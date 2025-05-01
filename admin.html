@@ -188,6 +188,68 @@
             border-radius: 4px;
             background: white;
         }
+        .doctor-templates {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 1000;
+            display: none;
+        }
+        .doctor-template-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+        .doctor-template-item:hover {
+            background-color: #f5f5f5;
+        }
+        .doctor-template-item .edit-template {
+            color: #007bff;
+            visibility: hidden;
+        }
+        .doctor-template-item:hover .edit-template {
+            visibility: visible;
+        }
+        .doctor-template-edit {
+            display: none;
+            padding: 8px;
+            background: #f8f9fa;
+            border-top: 1px solid #ddd;
+        }
+        .doctor-template-edit input {
+            width: calc(100% - 16px);
+            padding: 6px 8px;
+            margin-bottom: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .doctor-template-edit .buttons {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+        .doctor-template-edit button {
+            padding: 4px 8px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .doctor-template-edit .save-template {
+            background: #28a745;
+            color: white;
+        }
+        .doctor-template-edit .cancel-edit {
+            background: #dc3545;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -727,9 +789,110 @@
             loadShiftsForDay(date, shiftsContainer);
         }
 
+        // Thêm biến để lưu trữ mẫu tên bác sĩ
+        let doctorTemplates = [
+            "Thạc sĩ Quỳnh Anh",
+            "Bác sĩ CK2 Ngọc Đại",
+            "Thạc sĩ Quỳnh Anh + Bác sĩ CK2 Ngọc Đại"
+        ];
+
+        function createDoctorSelect() {
+            const container = document.createElement('div');
+            container.className = 'doctor-select-container';
+            container.innerHTML = `
+                <input type="text" class="doctor-select-input" placeholder="Nhập tên bác sĩ">
+                <div class="doctor-templates">
+                    ${doctorTemplates.map((template, index) => `
+                        <div class="doctor-template-item" data-index="${index}">
+                            <span class="template-text">${template}</span>
+                            <i class="fas fa-edit edit-template"></i>
+                        </div>
+                    `).join('')}
+                    <div class="doctor-template-edit">
+                        <input type="text" class="template-edit-input" placeholder="Nhập tên bác sĩ mới">
+                        <div class="buttons">
+                            <button class="save-template">
+                                <i class="fas fa-save"></i> Lưu
+                            </button>
+                            <button class="cancel-edit">
+                                <i class="fas fa-times"></i> Hủy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const input = container.querySelector('.doctor-select-input');
+            const templates = container.querySelector('.doctor-templates');
+            const templateItems = container.querySelectorAll('.doctor-template-item');
+            const editPanel = container.querySelector('.doctor-template-edit');
+            const editInput = container.querySelector('.template-edit-input');
+            let currentEditIndex = -1;
+
+            // Hiển thị danh sách mẫu khi focus vào input
+            input.addEventListener('focus', () => {
+                templates.style.display = 'block';
+            });
+
+            // Ẩn danh sách mẫu khi click ra ngoài
+            document.addEventListener('click', (e) => {
+                if (!container.contains(e.target)) {
+                    templates.style.display = 'none';
+                    editPanel.style.display = 'none';
+                }
+            });
+
+            // Xử lý click vào mẫu
+            templateItems.forEach(item => {
+                item.addEventListener('click', (e) => {
+                    if (!e.target.classList.contains('edit-template')) {
+                        input.value = item.querySelector('.template-text').textContent;
+                        templates.style.display = 'none';
+                    }
+                });
+
+                // Xử lý nút sửa
+                const editBtn = item.querySelector('.edit-template');
+                editBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    currentEditIndex = parseInt(item.dataset.index);
+                    editInput.value = doctorTemplates[currentEditIndex];
+                    editPanel.style.display = 'block';
+                    templateItems.forEach(i => i.style.display = 'none');
+                });
+            });
+
+            // Xử lý nút lưu template
+            container.querySelector('.save-template').addEventListener('click', () => {
+                const newValue = editInput.value.trim();
+                if (newValue && currentEditIndex >= 0) {
+                    doctorTemplates[currentEditIndex] = newValue;
+                    // Cập nhật giao diện
+                    templateItems[currentEditIndex].querySelector('.template-text').textContent = newValue;
+                    // Reset trạng thái
+                    editPanel.style.display = 'none';
+                    templateItems.forEach(i => i.style.display = 'flex');
+                    currentEditIndex = -1;
+                }
+            });
+
+            // Xử lý nút hủy
+            container.querySelector('.cancel-edit').addEventListener('click', () => {
+                editPanel.style.display = 'none';
+                templateItems.forEach(i => i.style.display = 'flex');
+                currentEditIndex = -1;
+            });
+
+            return container;
+        }
+
         function createShiftRow(date, shift = null) {
             const row = document.createElement('div');
             row.className = 'shift-row';
+            
+            row.dataset.shiftId = shift ? shift.id : '';
+            row.dataset.isLocked = shift && shift.is_locked ? 'true' : 'false';
+            
             if (shift && shift.is_locked) {
                 row.classList.add('locked');
             }
@@ -737,12 +900,7 @@
             row.innerHTML = `
                 <input type="time" class="start-time" value="${shift ? shift.start_time : ''}" required ${shift && shift.is_locked ? 'disabled' : ''}>
                 <input type="time" class="end-time" value="${shift ? shift.end_time : ''}" required ${shift && shift.is_locked ? 'disabled' : ''}>
-                <select class="doctor-select" ${shift && shift.is_locked ? 'disabled' : ''}>
-                    <option value="">Nhập tên bác sĩ</option>
-                    <option value="Thạc sĩ Quỳnh Anh">Thạc sĩ Quỳnh Anh</option>
-                    <option value="Bác sĩ CK2 Ngọc Đại">Bác sĩ CK2 Ngọc Đại</option>
-                    <option value="Thạc sĩ Quỳnh Anh + Bác sĩ CK2 Ngọc Đại">Thạc sĩ Quỳnh Anh + Bác sĩ CK2 Ngọc Đại</option>
-                </select>
+                <div class="doctor-select-wrapper"></div>
                 <div class="actions">
                     <button class="save-btn" title="Lưu" ${shift && shift.is_locked ? 'style="display: none;"' : ''}>
                         <i class="fas fa-save"></i> Lưu
@@ -756,8 +914,16 @@
                 </div>
             `;
 
+            // Thêm doctor select vào wrapper
+            const doctorSelectWrapper = row.querySelector('.doctor-select-wrapper');
+            const doctorSelect = createDoctorSelect();
+            doctorSelectWrapper.appendChild(doctorSelect);
+
             if (shift && shift.doctor_name) {
-                row.querySelector('.doctor-select').value = shift.doctor_name;
+                doctorSelect.querySelector('.doctor-select-input').value = shift.doctor_name;
+            }
+            if (shift && shift.is_locked) {
+                doctorSelect.querySelector('.doctor-select-input').disabled = true;
             }
 
             // Format date for API
@@ -773,7 +939,7 @@
                 saveBtn.onclick = async () => {
                     const startTime = row.querySelector('.start-time').value;
                     const endTime = row.querySelector('.end-time').value;
-                    const doctorName = row.querySelector('.doctor-select').value;
+                    const doctorName = row.querySelector('.doctor-select-input').value;
                     
                     if (!startTime || !endTime || !doctorName) {
                         alert('Vui lòng điền đầy đủ thông tin!');
@@ -781,9 +947,10 @@
                     }
                     
                     try {
-                        const method = shift ? 'PUT' : 'POST';
-                        const url = shift ? 
-                            `/api/admin/work-schedule/${shift.id}` : 
+                        const shiftId = row.dataset.shiftId;
+                        const method = shiftId ? 'PUT' : 'POST';
+                        const url = shiftId ? 
+                            `/api/admin/work-schedule/${shiftId}` : 
                             '/api/admin/work-schedule';
                         
                         const response = await fetch(url, {
@@ -803,7 +970,10 @@
                         }
 
                         const savedShift = await response.json();
-                        shift = savedShift; // Update shift with saved data
+                        
+                        // Update row data
+                        row.dataset.shiftId = savedShift.id;
+                        row.dataset.isLocked = 'true';
 
                         // Add fade effect and disable inputs
                         row.classList.add('locked');
@@ -818,26 +988,23 @@
             }
             
             if (editBtn) {
-                editBtn.onclick = async () => {
-                    try {
-                        // Enable inputs and show save button
-                        row.classList.remove('locked');
-                        inputs.forEach(input => input.disabled = false);
-                        saveBtn.style.display = 'inline-flex';
-                        editBtn.style.display = 'none';
-                    } catch (error) {
-                        console.error('Error editing shift:', error);
-                        alert('Có lỗi xảy ra khi chỉnh sửa ca khám!');
-                    }
+                editBtn.onclick = () => {
+                    // Enable editing mode
+                    row.classList.remove('locked');
+                    row.dataset.isLocked = 'false';
+                    inputs.forEach(input => input.disabled = false);
+                    saveBtn.style.display = 'inline-flex';
+                    editBtn.style.display = 'none';
                 };
             }
             
             deleteBtn.onclick = async () => {
                 if (!confirm('Bạn có chắc chắn muốn xóa ca khám này không?')) return;
                 
-                if (shift) {
+                const shiftId = row.dataset.shiftId;
+                if (shiftId) {
                     try {
-                        const response = await fetch(`/api/admin/work-schedule/${shift.id}`, {
+                        const response = await fetch(`/api/admin/work-schedule/${shiftId}`, {
                             method: 'DELETE'
                         });
 
