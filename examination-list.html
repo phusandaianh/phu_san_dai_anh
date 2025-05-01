@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Danh sách khám - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="utilities.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="logo-container">
+                <img src="logo_phu_san_dai_anh.png" alt="Logo Phòng khám Đại Anh" class="clinic-logo">
+                <div class="logo-text">
+                    <h1 class="logo">Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                    <p class="slogan">Uy Tín - Chất Lượng</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="examination-list">
+            <h2>Danh sách khám ngày hôm nay</h2>
+            
+            <div class="appointments-container">
+                <div class="appointments-list">
+                    <h3>Danh sách bệnh nhân</h3>
+                    <div class="search-box">
+                        <input type="text" id="search-patient" placeholder="Tìm kiếm bệnh nhân...">
+                    </div>
+                    <div class="appointments-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>STT</th>
+                                    <th>Họ tên</th>
+                                    <th>Số điện thoại</th>
+                                    <th>Giờ hẹn</th>
+                                    <th>Dịch vụ</th>
+                                    <th>Trạng thái</th>
+                                    <th>Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody id="appointments-body">
+                                <!-- Appointments will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="clinical-services">
+                    <h3>Dịch vụ cận lâm sàng</h3>
+                    <div class="services-list" id="services-list">
+                        <!-- Services will be loaded here -->
+                    </div>
+                    <div class="selected-services">
+                        <h4>Dịch vụ đã chọn</h4>
+                        <div id="selected-services-list">
+                            <!-- Selected services will be shown here -->
+                        </div>
+                        <div class="total-amount">
+                            <span>Tổng cộng:</span>
+                            <span id="total-amount">0đ</span>
+                        </div>
+                        <button id="print-clinical-service" class="btn primary-btn" disabled>
+                            <i class="fas fa-print"></i> In phiếu chỉ định
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Nút đặt lịch khám mới -->
+            <div style="text-align:right; margin-bottom:1rem;">
+                <button class="btn primary-btn" onclick="openNewAppointmentModal()">
+                    <i class="fas fa-plus"></i> Đặt lịch khám mới
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Popup chọn dịch vụ -->
+    <div id="service-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Chọn dịch vụ cho bệnh nhân</h2>
+            <div id="service-list"></div>
+            <div style="margin-top: 16px;">
+                <button id="save-services-btn" class="btn primary-btn">Lưu dịch vụ</button>
+                <button id="close-service-modal" class="btn secondary-btn">Đóng</button>
+            </div>
+            <div id="selected-services-list" style="margin-top: 16px;"></div>
+        </div>
+    </div>
+
+    <!-- Popup cập nhật kết quả xét nghiệm/siêu âm -->
+    <div id="test-result-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Cập nhật kết quả xét nghiệm/siêu âm</h2>
+            <form id="testResultForm" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="test-type">Loại kết quả</label>
+                    <select id="test-type" name="type" required>
+                        <option value="">-- Chọn loại --</option>
+                        <option value="Xét nghiệm máu">Xét nghiệm máu</option>
+                        <option value="Xét nghiệm nước tiểu">Xét nghiệm nước tiểu</option>
+                        <option value="Siêu âm">Siêu âm</option>
+                        <option value="Khác">Khác</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="test-result-text">Nội dung kết quả</label>
+                    <textarea id="test-result-text" name="result_text" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="test-file">Tệp đính kèm (PDF/hình ảnh)</label>
+                    <input type="file" id="test-file" name="file" accept=".pdf,image/*">
+                </div>
+                <button type="submit" class="btn primary-btn">Lưu kết quả</button>
+                <button type="button" class="btn secondary-btn" id="close-test-result-modal">Đóng</button>
+            </form>
+            <div style="margin-top: 2rem;">
+                <h4>Kết quả đã lưu</h4>
+                <div id="test-results-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Popup đặt lịch khám mới -->
+    <div id="new-appointment-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Đặt lịch khám mới</h2>
+            <form id="newAppointmentForm">
+                <div class="form-group">
+                    <label for="search-patient-autocomplete">Tìm bệnh nhân (tên/số điện thoại)</label>
+                    <input type="text" id="search-patient-autocomplete" autocomplete="off" placeholder="Nhập tên hoặc số điện thoại...">
+                    <div id="autocomplete-list" class="autocomplete-list"></div>
+                </div>
+                <div class="form-group">
+                    <label for="new-full-name">Họ và tên</label>
+                    <input type="text" id="new-full-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-dob">Ngày sinh</label>
+                    <input type="date" id="new-dob" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-phone">Số điện thoại</label>
+                    <input type="tel" id="new-phone" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-address">Địa chỉ</label>
+                    <input type="text" id="new-address" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-appointment-date">Thời gian hẹn</label>
+                    <input type="datetime-local" id="new-appointment-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-reason">Lý do khám/Dịch vụ</label>
+                    <textarea id="new-reason" rows="2" required></textarea>
+                </div>
+                <button type="submit" class="btn primary-btn">Lưu lịch khám</button>
+                <button type="button" class="btn secondary-btn" id="close-new-appointment-modal">Đóng</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentAppointmentId = null;
+        let selectedServices = new Set();
+        let currentTestAppointmentId = null;
+
+        // Load today's appointments
+        async function loadAppointments() {
+            try {
+                const response = await fetch('/api/appointments/today');
+                const appointments = await response.json();
+                
+                const tbody = document.getElementById('appointments-body');
+                tbody.innerHTML = '';
+                
+                appointments.forEach((appointment, index) => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${index + 1}</td>
+                        <td>${appointment.patient_name}</td>
+                        <td>${appointment.patient_phone}</td>
+                        <td>${new Date(appointment.appointment_date).toLocaleTimeString('vi-VN')}</td>
+                        <td>${appointment.service_type}</td>
+                        <td>${appointment.status}</td>
+                        <td>
+                            <button class="btn small-btn" onclick="selectAppointment(${appointment.id})">
+                                Chọn
+                            </button>
+                            <button class="btn small-btn" onclick="openTestResultModal(${appointment.id})">Cập nhật kết quả</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (error) {
+                console.error('Error loading appointments:', error);
+                alert('Không thể tải danh sách khám');
+            }
+        }
+
+        // Load clinical services
+        async function loadClinicalServices() {
+            try {
+                const response = await fetch('/api/clinical-services');
+                const services = await response.json();
+                
+                const servicesList = document.getElementById('services-list');
+                servicesList.innerHTML = '';
+                
+                services.forEach(service => {
+                    const div = document.createElement('div');
+                    div.className = 'service-item';
+                    div.innerHTML = `
+                        <div class="service-info">
+                            <h4>${service.name}</h4>
+                            <p>${service.description}</p>
+                            <p class="price">${service.price.toLocaleString('vi-VN')}đ</p>
+                        </div>
+                        <button class="btn small-btn" onclick="addService(${service.id})">
+                            Thêm
+                        </button>
+                    `;
+                    servicesList.appendChild(div);
+                });
+            } catch (error) {
+                console.error('Error loading clinical services:', error);
+                alert('Không thể tải danh sách dịch vụ');
+            }
+        }
+
+        // Select appointment
+        function selectAppointment(appointmentId) {
+            currentAppointmentId = appointmentId;
+            selectedServices.clear();
+            updateSelectedServices();
+            document.getElementById('print-clinical-service').disabled = true;
+            
+            // Highlight selected row
+            document.querySelectorAll('#appointments-body tr').forEach(tr => {
+                tr.classList.remove('selected');
+                if (tr.querySelector('button').onclick.toString().includes(appointmentId)) {
+                    tr.classList.add('selected');
+                }
+            });
+        }
+
+        // Add service
+        async function addService(serviceId) {
+            if (!currentAppointmentId) {
+                alert('Vui lòng chọn bệnh nhân trước');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/appointments/${currentAppointmentId}/clinical-services`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ service_id: serviceId })
+                });
+                
+                if (response.ok) {
+                    selectedServices.add(serviceId);
+                    updateSelectedServices();
+                    document.getElementById('print-clinical-service').disabled = false;
+                } else {
+                    throw new Error('Không thể thêm dịch vụ');
+                }
+            } catch (error) {
+                console.error('Error adding service:', error);
+                alert('Không thể thêm dịch vụ');
+            }
+        }
+
+        // Update selected services display
+        function updateSelectedServices() {
+            const selectedList = document.getElementById('selected-services-list');
+            selectedList.innerHTML = '';
+            
+            let total = 0;
+            document.querySelectorAll('.service-item').forEach(item => {
+                const serviceId = parseInt(item.querySelector('button').onclick.toString().match(/\d+/)[0]);
+                if (selectedServices.has(serviceId)) {
+                    const serviceName = item.querySelector('h4').textContent;
+                    const servicePrice = parseFloat(item.querySelector('.price').textContent.replace(/[^\d]/g, ''));
+                    total += servicePrice;
+                    
+                    const div = document.createElement('div');
+                    div.className = 'selected-service-item';
+                    div.innerHTML = `
+                        <span>${serviceName}</span>
+                        <span>${servicePrice.toLocaleString('vi-VN')}đ</span>
+                    `;
+                    selectedList.appendChild(div);
+                }
+            });
+            
+            document.getElementById('total-amount').textContent = `${total.toLocaleString('vi-VN')}đ`;
+        }
+
+        // Print clinical service form
+        async function printClinicalService() {
+            if (!currentAppointmentId) {
+                alert('Vui lòng chọn bệnh nhân trước');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/print-clinical-service/${currentAppointmentId}`);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `clinical_service_${currentAppointmentId}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    a.remove();
+                } else {
+                    throw new Error('Không thể in phiếu chỉ định');
+                }
+            } catch (error) {
+                console.error('Error printing clinical service:', error);
+                alert('Không thể in phiếu chỉ định');
+            }
+        }
+
+        // Mở popup chọn dịch vụ
+        function openServiceModal(appointmentId) {
+            currentAppointmentId = appointmentId;
+            document.getElementById('service-modal').classList.remove('hidden');
+            loadServices();
+            loadSelectedServices();
+        }
+
+        // Đóng popup
+        function closeServiceModal() {
+            document.getElementById('service-modal').classList.add('hidden');
+            currentAppointmentId = null;
+        }
+        document.getElementById('close-service-modal').onclick = closeServiceModal;
+
+        // Load danh sách dịch vụ
+        async function loadServices() {
+            const res = await fetch('/api/clinical-services');
+            const services = await res.json();
+            const listDiv = document.getElementById('service-list');
+            listDiv.innerHTML = '';
+            services.forEach(s => {
+                const label = document.createElement('label');
+                label.style.display = 'block';
+                label.innerHTML = `<input type="checkbox" value="${s.id}" class="service-checkbox"> ${s.name} <span style='color:#888'>(${s.price.toLocaleString()}đ)</span>`;
+                listDiv.appendChild(label);
+            });
+        }
+
+        // Load dịch vụ đã chọn cho bệnh nhân
+        async function loadSelectedServices() {
+            if (!currentAppointmentId) return;
+            const res = await fetch(`/api/appointments/${currentAppointmentId}`);
+            const data = await res.json();
+            const selectedDiv = document.getElementById('selected-services-list');
+            if (data.clinical_services && data.clinical_services.length > 0) {
+                selectedDiv.innerHTML = '<b>Dịch vụ đã chọn:</b> ' + data.clinical_services.map(s => `${s.name} (${s.price.toLocaleString()}đ)`).join(', ');
+            } else {
+                selectedDiv.innerHTML = '<i>Chưa chọn dịch vụ nào</i>';
+            }
+        }
+
+        // Lưu dịch vụ đã chọn
+        async function saveSelectedServices() {
+            if (!currentAppointmentId) return;
+            const checked = Array.from(document.querySelectorAll('.service-checkbox:checked')).map(cb => cb.value);
+            for (const serviceId of checked) {
+                await fetch(`/api/appointments/${currentAppointmentId}/clinical-services`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ service_id: serviceId })
+                });
+            }
+            alert('Đã lưu dịch vụ cho bệnh nhân!');
+            loadSelectedServices();
+        }
+        document.getElementById('save-services-btn').onclick = saveSelectedServices;
+
+        // Gắn sự kiện cho nút "Chọn" trong bảng bệnh nhân (giả sử có class .select-btn và data-id)
+        document.querySelectorAll('.select-btn').forEach(btn => {
+            btn.onclick = function() {
+                openServiceModal(this.dataset.id);
+            };
+        });
+
+        // Open test result modal
+        function openTestResultModal(appointmentId) {
+            currentTestAppointmentId = appointmentId;
+            document.getElementById('test-result-modal').classList.remove('hidden');
+            document.getElementById('testResultForm').reset();
+            loadTestResults();
+        }
+
+        // Close test result modal
+        document.getElementById('close-test-result-modal').onclick = function() {
+            document.getElementById('test-result-modal').classList.add('hidden');
+            currentTestAppointmentId = null;
+        };
+
+        // Gửi form lưu kết quả
+        const testResultForm = document.getElementById('testResultForm');
+        testResultForm.onsubmit = async function(e) {
+            e.preventDefault();
+            if (!currentTestAppointmentId) return;
+            const formData = new FormData(testResultForm);
+            try {
+                const res = await fetch(`/api/appointments/${currentTestAppointmentId}/test-results`, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (res.ok) {
+                    alert('Đã lưu kết quả!');
+                    testResultForm.reset();
+                    loadTestResults();
+                } else {
+                    const data = await res.json();
+                    alert(data.message || 'Có lỗi khi lưu kết quả');
+                }
+            } catch (err) {
+                alert('Lỗi kết nối máy chủ!');
+            }
+        };
+
+        // Load danh sách kết quả
+        async function loadTestResults() {
+            if (!currentTestAppointmentId) return;
+            const res = await fetch(`/api/appointments/${currentTestAppointmentId}/test-results`);
+            const results = await res.json();
+            const listDiv = document.getElementById('test-results-list');
+            if (!results.length) {
+                listDiv.innerHTML = '<i>Chưa có kết quả nào</i>';
+                return;
+            }
+            listDiv.innerHTML = '';
+            results.forEach(r => {
+                const div = document.createElement('div');
+                div.className = 'test-result-item';
+                div.innerHTML = `
+                    <b>${r.type}</b> - <span>${r.created_at}</span><br>
+                    <div>${r.result_text ? r.result_text : ''}</div>
+                    ${r.file_url ? `<a href="${r.file_url}" target="_blank">Tải file</a>` : ''}
+                    <button class="btn small-btn delete-btn" onclick="deleteTestResult(${r.id})">Xóa</button>
+                    <hr>
+                `;
+                listDiv.appendChild(div);
+            });
+        }
+
+        async function deleteTestResult(id) {
+            if (!confirm('Bạn có chắc muốn xóa kết quả này?')) return;
+            await fetch(`/api/test-results/${id}`, { method: 'DELETE' });
+            loadTestResults();
+        }
+
+        // Đặt lịch khám mới
+        function openNewAppointmentModal() {
+            document.getElementById('newAppointmentForm').reset();
+            document.getElementById('autocomplete-list').innerHTML = '';
+            document.getElementById('new-appointment-modal').classList.remove('hidden');
+        }
+
+        document.getElementById('close-new-appointment-modal').onclick = function() {
+            document.getElementById('new-appointment-modal').classList.add('hidden');
+        };
+
+        // Autocomplete bệnh nhân cũ
+        let allPatients = [];
+        async function fetchAllPatients() {
+            const res = await fetch('/api/patients');
+            allPatients = await res.json();
+        }
+        fetchAllPatients();
+
+        document.getElementById('search-patient-autocomplete').addEventListener('input', function() {
+            const val = this.value.toLowerCase();
+            const listDiv = document.getElementById('autocomplete-list');
+            listDiv.innerHTML = '';
+            if (!val) return;
+            const matches = allPatients.filter(p =>
+                p.name.toLowerCase().includes(val) || p.phone.includes(val)
+            ).slice(0, 5);
+            matches.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'autocomplete-item';
+                div.textContent = `${p.name} - ${p.phone}`;
+                div.onclick = function() {
+                    document.getElementById('new-full-name').value = p.name;
+                    document.getElementById('new-dob').value = p.date_of_birth;
+                    document.getElementById('new-phone').value = p.phone;
+                    document.getElementById('new-address').value = p.address;
+                    document.getElementById('autocomplete-list').innerHTML = '';
+                };
+                listDiv.appendChild(div);
+            });
+        });
+
+        // Gửi form đặt lịch mới
+        const newAppointmentForm = document.getElementById('newAppointmentForm');
+        newAppointmentForm.onsubmit = async function(e) {
+            e.preventDefault();
+            const name = document.getElementById('new-full-name').value;
+            const dob = document.getElementById('new-dob').value;
+            const phone = document.getElementById('new-phone').value;
+            const address = document.getElementById('new-address').value;
+            const appointment_date = document.getElementById('new-appointment-date').value;
+            const reason = document.getElementById('new-reason').value;
+            try {
+                const res = await fetch('/api/appointments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name,
+                        date_of_birth: dob,
+                        phone,
+                        address,
+                        appointment_date,
+                        service_type: reason
+                    })
+                });
+                if (res.ok) {
+                    alert('Đã đặt lịch khám mới!');
+                    document.getElementById('new-appointment-modal').classList.add('hidden');
+                    loadAppointments();
+                } else {
+                    const data = await res.json();
+                    alert(data.message || 'Có lỗi khi đặt lịch');
+                }
+            } catch (err) {
+                alert('Lỗi kết nối máy chủ!');
+            }
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAppointments();
+            loadClinicalServices();
+            
+            document.getElementById('print-clinical-service').addEventListener('click', printClinicalService);
+            
+            // Search functionality
+            document.getElementById('search-patient').addEventListener('input', (e) => {
+                const searchText = e.target.value.toLowerCase();
+                document.querySelectorAll('#appointments-body tr').forEach(tr => {
+                    const patientName = tr.querySelector('td:nth-child(2)').textContent.toLowerCase();
+                    tr.style.display = patientName.includes(searchText) ? '' : 'none';
+                });
+            });
+        });
+    </script>
+</body>
+</html> 

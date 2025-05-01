@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý lịch làm việc - Hệ thống quản trị Phòng khám Phụ Sản Đại Anh</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.css">
+    <style>
+        :root {
+            --primary-color: #1e88e5;
+            --secondary-color: #64b5f6;
+            --accent-color: #0d47a1;
+            --light-color: #e3f2fd;
+            --dark-color: #0a2351;
+            --success-color: #4caf50;
+            --warning-color: #ff9800;
+            --danger-color: #f44336;
+            --sidebar-width: 250px;
+        }
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+        
+        .wrapper {
+            display: flex;
+            width: 100%;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--dark-color);
+            color: white;
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            z-index: 999;
+            transition: all 0.3s;
+        }
+        
+        .sidebar.collapsed {
+            margin-left: calc(-1 * var(--sidebar-width));
+        }
+        
+        .sidebar-header {
+            padding: 20px;
+            background-color: var(--accent-color);
+            display: flex;
+            align-items: center;
+        }
+        
+        .sidebar-header img {
+            width: 40px;
+            height: auto;
+            margin-right: 10px;
+        }
+        
+        .sidebar-header h3 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+        
+        .sidebar-menu {
+            padding: 20px 0;
+        }
+        
+        .menu-item {
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .menu-item:hover, .menu-item.active {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+        
+        .menu-item i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .menu-divider {
+            height: 1px;
+            background-color: rgba(255, 255, 255, 0.1);
+            margin: 10px 20px;
+        }
+        
+        /* Content */
+        .content {
+            width: calc(100% - var(--sidebar-width));
+            margin-left: var(--sidebar-width);
+            transition: all 0.3s;
+        }
+        
+        .content.expanded {
+            width: 100%;
+            margin-left: 0;
+        }
+        
+        /* Navbar */
+        .top-navbar {
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .navbar-left {
+            display: flex;
+            align-items: center;
+        }
+        
+        .toggle-sidebar {
+            background: none;
+            border: none;
+            color: var(--dark-color);
+            font-size: 1.2rem;
+            cursor: pointer;
+            margin-right: 15px;
+        }
+        
+        .page-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--dark-color);
+            margin: 0;
+        }
+        
+        .navbar-right {
+            display: flex;
+            align-items: center;
+        }
+        
+        .user-dropdown {
+            position: relative;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+        
+        .user-info:hover {
+            background-color: var(--light-color);
+        }
+        
+        .user-avatar {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+        
+        .user-name {
+            font-weight: 600;
+            margin-right: 5px;
+        }
+        
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: white;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            border-radius: 5px;
+            padding: 10px 0;
+            min-width: 200px;
+            display: none;
+            z-index: 1000;
+        }
+        
+        .dropdown-menu.show {
+            display: block;
+        }
+        
+        .dropdown-item {
+            padding: 8px 20px;
+            display: flex;
+            align-items: center;
+            color: var(--dark-color);
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .dropdown-item:hover {
+            background-color: var(--light-color);
+        }
+        
+        .dropdown-item i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .dropdown-divider {
+            height: 1px;
+            background-color: #eee;
+            margin: 5px 0;
+        }
+        
+        /* Main content */
+        .main-content {
+            padding: 20px;
+        }
+        
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--dark-color);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .btn-add {
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s;
+        }
+        
+        .btn-add i {
+            margin-right: 5px;
+        }
+        
+        .btn-add:hover {
+            background-color: #3d8b40;
+            transform: translateY(-2px);
+        }
+        
+        /* Calendar */
+        .calendar-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .fc .fc-toolbar-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+        
+        .fc .fc-button-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .fc .fc-button-primary:hover {
+            background-color: var(--accent-color);
+            border-color: var(--accent-color);
+        }
+        
+        .fc .fc-daygrid-day.fc-day-today {
+            background-color: var(--light-color);
+        }
+        
+        .fc .fc-event {
+            border-radius: 3px;
+            padding: 3px 5px;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        
+        .fc .fc-event-main {
+            padding: 2px 4px;
+        }
+        
+        .event-doctor1 {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .event-doctor2 {
+            background-color: var(--warning-color);
+            border-color: var(--warning-color);
+        }
+        
+        .event-doctor3 {
+            background-color: var(--success-color);
+            border-color: var(--success-color);
+        }
+        
+        /* Schedule tabs */
+        .schedule-tabs {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .nav-tabs {
+            border-bottom: 1px solid #eee;
+            margin-bottom: 20px;
+        }
+        
+        .nav-tabs .nav-link {
+            color: var(--dark-color);
+            font-weight: 500;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 0;
+            margin-right: 10px;
+            transition: all 0.3s;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            color: var(--primary-color);
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+            font-weight: 600;
+        }
+        
+        .tab-content {
+            padding: 10px 0;
+        }
+        
+        .schedule-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .schedule-table th, .schedule-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .schedule-table th {
+            font-weight: 600;
+            color: var(--dark-color);
+            background-color: #f9f9f9;
+        }
+        
+        .schedule-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .schedule-table tr:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .doctor-name {
+            display: flex;
+            align-items: center;
+        }
+        
+        .doctor-avatar {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            background-color: var(--light-color);
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+        
+        .time-slot {
+            display: inline-block;
+            padding: 5px 10px;
+            background-color: var(--light-color);
+            color: var(--primary-color);
+            border-radius: 5px;
+            font-size: 0.9rem;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        .status-active {
+            background-color: #e8f5e9;
+            color: var(--success-color);
+        }
+        
+        .status-leave {
+            background-color: #ffebee;
+            color: var(--danger-color);
+        }
+        
+        .status-partial {
+            background-color: #fff8e1;
+            color: var(--warning-color);
+        }
+        
+        .action-btn {
+            background: none;
+            border: none;
+            color: var(--primary-color);
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-right: 5px;
+        }
+        
+        .action-btn:hover {
+            color: var(--accent-color);
+        }
+        
+        .action-btn.edit {
+            color: var(--warning-color);
+        }
+        
+        .action-btn.delete {
+            color: var(--danger-color);
+        }
+        
+        /* Doctor schedule cards */
+        .doctor-schedule-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .doctor-card {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+        
+        .doctor-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .doctor-header {
+            padding: 20px;
+            background-color: var(--light-color);
+            display: flex;
+            align-items: center;
+        }
+        
+        .doctor-large-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: white;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-right: 15px;
+            box-shadow: 0 3px 5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .doctor-info h4 {
+            margin: 0 0 5px 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+        
+        .doctor-info p {
+            margin: 0;
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .doctor-schedule {
+            padding: 20px;
+        }
+        
+        .schedule-day {
+            margin-bottom: 15px;
+        }
+        
+        .day-label {
+            font-weight: 600;
+            color: var(--dark-color);
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .day-status {
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        .time-slots {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        
+        .doctor-actions {
+            padding: 15px 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .doctor-actions button {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            border-radius: 5px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            margin: 0 5px;
+        }
+        
+        .btn-view-schedule {
+            background-color: var(--light-color);
+            color: var(--primary-color);
+        }
+        
+        .btn-view-schedule:hover {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .btn-edit-schedule {
+            background-color: #fff3e0;
+            color: var(--warning-color);
+        }
+        
+        .btn-edit-schedule:hover {
+            background-color: var(--warning-color);
+            color: white;
+        }
+        
+        /* Modal */
+        .modal-header {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .modal-title {
+            font-weight: 600;
+        }
+        
+        .form-label {
+            font-weight: 500;
+            color: var(--dark-color);
+        }
+        
+        .form-control {
+            border-radius: 5px;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+        }
+        
+        .form-control:focus {
+            box-shadow: 0 0 0 0.25rem rgba(30, 136, 229, 0.25);
+            border-color: var(--primary-color);
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            border: none;
+            font-weight: 500;
+            padding: 10px 20px;
+        }
+        
+        .btn-primary:hover <response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>

@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý người dùng - Hệ thống quản trị Phòng khám Phụ Sản Đại Anh</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #1e88e5;
+            --secondary-color: #64b5f6;
+            --accent-color: #0d47a1;
+            --light-color: #e3f2fd;
+            --dark-color: #0a2351;
+            --success-color: #4caf50;
+            --warning-color: #ff9800;
+            --danger-color: #f44336;
+            --sidebar-width: 250px;
+        }
+        
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+        
+        .wrapper {
+            display: flex;
+            width: 100%;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--dark-color);
+            color: white;
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            z-index: 999;
+            transition: all 0.3s;
+        }
+        
+        .sidebar.collapsed {
+            margin-left: calc(-1 * var(--sidebar-width));
+        }
+        
+        .sidebar-header {
+            padding: 20px;
+            background-color: var(--accent-color);
+            display: flex;
+            align-items: center;
+        }
+        
+        .sidebar-header img {
+            width: 40px;
+            height: auto;
+            margin-right: 10px;
+        }
+        
+        .sidebar-header h3 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+        
+        .sidebar-menu {
+            padding: 20px 0;
+        }
+        
+        .menu-item {
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .menu-item:hover, .menu-item.active {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+        
+        .menu-item i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .menu-divider {
+            height: 1px;
+            background-color: rgba(255, 255, 255, 0.1);
+            margin: 10px 20px;
+        }
+        
+        /* Content */
+        .content {
+            width: calc(100% - var(--sidebar-width));
+            margin-left: var(--sidebar-width);
+            transition: all 0.3s;
+        }
+        
+        .content.expanded {
+            width: 100%;
+            margin-left: 0;
+        }
+        
+        /* Navbar */
+        .top-navbar {
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .navbar-left {
+            display: flex;
+            align-items: center;
+        }
+        
+        .toggle-sidebar {
+            background: none;
+            border: none;
+            color: var(--dark-color);
+            font-size: 1.2rem;
+            cursor: pointer;
+            margin-right: 15px;
+        }
+        
+        .page-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--dark-color);
+            margin: 0;
+        }
+        
+        .navbar-right {
+            display: flex;
+            align-items: center;
+        }
+        
+        .user-dropdown {
+            position: relative;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+        
+        .user-info:hover {
+            background-color: var(--light-color);
+        }
+        
+        .user-avatar {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+        
+        .user-name {
+            font-weight: 600;
+            margin-right: 5px;
+        }
+        
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: white;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            border-radius: 5px;
+            padding: 10px 0;
+            min-width: 200px;
+            display: none;
+            z-index: 1000;
+        }
+        
+        .dropdown-menu.show {
+            display: block;
+        }
+        
+        .dropdown-item {
+            padding: 8px 20px;
+            display: flex;
+            align-items: center;
+            color: var(--dark-color);
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .dropdown-item:hover {
+            background-color: var(--light-color);
+        }
+        
+        .dropdown-item i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .dropdown-divider {
+            height: 1px;
+            background-color: #eee;
+            margin: 5px 0;
+        }
+        
+        /* Main content */
+        .main-content {
+            padding: 20px;
+        }
+        
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--dark-color);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .btn-add {
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s;
+        }
+        
+        .btn-add i {
+            margin-right: 5px;
+        }
+        
+        .btn-add:hover {
+            background-color: #3d8b40;
+            transform: translateY(-2px);
+        }
+        
+        .table-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .table {
+            margin-bottom: 0;
+        }
+        
+        .table th {
+            font-weight: 600;
+            color: var(--dark-color);
+            border-bottom-width: 1px;
+        }
+        
+        .badge {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: 500;
+        }
+        
+        .badge-admin {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .badge-staff {
+            background-color: var(--success-color);
+            color: white;
+        }
+        
+        .badge-doctor {
+            background-color: var(--warning-color);
+            color: white;
+        }
+        
+        .badge-active {
+            background-color: var(--success-color);
+            color: white;
+        }
+        
+        .badge-inactive {
+            background-color: var(--danger-color);
+            color: white;
+        }
+        
+        .action-btn {
+            background: none;
+            border: none;
+            color: var(--primary-color);
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-right: 5px;
+        }
+        
+        .action-btn:hover {
+            color: var(--accent-color);
+        }
+        
+        .action-btn.edit {
+            color: var(--warning-color);
+        }
+        
+        .action-btn.delete {
+            color: var(--danger-color);
+        }
+        
+        /* Modal */
+        .modal-header {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .modal-title {
+            font-weight: 600;
+        }
+        
+        .form-label {
+            font-weight: 500;
+            color: var(--dark-color);
+        }
+        
+        .form-control {
+            border-radius: 5px;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+        }
+        
+        .form-control:focus {
+            box-shadow: 0 0 0 0.25rem rgba(30, 136, 229, 0.25);
+            border-color: var(--primary-color);
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            border: none;
+            font-weight: 500;
+            padding: 10px 20px;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--accent-color);
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                margin-left: calc(-1 * var(--sidebar-width));
+            }
+            
+            .sidebar.active {
+                margin-left: 0;
+            }
+            
+            .content {
+                width: 100%;
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <!-- Sidebar -->
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <img src="../clinic-website/images/clinic_logo.png" alt="Logo">
+                <h3>Phụ Sản Đại Anh</h3>
+            </div>
+            
+            <div class="sidebar-menu">
+                <a href="dashboard.html" class="menu-item">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Tổng quan</span>
+                </a>
+                
+                <a href="appointments.html" class="menu-item">
+                    <i class="fas fa-calendar-check"></i>
+                    <span>Lịch hẹn khám</span>
+                </a>
+                
+                <a href="patients.html" class="menu-item">
+                    <i class="fas fa-user-injured"></i>
+                    <span>Bệnh nhân</span>
+                </a>
+                
+                <a href="services.html" class="menu-item">
+                    <i class="fas fa-stethoscope"></i>
+                    <span>Dịch vụ</span>
+                </a>
+                
+                <a href="schedule.html" class="menu-item">
+                    <i class="fas fa-clock"></i>
+                    <span>Lịch làm việc</span>
+                </a>
+                
+                <a href="utilities.html" class="menu-item">
+                    <i class="fas fa-tools"></i>
+                    <span>Tiện ích</span>
+                </a>
+                
+                <div class="menu-divider"></div>
+                
+                <a href="reports.html" class="menu-item">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Báo cáo & Thống kê</span>
+                </a>
+                
+                <a href="settings.html" class="menu-item">
+                    <i class="fas fa-cog"></i>
+                    <span>Cài đặt</span>
+                </a>
+                
+                <a href="users.html" class="menu-item active">
+                    <i class="fas fa-users-cog"></i>
+                    <span>Quản lý người dùng</span>
+                </a>
+            </div>
+        </nav>
+        
+        <!-- Content -->
+        <div id="content" class="content">
+            <!-- Top Navbar -->
+            <nav class="top-navbar">
+                <div class="navbar-left">
+                    <button id="toggle-sidebar" class="toggle-sidebar">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h1 class="page-title">Quản lý người dùng</h1>
+                </div>
+                
+                <div class="navbar-right">
+                    <div class="user-dropdown">
+                        <div class="user-info" id="user-dropdown-toggle">
+                            <div class="user-avatar">A</div>
+                            <span class="user-name">Admin</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        
+                        <div class="dropdown-menu" id="user-dropdown-menu">
+                            <a href="profile.html" class="dropdown-item">
+                                <i class="fas fa-user"></i>
+                                <span>Hồ sơ cá nhân</span>
+                            </a>
+                            
+                            <a href="settings.html" class="dropdown-item">
+                                <i class="fas fa-cog"></i>
+                                <span>Cài đặt</span>
+                            </a>
+                            
+                            <div class="dropdown-divider"></div>
+                            
+                            <a href="index.html" class="dropdown-item">
+                                <i class="fas fa-sign-out-alt"></i>
+                                <span>Đăng xuất</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+            
+            <!-- Main Content -->
+            <div class="main-content">
+                <!-- Users Table -->
+                <div class="table-container">
+                    <div class="section-title">
+                        <span>Danh sách người dùng</span>
+                        <button class="btn-add" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                            <i class="fas fa-plus"></i> Thêm người dùng
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Họ tên</th>
+                                    <th>Email</th>
+                                    <th>Vai trò</th>
+                                    <th>Trạng thái</th>
+                                    <th>Ngày tạo</th>
+                                    <th>Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>#USR001</td>
+                                    <td>Admin</td>
+                                    <td>phusandaianh@gmail.com</td>
+                                    <td><span class="badge badge-admin">Quản trị viên</span></td>
+                                    <td><span class="badge badge-active">Hoạt động</span></td>
+                                    <td>26/03/2025</td>
+                                    <td>
+                                        <button class="action-btn view"><i class="fas fa-eye"></i></button>
+                                        <button class="action-btn edit"><i class="fas fa-edit"></i></button>
+                                        <button class="action-btn delete"><i class="fas fa-trash"></i></button>
+                                    </td>
+                                </tr>
+                                <tr>
+               <response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>

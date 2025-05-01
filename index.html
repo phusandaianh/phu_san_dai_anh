@@ -1,0 +1,234 @@
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phòng khám chuyên khoa Phụ Sản Đại Anh - Đăng ký khám bệnh online</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="utilities.css">
+    <link rel="stylesheet" href="logo-animation.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="logo-container">
+                <img src="logo_phu_san_dai_anh.png" alt="Logo Phòng khám Đại Anh" class="clinic-logo animate__animated animate__fadeIn">
+                <div class="logo-text">
+                    <h1 class="logo animate__animated animate__fadeIn">Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                    <p class="slogan animate__animated animate__fadeIn">Uy Tín - Chất Lượng</p>
+                </div>
+            </div>
+            <nav class="main-nav">
+                <ul>
+                    <li><a href="/" class="nav-link">Trang chủ</a></li>
+                    <li><a href="/examination-list.html" class="nav-link">Danh sách khám</a></li>
+                    <li><a href="/admin.html" class="nav-link admin-link">
+                        <i class="fas fa-cog"></i> Quản trị
+                    </a></li>
+                    <li><a href="#services" class="nav-link">Dịch vụ</a></li>
+                    <li><a href="/booking.html" class="nav-link" style="color:#e53935;font-weight:bold;">Đặt lịch khám</a></li>
+                    <li><a href="#utilities" class="nav-link">Tiện ích cho mẹ bầu</a></li>
+                    <li><a href="#schedule" class="nav-link schedule-btn">Lịch làm việc</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <section id="home" class="hero-section">
+        <div class="container">
+            <div class="hero-content animate__animated animate__fadeInUp">
+                <h2>Chào mừng đến với Phòng khám chuyên khoa Phụ Sản Đại Anh</h2>
+                <p class="service-highlight">Khám, quản lý thai nghén, siêu âm dị tật thai chuyên sâu 5D</p>
+                <p class="service-highlight-sub">Khám phụ khoa, nam khoa, vô sinh hiếm muộn. Tư vấn xét nghiệm NIPT, ADN, sàng lọc ung thư cổ tử cung...</p>
+                <div class="cta-buttons">
+                    <a href="#appointment-form" class="btn primary-btn">Đặt lịch khám ngay</a>
+                    <a href="#contact" class="btn secondary-btn">Liên hệ tư vấn</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="appointments" class="appointments-section">
+        <div class="container">
+            <h2 class="section-title">Danh sách khám</h2>
+            <ul class="appointment-list">
+                <li>Nguyễn Văn A - 10:00 AM</li>
+                <li>Trần Thị B - 11:00 AM</li>
+                <li>Phạm Văn C - 1:00 PM</li>
+            </ul>
+        </div>
+    </section>
+
+    <section id="services" class="services-section">
+        <div class="container">
+            <h2 class="section-title">Dịch vụ</h2>
+            <ul class="service-list">
+                <li>Khám thai định kỳ</li>
+                <li>Siêu âm 2D, 4D, 5D</li>
+                <li>Xét nghiệm máu, nước tiểu</li>
+                <li>Tiêm phòng uốn ván, cúm</li>
+                <li>Tư vấn tiền sản</li>
+            </ul>
+        </div>
+    </section>
+
+    <section id="appointment-form" class="appointment-form-section">
+        <div class="container">
+            <h2 class="section-title">Đăng ký khám</h2>
+            <form id="appointmentForm" class="appointment-form">
+                <div class="form-group">
+                    <label for="full-name">Họ và Tên:</label>
+                    <input type="text" id="full-name" name="full-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="dob">Ngày tháng năm sinh:</label>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="dob-day" name="dob-day" required style="width: 70px;"></select>
+                        <select id="dob-month" name="dob-month" required style="width: 70px;"></select>
+                        <select id="dob-year" name="dob-year" required style="width: 90px;"></select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="phone">Số điện thoại:</label>
+                    <input type="tel" id="phone" name="phone" required>
+                </div>
+                <div class="form-group">
+                    <label for="address">Địa chỉ:</label>
+                    <input type="text" id="address" name="address" required>
+                </div>
+                <div class="form-group">
+                    <label for="reason">Lý do khám:</label>
+                    <textarea id="reason" name="reason" rows="4" required></textarea>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn primary-btn">Gửi đăng ký</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <section id="utilities" class="utilities-section">
+        <div class="container">
+            <h2 class="section-title">Tiện ích cho mẹ bầu</h2>
+            <ul class="utilities-list">
+                <li><a href="#nutrition" class="utility-link">Dinh dưỡng thai kỳ</a></li>
+                <li><a href="#exercises" class="utility-link">Bài tập cho bà bầu</a></li>
+                <li><a href="#shopping" class="utility-link">Địa chỉ mua sắm</a></li>
+                <li><a href="#faq" class="utility-link">Hỏi đáp</a></li>
+            </ul>
+        </div>
+    </section>
+
+    <section id="schedule" class="schedule-section">
+        <div class="container">
+            <h2 class="section-title">Lịch làm việc</h2>
+            <p>Thứ Hai - Thứ Sáu: 8:00 - 17:00</p>
+            <p>Thứ Bảy: 8:00 - 12:00</p>
+            <p>Chủ Nhật: Nghỉ</p>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2023 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Add a modal for registration confirmation -->
+<div id="confirmation-modal" class="modal hidden">
+    <div class="modal-content">
+        <h2>Xác nhận thông tin đăng ký</h2>
+        <p><strong>Họ và Tên:</strong> <span id="confirm-full-name"></span></p>
+        <p><strong>Ngày tháng năm sinh:</strong> <span id="confirm-dob"></span></p>
+        <p><strong>Số điện thoại:</strong> <span id="confirm-phone"></span></p>
+        <p><strong>Địa chỉ:</strong> <span id="confirm-address"></span></p>
+        <p><strong>Lý do khám:</strong> <span id="confirm-reason"></span></p>
+        <div class="modal-actions">
+            <button id="confirm-submit" class="btn primary-btn">Xác nhận</button>
+            <button id="close-modal" class="btn secondary-btn">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Tạo dropdown ngày, tháng, năm
+    function populateDateFields() {
+        const daySelect = document.getElementById('dob-day');
+        const monthSelect = document.getElementById('dob-month');
+        const yearSelect = document.getElementById('dob-year');
+        // Ngày
+        for (let d = 1; d <= 31; d++) {
+            const opt = document.createElement('option');
+            opt.value = d.toString().padStart(2, '0');
+            opt.textContent = d;
+            daySelect.appendChild(opt);
+        }
+        // Tháng
+        for (let m = 1; m <= 12; m++) {
+            const opt = document.createElement('option');
+            opt.value = m.toString().padStart(2, '0');
+            opt.textContent = m;
+            monthSelect.appendChild(opt);
+        }
+        // Năm (từ 1950 đến năm hiện tại)
+        const currentYear = new Date().getFullYear();
+        for (let y = currentYear; y >= 1950; y--) {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = y;
+            yearSelect.appendChild(opt);
+        }
+    }
+    document.addEventListener('DOMContentLoaded', populateDateFields);
+
+    document.getElementById('appointmentForm').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        // Lấy giá trị form
+        const fullName = document.getElementById('full-name').value;
+        const day = document.getElementById('dob-day').value;
+        const month = document.getElementById('dob-month').value;
+        const year = document.getElementById('dob-year').value;
+        const dob = `${year}-${month}-${day}`;
+        const phone = document.getElementById('phone').value;
+        const address = document.getElementById('address').value;
+        const reason = document.getElementById('reason').value;
+        try {
+            const response = await fetch('/api/appointments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: fullName,
+                    date_of_birth: dob,
+                    phone: phone,
+                    address: address,
+                    service_type: reason
+                })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                alert('Đăng ký khám thành công! Chúng tôi sẽ liên hệ với bạn sớm.');
+                document.getElementById('appointmentForm').reset();
+            } else {
+                alert(data.message || data.error || 'Có lỗi xảy ra khi đăng ký. Vui lòng thử lại sau.');
+            }
+        } catch (error) {
+            console.error('Error submitting appointment:', error);
+            alert('Không thể kết nối tới máy chủ. Vui lòng thử lại sau.');
+        }
+    });
+
+    // Close modal functionality
+    document.getElementById('close-modal').addEventListener('click', function() {
+        document.getElementById('confirmation-modal').classList.add('hidden');
+    });
+
+    // Confirm submission (you can add actual submission logic here)
+    document.getElementById('confirm-submit').addEventListener('click', function() {
+        alert('Thông tin đã được gửi thành công!');
+        document.getElementById('confirmation-modal').classList.add('hidden');
+    });
+</script>
+</body>
+</html>
