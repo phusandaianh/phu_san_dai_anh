@@ -1,0 +1,20 @@
+# Uploads - tránh commit file lớn lên GitHub (giới hạn 100MB)
+uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+
+# Database
+*.db
+instance/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
