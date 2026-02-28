@@ -6789,6 +6789,20 @@ def delete_ctg_result(ctg_id):
         db.session.rollback()
         return jsonify({'message': f'Lỗi khi xóa kết quả CTG: {str(e)}'}), 500
 # ============= CTG Image Analysis Functions =============
+# Optional imports for OCR/CV - fallback nếu không cài
+try:
+    import pytesseract
+    from PIL import Image as PILImage
+    import cv2
+    import numpy as np
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+    pytesseract = None
+    PILImage = None
+    cv2 = None
+    np = None
+
 def extract_ctg_data_ocr(image_bytes):
     """Trích xuất dữ liệu CTG từ ảnh bằng OCR"""
     if not OCR_AVAILABLE:

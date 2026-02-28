@@ -1,0 +1,15 @@
+# Render Blueprint - Phòng khám Phụ Sản Đại Anh
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: phong-kham-dai-anh
+    runtime: python
+    
+    buildCommand: pip install -r requirements.txt && mkdir -p uploads/treatment-plans uploads/pricing uploads/ctg-images instance
+    startCommand: gunicorn -b 0.0.0.0:$PORT wsgi:app
+    
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: FLASK_ENV
+        value: production

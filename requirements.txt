@@ -26,3 +26,5 @@ pytesseract==0.3.10
 opencv-python==4.8.1.78
 numpy==1.24.3
 scipy>=1.11.4
+# Production server (Render)
+gunicorn>=21.0.0
