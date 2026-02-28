@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bệnh lý và xét nghiệm - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .admin-header {
+            background-color: white;
+            color: #2196F3;
+            padding: 1rem 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #2196F3;
+        }
+        .admin-header .logo img {
+            height: 50px;
+            margin-right: 10px;
+        }
+        .admin-header .logo {
+            display: flex;
+            align-items: center;
+        }
+        .admin-header nav {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+        }
+        .admin-header .nav-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .admin-header .back-link {
+            color: #2196F3;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+        }
+        .admin-header .back-link.btn.secondary-btn {
+            background-color: transparent;
+            border: 1px solid #2196F3;
+            color: #2196F3;
+        }
+        .admin-main {
+            padding: 20px;
+        }
+        .search-filters {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .search-filters input, .search-filters select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .search-filters input[type="text"] {
+            min-width: 200px;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn-primary {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .data-table {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .table-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .table-header h3 {
+            margin: 0;
+            color: #333;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        .btn-small {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            min-width: 700px;
+            max-width: 90vw;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .form-group textarea {
+            height: 120px;
+            resize: vertical;
+        }
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+        .form-row .form-group {
+            flex: 1;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .disease-item {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .disease-item h4 {
+            margin: 0 0 10px 0;
+            color: #2196F3;
+        }
+        .disease-item .disease-category {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+        .disease-item .disease-description {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        .required-tests {
+            background: #fff3e0;
+            border: 1px solid #ffb74d;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        .required-tests h5 {
+            margin: 0 0 8px 0;
+            color: #f57c00;
+            font-size: 14px;
+        }
+        .test-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .test-tag {
+            background: #ffb74d;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .test-tag.high-priority {
+            background: #f44336;
+        }
+        .test-tag.medium-priority {
+            background: #ff9800;
+        }
+        .test-tag.low-priority {
+            background: #4caf50;
+        }
+        .tests-selection {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        .test-option {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        .test-option:last-child {
+            border-bottom: none;
+        }
+        .test-option input[type="checkbox"] {
+            margin-right: 10px;
+        }
+        .test-option select {
+            margin-left: auto;
+            width: 120px;
+            padding: 4px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.png" alt="Logo Phòng khám Đại Anh">
+            <div>
+                <h1>Bệnh lý và xét nghiệm</h1>
+                <p>Quản lý bệnh lý và xét nghiệm cần thiết</p>
+            </div>
+        </div>
+        <nav>
+            <div class="nav-row">
+                <a href="index.html" class="back-link btn secondary-btn">
+                    <i class="fas fa-home"></i> Trang chủ
+                </a>
+                <a href="admin.html" class="back-link btn secondary-btn">
+                    <i class="fas fa-cog"></i> Quản trị
+                </a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="admin-main">
+        <!-- Search and Filters -->
+        <div class="search-filters">
+            <input type="text" id="search-name" placeholder="Tìm theo tên bệnh lý">
+            <select id="filter-category">
+                <option value="">Tất cả loại bệnh lý</option>
+                <option value="pregnancy">Thai kỳ</option>
+                <option value="gynecology">Phụ khoa</option>
+                <option value="hormone">Nội tiết</option>
+                <option value="infection">Nhiễm trùng</option>
+                <option value="tumor">Khối u</option>
+                <option value="infertility">Vô sinh</option>
+                <option value="menopause">Mãn kinh</option>
+            </select>
+            <button class="btn btn-primary" onclick="searchDiseases()">
+                <i class="fas fa-search"></i> Tìm kiếm
+            </button>
+            <button class="btn btn-secondary" onclick="clearFilters()">
+                <i class="fas fa-times"></i> Xóa bộ lọc
+            </button>
+            <button class="btn btn-success" onclick="openAddModal()">
+                <i class="fas fa-plus"></i> Thêm bệnh lý
+            </button>
+        </div>
+
+        <!-- Diseases List -->
+        <div class="data-table">
+            <div class="table-header">
+                <h3><i class="fas fa-heartbeat"></i> Danh sách bệnh lý và xét nghiệm</h3>
+            </div>
+            <div class="table-container">
+                <table id="diseases-table">
+                    <thead>
+                        <tr>
+                            <th>STT</th>
+                            <th>Tên bệnh lý</th>
+                            <th>Loại bệnh lý</th>
+                            <th>Mô tả</th>
+                            <th>Số xét nghiệm</th>
+                            <th>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="diseases-tbody">
+                        <!-- Diseases will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="no-data" id="no-diseases" style="display: none;">
+                <i class="fas fa-heartbeat" style="font-size: 48px; color: #ccc; margin-bottom: 15px;"></i>
+                <p>Chưa có bệnh lý nào</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Add/Edit Modal -->
+    <div id="disease-modal" class="modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+            <h3 id="disease-modal-title">Thêm bệnh lý</h3>
+            <form id="disease-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="disease-name">Tên bệnh lý *</label>
+                        <input type="text" id="disease-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="disease-category">Loại bệnh lý *</label>
+                        <select id="disease-category" required>
+                            <option value="">Chọn loại bệnh lý</option>
+                            <option value="pregnancy">Thai kỳ</option>
+                            <option value="gynecology">Phụ khoa</option>
+                            <option value="hormone">Nội tiết</option>
+                            <option value="infection">Nhiễm trùng</option>
+                            <option value="tumor">Khối u</option>
+                            <option value="infertility">Vô sinh</option>
+                            <option value="menopause">Mãn kinh</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="disease-description">Mô tả bệnh lý *</label>
+                    <textarea id="disease-description" placeholder="Mô tả chi tiết về bệnh lý này..." required></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Xét nghiệm cần thiết</label>
+                    <div class="tests-selection" id="tests-selection">
+                        <!-- Test options will be loaded here -->
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="loadAvailableTests()">
+                        <i class="fas fa-refresh"></i> Tải lại danh sách xét nghiệm
+                    </button>
+                </div>
+                <div class="form-group">
+                    <label for="disease-notes">Ghi chú thêm</label>
+                    <textarea id="disease-notes" placeholder="Ghi chú bổ sung về bệnh lý..."></textarea>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+                    <button type="submit" class="btn btn-primary">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let diseases = [];
+        let availableTests = [];
+        let currentEditId = null;
+
+        // Load diseases from API
+        async function loadDiseases() {
+            try {
+                const response = await fetch('/api/disease-tests');
+                if (response.ok) {
+                    diseases = await response.json();
+                    renderDiseases();
+                } else {
+                    console.error('Lỗi tải danh sách bệnh lý:', response.status);
+                }
+            } catch (error) {
+                console.error('Lỗi tải danh sách bệnh lý:', error);
+            }
+        }
+
+        // Load available tests
+        async function loadAvailableTests() {
+            try {
+                const response = await fetch('/api/test-meanings');
+                if (response.ok) {
+                    availableTests = await response.json();
+                    renderTestOptions();
+                } else {
+                    console.error('Lỗi tải danh sách xét nghiệm:', response.status);
+                }
+            } catch (error) {
+                console.error('Lỗi tải danh sách xét nghiệm:', error);
+            }
+        }
+
+        // Render diseases table
+        function renderDiseases() {
+            const tbody = document.getElementById('diseases-tbody');
+            const noData = document.getElementById('no-diseases');
+            
+            if (diseases.length === 0) {
+                tbody.innerHTML = '';
+                noData.style.display = 'block';
+                return;
+            }
+
+            noData.style.display = 'none';
+            tbody.innerHTML = diseases.map((disease, index) => {
+                const requiredTests = disease.required_tests ? JSON.parse(disease.required_tests) : [];
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${disease.name}</td>
+                        <td><span class="disease-category">${getCategoryText(disease.category)}</span></td>
+                        <td>${disease.description ? disease.description.substring(0, 100) + '...' : 'Không có'}</td>
+                        <td>${requiredTests.length}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn btn-primary btn-small" onclick="viewDisease(${disease.id})" title="Xem chi tiết">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-secondary btn-small" onclick="editDisease(${disease.id})" title="Sửa">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-danger btn-small" onclick="deleteDisease(${disease.id})" title="Xóa">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Render test options
+        function renderTestOptions() {
+            const container = document.getElementById('tests-selection');
+            container.innerHTML = availableTests.map(test => `
+                <div class="test-option">
+                    <input type="checkbox" id="test-${test.id}" value="${test.id}">
+                    <label for="test-${test.id}">${test.name}</label>
+                    <select id="priority-${test.id}">
+                        <option value="low">Thấp</option>
+                        <option value="medium">Trung bình</option>
+                        <option value="high">Cao</option>
+                    </select>
+                </div>
+            `).join('');
+        }
+
+        // Get category text
+        function getCategoryText(category) {
+            const categoryMap = {
+                'pregnancy': 'Thai kỳ',
+                'gynecology': 'Phụ khoa',
+                'hormone': 'Nội tiết',
+                'infection': 'Nhiễm trùng',
+                'tumor': 'Khối u',
+                'infertility': 'Vô sinh',
+                'menopause': 'Mãn kinh'
+            };
+            return categoryMap[category] || category;
+        }
+
+        // Search diseases
+        function searchDiseases() {
+            const name = document.getElementById('search-name').value;
+            const category = document.getElementById('filter-category').value;
+
+            let filteredDiseases = diseases.filter(disease => {
+                const matchesName = !name || disease.name.toLowerCase().includes(name.toLowerCase());
+                const matchesCategory = !category || disease.category === category;
+                return matchesName && matchesCategory;
+            });
+
+            // Update display
+            const tbody = document.getElementById('diseases-tbody');
+            const noData = document.getElementById('no-diseases');
+            
+            if (filteredDiseases.length === 0) {
+                tbody.innerHTML = '';
+                noData.style.display = 'block';
+            } else {
+                noData.style.display = 'none';
+                tbody.innerHTML = filteredDiseases.map((disease, index) => {
+                    const requiredTests = disease.required_tests ? JSON.parse(disease.required_tests) : [];
+                    return `
+                        <tr>
+                            <td>${index + 1}</td>
+                            <td>${disease.name}</td>
+                            <td><span class="disease-category">${getCategoryText(disease.category)}</span></td>
+                            <td>${disease.description ? disease.description.substring(0, 100) + '...' : 'Không có'}</td>
+                            <td>${requiredTests.length}</td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn btn-primary btn-small" onclick="viewDisease(${disease.id})" title="Xem chi tiết">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button class="btn btn-secondary btn-small" onclick="editDisease(${disease.id})" title="Sửa">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-danger btn-small" onclick="deleteDisease(${disease.id})" title="Xóa">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        // Clear filters
+        function clearFilters() {
+            document.getElementById('search-name').value = '';
+            document.getElementById('filter-category').value = '';
+            renderDiseases();
+        }
+
+        // Open add modal
+        function openAddModal() {
+            currentEditId = null;
+            document.getElementById('disease-modal-title').textContent = 'Thêm bệnh lý';
+            document.getElementById('disease-form').reset();
+            loadAvailableTests();
+            document.getElementById('disease-modal').style.display = 'flex';
+        }
+
+        // Edit disease
+        function editDisease(id) {
+            const disease = diseases.find(d => d.id === id);
+            if (!disease) return;
+
+            currentEditId = id;
+            document.getElementById('disease-modal-title').textContent = 'Sửa bệnh lý';
+            document.getElementById('disease-name').value = disease.name;
+            document.getElementById('disease-category').value = disease.category;
+            document.getElementById('disease-description').value = disease.description || '';
+            document.getElementById('disease-notes').value = disease.notes || '';
+            
+            loadAvailableTests().then(() => {
+                // Pre-select tests
+                const requiredTests = disease.required_tests ? JSON.parse(disease.required_tests) : [];
+                requiredTests.forEach(test => {
+                    const checkbox = document.getElementById(`test-${test.test_id}`);
+                    const priority = document.getElementById(`priority-${test.test_id}`);
+                    if (checkbox && priority) {
+                        checkbox.checked = true;
+                        priority.value = test.priority || 'medium';
+                    }
+                });
+            });
+            
+            document.getElementById('disease-modal').style.display = 'flex';
+        }
+
+        // View disease
+        function viewDisease(id) {
+            const disease = diseases.find(d => d.id === id);
+            if (!disease) return;
+
+            const requiredTests = disease.required_tests ? JSON.parse(disease.required_tests) : [];
+            let content = `
+                <div class="disease-item">
+                    <h4>${disease.name}</h4>
+                    <span class="disease-category">${getCategoryText(disease.category)}</span>
+                    <div class="disease-description">
+                        <strong>Mô tả:</strong><br>
+                        ${disease.description || 'Không có thông tin'}
+                    </div>
+            `;
+            
+            if (requiredTests.length > 0) {
+                content += `
+                    <div class="required-tests">
+                        <h5>Xét nghiệm cần thiết:</h5>
+                        <div class="test-list">
+                `;
+                
+                requiredTests.forEach(test => {
+                    const testInfo = availableTests.find(t => t.id === test.test_id);
+                    if (testInfo) {
+                        const priorityClass = test.priority === 'high' ? 'high-priority' : 
+                                           test.priority === 'medium' ? 'medium-priority' : 'low-priority';
+                        content += `<span class="test-tag ${priorityClass}">${testInfo.name}</span>`;
+                    }
+                });
+                
+                content += `
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (disease.notes) {
+                content += `<div style="margin-top: 10px;"><strong>Ghi chú:</strong><br>${disease.notes}</div>`;
+            }
+            
+            content += `</div>`;
+            
+            alert(content.replace(/<[^>]*>/g, '')); // Simple text display
+        }
+
+        // Delete disease
+        async function deleteDisease(id) {
+            if (!confirm('Bạn có chắc muốn xóa bệnh lý này?')) return;
+
+            try {
+                const response = await fetch(`/api/disease-tests/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    await loadDiseases();
+                    alert('Đã xóa bệnh lý thành công!');
+                } else {
+                    const result = await response.json();
+                    alert('Lỗi xóa bệnh lý: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Lỗi xóa bệnh lý:', error);
+                alert('Lỗi xóa bệnh lý!');
+            }
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('disease-modal').style.display = 'none';
+        }
+
+        // Handle form submission
+        document.getElementById('disease-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            // Get selected tests
+            const selectedTests = [];
+            availableTests.forEach(test => {
+                const checkbox = document.getElementById(`test-${test.id}`);
+                const priority = document.getElementById(`priority-${test.id}`);
+                if (checkbox && checkbox.checked) {
+                    selectedTests.push({
+                        test_id: test.id,
+                        test_name: test.name,
+                        priority: priority ? priority.value : 'medium'
+                    });
+                }
+            });
+
+            const formData = {
+                name: document.getElementById('disease-name').value,
+                category: document.getElementById('disease-category').value,
+                description: document.getElementById('disease-description').value,
+                required_tests: selectedTests,
+                notes: document.getElementById('disease-notes').value
+            };
+
+            try {
+                let response;
+                if (currentEditId) {
+                    // Edit existing disease
+                    response = await fetch(`/api/disease-tests/${currentEditId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(formData)
+                    });
+                } else {
+                    // Add new disease
+                    response = await fetch('/api/disease-tests', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(formData)
+                    });
+                }
+
+                if (response.ok) {
+                    await loadDiseases();
+                    closeModal();
+                    alert(currentEditId ? 'Đã cập nhật bệnh lý thành công!' : 'Đã thêm bệnh lý thành công!');
+                } else {
+                    const result = await response.json();
+                    alert('Lỗi: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Lỗi lưu bệnh lý:', error);
+                alert('Lỗi lưu bệnh lý!');
+            }
+        });
+
+        // Initialize
+        async function initializePage() {
+            try {
+                // Load data
+                await loadDiseases();
+                await loadAvailableTests();
+            } catch (error) {
+                console.error('Lỗi khởi tạo trang:', error);
+            }
+        }
+        
+        initializePage();
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

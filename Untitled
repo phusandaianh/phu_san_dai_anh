@@ -1,0 +1,58 @@
+✅ HƯỚNG DẪN ĐỒNG BỘ (COMMIT & PUSH) TRÊN GITHUB DESKTOP
+🔹 BƯỚC 1: MỞ GITHUB DESKTOP
+
+Mở ứng dụng GitHub Desktop
+→ Chọn đúng repository của bạn (ví dụ: quanlylichbacsi).
+
+🔹 BƯỚC 2: XEM FILE ĐÃ THAY ĐỔI
+
+Ở bên trái của GitHub Desktop, bạn sẽ thấy:
+
+Changes
+→ Tất cả các file bạn sửa trong thư mục local sẽ xuất hiện tại đây.
+
+🔹 BƯỚC 3: NHẬP TIN NHẮN COMMIT
+
+Ở góc dưới bên trái, bạn sẽ thấy ô:
+
+Summary (required)
+
+
+👉 Nhập nội dung commit, ví dụ:
+
+Update API schedule logic
+
+
+(Không nhập thì sẽ không commit được)
+
+🔹 BƯỚC 4: BẤM "COMMIT TO MAIN"
+
+Ngay dưới ô Summary sẽ có nút:
+
+✔ Commit to main
+
+Bấm vào nút này để ghi lại thay đổi vào Git.
+
+🙏 Lưu ý: Sau bước này, thay đổi CHƯA được đẩy lên GitHub đâu.
+
+🔹 BƯỚC 5: PUSH LÊN GITHUB
+
+Sau khi commit xong, ở phần trên cùng ứng dụng sẽ hiện:
+
+✔ Push origin
+
+Bấm vào để đẩy code lên GitHub.
+
+Nếu bạn thấy:
+
+Fetch origin
+Pull origin
+
+→ Điều này nghĩa là bạn đã up-to-date.
+
+lệnh:
+git add .
+git commit -m "deploy render"
+git push
+
+Giữ render không ngủ bằng cron-job.org

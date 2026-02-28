@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đào tạo nhân viên - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="utilities.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .training-section {
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .training-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .add-training-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .training-list {
+            display: grid;
+            gap: 20px;
+        }
+        
+        .training-item {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 6px;
+        }
+        
+        .training-title {
+            font-size: 1.2em;
+            color: #2196F3;
+            margin-bottom: 10px;
+        }
+        
+        .training-meta {
+            display: flex;
+            gap: 20px;
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+        
+        .training-description {
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+        
+        .training-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .training-actions button {
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .edit-btn {
+            background-color: #2196F3;
+            color: white;
+        }
+        
+        .delete-btn {
+            background-color: #f44336;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="logo-container">
+                <img src="logo_phu_san_dai_anh.PNG" alt="Logo Phòng khám Đại Anh" class="clinic-logo">
+                <div class="logo-text">
+                    <h1 class="logo">Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                    <p class="slogan">Uy Tín - Chất Lượng</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="training-section">
+            <div class="training-header">
+                <h2>Đào tạo nhân viên</h2>
+                <button class="add-training-btn" onclick="openAddTrainingModal()">
+                    <i class="fas fa-plus"></i> Thêm khóa đào tạo
+                </button>
+            </div>
+
+            <div class="training-list">
+                <!-- Danh sách khóa đào tạo sẽ được thêm vào đây -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal thêm/sửa khóa đào tạo -->
+    <div id="training-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Thêm khóa đào tạo mới</h3>
+            <form id="training-form">
+                <div class="form-group">
+                    <label for="training-title">Tên khóa đào tạo</label>
+                    <input type="text" id="training-title" required>
+                </div>
+                <div class="form-group">
+                    <label for="training-description">Mô tả</label>
+                    <textarea id="training-description" rows="4" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="training-date">Ngày đào tạo</label>
+                    <input type="date" id="training-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="training-instructor">Người đào tạo</label>
+                    <input type="text" id="training-instructor" required>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn primary-btn">Lưu</button>
+                    <button type="button" class="btn secondary-btn" onclick="closeTrainingModal()">Hủy</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Lưu trữ danh sách khóa đào tạo
+        let trainings = [];
+
+        // Mở modal thêm khóa đào tạo
+        function openAddTrainingModal() {
+            document.getElementById('training-modal').classList.remove('hidden');
+        }
+
+        // Đóng modal
+        function closeTrainingModal() {
+            document.getElementById('training-modal').classList.add('hidden');
+        }
+
+        // Xử lý form submit
+        document.getElementById('training-form').onsubmit = function(e) {
+            e.preventDefault();
+            const training = {
+                id: Date.now(),
+                title: document.getElementById('training-title').value,
+                description: document.getElementById('training-description').value,
+                date: document.getElementById('training-date').value,
+                instructor: document.getElementById('training-instructor').value
+            };
+            trainings.push(training);
+            renderTrainings();
+            closeTrainingModal();
+            this.reset();
+        };
+
+        // Hiển thị danh sách khóa đào tạo
+        function renderTrainings() {
+            const list = document.querySelector('.training-list');
+            list.innerHTML = trainings.map(training => `
+                <div class="training-item">
+                    <h3 class="training-title">${training.title}</h3>
+                    <div class="training-meta">
+                        <span><i class="fas fa-calendar"></i> ${new Date(training.date).toLocaleDateString('vi-VN')}</span>
+                        <span><i class="fas fa-user"></i> ${training.instructor}</span>
+                    </div>
+                    <p class="training-description">${training.description}</p>
+                    <div class="training-actions">
+                        <button class="edit-btn" onclick="editTraining(${training.id})">
+                            <i class="fas fa-edit"></i> Sửa
+                        </button>
+                        <button class="delete-btn" onclick="deleteTraining(${training.id})">
+                            <i class="fas fa-trash"></i> Xóa
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Sửa khóa đào tạo
+        function editTraining(id) {
+            const training = trainings.find(t => t.id === id);
+            if (training) {
+                document.getElementById('training-title').value = training.title;
+                document.getElementById('training-description').value = training.description;
+                document.getElementById('training-date').value = training.date;
+                document.getElementById('training-instructor').value = training.instructor;
+                openAddTrainingModal();
+                // Cập nhật thay vì thêm mới
+                document.getElementById('training-form').onsubmit = function(e) {
+                    e.preventDefault();
+                    training.title = document.getElementById('training-title').value;
+                    training.description = document.getElementById('training-description').value;
+                    training.date = document.getElementById('training-date').value;
+                    training.instructor = document.getElementById('training-instructor').value;
+                    renderTrainings();
+                    closeTrainingModal();
+                    this.reset();
+                    // Khôi phục lại handler mặc định
+                    this.onsubmit = null;
+                };
+            }
+        }
+
+        // Xóa khóa đào tạo
+        function deleteTraining(id) {
+            if (confirm('Bạn có chắc muốn xóa khóa đào tạo này?')) {
+                trainings = trainings.filter(t => t.id !== id);
+                renderTrainings();
+            }
+        }
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

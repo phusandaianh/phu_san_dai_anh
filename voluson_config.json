@@ -1,0 +1,21 @@
+{
+  "sync_enabled": true,
+  "voluson_ip": "10.17.2.1",
+  "voluson_port": 104,
+  "ae_title": "MWL_SCP",
+  "voluson_ae_title": "VOLUSON_E10",
+  "database_path": "clinic.db",
+  "sync_interval": 30,
+  "retry_attempts": 3,
+  "retry_delay": 10,
+  "description": "Cấu hình đồng bộ với máy siêu âm Voluson E10",
+  "notes": [
+    "voluson_ip: Địa chỉ IP của máy siêu âm Voluson E10",
+    "voluson_port: Cổng DICOM của máy siêu âm (mặc định 104)",
+    "ae_title: Tên Application Entity của hệ thống phòng khám",
+    "voluson_ae_title: Tên Application Entity của máy siêu âm",
+    "sync_interval: Khoảng thời gian đồng bộ (giây)",
+    "retry_attempts: Số lần thử lại khi lỗi",
+    "retry_delay: Thời gian chờ giữa các lần thử (giây)"
+  ]
+}

@@ -1,0 +1,1693 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VR PACS - Quản lý Ảnh Siêu âm - Phòng khám Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="ai-assistant.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding-bottom: 30px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .btn-primary {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        .search-bar {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 250px;
+            padding: 12px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .filter-group select {
+            padding: 12px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            cursor: pointer;
+        }
+
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .refresh-btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .stat-card .number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .label {
+            color: #6c757d;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .patients-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 25px;
+        }
+
+        .patient-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .patient-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+        }
+
+        .patient-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+        }
+
+        .patient-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .patient-info {
+            font-size: 0.85rem;
+            opacity: 0.9;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .patient-body {
+            padding: 20px;
+        }
+
+        .images-preview {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+            min-height: 100px;
+        }
+
+        .image-thumb {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            background: #f8f9fa;
+            border: 2px solid #e1e5e9;
+            transition: all 0.3s ease;
+        }
+
+        .image-thumb:hover {
+            border-color: #667eea;
+            transform: scale(1.05);
+        }
+
+        .image-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .image-thumb .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            color: white;
+            font-size: 0.8rem;
+            text-align: center;
+            padding: 5px;
+        }
+
+        .image-thumb:hover .overlay {
+            opacity: 1;
+        }
+
+        .patient-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-small {
+            flex: 1;
+            padding: 10px;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
+        .btn-view-all {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-view-all:hover {
+            background: #5568d3;
+        }
+
+        .no-images {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6c757d;
+        }
+
+        .no-images i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 1.2rem;
+        }
+
+        .loading i {
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            overflow: auto;
+        }
+
+        .modal-content {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            background: #111827;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-close {
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background 0.3s ease;
+        }
+
+        .modal-close:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .modal-body {
+            flex: 1;
+            overflow: auto;
+            background: black;
+        }
+
+        /* DICOM Viewer Styles */
+        #dicomViewport {
+            width: 100%;
+            height: 100%;
+            min-height: 600px;
+            position: relative;
+            cursor: crosshair;
+        }
+        
+        #dicomViewport canvas {
+            display: block;
+            cursor: inherit;
+            pointer-events: auto;
+        }
+
+        .viewer-toolbar {
+            background: #1f2937;
+            padding: 10px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .toolbar-btn {
+            background: #374151;
+            color: #e5e7eb;
+            border: 1px solid #4b5563;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .toolbar-btn:hover {
+            background: #4b5563;
+            transform: translateY(-1px);
+        }
+
+        .toolbar-btn.active {
+            background: #2563eb;
+            border-color: #2563eb;
+            box-shadow: 0 2px 4px rgba(37, 99, 235, 0.4);
+        }
+        
+        .toolbar-btn i {
+            font-size: 0.85rem;
+        }
+
+        @media (max-width: 768px) {
+            .patients-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .search-bar {
+                flex-direction: column;
+            }
+
+            .search-input {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>
+            <i class="fas fa-x-ray"></i>
+            VR PACS - Quản lý Ảnh Siêu âm
+        </h1>
+        <div class="header-actions">
+            <a href="/" class="btn">
+                <i class="fas fa-home"></i> Trang chủ
+            </a>
+            <button class="btn btn-primary" onclick="refreshData()">
+                <i class="fas fa-sync-alt"></i> Làm mới
+            </button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="search-bar">
+            <input type="text" 
+                   id="searchInput" 
+                   class="search-input" 
+                   placeholder="Tìm kiếm theo tên bệnh nhân..."
+                   onkeyup="filterPatients()">
+            <div class="filter-group">
+                <select id="sortSelect" onchange="filterPatients()">
+                    <option value="name">Sắp xếp theo tên</option>
+                    <option value="date">Sắp xếp theo ngày</option>
+                    <option value="count">Sắp xếp theo số lượng ảnh</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="number" id="totalPatients">0</div>
+                <div class="label">Bệnh nhân</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="totalImages">0</div>
+                <div class="label">Ảnh siêu âm</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="totalStudies">0</div>
+                <div class="label">Nghiên cứu</div>
+            </div>
+        </div>
+
+        <div id="loadingIndicator" class="loading" style="display: none;">
+            <i class="fas fa-spinner"></i> Đang tải dữ liệu...
+        </div>
+
+        <div class="patients-grid" id="patientsGrid"></div>
+    </div>
+
+    <!-- DICOM Viewer Modal -->
+    <div id="viewerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <span id="modalPatientName"></span>
+                    <span> | </span>
+                    <span id="modalFileName"></span>
+                </div>
+                <button class="modal-close" onclick="closeViewer()">&times;</button>
+            </div>
+            <div class="viewer-toolbar"></div>
+            <div class="modal-body">
+                <div id="dicomViewport"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cornerstone Libraries - Load local copies to avoid CORB -->
+    <script>
+        // Load libraries strictly from local /static/vendor to avoid CORB / firewall issues
+        const libraryList = [
+            { name: 'cornerstone-core', urls: ['/static/vendor/cornerstone.js'] },
+            { name: 'dicom-parser', urls: ['/static/vendor/dicomParser.js'] },
+            { name: 'cornerstone-wado-image-loader', urls: ['/static/vendor/cornerstoneWADOImageLoader.js'] },
+            { name: 'cornerstone-math', urls: ['/static/vendor/cornerstoneMath.js'] },
+            { name: 'cornerstone-tools', urls: ['/static/vendor/cornerstoneTools.js'] }
+        ];
+
+        function loadScriptUrl(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.async = false;
+                script.onload = () => {
+                    console.log(`Loaded script: ${src}`);
+                    resolve(src);
+                };
+                script.onerror = () => {
+                    console.warn(`Failed to load script: ${src}`);
+                    script.remove();
+                    reject(new Error('Failed to load ' + src));
+                };
+                document.head.appendChild(script);
+            });
+        }
+
+        async function tryLoadLibrary(lib) {
+            for (const url of lib.urls) {
+                try {
+                    await loadScriptUrl(url);
+                    return { name: lib.name, url };
+                } catch (e) {
+                    // try next
+                }
+            }
+            throw new Error('All sources failed for ' + lib.name);
+        }
+
+        async function loadAllLibraries() {
+            console.log('Attempting to load DICOM viewer libraries (CDN primary, fallback)...');
+            const results = [];
+            const failed = [];
+            for (const lib of libraryList) {
+                try {
+                    const res = await tryLoadLibrary(lib);
+                    results.push(res);
+                } catch (err) {
+                    console.error(err.message);
+                    failed.push(lib.name);
+                }
+            }
+
+            if (failed.length > 0) {
+                console.error('Libraries failed to load:', failed);
+                // Inform user with which libraries are missing
+                alert('Các thư viện DICOM viewer chưa được tải: ' + failed.join(', ') + '\nVui lòng kiểm tra kết nối mạng hoặc cài đặt các file vendor vào /static/vendor và tải lại trang.');
+            } else {
+                console.log('All libraries loaded (or fallback used)');
+                if (window.onLibrariesReady) window.onLibrariesReady();
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', function() {
+            loadAllLibraries();
+        });
+    </script>
+
+    <script>
+        let patientsData = [];
+        let filteredPatients = [];
+        let currentImageId = null;
+        let viewerElement = null;
+        let isViewerInitialized = false;
+        let isWadoWorkerInitialized = false;
+        let TOOL_DEFINITIONS = [];
+
+        const lengthConfigFactory = () => ({
+            getTextCallback: function(data) {
+                if (data && data.handles && data.handles.start && data.handles.end) {
+                    try {
+                        const distance = cornerstoneMath.point.distance(data.handles.start, data.handles.end);
+                        if (data.image && data.image.rowPixelSpacing && data.image.columnPixelSpacing) {
+                            const pixelSpacing = (data.image.rowPixelSpacing + data.image.columnPixelSpacing) / 2;
+                            const distanceMm = distance * pixelSpacing;
+                            return `${distanceMm.toFixed(2)} mm`;
+                        }
+                        return `${distance.toFixed(2)} px`;
+                    } catch (e) {
+                        console.error('Error calculating distance:', e);
+                        return '';
+                    }
+                }
+                return '';
+            }
+        });
+
+        const TOOL_METADATA = [
+            { key: 'Window', internalKey: 'Wwwc', label: 'Window/Level', icon: 'fas fa-sliders-h', tooltip: 'Window/Level - Điều chỉnh độ sáng/tương phản (Phím W)', className: 'WwwcTool' },
+            { key: 'Pan', internalKey: 'Pan', label: 'Pan', icon: 'fas fa-hand-paper', tooltip: 'Pan - Di chuyển ảnh (Phím P)', className: 'PanTool' },
+            { key: 'Zoom', internalKey: 'Zoom', label: 'Zoom', icon: 'fas fa-search-plus', tooltip: 'Zoom - Phóng to/thu nhỏ (Phím Z)', className: 'ZoomTool', config: { invert: false } },
+            {
+                key: 'Length',
+                internalKey: 'Length',
+                label: 'Đo độ dài',
+                icon: 'fas fa-ruler',
+                tooltip: 'Đo độ dài - Đo khoảng cách giữa 2 điểm',
+                className: 'LengthTool',
+                configFactory: lengthConfigFactory
+            },
+            {
+                key: 'Distance',
+                internalKey: 'DistanceLength',
+                label: 'Distance length',
+                icon: 'fas fa-ruler-horizontal',
+                tooltip: 'Distance length - Đo khoảng cách giữa hai điểm',
+                className: 'LengthTool',
+                configFactory: lengthConfigFactory
+            },
+            {
+                key: 'Angle',
+                internalKey: 'Angle',
+                label: 'Đo góc',
+                icon: 'fas fa-angle-left',
+                tooltip: 'Đo góc - Đo góc giữa 2 đoạn thẳng',
+                className: 'AngleTool',
+                configFactory: () => ({
+                    getTextCallback: function(data) {
+                        if (data.handles && data.handles.start && data.handles.middle && data.handles.end) {
+                            const angle = cornerstoneMath.angle.degree(
+                                cornerstoneMath.point.subtract(data.handles.middle, data.handles.start),
+                                cornerstoneMath.point.subtract(data.handles.end, data.handles.middle)
+                            );
+                            return `${Math.abs(angle).toFixed(1)}°`;
+                        }
+                        return '';
+                    }
+                })
+            },
+            {
+                key: 'Elliptical',
+                internalKey: 'EllipticalRoi',
+                label: 'ROI Ellipse',
+                icon: 'fas fa-circle',
+                tooltip: 'ROI Ellipse - Vùng quan tâm hình elip',
+                className: 'EllipticalRoiTool',
+                configFactory: () => ({
+                    getTextCallback: function(data) {
+                        if (data.handles && data.handles.start && data.handles.end) {
+                            const width = Math.abs(data.handles.end.x - data.handles.start.x);
+                            const height = Math.abs(data.handles.end.y - data.handles.start.y);
+                            const area = Math.PI * (width / 2) * (height / 2);
+                            return `Area: ${area.toFixed(1)} px²`;
+                        }
+                        return '';
+                    }
+                })
+            },
+            {
+                key: 'Rectangle',
+                internalKey: 'RectangleRoi',
+                label: 'ROI Hình chữ nhật',
+                icon: 'fas fa-square',
+                tooltip: 'ROI Hình chữ nhật - Vùng quan tâm hình chữ nhật',
+                className: 'RectangleRoiTool',
+                configFactory: () => ({
+                    getTextCallback: function(data) {
+                        if (data.handles && data.handles.start && data.handles.end) {
+                            const width = Math.abs(data.handles.end.x - data.handles.start.x);
+                            const height = Math.abs(data.handles.end.y - data.handles.start.y);
+                            const area = width * height;
+                            return `Area: ${area.toFixed(1)} px²`;
+                        }
+                        return '';
+                    }
+                })
+            },
+            {
+                key: 'Probe',
+                internalKey: 'Probe',
+                label: 'Probe',
+                icon: 'fas fa-crosshairs',
+                tooltip: 'Probe - Xem giá trị pixel tại điểm click',
+                className: 'ProbeTool',
+                configFactory: () => ({
+                    getTextCallback: function(data) {
+                        if (data.currentPoints && data.currentPoints.image) {
+                            const imageData = data.currentPoints.image;
+                            return `Value: ${imageData.intensity}`;
+                        }
+                        return '';
+                    }
+                })
+            }
+        ];
+
+        function ensureToolDefinitions() {
+            if (TOOL_DEFINITIONS.length === TOOL_METADATA.length) {
+                return TOOL_DEFINITIONS;
+            }
+            if (typeof cornerstoneTools === 'undefined') {
+                return [];
+            }
+            TOOL_DEFINITIONS = TOOL_METADATA.map(meta => {
+                const toolClass = cornerstoneTools[meta.className];
+                if (!toolClass) {
+                    console.warn(`Tool class ${meta.className} not found in cornerstoneTools.`);
+                    return null;
+                }
+                const config = meta.configFactory ? meta.configFactory() : (meta.config ? { ...meta.config } : {});
+                return {
+                    ...meta,
+                    toolClass,
+                    config
+                };
+            }).filter(Boolean);
+            return TOOL_DEFINITIONS;
+        }
+
+        function buildToolbar() {
+            const toolbar = document.querySelector('.viewer-toolbar');
+            if (!toolbar) return;
+
+            toolbar.innerHTML = '';
+
+            const defs = ensureToolDefinitions();
+            const uiDefs = defs.length > 0 ? defs : TOOL_METADATA;
+
+            uiDefs.forEach(({ key, label, icon, tooltip }) => {
+                const button = document.createElement('button');
+                button.className = 'toolbar-btn';
+                if (tooltip) button.title = tooltip;
+                button.innerHTML = `<i class="${icon}"></i> ${label}`;
+                button.addEventListener('click', () => setActiveTool(key, button));
+                toolbar.appendChild(button);
+            });
+
+            const clearButton = document.createElement('button');
+            clearButton.className = 'toolbar-btn';
+            clearButton.title = 'Xóa - Xóa tất cả các đo đạc (Phím C hoặc Delete)';
+            clearButton.innerHTML = '<i class="fas fa-trash"></i> Xóa';
+            clearButton.addEventListener('click', () => {
+                clearAnnotations();
+                document.querySelectorAll('.viewer-toolbar .toolbar-btn').forEach(btn => btn.classList.remove('active'));
+            });
+            toolbar.appendChild(clearButton);
+        }
+
+        // Check if all libraries are loaded
+        function checkLibrariesLoaded() {
+            return typeof cornerstone !== 'undefined' &&
+                   typeof dicomParser !== 'undefined' &&
+                   typeof cornerstoneWADOImageLoader !== 'undefined' &&
+                   typeof cornerstoneMath !== 'undefined' &&
+                   typeof cornerstoneTools !== 'undefined';
+        }
+
+        // Wait for libraries to load
+        function waitForLibraries(callback, maxAttempts = 100) {
+            let attempts = 0;
+            const checkInterval = setInterval(() => {
+                attempts++;
+                if (checkLibrariesLoaded()) {
+                    clearInterval(checkInterval);
+                    console.log('All libraries verified loaded');
+                    callback();
+                } else if (attempts >= maxAttempts) {
+                    clearInterval(checkInterval);
+                    console.error('Libraries failed to load after', maxAttempts, 'attempts');
+                    console.error('Loaded libraries:', {
+                        cornerstone: typeof cornerstone !== 'undefined',
+                        dicomParser: typeof dicomParser !== 'undefined',
+                        cornerstoneWADOImageLoader: typeof cornerstoneWADOImageLoader !== 'undefined',
+                        cornerstoneMath: typeof cornerstoneMath !== 'undefined',
+                        cornerstoneTools: typeof cornerstoneTools !== 'undefined'
+                    });
+                    
+                    // Show more helpful error message
+                    const missingLibs = [];
+                    if (typeof cornerstone === 'undefined') missingLibs.push('cornerstone-core');
+                    if (typeof dicomParser === 'undefined') missingLibs.push('dicom-parser');
+                    if (typeof cornerstoneWADOImageLoader === 'undefined') missingLibs.push('cornerstone-wado-image-loader');
+                    if (typeof cornerstoneMath === 'undefined') missingLibs.push('cornerstone-math');
+                    if (typeof cornerstoneTools === 'undefined') missingLibs.push('cornerstone-tools');
+                    
+                    alert('Không thể tải các thư viện DICOM viewer:\n' + missingLibs.join(', ') + '\n\nVui lòng kiểm tra kết nối internet và tải lại trang.');
+                }
+            }, 100);
+        }
+
+        // Callback when libraries are ready
+        window.onLibrariesReady = function() {
+            console.log('Libraries ready callback called');
+            // Wait a bit more to ensure everything is ready
+            setTimeout(() => {
+                if (checkLibrariesLoaded()) {
+                    initializeCornerstone();
+                } else {
+                    waitForLibraries(() => {
+                        initializeCornerstone();
+                    });
+                }
+            }, 100);
+        };
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            buildToolbar();
+            loadPatients();
+            // Libraries will be loaded by the script loader above
+            // If they're already loaded, initialize immediately
+            if (checkLibrariesLoaded()) {
+                console.log('Libraries already loaded, initializing immediately');
+                initializeCornerstone();
+            } else {
+                // Wait for libraries to load
+                waitForLibraries(() => {
+                    initializeCornerstone();
+                });
+            }
+        });
+
+        // Initialize Cornerstone for DICOM viewing
+        function initializeCornerstone() {
+            if (!checkLibrariesLoaded()) {
+                console.error('Libraries not loaded yet');
+                return false;
+            }
+            
+            try {
+                cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
+                cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
+                cornerstoneTools.external.cornerstone = cornerstone;
+                cornerstoneTools.external.cornerstoneMath = cornerstoneMath;
+
+                if (!isWadoWorkerInitialized) {
+                    try {
+                        const localWorker = window.location.origin + '/static/vendor/cornerstoneWADOImageLoaderWebWorker.js';
+                        const localCodecs = window.location.origin + '/static/vendor/cornerstoneWADOImageLoaderCodecs.js';
+                        cornerstoneWADOImageLoader.webWorkerManager.initialize({
+                            maxWebWorkers: 2,
+                            startWebWorkersOnDemand: true,
+                            webWorkerPath: localWorker,
+                            taskConfiguration: {
+                                decodeTask: {
+                                    codecsPath: localCodecs
+                                }
+                            }
+                        });
+                        isWadoWorkerInitialized = true;
+                        console.log('Cornerstone WADO web worker initialized (local assets).');
+                    } catch (e) {
+                        console.error('Failed to initialize webWorkerManager with local paths.', e);
+                        alert('Không thể tải web worker DICOM từ /static/vendor. Vui lòng kiểm tra các file cornerstoneWADOImageLoaderWebWorker.js và cornerstoneWADOImageLoaderCodecs.js');
+                        throw e;
+                    }
+                } else {
+                    console.log('Cornerstone WADO web worker already initialized, skipping re-init.');
+                }
+                
+                console.log('Cornerstone initialized successfully');
+                return true;
+            } catch (error) {
+                console.error('Error initializing Cornerstone:', error);
+                return false;
+            }
+        }
+
+        // Load patients and their DICOM images
+        async function loadPatients() {
+            document.getElementById('loadingIndicator').style.display = 'block';
+            document.getElementById('patientsGrid').innerHTML = '';
+
+            try {
+                const response = await fetch('/api/vr-pacs/patients');
+                const data = await response.json();
+
+                if (data.success) {
+                    patientsData = data.patients || [];
+                    filteredPatients = [...patientsData];
+                    displayPatients(filteredPatients);
+                    updateStats(data.stats);
+                } else {
+                    alert('Lỗi khi tải dữ liệu: ' + (data.message || 'Không xác định'));
+                }
+            } catch (error) {
+                console.error('Error loading patients:', error);
+                alert('Lỗi kết nối đến server');
+            } finally {
+                document.getElementById('loadingIndicator').style.display = 'none';
+            }
+        }
+
+        // Display patients
+        function displayPatients(patients) {
+            const grid = document.getElementById('patientsGrid');
+            
+            if (patients.length === 0) {
+                grid.innerHTML = `
+                    <div class="no-images" style="grid-column: 1 / -1;">
+                        <i class="fas fa-folder-open"></i>
+                        <h3>Chưa có ảnh siêu âm</h3>
+                        <p>Khi máy siêu âm gửi ảnh, chúng sẽ xuất hiện tại đây</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = patients.map(patient => {
+                const imagesHtml = patient.images.length > 0
+                    ? patient.images.map((img, idx) => `
+                        <div class="image-thumb" onclick="viewDicom('${patient.name}', '${img.filename}')">
+                            <img src="/api/vr-pacs/preview/${encodeURIComponent(patient.name)}/${encodeURIComponent(img.filename)}" 
+                                 alt="${img.filename}"
+                                 onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27%3E%3Crect fill=%27%23f0f0f0%27 width=%27100%27 height=%27100%27/%3E%3Ctext x=%2750%27 y=%2750%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27%3EDICOM%3C/text%3E%3C/svg%3E'">
+                            <div class="overlay">
+                                ${img.filename}
+                            </div>
+                        </div>
+                    `).join('')
+                    : `
+                        <div class="no-images">
+                            <i class="fas fa-image"></i>
+                            <p>Chưa có ảnh</p>
+                        </div>
+                    `;
+
+                return `
+                    <div class="patient-card">
+                        <div class="patient-header">
+                            <div class="patient-name">${escapeHtml(patient.name)}</div>
+                            <div class="patient-info">
+                                <span><i class="fas fa-images"></i> ${patient.images.length} ảnh</span>
+                                <span><i class="fas fa-calendar"></i> ${patient.latestDate || 'N/A'}</span>
+                            </div>
+                        </div>
+                        <div class="patient-body">
+                            <div class="images-preview">
+                                ${imagesHtml}
+                            </div>
+                            <div class="patient-actions">
+                                <button class="btn btn-view-all btn-small" 
+                                        onclick="viewAllImages('${patient.name}')">
+                                    <i class="fas fa-eye"></i> Xem tất cả (${patient.images.length})
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Update statistics
+        function updateStats(stats) {
+            document.getElementById('totalPatients').textContent = stats.totalPatients || 0;
+            document.getElementById('totalImages').textContent = stats.totalImages || 0;
+            document.getElementById('totalStudies').textContent = stats.totalStudies || 0;
+        }
+
+        // Filter patients
+        function filterPatients() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const sortBy = document.getElementById('sortSelect').value;
+
+            filteredPatients = patientsData.filter(patient => 
+                patient.name.toLowerCase().includes(searchTerm)
+            );
+
+            // Sort
+            if (sortBy === 'name') {
+                filteredPatients.sort((a, b) => a.name.localeCompare(b.name));
+            } else if (sortBy === 'date') {
+                filteredPatients.sort((a, b) => (b.latestDate || '').localeCompare(a.latestDate || ''));
+            } else if (sortBy === 'count') {
+                filteredPatients.sort((a, b) => b.images.length - a.images.length);
+            }
+
+            displayPatients(filteredPatients);
+        }
+
+        // View single DICOM image
+        async function viewDicom(patientName, filename) {
+            // Check if libraries are loaded
+            if (!checkLibrariesLoaded()) {
+                console.error('Cornerstone libraries not loaded');
+                alert('Các thư viện DICOM viewer chưa được tải. Vui lòng đợi và thử lại.');
+                return;
+            }
+            
+            document.getElementById('modalPatientName').textContent = patientName;
+            document.getElementById('modalFileName').textContent = filename;
+            document.getElementById('viewerModal').style.display = 'block';
+            
+            viewerElement = document.getElementById('dicomViewport');
+            buildToolbar();
+            
+            // Disable and clear previous content if exists
+            try {
+                if (typeof cornerstone !== 'undefined' && cornerstone.getEnabledElement) {
+                    const enabledElement = cornerstone.getEnabledElement(viewerElement);
+                    if (enabledElement) {
+                        cornerstone.disable(viewerElement);
+                    }
+                }
+            } catch (e) {
+                console.log('No previous enabled element');
+            }
+            
+            // Clear HTML content
+            viewerElement.innerHTML = '';
+            
+            // Ensure Cornerstone is initialized
+            if (!isViewerInitialized) {
+                if (!initializeCornerstone()) {
+                    alert('Không thể khởi tạo DICOM viewer. Vui lòng tải lại trang.');
+                    return;
+                }
+            }
+            
+            // Enable cornerstone on the element
+            try {
+                if (typeof cornerstone !== 'undefined' && cornerstone.enable) {
+                    cornerstone.enable(viewerElement);
+                    console.log('✓ Cornerstone enabled on element');
+                    
+                    // Verify element is enabled
+                    const enabledEl = cornerstone.getEnabledElement(viewerElement);
+                    if (enabledEl) {
+                        console.log('✓ Element verified as enabled');
+                    } else {
+                        console.warn('⚠ Element enabled but not found in enabled elements');
+                    }
+                } else {
+                    throw new Error('Cornerstone not available');
+                }
+            } catch (e) {
+                console.error('Error enabling cornerstone:', e);
+                alert('Lỗi khi khởi tạo viewer: ' + e.message);
+                return;
+            }
+            
+            // Initialize tools - always ensure they're ready
+            if (typeof cornerstoneTools !== 'undefined') {
+                try {
+                    if (!isViewerInitialized) {
+                        try {
+                            cornerstoneTools.init();
+                            console.log('Cornerstone tools initialized');
+                        } catch (e) {
+                            console.log('Tools already initialized:', e.message);
+                        }
+
+                    const toolDefs = ensureToolDefinitions();
+                    if (!toolDefs.length) {
+                        console.warn('Tool definitions unavailable; skipping global registration for now.');
+                    }
+
+                    const uniqueDefs = Array.from(new Map((toolDefs.length > 0 ? toolDefs : []).map(def => [def.internalKey, def])).values());
+            uniqueDefs.forEach(({ internalKey, toolClass, config, label }) => {
+                            try {
+                                cornerstoneTools.removeTool(internalKey);
+                            } catch (e) {
+                                // ignore
+                            }
+
+                            try {
+                            cornerstoneTools.addTool(toolClass, {
+                                name: internalKey,
+                                configuration: config || {}
+                            });
+                                console.log(`✓ ${label || internalKey} tool registered globally`);
+                            } catch (e) {
+                                console.warn(`Could not add global tool ${internalKey}:`, e.message);
+                            }
+                        });
+
+                        isViewerInitialized = true;
+                    }
+
+                    // For every view call ensure element has tools registered
+                    const elementToolDefs = ensureToolDefinitions();
+                    const uniqueElementDefs = Array.from(new Map(elementToolDefs.map(def => [def.internalKey, def])).values());
+                    if (viewerElement && uniqueElementDefs.length > 0) {
+                        const enabledEl = cornerstone.getEnabledElement(viewerElement);
+                        if (enabledEl && cornerstoneTools.store) {
+                            const storeElements = cornerstoneTools.store.state.enabledElements || [];
+                            const inStore = storeElements.some(el => el.element === viewerElement);
+                            if (!inStore) {
+                                storeElements.push(enabledEl);
+                                cornerstoneTools.store.state.enabledElements = storeElements;
+                                console.log('✓ Element registered in store during tool setup');
+                            }
+
+                            uniqueElementDefs.forEach(({ internalKey, toolClass, config, label }) => {
+                                try {
+                                    cornerstoneTools.addToolForElement(viewerElement, toolClass, {
+                                        name: internalKey,
+                                        configuration: config || {}
+                                    });
+                                    console.log(`✓ Tool ${label || internalKey} registered for element`);
+                                } catch (e) {
+                                    console.warn(`⚠ Could not add tool ${internalKey} for element:`, e.message);
+                                }
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error initializing tools:', e);
+                }
+            }
+            
+            // Ensure element is registered in cornerstone tools store
+            try {
+                if (typeof cornerstoneTools !== 'undefined' && cornerstoneTools.store) {
+                    // The element should be automatically registered when cornerstone.enable is called
+                    console.log('Cornerstone tools store available');
+                    
+                    // Make sure element is properly registered
+                    const enabledElement = cornerstone.getEnabledElement(viewerElement);
+                    if (enabledElement) {
+                        console.log('Element enabled, should be registered in store');
+                    }
+                }
+            } catch (e) {
+                console.log('Could not access cornerstone tools store:', e);
+            }
+
+            // Load image
+            const imageId = `wadouri:${window.location.origin}/api/vr-pacs/dicom/${encodeURIComponent(patientName)}/${encodeURIComponent(filename)}`;
+            currentImageId = imageId;
+
+            try {
+                console.log('Loading DICOM image:', imageId);
+                
+                // Show loading indicator (create overlay instead of replacing content)
+                const viewport = document.getElementById('dicomViewport');
+                let loadingDiv = document.getElementById('loading-overlay');
+                if (!loadingDiv) {
+                    loadingDiv = document.createElement('div');
+                    loadingDiv.id = 'loading-overlay';
+                    loadingDiv.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); color: white; text-align: center; padding-top: 50%; z-index: 1000;';
+                    loadingDiv.textContent = 'Đang tải ảnh...';
+                    viewport.appendChild(loadingDiv);
+                } else {
+                    loadingDiv.style.display = 'block';
+                }
+                
+                const image = await cornerstone.loadAndCacheImage(imageId);
+                console.log('Image loaded successfully:', image);
+                
+                // Remove loading indicator
+                if (loadingDiv) {
+                    loadingDiv.style.display = 'none';
+                    loadingDiv.remove();
+                }
+                
+                const defaultViewport = cornerstone.getDefaultViewportForImage(viewerElement, image);
+                cornerstone.displayImage(viewerElement, image, defaultViewport);
+                
+                // Store current image ID for tool state management
+                currentImageId = image.imageId;
+                
+                // Ensure canvas is ready for tools
+                try {
+                    const enabledEl = cornerstone.getEnabledElement(viewerElement);
+                    if (enabledEl && enabledEl.canvas) {
+                        const canvas = enabledEl.canvas;
+                        canvas.style.display = '';
+                        canvas.style.pointerEvents = 'auto';
+                        console.log('✓ Canvas setup for tools');
+                    }
+                } catch (e) {
+                    console.warn('Could not setup canvas:', e);
+                }
+                
+                // Ensure tools are ready before activating
+                setTimeout(() => {
+                    // Ensure cornerstone is still enabled
+                    const enabledEl = cornerstone.getEnabledElement(viewerElement);
+                    if (!enabledEl) {
+                        console.warn('Element not enabled, re-enabling...');
+                        cornerstone.enable(viewerElement);
+                    }
+                    
+                    // Ensure element is registered in cornerstone tools
+                    // This must happen for tools to work
+                    try {
+                        if (cornerstoneTools.store) {
+                            let elementInStore = cornerstoneTools.store.state.enabledElements.find(
+                                el => el.element === viewerElement
+                            );
+                            
+                            if (!elementInStore) {
+                                console.warn('⚠ Element not in tools store, registering now...');
+                                // Try to add element to store
+                                try {
+                                    // Try multiple methods to register element
+                                    const enabledEl = cornerstone.getEnabledElement(viewerElement);
+                                    
+                                    if (enabledEl) {
+                                        // Method 1: Use addEnabledElement if available
+                                        if (typeof cornerstoneTools.addEnabledElement === 'function') {
+                                            try {
+                                                cornerstoneTools.addEnabledElement(viewerElement);
+                                                console.log('✓ Element registered via addEnabledElement');
+                                            } catch (e) {
+                                                console.log('addEnabledElement failed:', e);
+                                            }
+                                        }
+                                        
+                                        // Method 2: Manually add to store state
+                                        if (!cornerstoneTools.store.state.enabledElements) {
+                                            cornerstoneTools.store.state.enabledElements = [];
+                                        }
+                                        
+                                        // Check if already in array
+                                        const alreadyInArray = cornerstoneTools.store.state.enabledElements.some(
+                                            el => el.element === viewerElement
+                                        );
+                                        
+                                        if (!alreadyInArray) {
+                                            cornerstoneTools.store.state.enabledElements.push(enabledEl);
+                                            console.log('✓ Element manually added to store state');
+                                        }
+                                        
+                                        // Method 3: Try setting element directly
+                                        try {
+                                            if (cornerstoneTools.setToolActiveForElement) {
+                                                // Some tools might need element-specific activation
+                                                cornerstoneTools.setToolActiveForElement(viewerElement, 'WindowLevel', { mouseButtonMask: 1 });
+                                            }
+                                        } catch (e) {
+                                            // Method not available, that's okay
+                                        }
+                                    } else {
+                                        console.error('❌ No enabled element found to add to store');
+                                    }
+                                    
+                                    // Verify again
+                                    elementInStore = cornerstoneTools.store.state.enabledElements.find(
+                                        el => el.element === viewerElement
+                                    );
+                                    if (elementInStore) {
+                                        console.log('✓ Element confirmed in tools store');
+                                    } else {
+                                        console.error('❌ Element still not in store after registration attempt');
+                                    }
+                                } catch (registerError) {
+                                    console.error('Error registering element:', registerError);
+                                }
+                            } else {
+                                console.log('✓ Element registered in tools store:', elementInStore);
+                            }
+                        } else {
+                            console.warn('⚠ Cornerstone tools store not available');
+                        }
+                    } catch (e) {
+                        console.error('Could not check/register tools store:', e);
+                    }
+                    
+                    // Set default tool (Window/Level) AFTER image is fully displayed
+                    const firstBtn = document.querySelector('.viewer-toolbar .toolbar-btn');
+                    if (firstBtn) {
+                        console.log('Activating default tool: Window/Level');
+                        // Small delay to ensure image rendering is complete
+                        setTimeout(() => {
+                            setActiveTool('Window', firstBtn);
+                            console.log('Default tool activated after image display');
+                        }, 100);
+                    }
+                    
+                    console.log('Image displayed and tools ready');
+                }, 300);
+                
+                // Add keyboard shortcuts
+                setupKeyboardShortcuts();
+                
+                console.log('DICOM image displayed successfully');
+            } catch (error) {
+                console.error('Error loading DICOM:', error);
+                console.error('Error details:', error.stack);
+                const viewport = document.getElementById('dicomViewport');
+                viewport.innerHTML = `<div style="color: white; text-align: center; padding-top: 40%;">
+                    <h3>Lỗi khi tải ảnh DICOM</h3>
+                    <p>${error.message || 'Không xác định được lỗi'}</p>
+                    <button onclick="viewDicom('${patientName}', '${filename}')" style="margin-top: 20px; padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer;">Thử lại</button>
+                </div>`;
+            }
+        }
+
+        // View all images for a patient
+        function viewAllImages(patientName) {
+            const patient = patientsData.find(p => p.name === patientName);
+            if (!patient || patient.images.length === 0) {
+                alert('Không có ảnh để hiển thị');
+                return;
+            }
+
+            // Show first image
+            viewDicom(patientName, patient.images[0].filename);
+        }
+
+        // Set active tool in viewer
+        function setActiveTool(toolName, buttonElement) {
+            try {
+                if (typeof cornerstoneTools === 'undefined') {
+                    console.error('cornerstoneTools not loaded');
+                    return;
+                }
+                
+                if (!viewerElement || !cornerstone.getEnabledElement(viewerElement)) {
+                    console.error('Viewer element not ready');
+                    return;
+                }
+
+                const defs = ensureToolDefinitions();
+                const lookupDefs = defs.length > 0 ? defs : TOOL_METADATA;
+                const toolDefinition = lookupDefs.find(def => def.key === toolName);
+                const toolKey = toolDefinition ? toolDefinition.internalKey : toolName;
+                const toolLabel = toolDefinition ? toolDefinition.label : toolKey;
+                
+                // Clear active state of all buttons
+                document.querySelectorAll('.toolbar-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+
+                // Get enabled element
+                const enabledElement = cornerstone.getEnabledElement(viewerElement);
+                if (!enabledElement) {
+                    console.error('No enabled element found - cannot activate tool');
+                    alert('Viewer chưa sẵn sàng. Vui lòng đợi ảnh tải xong.');
+                    return;
+                }
+                
+                // Deactivate all active tools first
+                const toolsToDeactivate = Array.from(new Set((defs.length > 0 ? defs : TOOL_METADATA).map(def => def.internalKey)));
+                
+                // Deactivate all tools first
+                toolsToDeactivate.forEach(toolInternalName => {
+                    try {
+                        if (typeof cornerstoneTools.setToolPassiveForElement === 'function') {
+                            cornerstoneTools.setToolPassiveForElement(viewerElement, toolInternalName, { mouseButtonMask: 1 });
+                        } else {
+                            cornerstoneTools.setToolPassive(toolInternalName, { mouseButtonMask: 1 });
+                        }
+                    } catch (e) {
+                        // Tool might not be active, that's okay
+                        console.log(`${toolInternalName} deactivation skipped: ${e.message}`);
+                    }
+                });
+                
+                // Activate the selected tool
+                try {
+                    // Make sure element is registered first
+                    if (cornerstoneTools.store) {
+                        const elementInStore = cornerstoneTools.store.state.enabledElements.find(
+                            el => el.element === viewerElement
+                        );
+                        if (!elementInStore) {
+                            console.warn('⚠ Element not in store yet, attempting to add...');
+                            try {
+                                cornerstone.enable(viewerElement);
+                            } catch (e) {
+                                console.error('Error re-enabling element:', e);
+                            }
+                        }
+                    }
+
+                    if (typeof cornerstoneTools.setToolActiveForElement === 'function') {
+                        cornerstoneTools.setToolActiveForElement(
+                            viewerElement,
+                            toolKey,
+                            { mouseButtonMask: 1 }
+                        );
+                        console.log('✓ Tool activated FOR ELEMENT:', toolLabel);
+                    } else if (typeof cornerstoneTools.setToolActive === 'function') {
+                        cornerstoneTools.setToolActive(toolKey, { mouseButtonMask: 1 });
+                        console.log('✓ Tool activated globally (fallback):', toolLabel);
+                    } else {
+                        throw new Error('setToolActiveForElement not available');
+                    }
+
+                    try {
+                        const canvas = enabledElement.canvas;
+                        if (canvas) {
+                            console.log('✓ Canvas found:', canvas);
+
+                            if (canvas.parentElement) {
+                                console.log('✓ Canvas is in DOM');
+                            } else {
+                                console.warn('⚠ Canvas not in DOM!');
+                            }
+
+                            canvas.style.cursor = 'crosshair';
+                            console.log('✓ Cursor set to crosshair');
+                        } else {
+                            console.warn('⚠ No canvas found in enabled element');
+                        }
+                    } catch (e) {
+                        console.warn('Could not access canvas:', e);
+                    }
+
+                    console.log('Element:', viewerElement);
+                    console.log('Enabled element:', enabledElement);
+
+                    cornerstone.updateImage(viewerElement);
+
+                    setTimeout(() => {
+                        try {
+                            const canvas = enabledElement.canvas;
+                            if (canvas) {
+                                console.log('Re-activating tool for element...');
+
+                                if (typeof cornerstoneTools.setToolActiveForElement === 'function') {
+                                    cornerstoneTools.setToolActiveForElement(
+                                        viewerElement,
+                                        toolKey,
+                                        { mouseButtonMask: 1 }
+                                    );
+                                    console.log('✓ Tool re-activated FOR ELEMENT');
+                                } else {
+                                    cornerstoneTools.setToolActive(toolKey, { mouseButtonMask: 1 });
+                                }
+
+                                cornerstone.updateImage(viewerElement);
+                                console.log('✓ Tool re-activated for element');
+
+                                const testListener = (e) => {
+                                    console.log('✓ Mouse event detected on canvas:', e.type);
+                                };
+                                canvas.addEventListener('mousedown', testListener);
+                                console.log('✓ Mouse event listener attached to canvas');
+                            }
+                        } catch (e) {
+                            console.warn('Error re-activating tool:', e);
+                        }
+                    }, 200);
+                        
+                        // Verify tool is active by checking the store
+                        setTimeout(() => {
+                            try {
+                                if (cornerstoneTools.store && cornerstoneTools.store.state) {
+                                    const state = cornerstoneTools.store.state;
+                                    console.log('Tools store state:', state);
+                                    
+                                    // Check if element is registered
+                                    if (state.enabledElements && state.enabledElements.length > 0) {
+                                        const elementState = state.enabledElements.find(el => el.element === viewerElement);
+                                        if (elementState) {
+                                            console.log('Element registered in store:', elementState);
+                                        } else {
+                                            console.warn('Element not found in store');
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                console.log('Could not verify tool state:', e.message);
+                            }
+                        }, 100);
+                } catch (e) {
+                    console.error('Error setting tool active:', e);
+                    console.error('Error stack:', e.stack);
+                    console.error('Tool name:', toolKey);
+                    console.error('Enabled element:', enabledElement);
+                    console.error('cornerstoneTools available:', typeof cornerstoneTools !== 'undefined');
+                    alert('Không thể kích hoạt công cụ ' + toolName + '.\nLỗi: ' + e.message + '\n\nVui lòng mở Console (F12) để xem chi tiết.');
+                }
+                
+                // Highlight button
+                if (buttonElement) {
+                    buttonElement.classList.add('active');
+                }
+                
+                // Update image to ensure tool is visible
+                if (viewerElement) {
+                    cornerstone.updateImage(viewerElement);
+                }
+            } catch (error) {
+                console.error('Error in setActiveTool:', error);
+            }
+        }
+
+        // Clear annotations
+        function clearAnnotations() {
+            if (typeof cornerstoneTools === 'undefined' || typeof cornerstone === 'undefined') {
+                console.error('Cornerstone libraries not loaded');
+                return;
+            }
+            
+            if (!viewerElement) {
+                return;
+            }
+            
+            try {
+                if (currentImageId && cornerstoneTools.globalImageIdSpecificToolStateManager) {
+                    const toolState = cornerstoneTools.globalImageIdSpecificToolStateManager.toolState;
+                    
+                    // Clear all tool states for current image
+                    if (toolState[currentImageId]) {
+                        delete toolState[currentImageId];
+                    }
+                    
+                    // Also try to clear all measurements
+                    const enabledElement = cornerstone.getEnabledElement(viewerElement);
+                    if (enabledElement) {
+                        const toolStateManager = cornerstoneTools.globalImageIdSpecificToolStateManager;
+                        const imageId = enabledElement.image.imageId;
+                        
+                        // Clear measurements for all tools
+                        const toolsToClear = ['Length', 'DistanceLength', 'Angle', 'EllipticalRoi', 'RectangleRoi', 'Probe'];
+                        toolsToClear.forEach(toolName => {
+                            try {
+                                const state = toolStateManager.saveToolState(imageId, toolName);
+                                if (state && state.data) {
+                                    state.data = [];
+                                    toolStateManager.restoreToolState(imageId, toolName, state);
+                                }
+                            } catch (e) {
+                                // Tool state might not exist
+                            }
+                        });
+                    }
+                }
+                
+                // Update image to reflect changes
+                if (typeof cornerstone.updateImage === 'function') {
+                    cornerstone.updateImage(viewerElement);
+                }
+                
+                console.log('Annotations cleared');
+            } catch (e) {
+                console.error('Error clearing annotations:', e);
+                // Fallback: try to just clear the tool state
+                try {
+                    if (currentImageId) {
+                        const toolState = cornerstoneTools.globalImageIdSpecificToolStateManager.toolState;
+                        if (toolState[currentImageId]) {
+                            delete toolState[currentImageId];
+                            cornerstone.updateImage(viewerElement);
+                        }
+                    }
+                } catch (e2) {
+                    console.error('Fallback clear also failed:', e2);
+                }
+            }
+        }
+
+        // Close viewer
+        function closeViewer() {
+            document.getElementById('viewerModal').style.display = 'none';
+            if (viewerElement && typeof cornerstone !== 'undefined') {
+                try {
+                    if (typeof cornerstone.disable === 'function') {
+                        cornerstone.disable(viewerElement);
+                    }
+                } catch (e) {
+                    console.error('Error disabling cornerstone:', e);
+                }
+                
+                // Remove element from cornerstoneTools store to avoid operating on disabled elements
+                try {
+                    if (cornerstoneTools.store && Array.isArray(cornerstoneTools.store.state.enabledElements)) {
+                        cornerstoneTools.store.state.enabledElements = cornerstoneTools.store.state.enabledElements.filter(
+                            el => el.element !== viewerElement
+                        );
+                    }
+                } catch (e) {
+                    console.warn('Error removing element from cornerstoneTools store:', e);
+                }
+                
+                viewerElement = null;
+                currentImageId = null;
+            }
+        }
+
+        // Refresh data
+        function refreshData() {
+            loadPatients();
+        }
+
+        // Setup keyboard shortcuts
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', function(e) {
+                const modal = document.getElementById('viewerModal');
+                if (modal && modal.style.display === 'block') {
+                    // Only handle shortcuts when modal is open
+                    
+                    // Tool shortcuts (number keys 1-9)
+                    if (e.key >= '1' && e.key <= '9' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+                        const toolIndex = parseInt(e.key) - 1;
+                        const buttons = document.querySelectorAll('.viewer-toolbar .toolbar-btn');
+                        if (buttons[toolIndex] && !buttons[toolIndex].textContent.includes('Xóa')) {
+                            buttons[toolIndex].click();
+                            e.preventDefault();
+                        }
+                    }
+                    
+                    // ESC to close modal
+                    if (e.key === 'Escape') {
+                        closeViewer();
+                        e.preventDefault();
+                    }
+                    
+                    // Delete/Backspace to clear annotations
+                    if ((e.key === 'Delete' || e.key === 'Backspace') && !e.ctrlKey) {
+                        clearAnnotations();
+                        e.preventDefault();
+                    }
+                    
+                    // C for clear
+                    if (e.key === 'c' || e.key === 'C') {
+                        clearAnnotations();
+                        e.preventDefault();
+                    }
+                    
+                    // W for Window/Level
+                    if (e.key === 'w' || e.key === 'W') {
+                        const btn = document.querySelector('.viewer-toolbar .toolbar-btn');
+                        if (btn) btn.click();
+                        e.preventDefault();
+                    }
+                    
+                    // P for Pan
+                    if (e.key === 'p' || e.key === 'P') {
+                        const btn = Array.from(document.querySelectorAll('.viewer-toolbar .toolbar-btn')).find(b => b.textContent.includes('Pan'));
+                        if (btn) btn.click();
+                        e.preventDefault();
+                    }
+                    
+                    // Z for Zoom
+                    if (e.key === 'z' || e.key === 'Z') {
+                        const btn = Array.from(document.querySelectorAll('.viewer-toolbar .toolbar-btn')).find(b => b.textContent.includes('Zoom'));
+                        if (btn) btn.click();
+                        e.preventDefault();
+                    }
+                }
+            });
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('viewerModal');
+            if (event.target === modal) {
+                closeViewer();
+            }
+        }
+        
+        // Initialize keyboard shortcuts on page load
+        setupKeyboardShortcuts();
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>
+

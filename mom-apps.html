@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App mẹ bầu - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .apps-hero {
+            background: linear-gradient(135deg, #4caf50, #81c784);
+            color: white;
+            padding: 60px 20px;
+            text-align: center;
+            border-radius: 0 0 16px 16px;
+        }
+        .app-tab { background:#4caf50; color:#ffffff; font-weight:600; border:2px solid #4caf50; }
+        .app-tab.active { background:#ffffff; color:#2e7d32; border-color:#4caf50; }
+        .apps-grid {
+            max-width: 1100px;
+            margin: 30px auto;
+            padding: 0 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+        }
+        .app-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border-left: 4px solid #4caf50;
+        }
+        .app-card h3 { margin: 0 0 10px 0; color: #2e7d32; }
+        .coming-soon {
+            text-align: center;
+            padding: 40px 20px;
+            color: #555;
+        }
+        .coming-soon i { font-size: 3rem; color: #4caf50; margin-bottom: 10px; }
+        .admin-header {
+            background-color: white;
+            color: #2196F3;
+            padding: 1rem 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #2196F3;
+        }
+        .admin-header .logo img {
+            height: 50px;
+            margin-right: 10px;
+        }
+        .admin-header .logo {
+            display: flex;
+            align-items: center;
+        }
+        .admin-header nav {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+        }
+        .admin-header .nav-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .admin-header .back-link {
+            color: #2196F3;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+        }
+        .admin-header .back-link.btn.secondary-btn {
+            background-color: transparent;
+            border: 1px solid #2196F3;
+            color: #2196F3;
+        }
+        .admin-main {
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.png" alt="Logo Phòng khám Đại Anh">
+            <div>
+                <h1>App mẹ bầu</h1>
+                <p style="margin: 0; font-size: 0.9rem; color: #666;">Công cụ tiện ích cho mẹ bầu</p>
+            </div>
+        </div>
+        <nav>
+            <div class="nav-row">
+                <a href="pregnancy-utilities.html" class="back-link btn secondary-btn">
+                    <i class="fas fa-arrow-left"></i> Tiện ích mẹ bầu
+                </a>
+                <a href="index.html" class="back-link btn secondary-btn">
+                    <i class="fas fa-home"></i> Trang chủ
+                </a>
+            </div>
+        </nav>
+    </header>
+
+    <section class="apps-hero">
+        <div style="max-width: 1400px; margin: 0 auto; padding: 0 20px;">
+            <h2><i class="fas fa-mobile-alt"></i> App mẹ bầu</h2>
+            <div style="margin-top:12px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+                <button id="go-ga-calc" class="btn app-tab">
+                    <i class="fas fa-calculator"></i> Tính tuổi thai
+                </button>
+                <button id="go-art-cycle" class="btn app-tab">
+                    <i class="fas fa-pills"></i> Vòng kinh nhân tạo
+                </button>
+                <button id="go-leave-policy" class="btn app-tab">
+                    <i class="fas fa-calendar-times"></i> Chế độ nghỉ
+                </button>
+                <button id="go-bmi" class="btn app-tab">
+                    <i class="fas fa-weight"></i> BMI
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <main class="admin-main">
+        <div class="apps-grid">
+            <div class="app-card" id="ga-calc" style="grid-column: 1 / -1; display:none;">
+                <h3><i class="fas fa-calculator"></i> Tính tuổi thai</h3>
+                <p>Chọn phương pháp tính:</p>
+                <div style="display:flex; gap:8px; flex-wrap: wrap; margin: 10px 0 15px 0;">
+                    <button class="btn secondary-btn" id="tab-lmp">Theo Kỳ kinh cuối (LMP)</button>
+                    <button class="btn secondary-btn" id="tab-ivf">Theo ngày chuyển phôi (IVF)</button>
+                    <button class="btn secondary-btn" id="tab-edd">Theo ngày dự sinh (EDD)</button>
+                </div>
+
+                <!-- LMP method -->
+                <div id="panel-lmp" class="calc-panel">
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:12px;">
+                        <div>
+                            <label for="lmp-date" style="font-weight:600; color:#333;">Kỳ kinh cuối (LMP)</label>
+                            <input type="date" id="lmp-date" class="calc-input" />
+                        </div>
+                        <div>
+                            <label for="lmp-ref" style="font-weight:600; color:#333;">Ngày tham chiếu</label>
+                            <input type="date" id="lmp-ref" class="calc-input" />
+                            <small style="color:#666;">Mặc định là hôm nay</small>
+                        </div>
+                    </div>
+                    <div style="margin-top:12px; display:flex; gap:8px;">
+                        <button class="btn" id="btn-clear-lmp">Xóa</button>
+                    </div>
+                    <div id="lmp-result" class="calc-result" style="margin-top:14px;"></div>
+                </div>
+
+                <!-- IVF method -->
+                <div id="panel-ivf" class="calc-panel" style="display:none;">
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:12px;">
+                        <div>
+                            <label for="ivf-transfer-date" style="font-weight:600; color:#333;">Ngày chuyển phôi</label>
+                            <input type="date" id="ivf-transfer-date" class="calc-input" />
+                        </div>
+                        <div>
+                            <label for="ivf-type" style="font-weight:600; color:#333;">Loại phôi</label>
+                            <select id="ivf-type" class="calc-input">
+                                <option value="d3">Phôi ngày 3</option>
+                                <option value="d5">Phôi ngày 5</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="ivf-ref" style="font-weight:600; color:#333;">Ngày tham chiếu</label>
+                            <input type="date" id="ivf-ref" class="calc-input" />
+                            <small style="color:#666;">Mặc định là hôm nay</small>
+                        </div>
+                    </div>
+                    <div style="margin-top:12px; display:flex; gap:8px;">
+                        <button class="btn" id="btn-clear-ivf">Xóa</button>
+                    </div>
+                    <div id="ivf-result" class="calc-result" style="margin-top:14px;"></div>
+                </div>
+
+                <!-- EDD method -->
+                <div id="panel-edd" class="calc-panel" style="display:none;">
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:12px;">
+                        <div>
+                            <label for="edd-date" style="font-weight:600; color:#333;">Ngày dự sinh (EDD)</label>
+                            <input type="date" id="edd-date" class="calc-input" />
+                        </div>
+                        <div>
+                            <label for="edd-ref" style="font-weight:600; color:#333;">Ngày tham chiếu</label>
+                            <input type="date" id="edd-ref" class="calc-input" />
+                            <small style="color:#666;">Mặc định là hôm nay</small>
+                        </div>
+                    </div>
+                    <div style="margin-top:12px; display:flex; gap:8px;">
+                        <button class="btn" id="btn-clear-edd">Xóa</button>
+                    </div>
+                    <div id="edd-result" class="calc-result" style="margin-top:14px;"></div>
+                </div>
+                
+                <style>
+                    .calc-input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; }
+                    .calc-result { background: #f8f9fa; border-left: 4px solid #4caf50; padding: 12px; border-radius: 8px; }
+                    .pill { display:inline-block; padding:4px 10px; border-radius:20px; background:#e8f5e9; color:#2e7d32; font-weight:600; }
+                </style>
+                <script>
+                    // Helpers
+                    function toISODate(date) { return date.toISOString().slice(0,10); }
+                    function formatVN(date) { const d = new Date(date); const dd = String(d.getDate()).padStart(2,'0'); const mm = String(d.getMonth()+1).padStart(2,'0'); const yyyy = d.getFullYear(); return `${dd}/${mm}/${yyyy}`; }
+                    function parseDate(val) { return val ? new Date(val + 'T00:00:00') : null; }
+                    function addDays(date, days) { const d = new Date(date); d.setDate(d.getDate() + days); return d; }
+                    function diffDays(a, b) { // a - b in days
+                        const ms = parseDate(toISODate(a)) - parseDate(toISODate(b));
+                        return Math.round(ms / (24*60*60*1000));
+                    }
+                    function fmtGA(days) { if (days < 0) return 'Chưa đến kỳ'; const w = Math.floor(days / 7); const d = days % 7; return `${w} tuần ${d} ngày`; }
+
+                    // Tabs
+                    const tabs = [{b:'tab-lmp', p:'panel-lmp'}, {b:'tab-ivf', p:'panel-ivf'}, {b:'tab-edd', p:'panel-edd'}];
+                    tabs.forEach(t => {
+                        document.getElementById(t.b).addEventListener('click', () => {
+                            tabs.forEach(x => { document.getElementById(x.p).style.display = x.p === t.p ? 'block' : 'none'; });
+                        });
+                    });
+
+                    // Default reference dates to today
+                    const todayISO = toISODate(new Date());
+                    ['lmp-ref','ivf-ref','edd-ref'].forEach(id => { const el = document.getElementById(id); if (el) el.value = todayISO; });
+
+                    // Calculation functions
+                    function calcLMP() {
+                        const lmp = parseDate(document.getElementById('lmp-date').value);
+                        const ref = parseDate(document.getElementById('lmp-ref').value) || new Date();
+                        const out = document.getElementById('lmp-result');
+                        if (!lmp) { out.innerHTML = '<span style="color:#c62828;">Vui lòng chọn ngày kỳ kinh cuối.</span>'; return; }
+                        const edd = addDays(lmp, 280);
+                        const gaDays = diffDays(ref, lmp);
+                        out.innerHTML = `
+                            <div><strong>Tuổi thai hiện tại:</strong> <span class="pill">${fmtGA(gaDays)}</span></div>
+                            <div><strong>Dự kiến sinh (EDD):</strong> ${formatVN(edd)}</div>
+                            <div><small>LMP: ${formatVN(lmp)} | Ngày tham chiếu: ${formatVN(ref)}</small></div>
+                        `;
+                    }
+                    function calcIVF() {
+                        const transfer = parseDate(document.getElementById('ivf-transfer-date').value);
+                        const type = document.getElementById('ivf-type').value;
+                        const ref = parseDate(document.getElementById('ivf-ref').value) || new Date();
+                        const out = document.getElementById('ivf-result');
+                        if (!transfer) { out.innerHTML = '<span style=\"color:#c62828;\">Vui lòng chọn ngày chuyển phôi.</span>'; return; }
+                        const add = type === 'd5' ? 261 : 263;
+                        const edd = addDays(transfer, add);
+                        const lmp = addDays(edd, -280);
+                        const gaDays = diffDays(ref, lmp);
+                        out.innerHTML = `
+                            <div><strong>Tuổi thai hiện tại:</strong> <span class="pill">${fmtGA(gaDays)}</span></div>
+                            <div><strong>Dự kiến sinh (EDD):</strong> ${formatVN(edd)}</div>
+                            <div><small>Transfer: ${formatVN(transfer)} | Loại: ${(type==='d3'?'Phôi ngày 3':'Phôi ngày 5')} | Ngày tham chiếu: ${formatVN(ref)}</small></div>
+                        `;
+                    }
+                    function calcEDD() {
+                        const edd = parseDate(document.getElementById('edd-date').value);
+                        const ref = parseDate(document.getElementById('edd-ref').value) || new Date();
+                        const out = document.getElementById('edd-result');
+                        if (!edd) { out.innerHTML = '<span style=\"color:#c62828;\">Vui lòng chọn ngày dự sinh.</span>'; return; }
+                        const lmp = addDays(edd, -280);
+                        const gaDays = diffDays(ref, lmp);
+                        out.innerHTML = `
+                            <div><strong>Tuổi thai hiện tại:</strong> <span class="pill">${fmtGA(gaDays)}</span></div>
+                            <div><strong>Kỳ kinh cuối tương đương (ước tính):</strong> ${formatVN(lmp)}</div>
+                            <div><small>EDD: ${formatVN(edd)} | Ngày tham chiếu: ${formatVN(ref)}</small></div>
+                        `;
+                    }
+
+                    // Auto-calc on input changes
+                    ['lmp-date','lmp-ref'].forEach(id => {
+                        const el = document.getElementById(id);
+                        el && ['change','input'].forEach(evt => el.addEventListener(evt, calcLMP));
+                    });
+                    ['ivf-transfer-date','ivf-type','ivf-ref'].forEach(id => {
+                        const el = document.getElementById(id);
+                        el && ['change','input'].forEach(evt => el.addEventListener(evt, calcIVF));
+                    });
+                    ['edd-date','edd-ref'].forEach(id => {
+                        const el = document.getElementById(id);
+                        el && ['change','input'].forEach(evt => el.addEventListener(evt, calcEDD));
+                    });
+
+                    // Clear buttons
+                    const btnClearLmp = document.getElementById('btn-clear-lmp');
+                    if (btnClearLmp) btnClearLmp.addEventListener('click', () => {
+                        const date = document.getElementById('lmp-date');
+                        const out = document.getElementById('lmp-result');
+                        if (date) date.value = '';
+                        if (out) out.innerHTML = '';
+                    });
+
+                    const btnClearIvf = document.getElementById('btn-clear-ivf');
+                    if (btnClearIvf) btnClearIvf.addEventListener('click', () => {
+                        const date = document.getElementById('ivf-transfer-date');
+                        const out = document.getElementById('ivf-result');
+                        if (date) date.value = '';
+                        if (out) out.innerHTML = '';
+                    });
+
+                    const btnClearEdd = document.getElementById('btn-clear-edd');
+                    if (btnClearEdd) btnClearEdd.addEventListener('click', () => {
+                        const date = document.getElementById('edd-date');
+                        const out = document.getElementById('edd-result');
+                        if (date) date.value = '';
+                        if (out) out.innerHTML = '';
+                    });
+                </script>
+            </div>
+
+            <!-- Artificial Cycle App -->
+            <div class="app-card" id="art-cycle" style="grid-column: 1 / -1; display:none;">
+                <h3><i class="fas fa-pills"></i> Vòng kinh nhân tạo</h3>
+                <p>Thiết lập phác đồ hai thuốc. Ngày bắt đầu của Thuốc 2 mặc định sau Thuốc 1 là <strong id="offset-label">14</strong> ngày (có thể chỉnh).</p>
+                <div style="display:grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap:16px;">
+                    <div style="background:#f8f9fa; border-radius:10px; padding:12px; border-left:4px solid #4caf50;">
+                        <h4 style="margin:0 0 10px 0; color:#2e7d32;"><i class="fas fa-capsules"></i> Thuốc số 1</h4>
+                        <label for="drug1-name" style="font-weight:600; color:#333;">Tên thuốc</label>
+                        <input type="text" id="drug1-name" class="calc-input" placeholder="Nhập tên thuốc số 1">
+                        <div style="margin-top:10px;"></div>
+                        <label for="drug1-usage" style="font-weight:600; color:#333;">Cách dùng</label>
+                        <textarea id="drug1-usage" class="calc-input" placeholder="Nhập cách dùng / liều dùng"></textarea>
+                        <div style="margin-top:10px;"></div>
+                        <label for="drug1-start" style="font-weight:600; color:#333;">Ngày bắt đầu uống</label>
+                        <input type="date" id="drug1-start" class="calc-input">
+                        <small style="color:#666;">Mặc định: hôm nay</small>
+                    </div>
+
+                    <div style="background:#f8f9fa; border-radius:10px; padding:12px; border-left:4px solid #4caf50;">
+                        <h4 style="margin:0 0 10px 0; color:#2e7d32;"><i class="fas fa-capsules"></i> Thuốc số 2</h4>
+                        <label for="drug2-name" style="font-weight:600; color:#333;">Tên thuốc</label>
+                        <input type="text" id="drug2-name" class="calc-input" placeholder="Nhập tên thuốc số 2">
+                        <div style="margin-top:10px;"></div>
+                        <label for="drug2-usage" style="font-weight:600; color:#333;">Cách dùng</label>
+                        <textarea id="drug2-usage" class="calc-input" placeholder="Nhập cách dùng / liều dùng"></textarea>
+                        <div style="margin-top:10px;"></div>
+                        <label for="offset-days" style="font-weight:600; color:#333;">Số ngày sau Thuốc 1</label>
+                        <input type="number" id="offset-days" class="calc-input" min="0" value="14">
+                        <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+                            <button class="btn" id="btn-save-offset"><i class="fas fa-thumbtack"></i> Lưu mặc định</button>
+                            <small style="color:#666;">Lưu số ngày này làm mặc định cho lần sau</small>
+                        </div>
+                        <div style="margin-top:10px;"></div>
+                        <label for="drug2-start" style="font-weight:600; color:#333;">Ngày bắt đầu uống</label>
+                        <input type="date" id="drug2-start" class="calc-input">
+                        <small style="color:#666;">Tự động: sau Thuốc 1 theo số ngày trên (có thể chỉnh)</small>
+                    </div>
+                </div>
+                <div style="margin-top:12px; display:flex; gap:8px;">
+                    <button class="btn" id="btn-clear-art">Xóa</button>
+                </div>
+                <div id="art-summary" class="calc-result" style="margin-top:14px;"></div>
+            </div>
+
+            <!-- Medical Leave Policy App -->
+            <div class="app-card" id="leave-policy" style="grid-column: 1 / -1; display:none;">
+                <h3><i class="fas fa-calendar-times"></i> Chế độ nghỉ</h3>
+                <p>Quy định thời gian nghỉ làm việc theo từng loại chẩn đoán. Ngày bắt đầu nghỉ mặc định là ngày mai (hôm nay + 1 ngày).</p>
+                
+                <div id="leave-policy-content">
+                    <!-- Content will be dynamically loaded -->
+                </div>
+                
+                <div style="margin-top:16px; display:flex; gap:8px;">
+                    <button class="btn" id="btn-clear-leave">Xóa</button>
+                    <button class="btn primary-btn" id="btn-save-leave"><i class="fas fa-save"></i> Lưu</button>
+                </div>
+                <div id="leave-summary" class="calc-result" style="margin-top:14px;"></div>
+            </div>
+            <!-- BMI Calculator App -->
+            <div class="app-card" id="bmi-calc" style="grid-column: 1 / -1; display:none;">
+                <h3><i class="fas fa-weight"></i> Chỉ số BMI</h3>
+                <p>Tính chỉ số khối cơ thể (BMI). Nhập cân nặng (kg) và chiều cao (cm).</p>
+                <div style="display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:12px;">
+                    <div>
+                        <label for="bmi-weight" style="font-weight:600; color:#333;">Cân nặng (kg)</label>
+                        <input type="number" id="bmi-weight" class="calc-input" min="0" step="0.1" placeholder="vd. 65.5">
+                    </div>
+                    <div>
+                        <label for="bmi-height" style="font-weight:600; color:#333;">Chiều cao (cm)</label>
+                        <input type="number" id="bmi-height" class="calc-input" min="0" step="0.1" placeholder="vd. 165">
+                    </div>
+                    <div>
+                        <label style="font-weight:600; color:#333;">Kết quả</label>
+                        <div id="bmi-result" class="calc-result" style="min-height:56px; display:flex; align-items:center;">
+                            <div style="color:#666;">Chưa có dữ liệu</div>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top:12px; display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:8px; align-items:center;">
+                    <div>
+                        <label for="bmi-patient-id" style="font-weight:600; color:#333;">Mã bệnh nhân (PID) — nếu lưu</label>
+                        <input type="text" id="bmi-patient-id" class="calc-input" placeholder="vd. BN00123">
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn" id="btn-save-bmi"><i class="fas fa-save"></i> Lưu vào hồ sơ</button>
+                        <button class="btn" id="btn-clear-bmi">Xóa</button>
+                    </div>
+                </div>
+                <small style="display:block;margin-top:8px;color:#666;">Lưu ý: BMI chỉ mang tính tham khảo. Đánh giá cần kết hợp tiền sử và khám lâm sàng.</small>
+            </div>
+            <div class="app-card">
+                <h3><i class="fas fa-baby"></i> Theo dõi thai kỳ</h3>
+                <p>Ghi lại mốc thai kỳ, lịch khám, siêu âm, xét nghiệm.</p>
+            </div>
+            <div class="app-card">
+                <h3><i class="fas fa-apple-alt"></i> Dinh dưỡng thông minh</h3>
+                <p>Gợi ý thực đơn, dưỡng chất phù hợp từng giai đoạn.</p>
+            </div>
+            <div class="app-card">
+                <h3><i class="fas fa-heartbeat"></i> Sức khỏe & vận động</h3>
+                <p>Bài tập nhẹ nhàng, theo dõi cân nặng, huyết áp.</p>
+            </div>
+        </div>
+
+        <div class="coming-soon">
+            <i class="fas fa-tools"></i>
+            <h3>Tính năng đang phát triển</h3>
+            <p>Chúng tôi sẽ cập nhật và bổ sung thêm các ứng dụng hữu ích cho mẹ bầu trong thời gian tới.</p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+    <script>
+        function showApp(appId) {
+            const apps = ['ga-calc','art-cycle','leave-policy','bmi-calc'];
+            apps.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = (id === appId) ? 'block' : 'none';
+            });
+            // Toggle active tab button
+            const tabMap = { 'ga-calc': 'go-ga-calc', 'art-cycle': 'go-art-cycle', 'leave-policy': 'go-leave-policy', 'bmi-calc': 'go-bmi' };
+            const buttons = ['go-ga-calc','go-art-cycle','go-leave-policy','go-bmi'];
+            buttons.forEach(bid => {
+                const b = document.getElementById(bid);
+                if (b) b.classList.remove('active');
+            });
+            const activeBtn = document.getElementById(tabMap[appId]);
+            if (activeBtn) activeBtn.classList.add('active');
+            const el = document.getElementById(appId);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                el.style.boxShadow = '0 0 0 3px rgba(76,175,80,0.35)';
+                setTimeout(()=>{ el.style.boxShadow=''; }, 1200);
+            }
+        }
+        const goCalc = document.getElementById('go-ga-calc');
+        if (goCalc) goCalc.addEventListener('click', () => showApp('ga-calc'));
+        const goArt = document.getElementById('go-art-cycle');
+        if (goArt) goArt.addEventListener('click', () => showApp('art-cycle'));
+        const goLeave = document.getElementById('go-leave-policy');
+        if (goLeave) goLeave.addEventListener('click', () => showApp('leave-policy'));
+    const goBmi = document.getElementById('go-bmi');
+    if (goBmi) goBmi.addEventListener('click', () => showApp('bmi-calc'));
+
+        // Artificial Cycle Script
+        (function() {
+            const drug1Name = document.getElementById('drug1-name');
+            const drug1Usage = document.getElementById('drug1-usage');
+            const drug1Start = document.getElementById('drug1-start');
+            const drug2Name = document.getElementById('drug2-name');
+            const drug2Usage = document.getElementById('drug2-usage');
+            const drug2Start = document.getElementById('drug2-start');
+            const offsetDays = document.getElementById('offset-days');
+            const offsetLabel = document.getElementById('offset-label');
+            const btnSaveArt = document.getElementById('btn-save-art');
+            const btnClearArt = document.getElementById('btn-clear-art');
+            const btnSaveOffset = document.getElementById('btn-save-offset');
+            const artSummary = document.getElementById('art-summary');
+
+            // Helper functions
+            function toISODate(date) {
+                return date.toISOString().slice(0, 10);
+            }
+
+            function formatVN(date) {
+                const d = new Date(date);
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const yyyy = d.getFullYear();
+                return `${dd}/${mm}/${yyyy}`;
+            }
+
+            function addDays(date, days) {
+                const d = new Date(date);
+                d.setDate(d.getDate() + days);
+                return d;
+            }
+
+            function parseDate(val) {
+                return val ? new Date(val + 'T00:00:00') : null;
+            }
+
+            // Set default dates
+            function setDefaultDates() {
+                const today = new Date();
+                if (drug1Start && !drug1Start.value) {
+                    drug1Start.value = toISODate(today);
+                }
+                updateDrug2Date();
+            }
+
+            // Update drug2 start date based on drug1 start date + offset
+            function updateDrug2Date() {
+                if (!drug1Start || !drug2Start || !offsetDays) return;
+                
+                const drug1Date = parseDate(drug1Start.value);
+                const offset = parseInt(offsetDays.value) || 0;
+                
+                if (drug1Date) {
+                    const drug2Date = addDays(drug1Date, offset);
+                    drug2Start.value = toISODate(drug2Date);
+                }
+            }
+
+            // Load default offset from API
+            async function loadDefaultOffset() {
+                try {
+                    const response = await fetch('/api/artificial-cycle/default-offset');
+                    const data = await response.json();
+                    if (data.success && offsetDays) {
+                        offsetDays.value = data.offset_days || 14;
+                        if (offsetLabel) offsetLabel.textContent = data.offset_days || 14;
+                        updateDrug2Date();
+                    }
+                } catch (error) {
+                    console.error('Error loading default offset:', error);
+                }
+            }
+
+
+
+            // Save default offset
+            async function saveDefaultOffset() {
+                try {
+                    const offset = parseInt(offsetDays.value) || 14;
+                    const response = await fetch('/api/artificial-cycle/default-offset', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ offset_days: offset })
+                    });
+                    
+                    const data = await response.json();
+                    if (data.success) {
+                        if (offsetLabel) offsetLabel.textContent = offset;
+                        artSummary.innerHTML = `<div style="color:#4caf50;"><i class="fas fa-check-circle"></i> ${data.message || 'Đã lưu mặc định thành công'}</div>`;
+                        setTimeout(() => {
+                            artSummary.innerHTML = '';
+                        }, 3000);
+                    } else {
+                        throw new Error(data.message || 'Lỗi khi lưu');
+                    }
+                } catch (error) {
+                    console.error('Error saving default offset:', error);
+                    artSummary.innerHTML = `<div style="color:#c62828;"><i class="fas fa-exclamation-circle"></i> Lỗi: ${error.message}</div>`;
+                }
+            }
+
+            // Clear form
+            function clearForm() {
+                if (drug1Name) drug1Name.value = '';
+                if (drug1Usage) drug1Usage.value = '';
+                if (drug2Name) drug2Name.value = '';
+                if (drug2Usage) drug2Usage.value = '';
+                if (artSummary) artSummary.innerHTML = '';
+                setDefaultDates();
+            }
+
+            // Event listeners
+            if (drug1Start) {
+                drug1Start.addEventListener('change', updateDrug2Date);
+            }
+            if (offsetDays) {
+                offsetDays.addEventListener('input', updateDrug2Date);
+            }
+            if (btnClearArt) {
+                btnClearArt.addEventListener('click', clearForm);
+            }
+            if (btnSaveOffset) {
+                btnSaveOffset.addEventListener('click', saveDefaultOffset);
+            }
+
+            // Initialize when tab is shown
+            const goArtBtn = document.getElementById('go-art-cycle');
+            if (goArtBtn) {
+                goArtBtn.addEventListener('click', () => {
+                    setTimeout(() => {
+                        setDefaultDates();
+                        loadDefaultOffset();
+                    }, 100);
+                });
+            }
+
+            // When opening Artificial Cycle tab, delete all prescription templates
+            if (goArtBtn) {
+                goArtBtn.addEventListener('click', async () => {
+                    try {
+                        await fetch('/api/prescription-templates/all', { method: 'DELETE' });
+                        // Optionally show a tiny notice
+                        artSummary.innerHTML = `<div style="color:#4caf50;"><i class="fas fa-check-circle"></i> Đã xóa tất cả đơn thuốc mẫu</div>`;
+                        setTimeout(()=>{ if (artSummary) artSummary.innerHTML = ''; }, 2500);
+                    } catch (e) {
+                        console.error('Không thể xóa đơn thuốc mẫu:', e);
+                    }
+                });
+            }
+
+            // Initial setup
+            setDefaultDates();
+            loadDefaultOffset();
+        })();
+
+        // Medical Leave Policy Script
+        (function() {
+            const leavePolicyContent = document.getElementById('leave-policy-content');
+            const btnSaveLeave = document.getElementById('btn-save-leave');
+            const btnClearLeave = document.getElementById('btn-clear-leave');
+            let leavePolicies = {};
+
+            // Helper functions
+            function toISODate(date) {
+                return date.toISOString().slice(0, 10);
+            }
+
+            function formatVN(date) {
+                const d = new Date(date);
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const yyyy = d.getFullYear();
+                return `${dd}/${mm}/${yyyy}`;
+            }
+
+            function addDays(date, days) {
+                const d = new Date(date);
+                d.setDate(d.getDate() + days);
+                return d;
+            }
+
+            function parseDate(val) {
+                return val ? new Date(val + 'T00:00:00') : null;
+            }
+
+            // Calculate start date (today + 1)
+            function getStartDate() {
+                const today = new Date();
+                return addDays(today, 1);
+            }
+
+            // Render leave policy UI
+            function renderLeavePolicy() {
+                const startDate = getStartDate();
+                const startDateISO = toISODate(startDate);
+                
+                const leaveTypes = {
+                    'threatened_miscarriage': {
+                        title: '1. Dọa sảy thai',
+                        key: 'threatened_miscarriage',
+                        defaultDays: 10
+                    },
+                    'gynecological_surgery': {
+                        title: '2. Sau mổ phụ khoa',
+                        key: 'gynecological_surgery',
+                        defaultDays: 10
+                    },
+                    'normal_c_section_birth': {
+                        title: '3. Sau sinh thường, sinh mổ',
+                        key: 'normal_c_section_birth',
+                        defaultDays: 0,
+                        specialNote: 'Nghỉ theo chế độ thai sản'
+                    },
+                    'stillbirth_surgery': {
+                        title: '4. Sau đẻ, mổ thai lưu',
+                        key: 'stillbirth_surgery',
+                        subCategories: [
+                            { key: 'under_5_weeks', title: 'Thai dưới 05 tuần tuổi', defaultDays: 10 },
+                            { key: '5_13_weeks', title: 'Thai từ 05 - 13 tuần tuổi', defaultDays: 20 },
+                            { key: '13_25_weeks', title: 'Thai từ 13 - 25 tuần tuổi', defaultDays: 40 },
+                            { key: '25_weeks_above', title: 'Thai từ 25 tuần tuổi trở lên', defaultDays: 50 }
+                        ]
+                    }
+                };
+
+                let html = '<div style="display:grid; grid-template-columns: 1fr; gap:20px;">';
+                
+                for (const [typeKey, typeInfo] of Object.entries(leaveTypes)) {
+                    const policy = leavePolicies[typeKey];
+                    const days = policy ? policy.default_days : typeInfo.defaultDays;
+                    
+                    if (typeKey === 'stillbirth_surgery') {
+                        // Special handling for stillbirth surgery with subcategories
+                        html += `<div style="background:#f8f9fa; border-radius:10px; padding:16px; border-left:4px solid #4caf50;">`;
+                        html += `<h4 style="margin:0 0 16px 0; color:#2e7d32;">${typeInfo.title}</h4>`;
+                        
+                        typeInfo.subCategories.forEach(sub => {
+                            // Find policy for this subcategory
+                            let subPolicy = null;
+                            if (leavePolicies[typeKey] && leavePolicies[typeKey].sub_categories) {
+                                subPolicy = leavePolicies[typeKey].sub_categories.find(s => s.sub_category === sub.key);
+                            }
+                            const subDays = subPolicy ? subPolicy.default_days : sub.defaultDays;
+                            const endDate = addDays(startDate, subDays - 1);
+                            
+                            html += `<div style="margin-bottom:16px; padding:12px; background:white; border-radius:8px;">`;
+                            html += `<div style="font-weight:600; margin-bottom:8px; color:#333;">${sub.title}</div>`;
+                            html += `<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:8px;">`;
+                            html += `<div>`;
+                            html += `<label style="font-weight:600; color:#666; font-size:0.9em;">Số ngày nghỉ</label>`;
+                            html += `<input type="number" id="leave-days-${typeKey}-${sub.key}" class="calc-input" min="0" value="${subDays}" style="width:100%;">`;
+                            html += `</div>`;
+                            html += `<div>`;
+                            html += `<label style="font-weight:600; color:#666; font-size:0.9em;">Ngày bắt đầu</label>`;
+                            html += `<input type="date" id="leave-start-${typeKey}-${sub.key}" class="calc-input" value="${startDateISO}" style="width:100%;">`;
+                            html += `</div>`;
+                            html += `<div>`;
+                            html += `<label style="font-weight:600; color:#666; font-size:0.9em;">Ngày kết thúc</label>`;
+                            html += `<input type="date" id="leave-end-${typeKey}-${sub.key}" class="calc-input" value="${toISODate(endDate)}" readonly style="width:100%; background:#f0f0f0;">`;
+                            html += `</div>`;
+                            html += `</div>`;
+                            html += `<div style="color:#666; font-size:0.9em; margin-top:4px;">Hẹn khám lại sau 01 tuần hoặc khi có bất thường khám lại ngay.</div>`;
+                            html += `</div>`;
+                        });
+                        html += `</div>`;
+                    } else {
+                        // Regular categories
+                        const endDate = days > 0 ? addDays(startDate, days - 1) : startDate;
+                        const followUp = policy ? policy.follow_up_instruction : 'Hẹn khám lại sau 01 tuần hoặc khi có bất thường khám lại ngay.';
+                        
+                        html += `<div style="background:#f8f9fa; border-radius:10px; padding:16px; border-left:4px solid #4caf50;">`;
+                        html += `<h4 style="margin:0 0 16px 0; color:#2e7d32;">${typeInfo.title}</h4>`;
+                        
+                        if (typeKey === 'normal_c_section_birth') {
+                            html += `<div style="margin-bottom:12px; color:#666; font-size:0.95em;">Nghỉ theo chế độ thai sản. Dinh dưỡng đầy đủ. Dùng thuốc theo đơn.</div>`;
+                        } else {
+                            html += `<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:8px;">`;
+                            html += `<div>`;
+                            html += `<label style="font-weight:600; color:#666; font-size:0.9em;">Số ngày nghỉ</label>`;
+                            html += `<input type="number" id="leave-days-${typeKey}" class="calc-input" min="0" value="${days}" style="width:100%;">`;
+                            html += `</div>`;
+                            html += `<div>`;
+                            html += `<label style="font-weight:600; color:#666; font-size:0.9em;">Ngày bắt đầu</label>`;
+                            html += `<input type="date" id="leave-start-${typeKey}" class="calc-input" value="${startDateISO}" style="width:100%;">`;
+                            html += `</div>`;
+                            html += `<div>`;
+                            html += `<label style="font-weight:600; color:#666; font-size:0.9em;">Ngày kết thúc</label>`;
+                            html += `<input type="date" id="leave-end-${typeKey}" class="calc-input" value="${toISODate(endDate)}" readonly style="width:100%; background:#f0f0f0;">`;
+                            html += `</div>`;
+                            html += `</div>`;
+                        }
+                        html += `<div style="color:#666; font-size:0.9em; margin-top:4px;">${followUp}</div>`;
+                        html += `</div>`;
+                    }
+                }
+                
+                html += '</div>';
+                leavePolicyContent.innerHTML = html;
+                
+                // Attach event listeners for date calculation
+                attachLeaveEventListeners();
+            }
+
+            function attachLeaveEventListeners() {
+                // Update end dates when days or start date changes
+                const leaveTypes = ['threatened_miscarriage', 'gynecological_surgery']; // normal_c_section_birth doesn't have days input
+                const stillbirthSubs = ['under_5_weeks', '5_13_weeks', '13_25_weeks', '25_weeks_above'];
+                
+                leaveTypes.forEach(typeKey => {
+                    const daysInput = document.getElementById(`leave-days-${typeKey}`);
+                    const startInput = document.getElementById(`leave-start-${typeKey}`);
+                    const endInput = document.getElementById(`leave-end-${typeKey}`);
+                    
+                    if (daysInput && startInput && endInput) {
+                        const updateEndDate = () => {
+                            const days = parseInt(daysInput.value) || 0;
+                            const startDate = parseDate(startInput.value) || getStartDate();
+                            const endDate = days > 0 ? addDays(startDate, days - 1) : startDate;
+                            endInput.value = toISODate(endDate);
+                        };
+                        
+                        daysInput.addEventListener('input', updateEndDate);
+                        startInput.addEventListener('change', updateEndDate);
+                    }
+                });
+                
+                stillbirthSubs.forEach(subKey => {
+                    const daysInput = document.getElementById(`leave-days-stillbirth_surgery-${subKey}`);
+                    const startInput = document.getElementById(`leave-start-stillbirth_surgery-${subKey}`);
+                    const endInput = document.getElementById(`leave-end-stillbirth_surgery-${subKey}`);
+                    
+                    if (daysInput && startInput && endInput) {
+                        const updateEndDate = () => {
+                            const days = parseInt(daysInput.value) || 0;
+                            const startDate = parseDate(startInput.value) || getStartDate();
+                            const endDate = days > 0 ? addDays(startDate, days - 1) : startDate;
+                            endInput.value = toISODate(endDate);
+                        };
+                        
+                        daysInput.addEventListener('input', updateEndDate);
+                        startInput.addEventListener('change', updateEndDate);
+                    }
+                });
+            }
+
+            // Load policies from API
+            async function loadLeavePolicies() {
+                try {
+                    const response = await fetch('/api/medical-leave-policies');
+                    const data = await response.json();
+                    
+                    if (data.success && data.policies) {
+                        // Organize policies by type and sub_category
+                        data.policies.forEach(policy => {
+                            if (policy.sub_category) {
+                                if (!leavePolicies[policy.leave_type]) {
+                                    leavePolicies[policy.leave_type] = { sub_categories: [] };
+                                }
+                                if (!leavePolicies[policy.leave_type].sub_categories) {
+                                    leavePolicies[policy.leave_type].sub_categories = [];
+                                }
+                                leavePolicies[policy.leave_type].sub_categories.push(policy);
+                            } else {
+                                leavePolicies[policy.leave_type] = policy;
+                            }
+                        });
+                    }
+                    
+                    // Initialize default data if empty
+                    if (Object.keys(leavePolicies).length === 0) {
+                        await fetch('/api/medical-leave-policies/init', { method: 'POST' });
+                        await loadLeavePolicies(); // Reload
+                        return;
+                    }
+                    
+                    renderLeavePolicy();
+                } catch (error) {
+                    console.error('Error loading leave policies:', error);
+                    // Initialize default data on error
+                    try {
+                        await fetch('/api/medical-leave-policies/init', { method: 'POST' });
+                        await loadLeavePolicies();
+                    } catch (initError) {
+                        console.error('Error initializing leave policies:', initError);
+                        renderLeavePolicy(); // Render with defaults
+                    }
+                }
+            }
+
+            // Save policies
+            async function saveLeavePolicies() {
+                try {
+                    const policies = [];
+                    
+                    // Collect regular policies
+                    ['threatened_miscarriage', 'gynecological_surgery'].forEach(typeKey => {
+                        const daysInput = document.getElementById(`leave-days-${typeKey}`);
+                        if (daysInput) {
+                            policies.push({
+                                leave_type: typeKey,
+                                sub_category: null,
+                                default_days: parseInt(daysInput.value) || 0,
+                                follow_up_instruction: 'Hẹn khám lại sau 01 tuần hoặc khi có bất thường khám lại ngay.'
+                            });
+                        }
+                    });
+                    
+                    // Handle normal_c_section_birth (no days input, follows maternity regulations)
+                    policies.push({
+                        leave_type: 'normal_c_section_birth',
+                        sub_category: null,
+                        default_days: 0,
+                        follow_up_instruction: 'Hẹn khám lại sau 01 tuần hoặc khi có bất thường khám lại ngay. Nghỉ theo chế độ thai sản. Dinh dưỡng đầy đủ. Dùng thuốc theo đơn.'
+                    });
+                    
+                    // Collect stillbirth surgery subcategories
+                    ['under_5_weeks', '5_13_weeks', '13_25_weeks', '25_weeks_above'].forEach(subKey => {
+                        const daysInput = document.getElementById(`leave-days-stillbirth_surgery-${subKey}`);
+                        if (daysInput) {
+                            policies.push({
+                                leave_type: 'stillbirth_surgery',
+                                sub_category: subKey,
+                                default_days: parseInt(daysInput.value) || 0,
+                                follow_up_instruction: 'Hẹn khám lại sau 01 tuần hoặc khi có bất thường khám lại ngay.'
+                            });
+                        }
+                    });
+                    
+                    const response = await fetch('/api/medical-leave-policies', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ policies })
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        document.getElementById('leave-summary').innerHTML = 
+                            `<div style="color:#4caf50;"><i class="fas fa-check-circle"></i> ${result.message || 'Đã lưu thành công'}</div>`;
+                        setTimeout(() => {
+                            document.getElementById('leave-summary').innerHTML = '';
+                        }, 3000);
+                    } else {
+                        throw new Error(result.message || 'Lỗi khi lưu');
+                    }
+                } catch (error) {
+                    console.error('Error saving leave policies:', error);
+                    document.getElementById('leave-summary').innerHTML = 
+                        `<div style="color:#c62828;"><i class="fas fa-exclamation-circle"></i> Lỗi: ${error.message}</div>`;
+                }
+            }
+
+            // Clear button
+            if (btnClearLeave) {
+                btnClearLeave.addEventListener('click', () => {
+                    renderLeavePolicy();
+                    document.getElementById('leave-summary').innerHTML = '';
+                });
+            }
+
+            // Save button
+            if (btnSaveLeave) {
+                btnSaveLeave.addEventListener('click', saveLeavePolicies);
+            }
+
+            // Load policies when tab is shown
+            const goLeaveBtn = document.getElementById('go-leave-policy');
+            if (goLeaveBtn) {
+                goLeaveBtn.addEventListener('click', () => {
+                    setTimeout(loadLeavePolicies, 100);
+                });
+            }
+
+            // BMI tab: wire inputs and calculation
+            (function(){
+                const weight = document.getElementById('bmi-weight');
+                const height = document.getElementById('bmi-height');
+                const out = document.getElementById('bmi-result');
+                const btnClear = document.getElementById('btn-clear-bmi');
+                const btnSaveBmi = document.getElementById('btn-save-bmi');
+                const patientPidInput = document.getElementById('bmi-patient-id');
+
+                function calcBMI() {
+                    const w = parseFloat(weight && weight.value) || 0;
+                    const hcm = parseFloat(height && height.value) || 0;
+                    if (!w || !hcm) {
+                        out.innerHTML = '<div style="color:#666;">Chưa có dữ liệu</div>';
+                        return;
+                    }
+                    const hm = hcm / 100.0;
+                    if (hm <= 0) { out.innerHTML = '<div style="color:#c62828;">Chiều cao không hợp lệ</div>'; return; }
+                    const bmi = w / (hm * hm);
+                    const bmiR = Math.round(bmi * 10) / 10;
+                    let category = '';
+                    let color = '#2e7d32';
+                    if (bmi < 18.5) { category = 'Thiếu cân'; color = '#0288d1'; }
+                    else if (bmi < 25) { category = 'Bình thường'; color = '#2e7d32'; }
+                    else if (bmi < 30) { category = 'Thừa cân'; color = '#f57c00'; }
+                    else { category = 'Béo phì'; color = '#c62828'; }
+
+                    // Simple ideal weight range (BMI 18.5 - 24.9)
+                    const minW = Math.round(18.5 * hm * hm * 10) / 10;
+                    const maxW = Math.round(24.9 * hm * hm * 10) / 10;
+
+                    out.innerHTML = `
+                        <div style="display:flex;flex-direction:column;gap:6px;">
+                            <div><strong>BMI:</strong> <span style="font-weight:700;color:${color};">${bmiR}</span></div>
+                            <div><strong>Phân loại:</strong> <span style="font-weight:700;color:${color};">${category}</span></div>
+                            <div style="color:#666;font-size:0.95em;">Khoảng cân nặng khuyến nghị (BMI 18.5-24.9): ${minW}kg - ${maxW}kg</div>
+                        </div>
+                    `;
+                }
+
+                if (weight) weight.addEventListener('input', calcBMI);
+                if (height) height.addEventListener('input', calcBMI);
+                if (btnClear) btnClear.addEventListener('click', function(){ if (weight) weight.value=''; if (height) height.value=''; if (patientPidInput) patientPidInput.value=''; calcBMI(); });
+
+                // Save BMI to patient record
+                async function saveBMIToPatient() {
+                    try {
+                        const w = parseFloat(weight && weight.value) || 0;
+                        const hcm = parseFloat(height && height.value) || 0;
+                        if (!w || !hcm) {
+                            alert('Vui lòng nhập cân nặng và chiều cao trước khi lưu.');
+                            return;
+                        }
+                        const hm = hcm / 100.0;
+                        const bmi = w / (hm * hm);
+                        const bmiR = Math.round(bmi * 10) / 10;
+                        const pid = patientPidInput ? patientPidInput.value.trim() : '';
+                        if (!pid) {
+                            if (!confirm('Bạn chưa nhập Mã bệnh nhân (PID). Kết quả sẽ không được lưu. Bạn có muốn nhập PID để lưu không?')) return;
+                        }
+
+                        const payload = {
+                            patient_pid: pid || null,
+                            type: 'bmi',
+                            value: bmiR,
+                            unit: 'kg/m2',
+                            meta: { weight: w, height_cm: hcm }
+                        };
+
+                        const resp = await fetch('/api/patient-vitals', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        const data = await resp.json();
+                        if (data && data.success) {
+                            out.innerHTML = `<div style="color:#4caf50;"><i class="fas fa-check-circle"></i> Đã lưu BMI vào hồ sơ${data.patient_id? ' (PID: '+data.patient_pid+')':''}</div>`;
+                            setTimeout(calcBMI, 1200);
+                        } else {
+                            throw new Error(data && data.message ? data.message : 'Lỗi khi lưu');
+                        }
+                    } catch (e) {
+                        console.error('Error saving BMI:', e);
+                        alert('Lỗi khi lưu BMI: ' + (e.message || e));
+                    }
+                }
+
+                if (btnSaveBmi) btnSaveBmi.addEventListener('click', saveBMIToPatient);
+
+                // When BMI tab shown, focus weight
+                const goBmiBtn = document.getElementById('go-bmi');
+                if (goBmiBtn) goBmiBtn.addEventListener('click', () => { setTimeout(()=>{ if (weight) weight.focus(); }, 200); });
+            })();
+
+            // Initial load
+            loadLeavePolicies();
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bệnh án sản - Quản lý khám thai</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="utilities.css">
+    <style>
+        body { background: #f5f6fa; color: #1f2933; font-family: 'Inter', 'Segoe UI', Arial, sans-serif; }
+        .admin-header {
+            background-color: white;
+            color: #2196F3;
+            padding: 1rem 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #2196F3;
+        }
+        .admin-header .logo img {
+            height: 50px;
+            margin-right: 10px;
+        }
+        .admin-header .logo {
+            display: flex;
+            align-items: center;
+        }
+        .admin-header nav {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+        }
+        .admin-header .nav-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .admin-header .back-link {
+            color: #2196F3;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+        }
+        .admin-header .back-link.btn.secondary-btn {
+            background-color: transparent;
+            border: 1px solid #2196F3;
+            color: #2196F3;
+        }
+        .admin-main {
+            padding: 20px;
+        }
+        .page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 1.5rem; }
+        .page-header h1 { margin: 0; font-size: 1.6rem; color: #0f172a; }
+        .page-header p { margin: 4px 0 0; color: #475467; font-size: 0.95rem; }
+        .toolbar { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+        .toolbar input { flex: 1; min-width: 240px; padding: 10px 14px; border: 1px solid #d0d5dd; border-radius: 8px; font-size: 14px; }
+        .toolbar button { padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; }
+        .btn-primary { background: #2563eb; color: white; }
+        .btn-secondary { background: #e2e8f0; color: #1e293b; }
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 24px 0; }
+        .stat-card { background: white; padding: 18px; border-radius: 14px; box-shadow: 0 6px 30px rgba(15, 23, 42, 0.08); border: 1px solid #edf1f7; }
+        .stat-card label { font-size: 0.85rem; letter-spacing: .02em; text-transform: uppercase; color: #94a3b8; }
+        .stat-card strong { display: block; font-size: 1.9rem; margin-top: 8px; color: #0f172a; }
+        .patient-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
+        .patient-card { background: white; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06); display: flex; flex-direction: column; }
+        .patient-card header { padding: 18px; border-bottom: 1px solid #f1f5f9; display: flex; flex-direction: column; gap: 6px; }
+        .patient-card header h3 { margin: 0; font-size: 1.1rem; color: #0f172a; }
+        .patient-meta { font-size: 0.9rem; color: #475467; display: flex; gap: 16px; flex-wrap: wrap; }
+        .visit-table { width: 100%; border-collapse: collapse; }
+        .visit-table th, .visit-table td { padding: 10px 14px; font-size: 0.9rem; border-bottom: 1px solid #edf2f7; text-align: left; }
+        .visit-table th { background: #f8fafc; color: #475467; font-weight: 600; }
+        .visit-table td { color: #1e293b; }
+        .visit-table tr:last-child td { border-bottom: none; }
+        .tag { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+        .tag.pending { background: #fef3c7; color: #92400e; }
+        .tag.completed { background: #dcfce7; color: #166534; }
+        .tag.cancelled { background: #fee2e2; color: #b91c1c; }
+        .empty-state { margin: 40px auto; max-width: 480px; text-align: center; color: #64748b; background: white; border-radius: 16px; padding: 32px; border: 1px dashed #cbd5f5; }
+        .empty-state h3 { margin-bottom: 8px; font-size: 1.2rem; color: #0f172a; }
+        @media (max-width: 640px) {
+            .page-header { flex-direction: column; align-items: flex-start; }
+            .toolbar input { min-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.png" alt="Logo Phòng khám Đại Anh">
+            <div>
+                <h1>Bệnh án sản</h1>
+                <p style="margin: 0; font-size: 0.9rem; color: #666;">Theo dõi toàn bộ bệnh nhân khám thai và siêu âm thai</p>
+            </div>
+        </div>
+        <nav>
+            <div class="nav-row">
+                <a href="patient-records.html" class="back-link btn secondary-btn">
+                    <i class="fas fa-arrow-left"></i> Quay về hồ sơ tổng
+                </a>
+                <a href="index.html" class="back-link btn secondary-btn">
+                    <i class="fas fa-home"></i> Trang chủ
+                </a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="admin-main">
+        <div class="page-header">
+            <div>
+                <h1>Bệnh án sản</h1>
+                <p>Theo dõi toàn bộ bệnh nhân khám thai và siêu âm thai tại phòng khám.</p>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <input type="text" id="search-input" placeholder="Tìm bệnh nhân theo tên hoặc SĐT...">
+            <button class="btn-primary" id="btn-refresh">Làm mới</button>
+        </div>
+
+        <div class="stats-row">
+            <div class="stat-card">
+                <label>Tổng bệnh nhân</label>
+                <strong id="stat-total-patients">0</strong>
+            </div>
+            <div class="stat-card">
+                <label>Lượt khám thai</label>
+                <strong id="stat-total-visits">0</strong>
+            </div>
+            <div class="stat-card">
+                <label>Trung bình lượt/bệnh nhân</label>
+                <strong id="stat-average">0</strong>
+            </div>
+        </div>
+
+        <section id="patient-list" class="patient-grid"></section>
+        <div id="empty-state" class="empty-state" style="display:none;">
+            <h3>Chưa có dữ liệu</h3>
+            <p>Thêm lịch khám thai hoặc siêu âm thai để theo dõi tại đây.</p>
+        </div>
+    </main>
+
+    <script>
+        const state = { q: '' };
+
+        function formatDate(iso) {
+            if (!iso) return '—';
+            try {
+                const date = new Date(iso);
+                return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            } catch (_) {
+                return iso;
+            }
+        }
+
+        function renderSummary(data) {
+            const totalPatients = data.total_patients || 0;
+            const totalVisits = data.total_visits || 0;
+            document.getElementById('stat-total-patients').textContent = totalPatients.toLocaleString('vi-VN');
+            document.getElementById('stat-total-visits').textContent = totalVisits.toLocaleString('vi-VN');
+            document.getElementById('stat-average').textContent = totalPatients ? (totalVisits / totalPatients).toFixed(1) : '0';
+        }
+
+        function statusTag(status) {
+            const normalized = (status || '').toLowerCase();
+            if (normalized.includes('cancel')) return 'tag cancelled';
+            if (normalized.includes('đã') || normalized.includes('done') || normalized.includes('complete')) return 'tag completed';
+            return 'tag pending';
+        }
+
+        function renderPatients(patients) {
+            const listEl = document.getElementById('patient-list');
+            const emptyEl = document.getElementById('empty-state');
+            if (!patients || !patients.length) {
+                listEl.innerHTML = '';
+                emptyEl.style.display = 'block';
+                return;
+            }
+            emptyEl.style.display = 'none';
+            
+            // Sort patients by latest_visit (most recent first)
+            // Handle null/undefined by putting them at the end
+            patients = [...patients].sort((a, b) => {
+                const dateA = a.latest_visit ? new Date(a.latest_visit).getTime() : 0;
+                const dateB = b.latest_visit ? new Date(b.latest_visit).getTime() : 0;
+                return dateB - dateA; // Descending order (newest first)
+            });
+            listEl.innerHTML = patients.map(patient => {
+                const visitsRows = patient.visits.map(visit => `
+                    <tr>
+                        <td>${formatDate(visit.appointment_date)}</td>
+                        <td>${visit.service_type || '—'}</td>
+                        <td>${visit.doctor_name || 'PK Đại Anh'}</td>
+                        <td><span class="${statusTag(visit.status)}">${visit.status || 'pending'}</span></td>
+                        <td>${visit.notes ? visit.notes : '—'}</td>
+                    </tr>
+                `).join('');
+                return `
+                    <article class="patient-card">
+                        <header>
+                            <h3>${patient.patient_name || 'Chưa có tên'}</h3>
+                            <div class="patient-meta">
+                                <span>📞 ${patient.patient_phone || '—'}</span>
+                                <span>🗓 Lượt gần nhất: ${formatDate(patient.latest_visit)}</span>
+                                <span>🔁 Tổng lượt: ${patient.total_visits}</span>
+                            </div>
+                            <small style="color:#64748b;">${patient.status_summary || 'Chưa cập nhật trạng thái'}</small>
+                        </header>
+                        <div style="overflow-x:auto;">
+                            <table class="visit-table">
+                                <thead>
+                                    <tr>
+                                        <th>Ngày</th>
+                                        <th>Dịch vụ</th>
+                                        <th>Bác sĩ</th>
+                                        <th>Trạng thái</th>
+                                        <th>Ghi chú</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${visitsRows}
+                                </tbody>
+                            </table>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        async function loadObstetricRecords() {
+            const params = new URLSearchParams();
+            if (state.q) params.set('q', state.q);
+            const res = await fetch('/api/obstetric-records?' + params.toString());
+            if (!res.ok) {
+                alert('Không tải được dữ liệu bệnh án sản.');
+                return;
+            }
+            const data = await res.json();
+            renderSummary(data);
+            renderPatients(data.patients || []);
+        }
+
+        function debounce(fn, delay = 400) {
+            let timer;
+            return (...args) => {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn.apply(this, args), delay);
+            };
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('search-input');
+            const onSearch = debounce((event) => {
+                state.q = event.target.value.trim();
+                loadObstetricRecords();
+            }, 400);
+            searchInput.addEventListener('input', onSearch);
+            document.getElementById('btn-refresh').addEventListener('click', loadObstetricRecords);
+            loadObstetricRecords();
+        });
+    </script>
+</body>
+</html>
+

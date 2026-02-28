@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý nội dung đặt lịch khám</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo.png" alt="Phòng khám Phụ Sản Đại Anh">
+        </div>
+        <nav>
+            <a href="/" class="back-link btn secondary-btn"><i class="fas fa-arrow-left"></i> Quay lại trang chủ</a>
+            <a href="admin.html" class="header-nav-btn"><i class="fas fa-cog"></i> Quản trị</a>
+        </nav>
+    </header>
+
+    <main class="admin-main">
+        <div class="tab-content active" id="booking-content">
+            <h3>Quản lý nội dung trang đặt lịch khám</h3>
+            <form id="bookingContentForm" class="admin-form">
+                <div class="form-group">
+                    <label for="bookingTitle">Tiêu đề</label>
+                    <input type="text" id="bookingTitle" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="bookingDescription">Mô tả</label>
+                    <textarea id="bookingDescription" name="description" rows="2" required></textarea>
+                </div>
+                <h4>Dịch vụ nổi bật</h4>
+                <div id="bookingServicesList" class="items-list"></div>
+                <button type="button" class="add-item-btn" onclick="addBookingService()"><i class="fas fa-plus"></i> Thêm dịch vụ</button>
+                <h4>Lý do khám</h4>
+                <div id="bookingReasonsList" class="items-list"></div>
+                <button type="button" class="add-item-btn" onclick="addBookingReason()"><i class="fas fa-plus"></i> Thêm lý do</button>
+                <h4>Tiện ích cho mẹ bầu</h4>
+                <div id="bookingUtilitiesList" class="items-list"></div>
+                <button type="button" class="add-item-btn" onclick="addBookingUtility()"><i class="fas fa-plus"></i> Thêm tiện ích</button>
+                <div class="form-group">
+                    <label for="bookingSchedule">Lịch làm việc</label>
+                    <textarea id="bookingSchedule" name="schedule" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="bookingContact">Liên hệ</label>
+                    <textarea id="bookingContact" name="contact" rows="2"></textarea>
+                </div>
+                <button type="submit" class="save-btn">Lưu thay đổi</button>
+            </form>
+        </div>
+    </main>
+
+    <footer class="admin-footer">
+        <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+    </footer>
+
+    <script>
+        async function loadBookingContent() {
+            const res = await fetch('/api/booking-content');
+            const data = await res.json();
+            document.getElementById('bookingTitle').value = data.title || '';
+            document.getElementById('bookingDescription').value = data.description || '';
+            // Dịch vụ
+            const servicesList = document.getElementById('bookingServicesList');
+            servicesList.innerHTML = '';
+            (data.services || []).forEach(s => addBookingService(s));
+            // Lý do
+            const reasonsList = document.getElementById('bookingReasonsList');
+            reasonsList.innerHTML = '';
+            (data.reasons || []).forEach(r => addBookingReason(r));
+            // Tiện ích
+            const utilitiesList = document.getElementById('bookingUtilitiesList');
+            utilitiesList.innerHTML = '';
+            (data.utilities || []).forEach(u => addBookingUtility(u));
+            document.getElementById('bookingSchedule').value = data.schedule || '';
+            document.getElementById('bookingContact').value = data.contact || '';
+        }
+
+        function addBookingService(val = '') {
+            const div = document.createElement('div');
+            div.className = 'service-item';
+            div.innerHTML = `<input type="text" class="booking-service-input" value="${val}"> <button type="button" class="delete-btn" onclick="this.parentElement.remove()"><i class='fas fa-trash'></i></button>`;
+            document.getElementById('bookingServicesList').appendChild(div);
+        }
+        function addBookingUtility(val = '') {
+            const div = document.createElement('div');
+            div.className = 'service-item';
+            div.innerHTML = `<input type="text" class="booking-utility-input" value="${val}"> <button type="button" class="delete-btn" onclick="this.parentElement.remove()"><i class='fas fa-trash'></i></button>`;
+            document.getElementById('bookingUtilitiesList').appendChild(div);
+        }
+        function addBookingReason(val = '') {
+            const div = document.createElement('div');
+            div.className = 'service-item';
+            div.innerHTML = `<input type="text" class="booking-reason-input" value="${val}"> <button type="button" class="delete-btn" onclick="this.parentElement.remove()"><i class='fas fa-trash'></i></button>`;
+            document.getElementById('bookingReasonsList').appendChild(div);
+        }
+
+        document.getElementById('bookingContentForm').onsubmit = async function(e) {
+            e.preventDefault();
+            const title = document.getElementById('bookingTitle').value;
+            const description = document.getElementById('bookingDescription').value;
+            const services = Array.from(document.querySelectorAll('.booking-service-input')).map(i => i.value);
+            const reasons = Array.from(document.querySelectorAll('.booking-reason-input')).map(i => i.value);
+            const utilities = Array.from(document.querySelectorAll('.booking-utility-input')).map(i => i.value);
+            const schedule = document.getElementById('bookingSchedule').value;
+            const contact = document.getElementById('bookingContact').value;
+            const res = await fetch('/api/booking-content', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, description, services, reasons, utilities, schedule, contact })
+            });
+            if (res.ok) {
+                alert('Đã lưu nội dung trang đặt lịch khám!');
+                loadBookingContent();
+            } else {
+                alert('Có lỗi khi lưu nội dung!');
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', loadBookingContent);
+    </script>
+    
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>
+
+

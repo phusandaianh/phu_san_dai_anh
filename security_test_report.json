@@ -1,0 +1,73 @@
+{
+  "timestamp": "2025-10-23T15:29:50.892291",
+  "total_vulnerabilities": 11,
+  "critical": 3,
+  "high": 0,
+  "medium": 3,
+  "low": 5,
+  "vulnerabilities": [
+    {
+      "type": "AUTHENTICATION_BYPASS",
+      "severity": "CRITICAL",
+      "endpoint": "/api/patients",
+      "description": "Endpoint /api/patients accessible without authentication"
+    },
+    {
+      "type": "AUTHENTICATION_BYPASS",
+      "severity": "CRITICAL",
+      "endpoint": "/api/voluson/config",
+      "description": "Endpoint /api/voluson/config accessible without authentication"
+    },
+    {
+      "type": "AUTHENTICATION_BYPASS",
+      "severity": "CRITICAL",
+      "endpoint": "/api/lab-orders",
+      "description": "Endpoint /api/lab-orders accessible without authentication"
+    },
+    {
+      "type": "RATE_LIMITING",
+      "severity": "MEDIUM",
+      "description": "No rate limiting detected. 100 requests in 204.63s"
+    },
+    {
+      "type": "HTTPS_ENFORCEMENT",
+      "severity": "MEDIUM",
+      "description": "HTTPS not enforced - HTTP requests accepted"
+    },
+    {
+      "type": "SECURITY_HEADERS",
+      "severity": "LOW",
+      "header": "X-Content-Type-Options",
+      "description": "Missing security header: X-Content-Type-Options"
+    },
+    {
+      "type": "SECURITY_HEADERS",
+      "severity": "LOW",
+      "header": "X-Frame-Options",
+      "description": "Missing security header: X-Frame-Options"
+    },
+    {
+      "type": "SECURITY_HEADERS",
+      "severity": "LOW",
+      "header": "X-XSS-Protection",
+      "description": "Missing security header: X-XSS-Protection"
+    },
+    {
+      "type": "SECURITY_HEADERS",
+      "severity": "LOW",
+      "header": "Strict-Transport-Security",
+      "description": "Missing security header: Strict-Transport-Security"
+    },
+    {
+      "type": "SECURITY_HEADERS",
+      "severity": "LOW",
+      "header": "Content-Security-Policy",
+      "description": "Missing security header: Content-Security-Policy"
+    },
+    {
+      "type": "SESSION_FIXATION",
+      "severity": "MEDIUM",
+      "description": "Session ID not changed after login"
+    }
+  ]
+}

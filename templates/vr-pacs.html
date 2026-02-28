@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DICOM Viewer - VR PACS</title>
+  
+  <!-- AI Assistant CSS -->
+  <link rel="stylesheet" href="/ai-assistant.css">
+
+  <!-- Cornerstone Libraries -->
+  <script src="/static/vendor/cornerstone.js"></script>
+  <script src="/static/vendor/cornerstoneMath.js"></script>
+  <script src="/static/vendor/dicomParser.js"></script>
+  <script src="/static/vendor/cornerstoneWADOImageLoader.js"></script>
+  <script src="/static/vendor/cornerstoneTools.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background-color: #202020;
+      color: #eee;
+      font-family: Arial, sans-serif;
+    }
+    #dicomImage {
+      width: 100vw;
+      height: 100vh;
+      background-color: black;
+      position: relative;
+      overflow: hidden;
+      cursor: crosshair;
+    }
+  </style>
+</head>
+<body>
+  <div id="dicomImage"></div>
+
+  <script>
+    const viewerElement = document.getElementById('dicomImage');
+
+    // Khởi tạo Cornerstone
+    cornerstone.enable(viewerElement);
+    cornerstoneTools.init({ showSVGCursors: true });
+
+    // Cấu hình WADO Image Loader
+    cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
+    cornerstoneWADOImageLoader.configure({
+      beforeSend: function(xhr) {
+        xhr.setRequestHeader('Accept', 'application/dicom');
+      },
+    });
+
+    // Load 1 ảnh DICOM test (bạn có thể thay bằng API của bạn)
+    const imageId = "wadouri:/static/vendor/sample.dcm"; // Hoặc link khác
+    cornerstone
+      .loadAndCacheImage(imageId)
+      .then(function (image) {
+        console.log('✅ Image loaded successfully:', image);
+
+        // Hiển thị ảnh
+        const defaultViewport = cornerstone.getDefaultViewportForImage(viewerElement, image);
+        cornerstone.displayImage(viewerElement, image, defaultViewport);
+
+        // Gắn Tool State Manager cho element (CornerstoneTools v5)
+        const toolStateManager = cornerstoneTools.globalImageIdSpecificToolStateManager;
+        cornerstoneTools.setElementToolStateManager(viewerElement, toolStateManager);
+
+        // Thêm và kích hoạt công cụ
+        cornerstoneTools.addTool(cornerstoneTools.LengthTool);
+        cornerstoneTools.addTool(cornerstoneTools.PanTool);
+        cornerstoneTools.addTool(cornerstoneTools.ZoomTool);
+        cornerstoneTools.addTool(cornerstoneTools.WwwcTool);
+
+        // Kích hoạt công cụ với nút chuột tương ứng
+        cornerstoneTools.setToolActiveForElement(viewerElement, 'Wwwc', { mouseButtonMask: 1 }); // Chuột trái
+        cornerstoneTools.setToolActiveForElement(viewerElement, 'Pan', { mouseButtonMask: 2 });   // Chuột phải
+        cornerstoneTools.setToolActiveForElement(viewerElement, 'Zoom', { mouseButtonMask: 4 });  // Chuột giữa
+        cornerstoneTools.setToolActiveForElement(viewerElement, 'Length', { mouseButtonMask: 1 }); // Đo độ dài
+
+        console.log('🧭 Tools activated successfully for:', viewerElement);
+      })
+      .catch(function (err) {
+        console.error('❌ Error loading DICOM image:', err);
+      });
+  </script>
+    
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+</body>
+</html>

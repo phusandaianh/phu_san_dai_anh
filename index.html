@@ -9,28 +9,34 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+    <link rel="stylesheet" href="ai-assistant.css">
 </head>
 <body>
     <header class="header">
         <div class="container">
             <div class="logo-container">
                 <img src="logo_phu_san_dai_anh.png" alt="Logo Phòng khám Đại Anh" class="clinic-logo animate__animated animate__fadeIn">
-                <div class="logo-text">
-                    <h1 class="logo animate__animated animate__fadeIn">Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
-                    <p class="slogan animate__animated animate__fadeIn">Uy Tín - Chất Lượng</p>
-                </div>
             </div>
             <nav class="main-nav">
                 <ul>
-                    <li><a href="/" class="nav-link">Trang chủ</a></li>
                     <li><a href="/examination-list.html" class="nav-link">Danh sách khám</a></li>
                     <li><a href="/admin.html" class="nav-link admin-link">
                         <i class="fas fa-cog"></i> Quản trị
                     </a></li>
+                    <li><a href="/patient-records.html" class="nav-link">
+                        <i class="fas fa-file-medical"></i> Hồ sơ bệnh án
+                    </a></li>
                     <li><a href="#services" class="nav-link">Dịch vụ</a></li>
-                    <li><a href="/booking.html" class="nav-link" style="color:#e53935;font-weight:bold;">Đặt lịch khám</a></li>
-                    <li><a href="#utilities" class="nav-link">Tiện ích cho mẹ bầu</a></li>
-                    <li><a href="#schedule" class="nav-link schedule-btn">Lịch làm việc</a></li>
+                    <li><a href="/booking.html" class="nav-link">Đặt lịch khám</a></li>
+                    <li><a href="pregnancy-utilities.html" class="nav-link">Tiện ích cho mẹ bầu</a></li>
+                    <li><a href="/schedule.html" class="nav-link">Lịch làm việc</a></li>
+                    <li><a href="/vr-pacs.html" class="nav-link">
+                        <i class="fas fa-x-ray"></i> VR PACS
+                    </a></li>
+                    <li><a href="/vr-pacs-viewer/vr_pacs_enhanced.html" class="nav-link">
+                        <i class="fas fa-microscope"></i> VR PACS Enhanced
+                    </a></li>
+                    <li><a href="/links.html" class="nav-link">Website</a></li>
                 </ul>
             </nav>
         </div>
@@ -43,7 +49,10 @@
                 <p class="service-highlight">Khám, quản lý thai nghén, siêu âm dị tật thai chuyên sâu 5D</p>
                 <p class="service-highlight-sub">Khám phụ khoa, nam khoa, vô sinh hiếm muộn. Tư vấn xét nghiệm NIPT, ADN, sàng lọc ung thư cổ tử cung...</p>
                 <div class="cta-buttons">
-                    <a href="#appointment-form" class="btn primary-btn">Đặt lịch khám ngay</a>
+                    <a href="/booking.html" class="btn primary-btn">Đặt lịch khám ngay</a>
+                    <a href="pregnancy-utilities.html" class="btn secondary-btn" style="background: #e91e63; color: white;">
+                        <i class="fas fa-heart"></i> Tiện ích cho mẹ bầu
+                    </a>
                     <a href="#contact" class="btn secondary-btn">Liên hệ tư vấn</a>
                 </div>
             </div>
@@ -132,7 +141,7 @@
 
     <footer class="footer">
         <div class="container">
-            <p>&copy; 2023 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
         </div>
     </footer>
 
@@ -230,5 +239,8 @@
         document.getElementById('confirmation-modal').classList.add('hidden');
     });
 </script>
+
+<!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+<script src="ai-assistant.js"></script>
 </body>
 </html>

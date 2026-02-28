@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bảng giá xét nghiệm - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+        .admin-header {
+            background-color: #2196F3;
+            color: white;
+            padding: 1rem 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .admin-header .logo img {
+            height: 50px;
+            margin-right: 10px;
+        }
+        .admin-header .logo {
+            display: flex;
+            align-items: center;
+        }
+        .admin-header nav {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .admin-header .back-link {
+            color: white;
+            text-decoration: none;
+      display: flex;
+      align-items: center;
+        }
+        .admin-header .back-link.btn.secondary-btn {
+            background-color: transparent;
+            border: 1px solid white;
+            color: white;
+        }
+        .admin-main {
+            padding: 20px;
+        }
+        .pricelist-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        .pricelist-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .pricelist-header h2 {
+            margin: 0;
+            color: #333;
+        }
+        .add-price-btn {
+            background-color: #4CAF50;
+      color: white;
+      border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+      cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        .add-price-btn:hover {
+            background-color: #45a049;
+        }
+        .pricelist-table {
+      width: 100%;
+      border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .pricelist-table th,
+        .pricelist-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+      text-align: left;
+    }
+        .pricelist-table th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+            color: #333;
+        }
+        .pricelist-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .pricelist-table tr:hover {
+            background-color: #f0f0f0;
+        }
+        .price-input {
+            width: 100%;
+      border: none;
+            background: transparent;
+            padding: 5px;
+            font-size: 14px;
+        }
+        .price-input:focus {
+            outline: 2px solid #2196F3;
+            background: white;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        .btn {
+      padding: 5px 10px;
+            border: none;
+            border-radius: 3px;
+      cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .btn.edit-btn {
+            background-color: #2196F3;
+            color: white;
+        }
+        .btn.edit-btn:hover {
+            background-color: #1976D2;
+        }
+        .btn.delete-btn {
+            background-color: #f44336;
+            color: white;
+        }
+        .btn.delete-btn:hover {
+            background-color: #d32f2f;
+        }
+        .btn.save-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn.save-btn:hover {
+            background-color: #45a049;
+        }
+        .btn.cancel-btn {
+            background-color: #9E9E9E;
+            color: white;
+        }
+        .btn.cancel-btn:hover {
+            background-color: #757575;
+        }
+        .status-message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        display: none;
+      }
+        .status-message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .empty-state i {
+            font-size: 48px;
+            color: #ccc;
+            margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.PNG" alt="Logo">
+            <span>Bảng giá xét nghiệm</span>
+        </div>
+        <nav>
+            <a href="admin.html" class="back-link btn secondary-btn">
+                <i class="fas fa-arrow-left"></i> Quay lại Admin
+            </a>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="admin-main">
+        <div class="pricelist-container">
+            <div class="pricelist-header">
+                <h2><i class="fas fa-list-alt"></i> Bảng giá xét nghiệm</h2>
+                <button class="add-price-btn" onclick="addNewPrice()">
+                    <i class="fas fa-plus"></i> Thêm giá xét nghiệm
+                </button>
+  </div>
+
+            <div id="status-message" class="status-message"></div>
+
+            <div id="loading" class="loading" style="display: none;">
+                <i class="fas fa-spinner fa-spin"></i> Đang tải dữ liệu...
+  </div>
+
+            <div id="empty-state" class="empty-state" style="display: none;">
+                <i class="fas fa-clipboard-list"></i>
+                <h3>Chưa có dữ liệu</h3>
+                <p>Nhấn "Thêm giá xét nghiệm" để bắt đầu</p>
+            </div>
+
+            <table class="pricelist-table" id="pricelist-table" style="display: none;">
+                <thead>
+                    <tr>
+                        <th style="width: 5%;">STT</th>
+                        <th style="width: 30%;">Tên xét nghiệm</th>
+                        <th style="width: 20%;">Đơn vị</th>
+                        <th style="width: 15%;">Giá (VNĐ)</th>
+                        <th style="width: 20%;">Ghi chú</th>
+                        <th style="width: 10%;">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="pricelist-body">
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+  <script>
+        let priceList = [];
+        let editingId = null;
+
+        // Load dữ liệu từ server
+        async function loadPriceList() {
+            try {
+                showLoading(true);
+                const response = await fetch('/api/lab-prices');
+                if (response.ok) {
+                    priceList = await response.json();
+                    renderPriceList();
+                } else {
+                    showMessage('Lỗi khi tải dữ liệu: ' + response.status, 'error');
+                }
+            } catch (error) {
+                console.error('Error loading price list:', error);
+                showMessage('Lỗi khi tải dữ liệu: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Hiển thị danh sách giá
+        function renderPriceList() {
+            const tbody = document.getElementById('pricelist-body');
+            const table = document.getElementById('pricelist-table');
+            const emptyState = document.getElementById('empty-state');
+
+            if (priceList.length === 0) {
+                table.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            table.style.display = 'table';
+            emptyState.style.display = 'none';
+
+            tbody.innerHTML = priceList.map((price, index) => `
+                <tr data-id="${price.id}">
+                    <td>${index + 1}</td>
+                    <td>
+                        <input type="text" class="price-input" value="${price.name || ''}" 
+                               onchange="updatePrice(${price.id}, 'name', this.value)"
+                               ${editingId === price.id ? '' : 'readonly'}>
+                    </td>
+                    <td>
+                        <input type="text" class="price-input" value="${price.unit || ''}" 
+                               onchange="updatePrice(${price.id}, 'unit', this.value)"
+                               ${editingId === price.id ? '' : 'readonly'}>
+                    </td>
+                    <td>
+                        <input type="number" class="price-input" value="${price.price || ''}" 
+                               onchange="updatePrice(${price.id}, 'price', this.value)"
+                               ${editingId === price.id ? '' : 'readonly'}>
+                    </td>
+                    <td>
+                        <input type="text" class="price-input" value="${price.note || ''}" 
+                               onchange="updatePrice(${price.id}, 'note', this.value)"
+                               ${editingId === price.id ? '' : 'readonly'}>
+                    </td>
+                    <td class="action-buttons">
+                        ${editingId === price.id ? 
+                            `<button class="btn save-btn" onclick="savePrice(${price.id})">
+                                <i class="fas fa-save"></i> Lưu
+                            </button>
+                            <button class="btn cancel-btn" onclick="cancelEdit(${price.id})">
+                                <i class="fas fa-times"></i> Hủy
+                            </button>` :
+                            `<button class="btn edit-btn" onclick="editPrice(${price.id})">
+                                <i class="fas fa-edit"></i> Sửa
+                            </button>
+                            <button class="btn delete-btn" onclick="deletePrice(${price.id})">
+                                <i class="fas fa-trash"></i> Xóa
+                            </button>`
+                        }
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Thêm giá mới
+        async function addNewPrice() {
+            try {
+                const response = await fetch('/api/lab-prices', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: 'Xét nghiệm mới',
+                        unit: '',
+                        price: 0,
+                        note: ''
+                    })
+                });
+
+                if (response.ok) {
+                    const newPrice = await response.json();
+                    priceList.push(newPrice);
+                    editingId = newPrice.id;
+                    renderPriceList();
+                    showMessage('Đã thêm xét nghiệm mới', 'success');
+                } else {
+                    showMessage('Lỗi khi thêm xét nghiệm', 'error');
+                }
+            } catch (error) {
+                console.error('Error adding price:', error);
+                showMessage('Lỗi khi thêm xét nghiệm: ' + error.message, 'error');
+            }
+        }
+
+        // Bắt đầu chỉnh sửa
+        function editPrice(id) {
+            editingId = id;
+            renderPriceList();
+        }
+
+        // Hủy chỉnh sửa
+        function cancelEdit(id) {
+            editingId = null;
+            loadPriceList(); // Reload để lấy dữ liệu gốc
+        }
+
+        // Cập nhật giá trị
+        function updatePrice(id, field, value) {
+            const price = priceList.find(p => p.id === id);
+            if (price) {
+                price[field] = value;
+            }
+        }
+
+        // Lưu thay đổi
+        async function savePrice(id) {
+            try {
+                const price = priceList.find(p => p.id === id);
+                if (!price) return;
+
+                const response = await fetch(`/api/lab-prices/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(price)
+                });
+
+                if (response.ok) {
+                    editingId = null;
+                    showMessage('Đã lưu thay đổi', 'success');
+                    renderPriceList();
+                } else {
+                    showMessage('Lỗi khi lưu thay đổi', 'error');
+                }
+            } catch (error) {
+                console.error('Error saving price:', error);
+                showMessage('Lỗi khi lưu: ' + error.message, 'error');
+            }
+        }
+
+        // Xóa giá
+        async function deletePrice(id) {
+            if (!confirm('Bạn có chắc muốn xóa xét nghiệm này?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/lab-prices/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    priceList = priceList.filter(p => p.id !== id);
+                    showMessage('Đã xóa xét nghiệm', 'success');
+                    renderPriceList();
+                } else {
+                    showMessage('Lỗi khi xóa xét nghiệm', 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting price:', error);
+                showMessage('Lỗi khi xóa: ' + error.message, 'error');
+            }
+        }
+
+        // Hiển thị loading
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        // Hiển thị thông báo
+        function showMessage(message, type) {
+            const statusDiv = document.getElementById('status-message');
+            statusDiv.textContent = message;
+            statusDiv.className = `status-message ${type}`;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        // Khởi tạo trang
+        document.addEventListener('DOMContentLoaded', function() {
+            loadPriceList();
+        });
+  </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Phòng khám Đại Anh</title>
+    <style>
+    .booking-shift-row {
+        display: flex;
+        gap: 20px;
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+    }
+    </style>
+</head>
+<body>
+    <h1>Chào mừng đến với Phòng khám Đại Anh!</h1>
+    <p>Đây là trang chủ.</p>
+    <div>
+        <h3>Lịch làm việc của bác sĩ</h3>
+        <div id="doctor-schedule-list"></div>
+    </div>
+    <script>
+    async function loadDoctorSchedule() {
+        try {
+            const res = await fetch('/api/work-schedule', { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) throw new Error('Không lấy được lịch làm việc');
+            const shifts = await res.json();
+
+            // Hiển thị lịch làm việc
+            const container = document.getElementById('doctor-schedule-list');
+            container.innerHTML = '';
+            if (!shifts.length) {
+                container.innerHTML = '<div>Chưa có lịch làm việc nào.</div>';
+                return;
+            }
+            shifts.forEach(shift => {
+                const div = document.createElement('div');
+                div.className = 'booking-shift-row';
+                div.innerHTML = `
+                    <div><b>${shift.date}</b></div>
+                    <div>${shift.start_time} - ${shift.end_time}</div>
+                    <div>${shift.doctor_name}</div>
+                `;
+                container.appendChild(div);
+            });
+        } catch (err) {
+            document.getElementById('doctor-schedule-list').innerHTML = '<div style=\"color:red\">Lỗi tải lịch làm việc!</div>';
+            console.error(err);
+        }
+    }
+    document.addEventListener('DOMContentLoaded', loadDoctorSchedule);
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+</body>
+</html>

@@ -1,0 +1,1735 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý đơn thuốc - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .admin-header {
+            background-color: white;
+            color: #2196F3;
+            padding: 1rem 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #2196F3;
+        }
+        .admin-header .logo img {
+            height: 50px;
+            margin-right: 10px;
+        }
+        .admin-header .logo {
+            display: flex;
+            align-items: center;
+        }
+        .admin-header nav {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+        }
+        .admin-header .nav-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .admin-header .back-link {
+            color: #2196F3;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+        }
+        .admin-header .back-link.btn.secondary-btn {
+            background-color: transparent;
+            border: 1px solid #2196F3;
+            color: #2196F3;
+        }
+        .admin-main {
+            padding: 20px;
+        }
+        .tabs-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            border: 2px solid #2196F3;
+            background: white;
+            color: #2196F3;
+            cursor: pointer;
+            border-radius: 5px;
+            font-weight: 500;
+        }
+        .tab-btn.active {
+            background: #2196F3;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .search-filters {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .search-filters input, .search-filters select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .search-filters input[type="text"] {
+            min-width: 200px;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn-primary {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .data-table {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .table-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .table-header h3 {
+            margin: 0;
+            color: #333;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        .btn-small {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+        .modal {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            z-index: 1000;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .modal-content {
+            background: white;
+            padding: 0 !important;
+            border-radius: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: none !important;
+            max-height: none !important;
+            min-width: 100vw !important;
+            min-height: 100vh !important;
+            overflow-y: auto;
+            position: relative;
+            margin: 0 !important;
+            box-sizing: border-box;
+        }
+        .modal-content h3 {
+            position: sticky;
+            top: 0;
+            background: white;
+            padding: 20px 30px;
+            margin: 0 0 20px 0;
+            z-index: 1002;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-bottom: 2px solid #2196F3;
+            font-size: 24px;
+        }
+        .close-modal {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #dc3545;
+            border: none;
+            font-size: 32px;
+            cursor: pointer;
+            color: white;
+            z-index: 1003;
+            padding: 12px 16px;
+            border-radius: 50%;
+            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        .close-modal:hover {
+            background: #c82333;
+            transform: scale(1.1);
+            box-shadow: 0 6px 12px rgba(220, 53, 69, 0.4);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .form-group textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+        .form-row .form-group {
+            flex: 1;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .prescription-template {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .prescription-template h4 {
+            margin: 0 0 10px 0;
+            color: #2196F3;
+        }
+        .prescription-template p {
+            margin: 5px 0;
+            color: #666;
+        }
+        .medication-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        .medication-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        .medication-item:last-child {
+            border-bottom: none;
+        }
+        .medication-info {
+            flex: 1;
+        }
+        .medication-actions {
+            display: flex;
+            gap: 5px;
+        }
+        .prescription-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            padding: 0 30px 30px 30px;
+        }
+        .prescription-form .full-width {
+            grid-column: 1 / -1;
+        }
+        .prescription-form .two-column {
+            grid-column: 1 / 3;
+        }
+        .detail-modal {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            z-index: 1000;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .detail-modal-content {
+            background: white;
+            padding: 0 !important;
+            border-radius: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: none !important;
+            max-height: none !important;
+            min-width: 100vw !important;
+            min-height: 100vh !important;
+            overflow-y: auto;
+            position: relative;
+            margin: 0 !important;
+            box-sizing: border-box;
+        }
+        .detail-header {
+            position: sticky;
+            top: 0;
+            background: white;
+            border-bottom: 2px solid #2196F3;
+            padding: 20px 30px;
+            margin: 0;
+            z-index: 1002;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .detail-header h3 {
+            margin: 0;
+            color: #2196F3;
+            font-size: 24px;
+        }
+        .detail-section {
+            margin-bottom: 25px;
+            padding: 0;
+        }
+        .detail-section:first-of-type {
+            margin-top: 0;
+            padding-top: 0;
+        }
+        .detail-content {
+            padding: 20px 30px 30px 30px;
+        }
+        .detail-section h4 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 18px;
+            border-left: 4px solid #2196F3;
+            padding-left: 10px;
+        }
+        .detail-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            white-space: pre-line;
+        }
+        .detail-info strong {
+            color: #2196F3;
+            display: inline-block;
+            min-width: 120px;
+        }
+        .medication-detail {
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            align-items: start;
+        }
+        .medication-detail h5 {
+            color: #2196F3;
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            grid-column: 1 / -1;
+        }
+        .medication-detail p {
+            margin: 5px 0;
+            color: #666;
+            white-space: pre-line;
+        }
+        .close-detail-modal {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #dc3545;
+            border: none;
+            font-size: 32px;
+            cursor: pointer;
+            color: white;
+            z-index: 1003;
+            padding: 12px 16px;
+            border-radius: 50%;
+            box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        .close-detail-modal:hover {
+            background: #c82333;
+            transform: scale(1.1);
+            box-shadow: 0 6px 12px rgba(220, 53, 69, 0.4);
+        }
+        .table-row {
+            cursor: pointer;
+        }
+        .table-row:hover {
+            background: #e3f2fd !important;
+        }
+        
+        /* Fullscreen modal styles */
+        body.modal-open {
+            overflow: hidden !important;
+        }
+        
+        .modal.show {
+            display: block !important;
+        }
+        
+        .modal-content * {
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.png" alt="Logo Phòng khám Đại Anh">
+            <div>
+                <h1>Quản lý đơn thuốc</h1>
+                <p>Đơn thuốc mẫu và danh sách thuốc</p>
+            </div>
+        </div>
+        <nav>
+            <div class="nav-row">
+                <a href="index.html" class="back-link btn secondary-btn">
+                    <i class="fas fa-home"></i> Trang chủ
+                </a>
+                <a href="admin.html" class="back-link btn secondary-btn">
+                    <i class="fas fa-cog"></i> Quản trị
+                </a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="admin-main">
+        <!-- Tabs -->
+        <div class="tabs-container">
+            <button class="tab-btn active" onclick="switchTab('prescription-templates')">
+                <i class="fas fa-file-medical"></i> Đơn thuốc mẫu
+            </button>
+            <button class="tab-btn" onclick="switchTab('medications')">
+                <i class="fas fa-pills"></i> Danh sách thuốc
+            </button>
+            <button class="tab-btn" onclick="switchTab('prescriptions')">
+                <i class="fas fa-prescription"></i> Đơn thuốc bệnh nhân
+            </button>
+        </div>
+
+        <!-- Prescription Templates Tab -->
+        <div id="prescription-templates" class="tab-content active">
+            <div class="search-filters">
+                <input type="text" id="template-search" placeholder="Tìm theo tên đơn thuốc">
+                <select id="template-category">
+                    <option value="">Tất cả bệnh lý</option>
+                    <option value="pregnancy">Thai kỳ</option>
+                    <option value="gynecology">Phụ khoa</option>
+                    <option value="postpartum">Sau sinh</option>
+                    <option value="fertility">Vô sinh</option>
+                </select>
+                <button class="btn btn-primary" onclick="searchTemplates()">
+                    <i class="fas fa-search"></i> Tìm kiếm
+                </button>
+                <button class="btn btn-success" onclick="openTemplateModal()">
+                    <i class="fas fa-plus"></i> Tạo đơn thuốc mẫu
+                </button>
+            </div>
+
+            <div class="data-table">
+                <div class="table-header">
+                    <h3><i class="fas fa-file-medical"></i> Đơn thuốc mẫu theo bệnh lý</h3>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>STT</th>
+                                <th>Tên đơn thuốc</th>
+                                <th>Bệnh lý</th>
+                                <th>Mô tả</th>
+                                <th>Số thuốc</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="templates-tbody">
+                            <!-- Templates will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="no-data" id="no-templates" style="display: none;">
+                    <i class="fas fa-file-medical" style="font-size: 48px; color: #ccc; margin-bottom: 15px;"></i>
+                    <p>Chưa có đơn thuốc mẫu nào</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Medications Tab -->
+        <div id="medications" class="tab-content">
+            <div class="search-filters">
+                <input type="text" id="medication-search" placeholder="Tìm theo tên thuốc">
+                <select id="medication-category">
+                    <option value="">Tất cả loại thuốc</option>
+                    <option value="antibiotic">Kháng sinh</option>
+                    <option value="vitamin">Vitamin</option>
+                    <option value="hormone">Nội tiết</option>
+                    <option value="painkiller">Giảm đau</option>
+                    <option value="supplement">Thực phẩm chức năng</option>
+                </select>
+                <button class="btn btn-primary" onclick="searchMedications()">
+                    <i class="fas fa-search"></i> Tìm kiếm
+                </button>
+                <button class="btn btn-success" onclick="openMedicationModal()">
+                    <i class="fas fa-plus"></i> Thêm thuốc
+                </button>
+            </div>
+
+            <div class="data-table">
+                <div class="table-header">
+                    <h3><i class="fas fa-pills"></i> Danh sách thuốc phòng khám</h3>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>STT</th>
+                                <th>Tên thuốc</th>
+                                <th>Hoạt chất</th>
+                                <th>Loại thuốc</th>
+                                <th>Đơn vị</th>
+                                <th>Giá</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="medications-tbody">
+                            <!-- Medications will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="no-data" id="no-medications" style="display: none;">
+                    <i class="fas fa-pills" style="font-size: 48px; color: #ccc; margin-bottom: 15px;"></i>
+                    <p>Chưa có thuốc nào</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Patient Prescriptions Tab -->
+        <div id="prescriptions" class="tab-content">
+            <div class="search-filters">
+                <input type="text" id="prescription-search" placeholder="Tìm theo tên bệnh nhân">
+                <input type="date" id="prescription-date-from" placeholder="Từ ngày">
+                <input type="date" id="prescription-date-to" placeholder="Đến ngày">
+                <button class="btn btn-primary" onclick="searchPrescriptions()">
+                    <i class="fas fa-search"></i> Tìm kiếm
+                </button>
+                <button class="btn btn-success" onclick="openPrescriptionModal()">
+                    <i class="fas fa-plus"></i> Tạo đơn thuốc
+                </button>
+            </div>
+
+            <div class="data-table">
+                <div class="table-header">
+                    <h3><i class="fas fa-prescription"></i> Đơn thuốc bệnh nhân</h3>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>STT</th>
+                                <th>Bệnh nhân</th>
+                                <th>Ngày kê đơn</th>
+                                <th>Chẩn đoán</th>
+                                <th>Số thuốc</th>
+                                <th>Bác sĩ</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="prescriptions-tbody">
+                            <!-- Prescriptions will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="no-data" id="no-prescriptions" style="display: none;">
+                    <i class="fas fa-prescription" style="font-size: 48px; color: #ccc; margin-bottom: 15px;"></i>
+                    <p>Chưa có đơn thuốc nào</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Template Modal -->
+    <div id="template-modal" class="modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+            <h3 id="template-modal-title">Tạo đơn thuốc mẫu</h3>
+            <form id="template-form" class="prescription-form">
+                <div class="form-group">
+                    <label for="template-name">Tên đơn thuốc *</label>
+                    <input type="text" id="template-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="template-category-input">Bệnh lý *</label>
+                    <select id="template-category-input" required>
+                        <option value="">Chọn bệnh lý</option>
+                        <option value="pregnancy">Thai kỳ</option>
+                        <option value="gynecology">Phụ khoa</option>
+                        <option value="postpartum">Sau sinh</option>
+                        <option value="fertility">Vô sinh</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <!-- Empty space for alignment -->
+                </div>
+                <div class="form-group full-width">
+                    <label for="template-description">Mô tả</label>
+                    <textarea id="template-description" placeholder="Mô tả về đơn thuốc mẫu" style="height: 100px;"></textarea>
+                </div>
+                <div class="form-group full-width">
+                    <label>Thuốc trong đơn</label>
+                    <div class="medication-list" id="template-medications" style="max-height: 200px;">
+                        <!-- Medications will be added here -->
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="addMedicationToTemplate()">
+                        <i class="fas fa-plus"></i> Thêm thuốc
+                    </button>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+                    <button type="submit" class="btn btn-primary">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Medication Modal -->
+    <div id="medication-modal" class="modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+            <h3 id="medication-modal-title">Thêm thuốc</h3>
+            <form id="medication-form" class="prescription-form">
+                <div class="form-group">
+                    <label for="medication-name">Tên thuốc *</label>
+                    <input type="text" id="medication-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="medication-ingredient">Hoạt chất *</label>
+                    <input type="text" id="medication-ingredient" required>
+                </div>
+                <div class="form-group">
+                    <label for="medication-category-input">Loại thuốc *</label>
+                    <select id="medication-category-input" required>
+                        <option value="">Chọn loại thuốc</option>
+                        <option value="antibiotic">Kháng sinh</option>
+                        <option value="vitamin">Vitamin</option>
+                        <option value="hormone">Nội tiết</option>
+                        <option value="painkiller">Giảm đau</option>
+                        <option value="supplement">Thực phẩm chức năng</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="medication-unit">Đơn vị *</label>
+                    <input type="text" id="medication-unit" placeholder="viên, ống, gói..." required>
+                </div>
+                <div class="form-group">
+                    <label for="medication-price">Giá (VNĐ) *</label>
+                    <input type="number" id="medication-price" required>
+                </div>
+                <div class="form-group">
+                    <label for="medication-dosage">Liều dùng</label>
+                    <input type="text" id="medication-dosage" placeholder="1-2 viên/ngày">
+                </div>
+                <div class="form-group full-width">
+                    <label for="medication-notes">Ghi chú</label>
+                    <textarea id="medication-notes" placeholder="Ghi chú về thuốc" style="height: 120px;"></textarea>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+                    <button type="submit" class="btn btn-primary">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Prescription Modal -->
+    <div id="prescription-modal" class="modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+            <h3 id="prescription-modal-title">Tạo đơn thuốc bệnh nhân</h3>
+            <form id="prescription-form" class="prescription-form">
+                <div class="form-group">
+                    <label for="patient-name">Tên bệnh nhân *</label>
+                    <input type="text" id="patient-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="patient-phone">Số điện thoại</label>
+                    <input type="tel" id="patient-phone">
+                </div>
+                <div class="form-group">
+                    <label for="prescription-date">Ngày kê đơn *</label>
+                    <input type="datetime-local" id="prescription-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="doctor-name">Bác sĩ *</label>
+                    <input type="text" id="doctor-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="diagnosis">Chẩn đoán *</label>
+                    <input type="text" id="diagnosis" required>
+                </div>
+                <div class="form-group">
+                    <!-- Empty space for alignment -->
+                </div>
+                <div class="form-group full-width">
+                    <label>Thuốc kê đơn</label>
+                    <div class="medication-list" id="prescription-medications" style="max-height: 200px;">
+                        <!-- Medications will be added here -->
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="addMedicationToPrescription()">
+                        <i class="fas fa-plus"></i> Thêm thuốc
+                    </button>
+                </div>
+                <div class="form-group full-width">
+                    <label for="prescription-notes">Ghi chú</label>
+                    <textarea id="prescription-notes" placeholder="Ghi chú thêm về đơn thuốc" style="height: 100px;"></textarea>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+                    <button type="submit" class="btn btn-primary">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detail-modal" class="detail-modal">
+        <div class="detail-modal-content">
+            <button class="close-detail-modal" onclick="closeDetailModal()">&times;</button>
+            <div class="detail-header">
+                <h3 id="detail-title">Chi tiết thuốc</h3>
+            </div>
+            <div id="detail-content">
+                <!-- Detail content will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'prescription-templates';
+        let templates = [];
+        let medications = [];
+        let prescriptions = [];
+        let currentEditId = null;
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            currentTab = tabName;
+
+            // Load data for the tab
+            switch(tabName) {
+                case 'prescription-templates':
+                    loadTemplates();
+                    break;
+                case 'medications':
+                    loadMedications();
+                    break;
+                case 'prescriptions':
+                    loadPrescriptions();
+                    break;
+            }
+        }
+
+        // Load prescription templates
+        async function loadTemplates() {
+            try {
+                const response = await fetch('/api/prescription-templates');
+                if (response.ok) {
+                    templates = await response.json();
+                    renderTemplates();
+                } else {
+                    console.error('Lỗi tải đơn thuốc mẫu:', response.status);
+                }
+            } catch (error) {
+                console.error('Lỗi tải đơn thuốc mẫu:', error);
+            }
+        }
+
+        // Render templates
+        function renderTemplates() {
+            const tbody = document.getElementById('templates-tbody');
+            const noData = document.getElementById('no-templates');
+            
+            if (templates.length === 0) {
+                tbody.innerHTML = '';
+                noData.style.display = 'block';
+                return;
+            }
+
+            noData.style.display = 'none';
+            tbody.innerHTML = templates.map((template, index) => `
+                <tr class="table-row" ondblclick="showTemplateDetail(${template.id})">
+                    <td>${index + 1}</td>
+                    <td>${template.name}</td>
+                    <td>${getCategoryText(template.category)}</td>
+                    <td>${template.description || 'Không có'}</td>
+                    <td>${template.medications ? template.medications.length : 0}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-primary btn-small" onclick="viewTemplate(${template.id})" title="Xem chi tiết">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-secondary btn-small" onclick="editTemplate(${template.id})" title="Sửa">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-danger btn-small" onclick="deleteTemplate(${template.id})" title="Xóa">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Load medications
+        async function loadMedications() {
+            try {
+                const response = await fetch('/api/medications');
+                if (response.ok) {
+                    medications = await response.json();
+                    renderMedications();
+                } else {
+                    console.error('Lỗi tải danh sách thuốc:', response.status);
+                }
+            } catch (error) {
+                console.error('Lỗi tải danh sách thuốc:', error);
+            }
+        }
+
+        // Render medications
+        function renderMedications() {
+            const tbody = document.getElementById('medications-tbody');
+            const noData = document.getElementById('no-medications');
+            
+            if (medications.length === 0) {
+                tbody.innerHTML = '';
+                noData.style.display = 'block';
+                return;
+            }
+
+            noData.style.display = 'none';
+            tbody.innerHTML = medications.map((medication, index) => `
+                <tr class="table-row" ondblclick="showMedicationDetail(${medication.id})">
+                    <td>${index + 1}</td>
+                    <td>${medication.name}</td>
+                    <td>${medication.ingredient}</td>
+                    <td>${getCategoryText(medication.category)}</td>
+                    <td>${medication.unit}</td>
+                    <td>${formatPrice(medication.price)}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-secondary btn-small" onclick="editMedication(${medication.id})" title="Sửa">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-danger btn-small" onclick="deleteMedication(${medication.id})" title="Xóa">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Load prescriptions
+        async function loadPrescriptions() {
+            try {
+                const response = await fetch('/api/prescriptions');
+                if (response.ok) {
+                    prescriptions = await response.json();
+                    renderPrescriptions();
+                } else {
+                    console.error('Lỗi tải đơn thuốc:', response.status);
+                }
+            } catch (error) {
+                console.error('Lỗi tải đơn thuốc:', error);
+            }
+        }
+
+        // Render prescriptions
+        function renderPrescriptions() {
+            const tbody = document.getElementById('prescriptions-tbody');
+            const noData = document.getElementById('no-prescriptions');
+            
+            if (prescriptions.length === 0) {
+                tbody.innerHTML = '';
+                noData.style.display = 'block';
+                return;
+            }
+
+            noData.style.display = 'none';
+            tbody.innerHTML = prescriptions.map((prescription, index) => `
+                <tr class="table-row" ondblclick="showPrescriptionDetail(${prescription.id})">
+                    <td>${index + 1}</td>
+                    <td>${prescription.patient_name}</td>
+                    <td>${formatDateTime(prescription.prescription_date)}</td>
+                    <td>${prescription.diagnosis}</td>
+                    <td>${prescription.medications ? prescription.medications.length : 0}</td>
+                    <td>${prescription.doctor_name}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-primary btn-small" onclick="viewPrescription(${prescription.id})" title="Xem chi tiết">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-secondary btn-small" onclick="editPrescription(${prescription.id})" title="Sửa">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-danger btn-small" onclick="deletePrescription(${prescription.id})" title="Xóa">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Helper functions
+        function getCategoryText(category) {
+            const categoryMap = {
+                'pregnancy': 'Thai kỳ',
+                'gynecology': 'Phụ khoa',
+                'postpartum': 'Sau sinh',
+                'fertility': 'Vô sinh',
+                'antibiotic': 'Kháng sinh',
+                'vitamin': 'Vitamin',
+                'hormone': 'Nội tiết',
+                'painkiller': 'Giảm đau',
+                'supplement': 'Thực phẩm chức năng'
+            };
+            return categoryMap[category] || category;
+        }
+
+        function formatPrice(price) {
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(price);
+        }
+
+        function formatDateTime(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('vi-VN');
+        }
+
+        // Modal functions
+        function openTemplateModal() {
+            currentEditId = null;
+            document.getElementById('template-modal-title').textContent = 'Tạo đơn thuốc mẫu';
+            document.getElementById('template-form').reset();
+            document.getElementById('template-medications').innerHTML = '';
+            document.getElementById('template-modal').style.display = 'block';
+            document.body.classList.add('modal-open');
+        }
+
+        function openMedicationModal() {
+            currentEditId = null;
+            document.getElementById('medication-modal-title').textContent = 'Thêm thuốc';
+            document.getElementById('medication-form').reset();
+            document.getElementById('medication-modal').style.display = 'block';
+            document.body.classList.add('modal-open');
+        }
+
+        function openPrescriptionModal() {
+            currentEditId = null;
+            document.getElementById('prescription-modal-title').textContent = 'Tạo đơn thuốc bệnh nhân';
+            document.getElementById('prescription-form').reset();
+            document.getElementById('prescription-medications').innerHTML = '';
+            document.getElementById('prescription-modal').style.display = 'block';
+            document.body.classList.add('modal-open');
+        }
+
+        function closeModal() {
+            document.querySelectorAll('.modal').forEach(modal => {
+                modal.style.display = 'none';
+            });
+            document.body.classList.remove('modal-open');
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detail-modal').style.display = 'none';
+            document.body.classList.remove('modal-open');
+        }
+
+        // Show medication detail
+        function showMedicationDetail(id) {
+            const medication = medications.find(m => m.id === id);
+            if (!medication) return;
+
+            document.getElementById('detail-title').textContent = `Chi tiết thuốc: ${medication.name}`;
+            
+            const content = `
+                <div class="detail-section">
+                    <h4><i class="fas fa-pills"></i> Thông tin cơ bản</h4>
+                    <div class="detail-info">
+                        <strong>Tên thuốc:</strong> ${medication.name}<br>
+                        <strong>Hoạt chất:</strong> ${medication.ingredient}<br>
+                        <strong>Loại thuốc:</strong> ${getCategoryText(medication.category)}<br>
+                        <strong>Đơn vị:</strong> ${medication.unit}<br>
+                        <strong>Giá:</strong> ${formatPrice(medication.price)}
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <h4><i class="fas fa-info-circle"></i> Thông tin bổ sung</h4>
+                    <div class="detail-info">
+                        <strong>Liều dùng:</strong> ${medication.dosage || 'Chưa có thông tin'}<br>
+                        <strong>Ghi chú:</strong> ${medication.notes || 'Không có ghi chú'}
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <h4><i class="fas fa-clock"></i> Thông tin hệ thống</h4>
+                    <div class="detail-info">
+                        <strong>Ngày tạo:</strong> ${medication.created_at ? formatDateTime(medication.created_at) : 'Không có'}<br>
+                        <strong>Cập nhật lần cuối:</strong> ${medication.updated_at ? formatDateTime(medication.updated_at) : 'Không có'}
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('detail-content').innerHTML = content;
+            document.getElementById('detail-modal').style.display = 'block';
+            document.body.classList.add('modal-open');
+        }
+
+        // Show template detail
+        function showTemplateDetail(id) {
+            const template = templates.find(t => t.id === id);
+            if (!template) return;
+
+            document.getElementById('detail-title').textContent = `Chi tiết đơn thuốc mẫu: ${template.name}`;
+            
+            let medicationsHtml = '';
+            if (template.medications && template.medications.length > 0) {
+                template.medications.forEach(med => {
+                    const medication = medications.find(m => m.id === med.medication_id);
+                    medicationsHtml += `
+                        <div class="medication-detail">
+                            <h5>${medication ? medication.name : 'Thuốc không tồn tại'}</h5>
+                            <p><strong>Hoạt chất:</strong> ${medication ? medication.ingredient : 'Không có'}</p>
+                            <p><strong>Liều dùng:</strong> ${med.dosage || 'Không có'}</p>
+                            <p><strong>Loại:</strong> ${medication ? getCategoryText(medication.category) : 'Không có'}</p>
+                        </div>
+                    `;
+                });
+            } else {
+                medicationsHtml = '<p>Không có thuốc nào trong đơn thuốc mẫu này.</p>';
+            }
+            
+            const content = `
+                <div class="detail-section">
+                    <h4><i class="fas fa-file-medical"></i> Thông tin đơn thuốc mẫu</h4>
+                    <div class="detail-info">
+                        <strong>Tên đơn thuốc:</strong> ${template.name}<br>
+                        <strong>Bệnh lý:</strong> ${getCategoryText(template.category)}<br>
+                        <strong>Mô tả:</strong> ${template.description || 'Không có mô tả'}
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <h4><i class="fas fa-pills"></i> Danh sách thuốc (${template.medications ? template.medications.length : 0} thuốc)</h4>
+                    ${medicationsHtml}
+                </div>
+                
+                <div class="detail-section">
+                    <h4><i class="fas fa-clock"></i> Thông tin hệ thống</h4>
+                    <div class="detail-info">
+                        <strong>Ngày tạo:</strong> ${template.created_at ? formatDateTime(template.created_at) : 'Không có'}<br>
+                        <strong>Cập nhật lần cuối:</strong> ${template.updated_at ? formatDateTime(template.updated_at) : 'Không có'}
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('detail-content').innerHTML = content;
+            document.getElementById('detail-modal').style.display = 'block';
+            document.body.classList.add('modal-open');
+        }
+
+        // Show prescription detail
+        function showPrescriptionDetail(id) {
+            const prescription = prescriptions.find(p => p.id === id);
+            if (!prescription) return;
+
+            document.getElementById('detail-title').textContent = `Chi tiết đơn thuốc: ${prescription.patient_name}`;
+            
+            let medicationsHtml = '';
+            if (prescription.medications && prescription.medications.length > 0) {
+                prescription.medications.forEach(med => {
+                    const medication = medications.find(m => m.id === med.medication_id);
+                    medicationsHtml += `
+                        <div class="medication-detail">
+                            <h5>${medication ? medication.name : 'Thuốc không tồn tại'}</h5>
+                            <p><strong>Hoạt chất:</strong> ${medication ? medication.ingredient : 'Không có'}</p>
+                            <p><strong>Liều dùng:</strong> ${med.dosage || 'Không có'}</p>
+                            <p><strong>Loại:</strong> ${medication ? getCategoryText(medication.category) : 'Không có'}</p>
+                            <p><strong>Giá:</strong> ${medication ? formatPrice(medication.price) : 'Không có'}</p>
+                        </div>
+                    `;
+                });
+            } else {
+                medicationsHtml = '<p>Không có thuốc nào trong đơn thuốc này.</p>';
+            }
+            
+            const content = `
+                <div class="detail-section">
+                    <h4><i class="fas fa-user"></i> Thông tin bệnh nhân</h4>
+                    <div class="detail-info">
+                        <strong>Tên bệnh nhân:</strong> ${prescription.patient_name}<br>
+                        <strong>Số điện thoại:</strong> ${prescription.patient_phone || 'Không có'}<br>
+                        <strong>Bác sĩ kê đơn:</strong> ${prescription.doctor_name}<br>
+                        <strong>Ngày kê đơn:</strong> ${formatDateTime(prescription.prescription_date)}
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <h4><i class="fas fa-stethoscope"></i> Chẩn đoán</h4>
+                    <div class="detail-info">
+                        <strong>Chẩn đoán:</strong> ${prescription.diagnosis}
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <h4><i class="fas fa-pills"></i> Danh sách thuốc (${prescription.medications ? prescription.medications.length : 0} thuốc)</h4>
+                    ${medicationsHtml}
+                </div>
+                
+                <div class="detail-section">
+                    <h4><i class="fas fa-sticky-note"></i> Ghi chú</h4>
+                    <div class="detail-info">
+                        <strong>Ghi chú:</strong> ${prescription.notes || 'Không có ghi chú'}
+                    </div>
+                </div>
+                
+                <div class="detail-section">
+                    <h4><i class="fas fa-clock"></i> Thông tin hệ thống</h4>
+                    <div class="detail-info">
+                        <strong>Ngày tạo:</strong> ${prescription.created_at ? formatDateTime(prescription.created_at) : 'Không có'}<br>
+                        <strong>Cập nhật lần cuối:</strong> ${prescription.updated_at ? formatDateTime(prescription.updated_at) : 'Không có'}
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('detail-content').innerHTML = content;
+            document.getElementById('detail-modal').style.display = 'block';
+            document.body.classList.add('modal-open');
+        }
+
+        // Add medication to template
+        function addMedicationToTemplate() {
+            const container = document.getElementById('template-medications');
+            const medicationSelect = document.createElement('select');
+            medicationSelect.innerHTML = '<option value="">Chọn thuốc</option>' + 
+                medications.map(med => `<option value="${med.id}">${med.name} - ${med.ingredient}</option>`).join('');
+            
+            const dosageInput = document.createElement('input');
+            dosageInput.type = 'text';
+            dosageInput.placeholder = 'Liều dùng';
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'btn btn-danger btn-small';
+            removeBtn.innerHTML = '<i class="fas fa-trash"></i>';
+            removeBtn.onclick = function() { container.removeChild(medicationItem); };
+            
+            const medicationItem = document.createElement('div');
+            medicationItem.className = 'medication-item';
+            medicationItem.appendChild(medicationSelect);
+            medicationItem.appendChild(dosageInput);
+            medicationItem.appendChild(removeBtn);
+            
+            container.appendChild(medicationItem);
+        }
+
+        // Add medication to prescription
+        function addMedicationToPrescription() {
+            const container = document.getElementById('prescription-medications');
+            const medicationSelect = document.createElement('select');
+            medicationSelect.innerHTML = '<option value="">Chọn thuốc</option>' + 
+                medications.map(med => `<option value="${med.id}">${med.name} - ${med.ingredient}</option>`).join('');
+            
+            const dosageInput = document.createElement('input');
+            dosageInput.type = 'text';
+            dosageInput.placeholder = 'Liều dùng';
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'btn btn-danger btn-small';
+            removeBtn.innerHTML = '<i class="fas fa-trash"></i>';
+            removeBtn.onclick = function() { container.removeChild(medicationItem); };
+            
+            const medicationItem = document.createElement('div');
+            medicationItem.className = 'medication-item';
+            medicationItem.appendChild(medicationSelect);
+            medicationItem.appendChild(dosageInput);
+            medicationItem.appendChild(removeBtn);
+            
+            container.appendChild(medicationItem);
+        }
+
+        // Search functions
+        function searchTemplates() {
+            const search = document.getElementById('template-search').value;
+            const category = document.getElementById('template-category').value;
+            
+            let filteredTemplates = templates.filter(template => {
+                const matchesSearch = !search || template.name.toLowerCase().includes(search.toLowerCase());
+                const matchesCategory = !category || template.category === category;
+                return matchesSearch && matchesCategory;
+            });
+            
+            // Update display
+            const tbody = document.getElementById('templates-tbody');
+            const noData = document.getElementById('no-templates');
+            
+            if (filteredTemplates.length === 0) {
+                tbody.innerHTML = '';
+                noData.style.display = 'block';
+            } else {
+                noData.style.display = 'none';
+                tbody.innerHTML = filteredTemplates.map((template, index) => `
+                    <tr class="table-row" ondblclick="showTemplateDetail(${template.id})">
+                        <td>${index + 1}</td>
+                        <td>${template.name}</td>
+                        <td>${getCategoryText(template.category)}</td>
+                        <td>${template.description || 'Không có'}</td>
+                        <td>${template.medications ? template.medications.length : 0}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn btn-primary btn-small" onclick="viewTemplate(${template.id})" title="Xem chi tiết">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-secondary btn-small" onclick="editTemplate(${template.id})" title="Sửa">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-danger btn-small" onclick="deleteTemplate(${template.id})" title="Xóa">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        function searchMedications() {
+            const search = document.getElementById('medication-search').value;
+            const category = document.getElementById('medication-category').value;
+            
+            let filteredMedications = medications.filter(medication => {
+                const matchesSearch = !search || medication.name.toLowerCase().includes(search.toLowerCase());
+                const matchesCategory = !category || medication.category === category;
+                return matchesSearch && matchesCategory;
+            });
+            
+            // Update display
+            const tbody = document.getElementById('medications-tbody');
+            const noData = document.getElementById('no-medications');
+            
+            if (filteredMedications.length === 0) {
+                tbody.innerHTML = '';
+                noData.style.display = 'block';
+            } else {
+                noData.style.display = 'none';
+                tbody.innerHTML = filteredMedications.map((medication, index) => `
+                    <tr class="table-row" ondblclick="showMedicationDetail(${medication.id})">
+                        <td>${index + 1}</td>
+                        <td>${medication.name}</td>
+                        <td>${medication.ingredient}</td>
+                        <td>${getCategoryText(medication.category)}</td>
+                        <td>${medication.unit}</td>
+                        <td>${formatPrice(medication.price)}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn btn-secondary btn-small" onclick="editMedication(${medication.id})" title="Sửa">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-danger btn-small" onclick="deleteMedication(${medication.id})" title="Xóa">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        function searchPrescriptions() {
+            const search = document.getElementById('prescription-search').value;
+            const dateFrom = document.getElementById('prescription-date-from').value;
+            const dateTo = document.getElementById('prescription-date-to').value;
+            
+            let filteredPrescriptions = prescriptions.filter(prescription => {
+                const matchesSearch = !search || prescription.patient_name.toLowerCase().includes(search.toLowerCase());
+                let matchesDate = true;
+                if (dateFrom || dateTo) {
+                    const prescriptionDate = new Date(prescription.prescription_date);
+                    if (dateFrom) {
+                        const fromDate = new Date(dateFrom);
+                        matchesDate = matchesDate && prescriptionDate >= fromDate;
+                    }
+                    if (dateTo) {
+                        const toDate = new Date(dateTo);
+                        toDate.setHours(23, 59, 59, 999);
+                        matchesDate = matchesDate && prescriptionDate <= toDate;
+                    }
+                }
+                return matchesSearch && matchesDate;
+            });
+            
+            // Update display
+            const tbody = document.getElementById('prescriptions-tbody');
+            const noData = document.getElementById('no-prescriptions');
+            
+            if (filteredPrescriptions.length === 0) {
+                tbody.innerHTML = '';
+                noData.style.display = 'block';
+            } else {
+                noData.style.display = 'none';
+                tbody.innerHTML = filteredPrescriptions.map((prescription, index) => `
+                    <tr class="table-row" ondblclick="showPrescriptionDetail(${prescription.id})">
+                        <td>${index + 1}</td>
+                        <td>${prescription.patient_name}</td>
+                        <td>${formatDateTime(prescription.prescription_date)}</td>
+                        <td>${prescription.diagnosis}</td>
+                        <td>${prescription.medications ? prescription.medications.length : 0}</td>
+                        <td>${prescription.doctor_name}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn btn-primary btn-small" onclick="viewPrescription(${prescription.id})" title="Xem chi tiết">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-secondary btn-small" onclick="editPrescription(${prescription.id})" title="Sửa">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-danger btn-small" onclick="deletePrescription(${prescription.id})" title="Xóa">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        // Form submission handlers
+        document.getElementById('medication-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                name: document.getElementById('medication-name').value,
+                ingredient: document.getElementById('medication-ingredient').value,
+                category: document.getElementById('medication-category-input').value,
+                unit: document.getElementById('medication-unit').value,
+                price: parseFloat(document.getElementById('medication-price').value),
+                dosage: document.getElementById('medication-dosage').value,
+                notes: document.getElementById('medication-notes').value
+            };
+
+            try {
+                const url = currentEditId ? `/api/medications/${currentEditId}` : '/api/medications';
+                const method = currentEditId ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (response.ok) {
+                    alert(currentEditId ? 'Cập nhật thuốc thành công!' : 'Thêm thuốc thành công!');
+                    closeModal();
+                    await loadMedications(); // Reload medications list
+                } else {
+                    const error = await response.json();
+                    alert('Lỗi: ' + (error.message || 'Không thể lưu thuốc'));
+                }
+            } catch (error) {
+                console.error('Lỗi lưu thuốc:', error);
+                alert('Lỗi kết nối. Vui lòng thử lại.');
+            }
+        });
+
+        // Template form submission
+        document.getElementById('template-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Collect medications from template
+            const medicationItems = document.querySelectorAll('#template-medications .medication-item');
+            const medications = [];
+            medicationItems.forEach(item => {
+                const select = item.querySelector('select');
+                const dosage = item.querySelector('input[type="text"]').value;
+                if (select.value) {
+                    medications.push({
+                        medication_id: parseInt(select.value),
+                        dosage: dosage
+                    });
+                }
+            });
+
+            const formData = {
+                name: document.getElementById('template-name').value,
+                category: document.getElementById('template-category-input').value,
+                description: document.getElementById('template-description').value,
+                medications: medications
+            };
+
+            try {
+                const url = currentEditId ? `/api/prescription-templates/${currentEditId}` : '/api/prescription-templates';
+                const method = currentEditId ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (response.ok) {
+                    alert(currentEditId ? 'Cập nhật đơn thuốc mẫu thành công!' : 'Tạo đơn thuốc mẫu thành công!');
+                    closeModal();
+                    await loadTemplates();
+                } else {
+                    const error = await response.json();
+                    alert('Lỗi: ' + (error.message || 'Không thể lưu đơn thuốc mẫu'));
+                }
+            } catch (error) {
+                console.error('Lỗi lưu đơn thuốc mẫu:', error);
+                alert('Lỗi kết nối. Vui lòng thử lại.');
+            }
+        });
+
+        // Prescription form submission
+        document.getElementById('prescription-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Collect medications from prescription
+            const medicationItems = document.querySelectorAll('#prescription-medications .medication-item');
+            const medications = [];
+            medicationItems.forEach(item => {
+                const select = item.querySelector('select');
+                const dosage = item.querySelector('input[type="text"]').value;
+                if (select.value) {
+                    medications.push({
+                        medication_id: parseInt(select.value),
+                        dosage: dosage
+                    });
+                }
+            });
+
+            const formData = {
+                patient_name: document.getElementById('patient-name').value,
+                patient_phone: document.getElementById('patient-phone').value,
+                prescription_date: document.getElementById('prescription-date').value,
+                doctor_name: document.getElementById('doctor-name').value,
+                diagnosis: document.getElementById('diagnosis').value,
+                medications: medications,
+                notes: document.getElementById('prescription-notes').value
+            };
+
+            try {
+                const url = currentEditId ? `/api/prescriptions/${currentEditId}` : '/api/prescriptions';
+                const method = currentEditId ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (response.ok) {
+                    alert(currentEditId ? 'Cập nhật đơn thuốc thành công!' : 'Tạo đơn thuốc thành công!');
+                    closeModal();
+                    await loadPrescriptions();
+                } else {
+                    const error = await response.json();
+                    alert('Lỗi: ' + (error.message || 'Không thể lưu đơn thuốc'));
+                }
+            } catch (error) {
+                console.error('Lỗi lưu đơn thuốc:', error);
+                alert('Lỗi kết nối. Vui lòng thử lại.');
+            }
+        });
+
+        // Edit and Delete functions
+        async function editMedication(id) {
+            const medication = medications.find(m => m.id === id);
+            if (!medication) return;
+
+            currentEditId = id;
+            document.getElementById('medication-modal-title').textContent = 'Sửa thuốc';
+            document.getElementById('medication-name').value = medication.name;
+            document.getElementById('medication-ingredient').value = medication.ingredient;
+            document.getElementById('medication-category-input').value = medication.category;
+            document.getElementById('medication-unit').value = medication.unit;
+            document.getElementById('medication-price').value = medication.price;
+            document.getElementById('medication-dosage').value = medication.dosage || '';
+            document.getElementById('medication-notes').value = medication.notes || '';
+            document.getElementById('medication-modal').style.display = 'block';
+            document.body.classList.add('modal-open');
+        }
+
+        async function deleteMedication(id) {
+            if (!confirm('Bạn có chắc chắn muốn xóa thuốc này?')) return;
+
+            try {
+                const response = await fetch(`/api/medications/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('Xóa thuốc thành công!');
+                    await loadMedications();
+                } else {
+                    alert('Lỗi xóa thuốc!');
+                }
+            } catch (error) {
+                console.error('Lỗi xóa thuốc:', error);
+                alert('Lỗi kết nối. Vui lòng thử lại.');
+            }
+        }
+
+        async function editTemplate(id) {
+            const template = templates.find(t => t.id === id);
+            if (!template) return;
+
+            currentEditId = id;
+            document.getElementById('template-modal-title').textContent = 'Sửa đơn thuốc mẫu';
+            document.getElementById('template-name').value = template.name;
+            document.getElementById('template-category-input').value = template.category;
+            document.getElementById('template-description').value = template.description || '';
+            
+            // Clear and populate medications
+            const container = document.getElementById('template-medications');
+            container.innerHTML = '';
+            
+            if (template.medications && template.medications.length > 0) {
+                template.medications.forEach(med => {
+                    addMedicationToTemplate();
+                    const lastItem = container.lastElementChild;
+                    const select = lastItem.querySelector('select');
+                    const dosageInput = lastItem.querySelector('input[type="text"]');
+                    select.value = med.medication_id;
+                    dosageInput.value = med.dosage || '';
+                });
+            }
+            
+            document.getElementById('template-modal').style.display = 'block';
+            document.body.classList.add('modal-open');
+        }
+
+        async function deleteTemplate(id) {
+            if (!confirm('Bạn có chắc chắn muốn xóa đơn thuốc mẫu này?')) return;
+
+            try {
+                const response = await fetch(`/api/prescription-templates/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('Xóa đơn thuốc mẫu thành công!');
+                    await loadTemplates();
+                } else {
+                    alert('Lỗi xóa đơn thuốc mẫu!');
+                }
+            } catch (error) {
+                console.error('Lỗi xóa đơn thuốc mẫu:', error);
+                alert('Lỗi kết nối. Vui lòng thử lại.');
+            }
+        }
+
+        async function editPrescription(id) {
+            const prescription = prescriptions.find(p => p.id === id);
+            if (!prescription) return;
+
+            currentEditId = id;
+            document.getElementById('prescription-modal-title').textContent = 'Sửa đơn thuốc';
+            document.getElementById('patient-name').value = prescription.patient_name;
+            document.getElementById('patient-phone').value = prescription.patient_phone || '';
+            document.getElementById('prescription-date').value = prescription.prescription_date.split('T')[0] + 'T' + prescription.prescription_date.split('T')[1].substring(0, 5);
+            document.getElementById('doctor-name').value = prescription.doctor_name;
+            document.getElementById('diagnosis').value = prescription.diagnosis;
+            document.getElementById('prescription-notes').value = prescription.notes || '';
+            
+            // Clear and populate medications
+            const container = document.getElementById('prescription-medications');
+            container.innerHTML = '';
+            
+            if (prescription.medications && prescription.medications.length > 0) {
+                prescription.medications.forEach(med => {
+                    addMedicationToPrescription();
+                    const lastItem = container.lastElementChild;
+                    const select = lastItem.querySelector('select');
+                    const dosageInput = lastItem.querySelector('input[type="text"]');
+                    select.value = med.medication_id;
+                    dosageInput.value = med.dosage || '';
+                });
+            }
+            
+            document.getElementById('prescription-modal').style.display = 'block';
+            document.body.classList.add('modal-open');
+        }
+
+        async function deletePrescription(id) {
+            if (!confirm('Bạn có chắc chắn muốn xóa đơn thuốc này?')) return;
+
+            try {
+                const response = await fetch(`/api/prescriptions/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('Xóa đơn thuốc thành công!');
+                    await loadPrescriptions();
+                } else {
+                    alert('Lỗi xóa đơn thuốc!');
+                }
+            } catch (error) {
+                console.error('Lỗi xóa đơn thuốc:', error);
+                alert('Lỗi kết nối. Vui lòng thử lại.');
+            }
+        }
+
+        // View functions
+        function viewTemplate(id) {
+            const template = templates.find(t => t.id === id);
+            if (!template) return;
+            
+            let medicationsText = 'Không có thuốc';
+            if (template.medications && template.medications.length > 0) {
+                medicationsText = template.medications.map(med => {
+                    const medication = medications.find(m => m.id === med.medication_id);
+                    return `${medication ? medication.name : 'Thuốc không tồn tại'} - ${med.dosage || 'Không có liều dùng'}`;
+                }).join('\n');
+            }
+            
+            alert(`Đơn thuốc mẫu: ${template.name}\nBệnh lý: ${getCategoryText(template.category)}\nMô tả: ${template.description || 'Không có'}\n\nThuốc:\n${medicationsText}`);
+        }
+
+        function viewPrescription(id) {
+            const prescription = prescriptions.find(p => p.id === id);
+            if (!prescription) return;
+            
+            let medicationsText = 'Không có thuốc';
+            if (prescription.medications && prescription.medications.length > 0) {
+                medicationsText = prescription.medications.map(med => {
+                    const medication = medications.find(m => m.id === med.medication_id);
+                    return `${medication ? medication.name : 'Thuốc không tồn tại'} - ${med.dosage || 'Không có liều dùng'}`;
+                }).join('\n');
+            }
+            
+            alert(`Đơn thuốc bệnh nhân: ${prescription.patient_name}\nBác sĩ: ${prescription.doctor_name}\nChẩn đoán: ${prescription.diagnosis}\nNgày: ${formatDateTime(prescription.prescription_date)}\n\nThuốc:\n${medicationsText}\n\nGhi chú: ${prescription.notes || 'Không có'}`);
+        }
+
+        // Initialize
+        async function initializePage() {
+            try {
+                // Load initial data
+                await loadTemplates();
+                await loadMedications();
+                await loadPrescriptions();
+            } catch (error) {
+                console.error('Lỗi khởi tạo trang:', error);
+            }
+        }
+        
+        initializePage();
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

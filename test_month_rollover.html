@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Month Rollover Logic</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { border: 1px solid #ccc; padding: 16px; margin: 16px 0; border-radius: 8px; }
+        .log { background: #f5f5f5; padding: 12px; border-radius: 4px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        button { padding: 8px 16px; margin: 4px; cursor: pointer; }
+        h2 { margin-top: 0; }
+    </style>
+</head>
+<body>
+    <h1>Test: Month Rollover & Tab Label Update</h1>
+    
+    <div class="test-section">
+        <h2>Simulate Date Change</h2>
+        <p>Giả lập hệ thống chuyển sang các ngày khác nhau để test logic:</p>
+        <button onclick="testChangeToDate('2025-11-15')">Đặt ngày 15/11/2025 (T11)</button>
+        <button onclick="testChangeToDate('2025-12-01')">Đặt ngày 01/12/2025 (ngày 1 tháng T12)</button>
+        <button onclick="testChangeToDate('2026-01-01')">Đặt ngày 01/01/2026 (ngày 1 tháng T1 năm mới)</button>
+        <button onclick="testChangeToDate('2026-02-15')">Đặt ngày 15/02/2026 (T2 năm mới)</button>
+        <br>
+        <p><strong>Ngày hiện tại (test):</strong> <span id="test-date">N/A</span></p>
+    </div>
+
+    <div class="test-section">
+        <h2>Test buildMonthTabs() Logic</h2>
+        <p>Kiểm tra hàm xây dựng tab với các năm/tháng khác nhau:</p>
+        <div id="month-tabs-demo" style="display: flex; gap: 8px; flex-wrap: wrap; padding: 12px; background: #f0f0f0; border-radius: 4px;"></div>
+        <p><em>Tabs được tạo theo năm hiện tại. Tab với nền cam (nếu có) là tháng sau (ngày 1).</em></p>
+    </div>
+
+    <div class="test-section">
+        <h2>Test getMillisToNextSundayEighteen() Logic</h2>
+        <p>Tính thời gian đến chủ nhật 18:00 tiếp theo:</p>
+        <button onclick="testNextSundayCalculation()">Tính thời gian đến chủ nhật 18:00</button>
+        <div id="sunday-log" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test Month Rollover Detection</h2>
+        <button onclick="testMonthRolloverDetection()">Kiểm tra phát hiện thay đổi tháng</button>
+        <div id="rollover-log" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Console Log</h2>
+        <div id="console-log" class="log"></div>
+    </div>
+
+    <script>
+        // Biến toàn cầu để giả lập ngày tháng
+        let fakeDate = null;
+
+        // Override Date constructor để trả về ngày giả lập
+        const OriginalDate = Date;
+        window.Date = class extends OriginalDate {
+            constructor(...args) {
+                if (args.length === 0) {
+                    return fakeDate ? new OriginalDate(fakeDate) : new OriginalDate();
+                }
+                return new OriginalDate(...args);
+            }
+            static now() {
+                return fakeDate ? new OriginalDate(fakeDate).getTime() : OriginalDate.now();
+            }
+        };
+        Object.setPrototypeOf(window.Date, OriginalDate);
+
+        function logToConsole(msg) {
+            const logEl = document.getElementById('console-log');
+            const line = document.createElement('div');
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logEl.appendChild(line);
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(msg);
+        }
+
+        window.console.log = logToConsole;
+
+        function testChangeToDate(dateStr) {
+            fakeDate = dateStr;
+            const dt = new Date();
+            document.getElementById('test-date').textContent = `${dt.toLocaleDateString('vi-VN')} (Thứ ${['CN', 'Hai', 'Ba', 'Tư', 'Năm', 'Sáu', 'Bảy'][dt.getDay()]})`;
+            buildMonthTabsDemo();
+            logToConsole(`Ngày đã đặt: ${dateStr}`);
+        }
+
+        function buildMonthTabsDemo() {
+            const container = document.getElementById('month-tabs-demo');
+            container.innerHTML = '';
+            const today = new Date();
+            const y = today.getFullYear();
+            const currentM = today.getMonth() + 1;
+            const currentDate = today.getDate();
+
+            // Tạo các tab cho tháng 1-12
+            for (let m = 1; m <= 12; m++) {
+                const btn = document.createElement('button');
+                btn.textContent = `T${m}.${y}`;
+                btn.style.padding = '8px 12px';
+                btn.style.borderRadius = '4px';
+                btn.style.border = '1px solid #ccc';
+                btn.style.background = m === currentM ? '#2196F3' : '#fff';
+                btn.style.color = m === currentM ? '#fff' : '#000';
+                btn.style.cursor = 'pointer';
+                container.appendChild(btn);
+            }
+
+            // Thêm tab tháng sau nếu là ngày 1
+            if (currentDate === 1) {
+                const nextM = currentM === 12 ? 1 : currentM + 1;
+                const nextY = currentM === 12 ? y + 1 : y;
+                const nextBtn = document.createElement('button');
+                nextBtn.textContent = `T${nextM}.${nextY}`;
+                nextBtn.style.padding = '8px 12px';
+                nextBtn.style.borderRadius = '4px';
+                nextBtn.style.border = '1px solid #ff9800';
+                nextBtn.style.background = '#fff3e0';
+                nextBtn.style.fontWeight = 'bold';
+                nextBtn.title = 'Tab tháng tiếp theo (mới)';
+                container.appendChild(nextBtn);
+                logToConsole(`✓ Ngày 1 phát hiện: Tab tháng sau T${nextM}.${nextY} được tạo`);
+            }
+        }
+
+        function testNextSundayCalculation() {
+            const logEl = document.getElementById('sunday-log');
+            logEl.innerHTML = '';
+
+            function log(msg) {
+                const line = document.createElement('div');
+                line.textContent = msg;
+                logEl.appendChild(line);
+            }
+
+            const now = new Date();
+            const dayOfWeek = now.getDay();
+            const dayNames = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+
+            log(`Hôm nay: ${now.toLocaleString('vi-VN')} (${dayNames[dayOfWeek]})`);
+            log(`---`);
+
+            let daysUntilSunday = (7 - dayOfWeek) % 7;
+            if (daysUntilSunday === 0 && (now.getHours() > 18 || (now.getHours() === 18 && now.getMinutes() >= 0))) {
+                daysUntilSunday = 7;
+                log(`Hôm nay là chủ nhật và đã qua 18:00 → chờ chủ nhật tuần sau`);
+            } else if (daysUntilSunday === 0) {
+                log(`Hôm nay là chủ nhật và chưa tới 18:00 → chủ nhật hôm nay`);
+            }
+
+            const nextSunday = new Date(now);
+            nextSunday.setDate(nextSunday.getDate() + daysUntilSunday);
+            nextSunday.setHours(18, 0, 0, 0);
+
+            log(`Chủ nhật 18:00 tiếp theo: ${nextSunday.toLocaleString('vi-VN')}`);
+
+            const msUntil = nextSunday - now;
+            const minutesUntil = Math.round(msUntil / 1000 / 60);
+            const hoursUntil = Math.round(msUntil / 1000 / 60 / 60);
+            const daysUntil = Math.round(msUntil / 1000 / 60 / 60 / 24);
+
+            log(`---`);
+            log(`Còn: ${daysUntil} ngày, ${hoursUntil} giờ, ${minutesUntil} phút`);
+        }
+
+        function testMonthRolloverDetection() {
+            const logEl = document.getElementById('rollover-log');
+            logEl.innerHTML = '';
+
+            function log(msg) {
+                const line = document.createElement('div');
+                line.textContent = msg;
+                logEl.appendChild(line);
+            }
+
+            const testCases = [
+                { dateStr: '2025-11-15', label: '15/11/2025' },
+                { dateStr: '2025-12-01', label: '01/12/2025 (ngày 1)' },
+                { dateStr: '2026-01-01', label: '01/01/2026 (ngày 1, năm mới)' },
+                { dateStr: '2026-02-15', label: '15/02/2026' }
+            ];
+
+            let lastMonth = '';
+            testCases.forEach((tc, idx) => {
+                fakeDate = tc.dateStr;
+                const now = new Date();
+                const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                const changed = idx === 0 ? '(lần đầu)' : (currentMonth !== lastMonth ? '(THAY ĐỔI ✓)' : '(không thay đổi)');
+                log(`${tc.label}: ${currentMonth} ${changed}`);
+                lastMonth = currentMonth;
+            });
+
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // Gọi test ban đầu
+        testChangeToDate('2025-11-12');
+        testNextSundayCalculation();
+    </script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

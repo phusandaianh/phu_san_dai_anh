@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý đồng bộ Voluson E10 - Phòng khám Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body { 
+            background: #f8fafc; 
+            margin: 0; 
+            font-family: 'Roboto', Arial, sans-serif; 
+        }
+        .header { 
+            background: #fff; 
+            box-shadow: 0 2px 8px rgba(44,62,80,0.04); 
+            margin-bottom: 2rem;
+        }
+        .header .container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 2rem;
+        }
+        .logo-text {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .logo { 
+            font-size: 1.5rem; 
+            color: #0000FF; 
+            margin: 0; 
+            font-weight: bold;
+        }
+        .back-btn {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .back-btn:hover {
+            background: #1976d2;
+        }
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(33,150,243,0.08);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        .card-title {
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: #e53935;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .status-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            border-left: 4px solid #2196f3;
+        }
+        .status-card.synced {
+            border-left-color: #4caf50;
+        }
+        .status-card.pending {
+            border-left-color: #ff9800;
+        }
+        .status-card.error {
+            border-left-color: #f44336;
+        }
+        .status-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #2196f3;
+            margin-bottom: 0.5rem;
+        }
+        .status-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .control-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #2196f3;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #1976d2;
+        }
+        .btn-success {
+            background: #4caf50;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #388e3c;
+        }
+        .btn-warning {
+            background: #ff9800;
+            color: white;
+        }
+        .btn-warning:hover {
+            background: #f57c00;
+        }
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #d32f2f;
+        }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .config-section {
+            margin-top: 2rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #333;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #2196f3;
+            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        .appointments-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        .appointments-table th,
+        .appointments-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .appointments-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+        .sync-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .sync-status.synced {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+        .sync-status.pending {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+        .sync-status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .notification {
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+        .notification.success {
+            background: #e8f5e8;
+            color: #2e7d32;
+            border: 1px solid #4caf50;
+        }
+        .notification.error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #f44336;
+        }
+        .notification.info {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #2196f3;
+        }
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            .control-buttons {
+                flex-direction: column;
+            }
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="logo-text">
+                <img src="logo_phu_san_dai_anh.png" alt="Logo" style="height: 40px;">
+                <div>
+                    <h1 class="logo">Quản lý đồng bộ Voluson E10</h1>
+                    <p style="margin: 0; color: #666; font-size: 0.9rem;">Đồng bộ danh sách bệnh nhân với máy siêu âm</p>
+                </div>
+            </div>
+            <a href="/admin.html" class="back-btn">
+                <i class="fas fa-arrow-left"></i>
+                Quay lại quản trị
+            </a>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Thông báo -->
+        <div id="notification" class="notification"></div>
+
+        <!-- Trạng thái đồng bộ -->
+        <div class="card">
+            <h2 class="card-title">
+                <i class="fas fa-chart-line"></i>
+                Trạng thái đồng bộ
+            </h2>
+            <div class="status-grid" id="status-grid">
+                <!-- Sẽ được cập nhật bằng JavaScript -->
+            </div>
+        </div>
+
+        <!-- Điều khiển đồng bộ -->
+        <div class="card">
+            <h2 class="card-title">
+                <i class="fas fa-cogs"></i>
+                Điều khiển đồng bộ
+            </h2>
+            <div class="control-buttons">
+                <button id="start-sync-btn" class="btn btn-success">
+                    <i class="fas fa-play"></i>
+                    Khởi động đồng bộ
+                </button>
+                <button id="stop-sync-btn" class="btn btn-danger">
+                    <i class="fas fa-stop"></i>
+                    Dừng đồng bộ
+                </button>
+                <button id="sync-all-btn" class="btn btn-primary">
+                    <i class="fas fa-sync"></i>
+                    Đồng bộ tất cả
+                </button>
+                <button id="refresh-status-btn" class="btn btn-warning">
+                    <i class="fas fa-refresh"></i>
+                    Làm mới trạng thái
+                </button>
+            </div>
+        </div>
+
+        <!-- Cấu hình -->
+        <div class="card config-section">
+            <h2 class="card-title">
+                <i class="fas fa-wrench"></i>
+                Cấu hình kết nối
+            </h2>
+            <form id="config-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="voluson-ip">Địa chỉ IP máy siêu âm:</label>
+                        <input type="text" id="voluson-ip" name="voluson_ip" placeholder="192.168.1.100">
+                    </div>
+                    <div class="form-group">
+                        <label for="voluson-port">Cổng DICOM:</label>
+                        <input type="number" id="voluson-port" name="voluson_port" placeholder="104">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="ae-title">Tên hệ thống (AE Title):</label>
+                        <input type="text" id="ae-title" name="ae_title" placeholder="CLINIC_SYSTEM">
+                    </div>
+                    <div class="form-group">
+                        <label for="voluson-ae-title">Tên máy siêu âm (AE Title):</label>
+                        <input type="text" id="voluson-ae-title" name="voluson_ae_title" placeholder="VOLUSON_E10">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="sync-interval">Khoảng thời gian đồng bộ (giây):</label>
+                        <input type="number" id="sync-interval" name="sync_interval" placeholder="300">
+                    </div>
+                    <div class="form-group">
+                        <label for="sync-enabled">
+                            <input type="checkbox" id="sync-enabled" name="sync_enabled" style="width: auto; margin-right: 0.5rem;">
+                            Bật đồng bộ tự động
+                        </label>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i>
+                    Lưu cấu hình
+                </button>
+            </form>
+        </div>
+
+        <!-- Danh sách cuộc hẹn -->
+        <div class="card">
+            <h2 class="card-title">
+                <i class="fas fa-calendar-alt"></i>
+                Danh sách cuộc hẹn
+            </h2>
+            <div style="margin-bottom: 1rem;">
+                <button id="load-appointments-btn" class="btn btn-primary">
+                    <i class="fas fa-download"></i>
+                    Tải danh sách cuộc hẹn
+                </button>
+            </div>
+            <table class="appointments-table" id="appointments-table" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Bệnh nhân</th>
+                        <th>Ngày khám</th>
+                        <th>Giờ khám</th>
+                        <th>Dịch vụ</th>
+                        <th>Trạng thái đồng bộ</th>
+                        <th>Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="appointments-tbody">
+                    <!-- Sẽ được cập nhật bằng JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Biến toàn cục
+        let syncStatus = {};
+        let appointments = [];
+
+        // Khởi tạo trang
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSyncStatus();
+            loadConfig();
+            setupEventListeners();
+        });
+
+        // Thiết lập event listeners
+        function setupEventListeners() {
+            document.getElementById('start-sync-btn').addEventListener('click', startSync);
+            document.getElementById('stop-sync-btn').addEventListener('click', stopSync);
+            document.getElementById('sync-all-btn').addEventListener('click', syncAllAppointments);
+            document.getElementById('refresh-status-btn').addEventListener('click', loadSyncStatus);
+            document.getElementById('load-appointments-btn').addEventListener('click', loadAppointments);
+            document.getElementById('config-form').addEventListener('submit', saveConfig);
+        }
+
+        // Tải trạng thái đồng bộ
+        async function loadSyncStatus() {
+            try {
+                const response = await fetch('/api/voluson/sync-status');
+                const data = await response.json();
+                
+                if (data.error) {
+                    showNotification('Lỗi khi tải trạng thái: ' + data.error, 'error');
+                    return;
+                }
+
+                syncStatus = data;
+                updateStatusDisplay();
+            } catch (error) {
+                showNotification('Lỗi kết nối: ' + error.message, 'error');
+            }
+        }
+
+        // Cập nhật hiển thị trạng thái
+        function updateStatusDisplay() {
+            const statusGrid = document.getElementById('status-grid');
+            statusGrid.innerHTML = `
+                <div class="status-card ${syncStatus.sync_enabled ? 'synced' : 'pending'}">
+                    <div class="status-number">${syncStatus.sync_enabled ? 'BẬT' : 'TẮT'}</div>
+                    <div class="status-label">Trạng thái đồng bộ</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-number">${syncStatus.total_appointments || 0}</div>
+                    <div class="status-label">Tổng cuộc hẹn</div>
+                </div>
+                <div class="status-card synced">
+                    <div class="status-number">${syncStatus.synced_appointments || 0}</div>
+                    <div class="status-label">Đã đồng bộ</div>
+                </div>
+                <div class="status-card pending">
+                    <div class="status-number">${syncStatus.pending_appointments || 0}</div>
+                    <div class="status-label">Chờ đồng bộ</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-number">${syncStatus.voluson_ip || 'N/A'}</div>
+                    <div class="status-label">IP máy siêu âm</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-number">${syncStatus.voluson_port || 'N/A'}</div>
+                    <div class="status-label">Cổng DICOM</div>
+                </div>
+            `;
+        }
+
+        // Tải cấu hình
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/voluson/config');
+                const data = await response.json();
+                
+                if (data.error) {
+                    showNotification('Lỗi khi tải cấu hình: ' + data.error, 'error');
+                    return;
+                }
+
+                // Điền form cấu hình
+                document.getElementById('voluson-ip').value = data.voluson_ip || '';
+                document.getElementById('voluson-port').value = data.voluson_port || '';
+                document.getElementById('ae-title').value = data.ae_title || '';
+                document.getElementById('voluson-ae-title').value = data.voluson_ae_title || '';
+                document.getElementById('sync-interval').value = data.sync_interval || '';
+                document.getElementById('sync-enabled').checked = data.sync_enabled || false;
+            } catch (error) {
+                showNotification('Lỗi kết nối: ' + error.message, 'error');
+            }
+        }
+
+        // Lưu cấu hình
+        async function saveConfig(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const config = {};
+            
+            for (let [key, value] of formData.entries()) {
+                if (key === 'sync_enabled') {
+                    config[key] = true;
+                } else if (key === 'voluson_port' || key === 'sync_interval') {
+                    config[key] = parseInt(value);
+                } else {
+                    config[key] = value;
+                }
+            }
+
+            try {
+                const response = await fetch('/api/voluson/config', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    showNotification('Lỗi khi lưu cấu hình: ' + data.error, 'error');
+                } else {
+                    showNotification('Đã lưu cấu hình thành công', 'success');
+                    loadSyncStatus(); // Cập nhật trạng thái
+                }
+            } catch (error) {
+                showNotification('Lỗi kết nối: ' + error.message, 'error');
+            }
+        }
+
+        // Khởi động đồng bộ
+        async function startSync() {
+            try {
+                const response = await fetch('/api/voluson/start-sync', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    showNotification('Lỗi khi khởi động đồng bộ: ' + data.error, 'error');
+                } else {
+                    showNotification('Đã khởi động đồng bộ thành công', 'success');
+                    loadSyncStatus();
+                }
+            } catch (error) {
+                showNotification('Lỗi kết nối: ' + error.message, 'error');
+            }
+        }
+
+        // Dừng đồng bộ
+        async function stopSync() {
+            try {
+                const response = await fetch('/api/voluson/stop-sync', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    showNotification('Lỗi khi dừng đồng bộ: ' + data.error, 'error');
+                } else {
+                    showNotification('Đã dừng đồng bộ thành công', 'success');
+                    loadSyncStatus();
+                }
+            } catch (error) {
+                showNotification('Lỗi kết nối: ' + error.message, 'error');
+            }
+        }
+
+        // Đồng bộ tất cả cuộc hẹn
+        async function syncAllAppointments() {
+            if (!confirm('Bạn có chắc muốn đồng bộ tất cả cuộc hẹn chưa được đồng bộ?')) {
+                return;
+            }
+
+            try {
+                // Lấy danh sách cuộc hẹn chưa đồng bộ
+                const response = await fetch('/api/appointments?status=pending&voluson_synced=false');
+                const appointments = await response.json();
+                
+                let successCount = 0;
+                let errorCount = 0;
+
+                for (const appointment of appointments) {
+                    try {
+                        const syncResponse = await fetch(`/api/voluson/sync-appointment/${appointment.id}`, {
+                            method: 'POST'
+                        });
+                        
+                        if (syncResponse.ok) {
+                            successCount++;
+                        } else {
+                            errorCount++;
+                        }
+                    } catch (error) {
+                        errorCount++;
+                    }
+                }
+
+                showNotification(`Đồng bộ hoàn tất: ${successCount} thành công, ${errorCount} lỗi`, 
+                    errorCount > 0 ? 'warning' : 'success');
+                loadSyncStatus();
+            } catch (error) {
+                showNotification('Lỗi khi đồng bộ: ' + error.message, 'error');
+            }
+        }
+
+        // Tải danh sách cuộc hẹn
+        async function loadAppointments() {
+            try {
+                const response = await fetch('/api/appointments?limit=50');
+                const data = await response.json();
+                
+                if (data.error) {
+                    showNotification('Lỗi khi tải danh sách: ' + data.error, 'error');
+                    return;
+                }
+
+                appointments = data;
+                displayAppointments();
+            } catch (error) {
+                showNotification('Lỗi kết nối: ' + error.message, 'error');
+            }
+        }
+
+        // Hiển thị danh sách cuộc hẹn
+        function displayAppointments() {
+            const tbody = document.getElementById('appointments-tbody');
+            const table = document.getElementById('appointments-table');
+            
+            if (appointments.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #666;">Không có cuộc hẹn nào</td></tr>';
+            } else {
+                tbody.innerHTML = appointments.map(appointment => `
+                    <tr>
+                        <td>${appointment.id}</td>
+                        <td>${appointment.patient_name}</td>
+                        <td>${new Date(appointment.appointment_date).toLocaleDateString('vi-VN')}</td>
+                        <td>${new Date(appointment.appointment_date).toLocaleTimeString('vi-VN', {hour: '2-digit', minute: '2-digit'})}</td>
+                        <td>${appointment.service_type}</td>
+                        <td>
+                            <span class="sync-status ${appointment.voluson_synced ? 'synced' : 'pending'}">
+                                ${appointment.voluson_synced ? 'Đã đồng bộ' : 'Chờ đồng bộ'}
+                            </span>
+                        </td>
+                        <td>
+                            ${!appointment.voluson_synced ? `
+                                <button class="btn btn-primary" onclick="syncSingleAppointment(${appointment.id})" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                                    <i class="fas fa-sync"></i>
+                                    Đồng bộ
+                                </button>
+                            ` : ''}
+                        </td>
+                    </tr>
+                `).join('');
+            }
+            
+            table.style.display = 'table';
+        }
+
+        // Đồng bộ một cuộc hẹn
+        async function syncSingleAppointment(appointmentId) {
+            try {
+                const response = await fetch(`/api/voluson/sync-appointment/${appointmentId}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    showNotification('Lỗi khi đồng bộ: ' + data.error, 'error');
+                } else {
+                    showNotification('Đã đồng bộ thành công', 'success');
+                    loadAppointments(); // Cập nhật danh sách
+                    loadSyncStatus(); // Cập nhật trạng thái
+                }
+            } catch (error) {
+                showNotification('Lỗi kết nối: ' + error.message, 'error');
+            }
+        }
+
+        // Hiển thị thông báo
+        function showNotification(message, type) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.style.display = 'block';
+            
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 5000);
+        }
+
+        // Auto-refresh trạng thái mỗi 30 giây
+        setInterval(loadSyncStatus, 30000);
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

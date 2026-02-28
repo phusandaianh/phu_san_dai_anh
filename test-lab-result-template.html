@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test - Phiếu Kết Quả Cận Lâm Sàng</title>
+    <style>
+        body {
+            font-family: 'Times New Roman', serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .template-container {
+            background: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-info {
+            background: #e3f2fd;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196F3;
+        }
+        .test-info h3 {
+            margin: 0 0 10px 0;
+            color: #1976d2;
+        }
+        .test-info p {
+            margin: 5px 0;
+            color: #424242;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-info">
+        <h3>🧪 Test Template - Phiếu Kết Quả Cận Lâm Sàng</h3>
+        <p><strong>Trạng thái:</strong> Template đã được cập nhật với trường "Chẩn đoán"</p>
+        <p><strong>Thời gian:</strong> <span id="current-time"></span></p>
+        <p><strong>Hướng dẫn:</strong> Kiểm tra xem trường "Chẩn đoán" có xuất hiện trong template không</p>
+    </div>
+
+    <div class="template-container">
+        <!-- Template phiếu kết quả cận lâm sàng với trường chẩn đoán -->
+        <div style="font-family:'Times New Roman', serif; padding:20px;">
+            <div style="text-align:center; margin-bottom:20px;">
+                <h2 style="color:#0000cc; margin:0;">PHIẾU KẾT QUẢ CẬN LÂM SÀNG</h2>
+            </div>
+            
+            <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
+                <tr>
+                    <td style="padding:8px; border:1px solid #000; width:20%;"><strong>Họ tên:</strong></td>
+                    <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
+                    <td style="padding:8px; border:1px solid #000; width:20%;"><strong>Tuổi:</strong></td>
+                    <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
+                </tr>
+                <tr>
+                    <td style="padding:8px; border:1px solid #000;"><strong>Địa chỉ:</strong></td>
+                    <td style="padding:8px; border:1px solid #000;" colspan="3">_________________</td>
+                </tr>
+                <tr>
+                    <td style="padding:8px; border:1px solid #000;"><strong>Chẩn đoán:</strong></td>
+                    <td style="padding:8px; border:1px solid #000;" colspan="3">_________________</td>
+                </tr>
+            </table>
+
+            <div style="margin-bottom:20px;">
+                <h3 style="color:#0000cc; margin-bottom:10px;">KẾT QUẢ XÉT NGHIỆM:</h3>
+                <div style="border:1px solid #000; padding:10px; min-height:150px;">
+                    <p><strong>Siêu âm:</strong></p>
+                    <p>Kết quả: _________________</p>
+                    <p>Ghi chú: _________________</p>
+                    <br>
+                    <p><strong>Xét nghiệm:</strong></p>
+                    <p>Kết quả: _________________</p>
+                    <p>Ghi chú: _________________</p>
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; margin-top:30px;">
+                <div style="text-align:center;">
+                    <p><strong>Bác sĩ thực hiện</strong></p>
+                    <p style="margin-top:50px;">_________________</p>
+                </div>
+                <div style="text-align:center;">
+                    <p><strong>Ngày: ___/___/_____</strong></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-info">
+        <h3>✅ Kiểm tra hoàn tất</h3>
+        <p><strong>Trường "Chẩn đoán" đã được thêm vào template!</strong></p>
+        <p>Bạn có thể thấy trường "Chẩn đoán" xuất hiện giữa "Địa chỉ" và "KẾT QUẢ XÉT NGHIỆM"</p>
+        <button onclick="window.print()" style="background: #2196F3; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-top: 10px;">
+            🖨️ In phiếu test
+        </button>
+    </div>
+
+    <script>
+        // Hiển thị thời gian hiện tại
+        document.getElementById('current-time').textContent = new Date().toLocaleString('vi-VN');
+        
+        // Auto refresh mỗi 30 giây để kiểm tra cập nhật
+        setTimeout(() => {
+            location.reload();
+        }, 30000);
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

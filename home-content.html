@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý nội dung trang chủ - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body { 
+            background: #f8fafc; 
+            margin: 0; 
+            font-family: 'Roboto', Arial, sans-serif; 
+        }
+        .header { 
+            background: #fff; 
+            box-shadow: 0 2px 8px rgba(44,62,80,0.04); 
+            padding: 1rem 0;
+        }
+        .header .container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        .header h1 {
+            color: #e53935;
+            margin: 0;
+            font-size: 1.5rem;
+        }
+        .back-btn {
+            background: #e53935;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .back-btn:hover {
+            background: #c62828;
+        }
+        .main-content {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .content-section {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(33,150,243,0.08);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        .section-title {
+            color: #e53935;
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid #e53935;
+            padding-bottom: 0.5rem;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #e53935;
+        }
+        .form-group small {
+            color: #666;
+            font-size: 0.85rem;
+            margin-top: 0.25rem;
+            display: block;
+        }
+        .btn {
+            background: #e53935;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        .btn:hover {
+            background: #c62828;
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        .items-list {
+            margin-bottom: 1rem;
+        }
+        .item {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+        .item-content {
+            flex: 1;
+        }
+        .item-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .add-item-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .add-item-btn:hover {
+            background: #218838;
+        }
+        .delete-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .delete-btn:hover {
+            background: #c82333;
+        }
+        .status-message {
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1><i class="fas fa-home"></i> Quản lý nội dung trang chủ</h1>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button onclick="scrollToFooter()" class="back-btn" style="background: #2196F3;">
+                    <i class="fas fa-cog"></i> Quản lý Footer
+                </button>
+                <a href="/admin.html" class="back-btn">
+                    <i class="fas fa-arrow-left"></i> Quay lại Admin
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-content">
+        <div class="content-section">
+            <h2 class="section-title">Thông tin cơ bản</h2>
+            
+            <div id="status-message" class="status-message"></div>
+            
+            <form id="homeContentForm">
+                <div class="form-group">
+                    <label for="heroTitle">Tiêu đề chính</label>
+                    <input type="text" id="heroTitle" name="heroTitle" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="clinicSummary">Tóm tắt dịch vụ phòng khám</label>
+                    <input type="text" id="clinicSummary" name="clinicSummary" value="Siêu âm 5D, sàng lọc dị tật, khám phụ khoa, vô sinh" style="text-align:center;color:#0000FF;font-size:0.9rem;">
+                    <small style="color: #666; font-size: 0.85rem;">Dòng này sẽ hiển thị dưới tiêu đề chính, trên slogan ở các trang chính</small>
+                    <div id="clinic-summary-status" style="font-size: 0.8rem; margin-top: 5px; color: #666;"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="slogan">Slogan phòng khám</label>
+                    <input type="text" id="slogan" name="slogan" placeholder="Ví dụ: Uy Tín - Chất Lượng" required>
+                    <small style="color: #666; font-size: 0.85rem;">Slogan này sẽ hiển thị trên tất cả các trang</small>
+                </div>
+
+                <button type="submit" class="btn">
+                    <i class="fas fa-save"></i> Lưu thông tin
+                </button>
+            </form>
+        </div>
+
+
+        <div class="content-section">
+            <h2 class="section-title">Thông tin liên hệ</h2>
+            <div id="contactInfoList" class="items-list">
+                <!-- Contact info will be added here dynamically -->
+            </div>
+            <button type="button" class="add-item-btn" onclick="addContactInfo()">
+                <i class="fas fa-plus"></i> Thêm thông tin liên hệ
+            </button>
+        </div>
+
+        <div class="content-section" id="footer-management-section">
+            <h2 class="section-title">Quản lý Footer</h2>
+            <div id="footer-status-message" class="status-message"></div>
+            
+            <form id="footerContentForm">
+                <div class="form-group">
+                    <label for="footerText">Nội dung Footer</label>
+                    <textarea id="footerText" name="footerText" rows="3" required></textarea>
+                    <small>Nội dung này sẽ hiển thị trong footer của tất cả các trang</small>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label for="footerBgColor">Màu nền</label>
+                        <input type="color" id="footerBgColor" name="footerBgColor" value="#333333">
+                        <input type="text" id="footerBgColorText" value="#333333" style="margin-top: 0.5rem; width: 100%;" placeholder="#333333">
+                        <small>Chọn hoặc nhập mã màu hex</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="footerTextColor">Màu chữ</label>
+                        <input type="color" id="footerTextColor" name="footerTextColor" value="#ffffff">
+                        <input type="text" id="footerTextColorText" value="#ffffff" style="margin-top: 0.5rem; width: 100%;" placeholder="#ffffff">
+                        <small>Chọn hoặc nhập mã màu hex</small>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label for="footerPadding">Padding (px)</label>
+                        <input type="number" id="footerPadding" name="footerPadding" value="32" min="0" step="4">
+                        <small>Khoảng cách bên trong footer</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="footerTextAlign">Căn lề văn bản</label>
+                        <select id="footerTextAlign" name="footerTextAlign">
+                            <option value="center">Giữa</option>
+                            <option value="left">Trái</option>
+                            <option value="right">Phải</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Xem trước Footer</label>
+                    <div id="footerPreview" style="border: 2px dashed #e0e0e0; border-radius: 6px; padding: 1rem; margin-top: 0.5rem; min-height: 80px; display: flex; align-items: center; justify-content: center;">
+                        <p style="margin: 0;">Xem trước sẽ hiển thị ở đây</p>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn">
+                    <i class="fas fa-save"></i> Lưu cài đặt Footer
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Load existing content
+        async function loadContent() {
+            try {
+                // Load home content
+                const homeResponse = await fetch('/api/home-content');
+                const homeData = await homeResponse.json();
+                
+                // Load basic information
+                document.getElementById('heroTitle').value = homeData.heroTitle || 'Phòng khám chuyên khoa Phụ Sản Đại Anh';
+                document.getElementById('clinicSummary').value = homeData.clinicSummary || 'Siêu âm 5D, sàng lọc dị tật, khám phụ khoa, vô sinh';
+                document.getElementById('slogan').value = homeData.heroDescription || 'Uy Tín - Chất Lượng';
+                
+                // Load contact info
+                const contactInfoList = document.getElementById('contactInfoList');
+                if (homeData.contactInfo && homeData.contactInfo.length > 0) {
+                    homeData.contactInfo.forEach(contact => {
+                        addContactInfo(contact.type, contact.value);
+                    });
+                } else {
+                    // Add default contact info if none exists
+                    addContactInfo('Địa chỉ', 'TDP Quán Trắng - Tân An - Bắc Ninh');
+                    addContactInfo('Điện thoại', '0858.838.616');
+                }
+
+                // Load footer content
+                await loadFooterContent();
+
+            } catch (error) {
+                console.error('Error loading content:', error);
+                showStatusMessage('Lỗi khi tải nội dung từ database', 'error');
+                
+                // Set default values if loading fails
+                document.getElementById('heroTitle').value = 'Phòng khám chuyên khoa Phụ Sản Đại Anh';
+                document.getElementById('clinicSummary').value = 'Siêu âm 5D, sàng lọc dị tật, khám phụ khoa, vô sinh';
+                document.getElementById('slogan').value = 'Uy Tín - Chất Lượng';
+            }
+        }
+
+        // Load footer content
+        async function loadFooterContent() {
+            try {
+                const response = await fetch('/api/footer-content');
+                const footerData = await response.json();
+                
+                document.getElementById('footerText').value = footerData.text || '&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.';
+                document.getElementById('footerBgColor').value = footerData.bgColor || '#333333';
+                document.getElementById('footerBgColorText').value = footerData.bgColor || '#333333';
+                document.getElementById('footerTextColor').value = footerData.textColor || '#ffffff';
+                document.getElementById('footerTextColorText').value = footerData.textColor || '#ffffff';
+                document.getElementById('footerPadding').value = footerData.padding || 32;
+                document.getElementById('footerTextAlign').value = footerData.textAlign || 'center';
+                
+                updateFooterPreview();
+            } catch (error) {
+                console.error('Error loading footer content:', error);
+                // Set default values
+                document.getElementById('footerText').value = '&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.';
+                document.getElementById('footerBgColor').value = '#333333';
+                document.getElementById('footerBgColorText').value = '#333333';
+                document.getElementById('footerTextColor').value = '#ffffff';
+                document.getElementById('footerTextColorText').value = '#ffffff';
+                document.getElementById('footerPadding').value = 32;
+                document.getElementById('footerTextAlign').value = 'center';
+                updateFooterPreview();
+            }
+        }
+
+        // Update footer preview
+        function updateFooterPreview() {
+            const preview = document.getElementById('footerPreview');
+            const text = document.getElementById('footerText').value;
+            const bgColor = document.getElementById('footerBgColorText').value;
+            const textColor = document.getElementById('footerTextColorText').value;
+            const padding = document.getElementById('footerPadding').value;
+            const textAlign = document.getElementById('footerTextAlign').value;
+            
+            preview.style.backgroundColor = bgColor;
+            preview.style.color = textColor;
+            preview.style.padding = padding + 'px';
+            preview.style.textAlign = textAlign;
+            preview.innerHTML = `<p style="margin: 0;">${text}</p>`;
+        }
+
+        // Sync color picker and text input
+        function syncColorInputs() {
+            // Background color sync
+            document.getElementById('footerBgColor').addEventListener('input', function() {
+                document.getElementById('footerBgColorText').value = this.value;
+                updateFooterPreview();
+            });
+            document.getElementById('footerBgColorText').addEventListener('input', function() {
+                if (/^#[0-9A-F]{6}$/i.test(this.value)) {
+                    document.getElementById('footerBgColor').value = this.value;
+                    updateFooterPreview();
+                }
+            });
+            
+            // Text color sync
+            document.getElementById('footerTextColor').addEventListener('input', function() {
+                document.getElementById('footerTextColorText').value = this.value;
+                updateFooterPreview();
+            });
+            document.getElementById('footerTextColorText').addEventListener('input', function() {
+                if (/^#[0-9A-F]{6}$/i.test(this.value)) {
+                    document.getElementById('footerTextColor').value = this.value;
+                    updateFooterPreview();
+                }
+            });
+        }
+
+        // Show footer status message
+        function showFooterStatusMessage(message, type) {
+            const statusDiv = document.getElementById('footer-status-message');
+            statusDiv.textContent = message;
+            statusDiv.className = `status-message status-${type}`;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Scroll to footer management section
+        function scrollToFooter() {
+            const footerSection = document.getElementById('footer-management-section');
+            if (footerSection) {
+                footerSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // Add a highlight effect
+                footerSection.style.transition = 'box-shadow 0.3s';
+                footerSection.style.boxShadow = '0 4px 24px rgba(33,150,243,0.3)';
+                setTimeout(() => {
+                    footerSection.style.boxShadow = '';
+                }, 2000);
+            }
+        }
+
+        // Show status message
+        function showStatusMessage(message, type) {
+            const statusDiv = document.getElementById('status-message');
+            statusDiv.textContent = message;
+            statusDiv.className = `status-message status-${type}`;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+
+
+        // Add contact info
+        function addContactInfo(type = '', value = '') {
+            const contactInfoList = document.getElementById('contactInfoList');
+            const contactDiv = document.createElement('div');
+            contactDiv.className = 'item contact-item';
+            contactDiv.innerHTML = `
+                <div class="item-content">
+                    <div class="form-group">
+                        <label>Loại thông tin</label>
+                        <input type="text" name="contactType" value="${type}" placeholder="Ví dụ: Địa chỉ, Điện thoại" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Nội dung</label>
+                        <input type="text" name="contactValue" value="${value}" required>
+                    </div>
+                </div>
+                <div class="item-actions">
+                    <button type="button" class="delete-btn" onclick="removeContactInfo(this)">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            contactInfoList.appendChild(contactDiv);
+        }
+
+        // Remove contact info
+        function removeContactInfo(button) {
+            button.closest('.contact-item').remove();
+        }
+
+        // Form submission
+        document.getElementById('homeContentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                heroTitle: document.getElementById('heroTitle').value,
+                slogan: document.getElementById('slogan').value,
+                clinicSummary: document.getElementById('clinicSummary').value,
+                contactInfo: Array.from(document.querySelectorAll('.contact-item')).map(item => ({
+                    type: item.querySelector('input[name="contactType"]').value,
+                    value: item.querySelector('input[name="contactValue"]').value
+                }))
+            };
+
+            try {
+                const response = await fetch('/api/home-content', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (response.ok) {
+                    showStatusMessage('Nội dung trang chủ đã được cập nhật thành công!', 'success');
+                } else {
+                    showStatusMessage('Lỗi khi cập nhật nội dung', 'error');
+                }
+            } catch (error) {
+                console.error('Error updating content:', error);
+                showStatusMessage('Lỗi khi cập nhật nội dung', 'error');
+            }
+        });
+
+        // Footer form submission
+        document.getElementById('footerContentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                text: document.getElementById('footerText').value,
+                bgColor: document.getElementById('footerBgColorText').value,
+                textColor: document.getElementById('footerTextColorText').value,
+                padding: parseInt(document.getElementById('footerPadding').value),
+                textAlign: document.getElementById('footerTextAlign').value
+            };
+
+            try {
+                const response = await fetch('/api/footer-content', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (response.ok) {
+                    showFooterStatusMessage('Cài đặt Footer đã được cập nhật thành công!', 'success');
+                } else {
+                    showFooterStatusMessage('Lỗi khi cập nhật cài đặt Footer', 'error');
+                }
+            } catch (error) {
+                console.error('Error updating footer content:', error);
+                showFooterStatusMessage('Lỗi khi cập nhật cài đặt Footer', 'error');
+            }
+        });
+
+        // Auto-save clinic summary when content changes
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadContent();
+            
+            // Initialize footer color sync and preview updates
+            syncColorInputs();
+            
+            // Real-time preview updates for footer
+            document.getElementById('footerText').addEventListener('input', updateFooterPreview);
+            document.getElementById('footerPadding').addEventListener('input', updateFooterPreview);
+            document.getElementById('footerTextAlign').addEventListener('change', updateFooterPreview);
+            
+            const clinicSummaryInput = document.getElementById('clinicSummary');
+            const statusDiv = document.getElementById('clinic-summary-status');
+            if (clinicSummaryInput) {
+                let saveTimeout;
+                clinicSummaryInput.addEventListener('input', () => {
+                    clearTimeout(saveTimeout);
+                    statusDiv.textContent = 'Đang lưu...';
+                    statusDiv.style.color = '#ff9800';
+                    
+                    saveTimeout = setTimeout(async () => {
+                        try {
+                            const response = await fetch('/api/clinic-summary', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    clinicSummary: clinicSummaryInput.value
+                                })
+                            });
+                            
+                            if (response.ok) {
+                                statusDiv.textContent = 'Đã lưu tự động';
+                                statusDiv.style.color = '#4caf50';
+                                setTimeout(() => {
+                                    statusDiv.textContent = '';
+                                }, 2000);
+                            } else {
+                                statusDiv.textContent = 'Lỗi khi lưu';
+                                statusDiv.style.color = '#f44336';
+                            }
+                        } catch (error) {
+                            statusDiv.textContent = 'Lỗi khi lưu';
+                            statusDiv.style.color = '#f44336';
+                        }
+                    }, 1000); // Lưu sau 1 giây khi người dùng ngừng gõ
+                });
+            }
+        });
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+</body>
+</html>

@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý dịch vụ cận lâm sàng - Phòng khám Phụ Sản Đại Anh</title>
+    <!-- Copy necessary CSS and JS links from admin.html -->
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* Copy necessary styles from admin.html */
+        .admin-header {
+             background-color: #2196F3;
+             color: white;
+             padding: 1rem 20px;
+             display: flex;
+             justify-content: space-between;
+             align-items: center;
+        }
+        .admin-header .logo img {
+              height: 50px;
+              margin-right: 10px;
+        }
+         .admin-header .logo {
+             display: flex;
+             align-items: center;
+         }
+
+        .admin-header nav {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            gap: 12px;
+        }
+        .admin-header-nav .nav-top-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            width: 100%;
+        }
+        .admin-header-nav .nav-top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .admin-header-nav .nav-filter-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            width: 100%;
+        }
+        #service-group-filters {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        #package-services-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        #package-services-list .package-service-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 6px 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background: #fafafa;
+            width: 100%;
+            cursor: pointer;
+        }
+        #package-services-list .package-service-item .service-name {
+            flex: 1;
+        }
+        #package-services-list .package-service-item .service-price {
+            color: #555;
+            font-weight: 500;
+            white-space: nowrap;
+            margin-right: 8px;
+        }
+        #package-services-list .package-service-item input[type="checkbox"] {
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+         .admin-header .back-link {
+            color: white;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+         }
+         .admin-header .back-link.btn.secondary-btn {
+             background-color: transparent;
+             border: 1px solid white;
+             color: white;
+         }
+        .admin-main {
+            padding: 20px;
+        }
+        .admin-form {
+            margin-bottom: 24px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .admin-table th, .admin-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        .admin-table th {
+            background-color: #f2f2f2;
+        }
+        .admin-table td input, .admin-table td textarea {
+            width: calc(100% - 16px); /* Adjust for padding */
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .admin-table td .actions button {
+            margin-right: 5px;
+        }
+         .modal.hidden {
+            display: none !important;
+        }
+         .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            z-index: 1000;
+            animation: fadeInOut 3s ease-in-out;
+            max-width: 80vw;
+            word-wrap: break-word;
+        }
+         @keyframes fadeInOut {
+                0% { opacity: 0; transform: translateY(20px); }
+                10% { opacity: 1; transform: translateY(0); }
+                90% { opacity: 1; transform: translateY(0); }
+                100% { opacity: 0; transform: translateY(20px); }
+            }
+        
+        /* Style for service group filter buttons - same as package button */
+        .service-group-filter-btn {
+            /* Inherits from .btn .primary-btn */
+        }
+        
+        .service-group-filter-btn.active {
+            background-color: #1976D2;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        }
+
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo.png" alt="Phòng khám Phụ Sản Đại Anh">
+        </div>
+        <nav class="admin-header-nav">
+            <div class="nav-top-row">
+                <a href="/admin.html" class="back-link btn secondary-btn"><i class="fas fa-arrow-left"></i> Quay lại trang quản trị</a>
+                <div class="nav-top-actions">
+                    <button id="manage-service-groups-btn" class="btn primary-btn">Quản lý nhóm</button>
+                    <button id="package-management-btn" class="btn primary-btn">Gói cận lâm sàng</button>
+                </div>
+            </div>
+            <div class="nav-filter-row">
+                <div id="service-group-filters"></div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="admin-main">
+        <div id="package-management-section" style="display:none;">
+            <h3>Quản lý gói cận lâm sàng</h3>
+            <div style="margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center;">
+                <button class="btn secondary-btn" id="view-packages-btn">Danh sách các gói cận lâm sàng</button>
+                <button class="btn primary-btn" id="show-add-package-modal-btn">
+                    <i class="fas fa-plus"></i> Thêm mới gói
+                </button>
+            </div>
+            <div id="existing-packages-list"></div>
+            <!-- Modal Thêm gói cận lâm sàng -->
+            <div id="add-package-modal" class="modal hidden" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;z-index:1000;">
+                <div class="modal-content" style="background:#fff;padding:2rem 1.5rem;border-radius:14px;min-width:400px;max-width:95vw;position:relative;">
+                    <button id="close-add-package-modal" style="position:absolute;top:10px;right:10px;font-size:1.2rem;background:none;border:none;cursor:pointer;">&times;</button>
+                    <h3>Thêm gói cận lâm sàng mới</h3>
+                    <form id="add-package-form">
+                        <div class="form-group">
+                            <label for="packageName">Tên gói:</label>
+                            <input type="text" id="packageName" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="packageDescription">Mô tả gói:</label>
+                            <textarea id="packageDescription" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="packagePrice">Giá gói:</label>
+                            <input type="number" id="packagePrice" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Chọn dịch vụ:</label>
+                            <div id="package-services-list" style="max-height: 150px; overflow-y: auto; border: 1px solid #ccc; padding: 8px;"></div>
+                        </div>
+                        <button type="submit" class="btn primary-btn">Lưu gói</button>
+                        <button type="button" class="btn secondary-btn" id="cancel-add-package">Hủy</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="tab-content active" id="clinical-services-management">
+            <h3>Quản lý dịch vụ cận lâm sàng</h3>
+            <form id="addClinicalServiceForm" class="admin-form" style="margin-bottom: 24px;">
+                <div class="form-group">
+                    <label for="newServiceGroup">Nhóm dịch vụ:</label>
+                    <select id="newServiceGroup" required></select>
+                </div>
+                <div class="form-group">
+                    <input type="text" id="newServiceName" placeholder="Tên dịch vụ" required>
+                </div>
+                <div class="form-group">
+                    <input type="number" id="newServicePrice" placeholder="Giá dịch vụ" required>
+                </div>
+                <div class="form-group">
+                    <label for="newServiceProviderUnit">Đơn vị thực hiện dịch vụ:</label>
+                    <input type="text" id="newServiceProviderUnit" placeholder="Đơn vị thực hiện" list="provider-units">
+                </div>
+                <button type="submit" class="btn primary-btn">Thêm dịch vụ</button>
+            </form>
+            <datalist id="provider-units"></datalist>
+            <!-- Modal for managing provider units -->
+            <div id="provider-unit-modal" class="modal hidden" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;z-index:1000;">
+                <div class="modal-content" style="background:#fff;padding:2rem 1.5rem;border-radius:14px;min-width:350px;max-width:95vw;position:relative;">
+                    <button id="close-provider-unit-modal" style="position:absolute;top:10px;right:10px;font-size:1.2rem;background:none;border:none;cursor:pointer;">&times;</button>
+                    <h3>Quản lý đơn vị thực hiện dịch vụ</h3>
+                    <div id="provider-unit-list"></div>
+                    <form id="add-provider-unit-form" style="margin-top:1rem;display:flex;gap:10px;">
+                        <input type="text" id="new-provider-unit-input" placeholder="Thêm đơn vị mới" style="flex:1;">
+                        <button type="submit" class="btn primary-btn">Thêm</button>
+                    </form>
+                </div>
+            </div>
+            <!-- Modal for managing service groups -->
+            <div id="service-group-modal" class="modal hidden" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;z-index:1000;">
+                <div class="modal-content" style="background:#fff;padding:2rem 1.5rem;border-radius:14px;min-width:380px;max-width:95vw;position:relative;">
+                    <button id="close-service-group-modal" style="position:absolute;top:10px;right:10px;font-size:1.2rem;background:none;border:none;cursor:pointer;">&times;</button>
+                    <h3>Quản lý nhóm dịch vụ</h3>
+                    <form id="add-service-group-form" style="margin-top:1rem;display:flex;gap:10px;align-items:center;">
+                        <input type="text" id="new-service-group-input" placeholder="Tên nhóm mới" style="flex:1;">
+                        <button type="submit" class="btn primary-btn"><i class="fas fa-plus"></i></button>
+                    </form>
+                    <div style="margin:1.5rem 0;border-top:1px solid #eee;"></div>
+                    <form id="rename-service-group-form" style="display:flex;flex-direction:column;gap:10px;">
+                        <select id="rename-group-select" style="padding:8px;border:1px solid #ccc;border-radius:4px;"></select>
+                        <input type="text" id="rename-group-name-input" placeholder="Tên mới" style="padding:8px;border:1px solid #ccc;border-radius:4px;">
+                        <button type="submit" class="btn secondary-btn">Cập nhật tên nhóm</button>
+                    </form>
+                </div>
+            </div>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Tên dịch vụ</th>
+                        <th>Nhóm dịch vụ</th>
+                        <th>Đơn vị thực hiện dịch vụ</th>
+                        <th>Giá</th>
+                        <th>Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="clinicalServicesTableBody">
+                    <!-- Dịch vụ sẽ được load ở đây -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+         // Add notification helper function (copy from admin.html)
+        function showNotification(message, type = 'info') {
+            const colors = {
+                success: '#4CAF50',
+                error: '#f44336',
+                warning: '#ff9800',
+                info: '#2196F3'
+            };
+
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background: ${colors[type]};
+                color: white;
+                padding: 10px 20px;
+                border-radius: 4px;
+                z-index: 1000;
+                animation: fadeInOut 3s ease-in-out;
+                max-width: 80vw;
+                word-wrap: break-word;
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+    // Define the list of service provider units (will be loaded from server)
+    let providerUnits = [];
+    // Manage clinical service groups
+    const FALLBACK_SERVICE_GROUPS = ['Siêu âm thai', 'Siêu âm khác', 'Xét nghiệm máu', 'Xét nghiệm dịch', 'Các dịch vụ khác'];
+    let serviceGroups = [...FALLBACK_SERVICE_GROUPS];
+    let activeServiceGroupKey = '__all__';
+    async function loadProviderUnitsFromServer() {
+        try {
+            const res = await fetch('/api/provider-units');
+            if (!res.ok) {
+                console.warn('Failed to load provider units, status:', res.status);
+                // Use fallback defaults
+                providerUnits = ["phòng khám Đại Anh", "Metalab", "Greenlab", "Gene solution", "High tech Genetics", "Happylab"];
+                updateProviderUnitsDatalist();
+                return;
+            }
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                providerUnits = data.length > 0 ? data : ["phòng khám Đại Anh", "Metalab", "Greenlab", "Gene solution", "High tech Genetics", "Happylab"];
+            } else if (data.units) {
+                providerUnits = Array.isArray(data.units) && data.units.length > 0 ? data.units : ["phòng khám Đại Anh", "Metalab", "Greenlab", "Gene solution", "High tech Genetics", "Happylab"];
+            } else {
+                // Use fallback if data format is unexpected
+                providerUnits = ["phòng khám Đại Anh", "Metalab", "Greenlab", "Gene solution", "High tech Genetics", "Happylab"];
+            }
+            updateProviderUnitsDatalist();
+        } catch (err) {
+            console.error('Error loading provider units:', err);
+            // Fallback to some defaults if server unavailable
+            providerUnits = ["phòng khám Đại Anh", "Metalab", "Greenlab", "Gene solution", "High tech Genetics", "Happylab"];
+            updateProviderUnitsDatalist();
+        }
+    }
+
+    async function saveProviderUnitsToServer() {
+        try {
+            const res = await fetch('/api/provider-units', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ units: providerUnits })
+            });
+            
+            const responseData = await res.json().catch(() => ({}));
+            
+            if (!res.ok) {
+                const errorMsg = responseData.message || `Lỗi ${res.status}: ${res.statusText}`;
+                const errorTrace = responseData.trace || '';
+                console.error('Error saving provider units:', errorMsg);
+                if (errorTrace) {
+                    console.error('Error trace:', errorTrace);
+                }
+                showNotification('Lưu danh sách đơn vị lên server thất bại: ' + errorMsg, 'error');
+                return false;
+            }
+            
+            // Verify response contains expected data
+            if (responseData && responseData.units) {
+                console.log('Provider units saved successfully:', responseData.units);
+                return true;
+            } else {
+                console.warn('Unexpected response format:', responseData);
+                // Still return true if status is OK, as the save might have succeeded
+                return true;
+            }
+        } catch (err) {
+            console.error('Error saving provider units:', err);
+            showNotification('Lưu danh sách đơn vị lên server thất bại: ' + (err.message || err), 'error');
+            return false;
+        }
+    }
+        // Modal logic for provider units
+        function renderProviderUnitList() {
+            const listDiv = document.getElementById('provider-unit-list');
+            listDiv.innerHTML = '';
+            if (providerUnits.length === 0) {
+                listDiv.innerHTML = '<p>Chưa có đơn vị nào.</p>';
+                return;
+            }
+            providerUnits.forEach((unit, idx) => {
+                const div = document.createElement('div');
+                div.style.display = 'flex';
+                div.style.alignItems = 'center';
+                div.style.justifyContent = 'space-between';
+                div.style.marginBottom = '6px';
+                div.innerHTML = `<span>${unit}</span> <button class="btn small-btn delete-provider-unit-btn" data-idx="${idx}">Xóa</button>`;
+                listDiv.appendChild(div);
+            });
+        }
+
+        function openProviderUnitModal() {
+            renderProviderUnitList();
+            document.getElementById('provider-unit-modal').classList.remove('hidden');
+        }
+        function closeProviderUnitModal() {
+            document.getElementById('provider-unit-modal').classList.add('hidden');
+            document.getElementById('add-provider-unit-form').reset();
+        }
+
+        document.getElementById('close-provider-unit-modal').onclick = closeProviderUnitModal;
+
+        document.getElementById('add-provider-unit-form').onsubmit = async function(e) {
+            e.preventDefault();
+            const val = document.getElementById('new-provider-unit-input').value.trim();
+            if (!val) return;
+            if (providerUnits.includes(val)) {
+                showNotification('Đơn vị đã tồn tại!', 'warning');
+                return;
+            }
+            // Save to server first, then update local array if successful
+            const tempUnits = [...providerUnits, val];
+            const originalUnits = [...providerUnits];
+            providerUnits = tempUnits; // Temporarily update for save
+            const ok = await saveProviderUnitsToServer();
+            if (ok) {
+                showNotification('Đã thêm đơn vị!', 'success');
+                renderProviderUnitList();
+                updateProviderUnitsDatalist();
+                document.getElementById('add-provider-unit-form').reset();
+            } else {
+                // Revert if save failed
+                providerUnits = originalUnits;
+                renderProviderUnitList();
+            }
+        };
+
+        document.getElementById('provider-unit-list').addEventListener('click', async function(e) {
+            if (e.target.classList.contains('delete-provider-unit-btn')) {
+                const idx = parseInt(e.target.dataset.idx);
+                if (!isNaN(idx) && idx >= 0 && idx < providerUnits.length) {
+                    const unitName = providerUnits[idx];
+                    if (!confirm(`Bạn có chắc chắn muốn xóa đơn vị "${unitName}"?`)) {
+                        return;
+                    }
+                    // Save to server first, then update local array if successful
+                    const removed = providerUnits[idx];
+                    const tempUnits = providerUnits.filter((_, i) => i !== idx);
+                    const originalUnits = [...providerUnits];
+                    providerUnits = tempUnits; // Temporarily update for save
+                    const ok = await saveProviderUnitsToServer();
+                    if (ok) {
+                        showNotification('Đã xóa đơn vị!', 'success');
+                        updateProviderUnitsDatalist();
+                        renderProviderUnitList();
+                    } else {
+                        // Revert if save failed
+                        providerUnits = originalUnits;
+                        renderProviderUnitList();
+                    }
+                }
+            }
+        });
+
+        // Attach modal open to all provider unit inputs (table and add form)
+        function attachProviderUnitInputListeners() {
+            // Table inputs
+            document.querySelectorAll('.edit-service-provider-unit').forEach(input => {
+                input.onclick = openProviderUnitModal;
+            });
+            // Add form input
+            const addInput = document.getElementById('newServiceProviderUnit');
+            if (addInput) {
+                addInput.onclick = openProviderUnitModal;
+            }
+        }
+
+        // Function to update the datalist for provider units
+        function updateProviderUnitsDatalist() {
+            const datalist = document.getElementById('provider-units');
+            if (!datalist) return; // Check if datalist exists
+            datalist.innerHTML = ''; // Clear existing options
+            providerUnits.forEach(unit => {
+                const option = document.createElement('option');
+                option.value = unit;
+                datalist.appendChild(option);
+            });
+        }
+
+        // ===== Clinical Service Groups Management =====
+        function normalizeText(value) {
+            return (value || '').toString().trim().toLowerCase();
+        }
+
+        async function loadServiceGroups() {
+            try {
+                const res = await fetch('/api/clinical-service-groups');
+                if (!res.ok) throw new Error('Failed to load service groups');
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    serviceGroups = data;
+                } else {
+                    serviceGroups = [...FALLBACK_SERVICE_GROUPS];
+                }
+            } catch (error) {
+                console.error('Error loading service groups:', error);
+                serviceGroups = [...FALLBACK_SERVICE_GROUPS];
+                showNotification('Không thể tải danh sách nhóm dịch vụ, dùng danh sách mặc định.', 'warning');
+            }
+            renderServiceGroupFilters();
+            renderNewServiceGroupOptions();
+            populateRenameGroupSelect();
+        }
+
+        function renderServiceGroupFilters() {
+            const container = document.getElementById('service-group-filters');
+            if (!container) return;
+            container.innerHTML = '';
+            const fragment = document.createDocumentFragment();
+
+            serviceGroups.forEach(groupName => {
+                const btn = document.createElement('button');
+                btn.className = 'service-group-filter-btn btn primary-btn';
+                btn.dataset.group = groupName;
+                btn.textContent = groupName;
+                btn.addEventListener('click', handleServiceGroupFilterClick);
+                fragment.appendChild(btn);
+            });
+
+            const allBtn = document.createElement('button');
+            allBtn.className = 'service-group-filter-btn btn primary-btn';
+            allBtn.dataset.group = '__all__';
+            allBtn.textContent = 'Tất cả các dịch vụ';
+            allBtn.addEventListener('click', handleServiceGroupFilterClick);
+            fragment.appendChild(allBtn);
+
+            container.appendChild(fragment);
+            setActiveServiceGroupButton(activeServiceGroupKey);
+        }
+
+        function setActiveServiceGroupButton(groupKey) {
+            activeServiceGroupKey = groupKey;
+            document.querySelectorAll('.service-group-filter-btn').forEach(btn => {
+                const isActive = btn.dataset.group === groupKey;
+                btn.classList.toggle('active', isActive);
+            });
+        }
+
+        function handleServiceGroupFilterClick(event) {
+            const group = event.currentTarget.dataset.group || '__all__';
+            setActiveServiceGroupButton(group);
+            filterServicesByGroup(group);
+        }
+
+        function buildServiceGroupOptionsHtml(selectedValue = '') {
+            const selectedNorm = normalizeText(selectedValue);
+            const seen = new Set();
+            const options = [];
+
+            serviceGroups.forEach(groupName => {
+                const label = groupName || '';
+                const norm = normalizeText(label);
+                if (seen.has(norm)) return;
+                seen.add(norm);
+                const selectedAttr = norm === selectedNorm ? 'selected' : '';
+                options.push(`<option value="${label}" ${selectedAttr}>${label}</option>`);
+            });
+
+            if (selectedValue && !seen.has(selectedNorm)) {
+                options.unshift(`<option value="${selectedValue}" selected>${selectedValue}</option>`);
+            }
+
+            if (options.length === 0) {
+                return '<option value="">Chưa có nhóm</option>';
+            }
+            return options.join('');
+        }
+
+        function renderNewServiceGroupOptions() {
+            const select = document.getElementById('newServiceGroup');
+            if (!select) return;
+            if (!serviceGroups.length) {
+                select.innerHTML = '<option value="">Chưa có nhóm</option>';
+                select.disabled = true;
+            } else {
+                select.disabled = false;
+                select.innerHTML = serviceGroups.map((group, idx) => `<option value="${group}" ${idx === 0 ? 'selected' : ''}>${group}</option>`).join('');
+            }
+        }
+
+        function populateRenameGroupSelect() {
+            const renameSelect = document.getElementById('rename-group-select');
+            if (!renameSelect) return;
+            renameSelect.innerHTML = serviceGroups.map(group => `<option value="${group}">${group}</option>`).join('');
+        }
+
+        function openServiceGroupModal() {
+            populateRenameGroupSelect();
+            document.getElementById('rename-group-name-input').value = '';
+            document.getElementById('service-group-modal').classList.remove('hidden');
+        }
+
+        function closeServiceGroupModal() {
+            document.getElementById('service-group-modal').classList.add('hidden');
+            document.getElementById('add-service-group-form').reset();
+            document.getElementById('rename-service-group-form').reset();
+        }
+
+        // Move the JavaScript functions for clinical services management here
+        let allClinicalServices = []; // To store all services
+
+        async function loadClinicalServicesTable() {
+            try {
+                const res = await fetch('/api/clinical-services');
+                if (!res.ok) throw new Error('Failed to load clinical services');
+                allClinicalServices = await res.json(); // Store all services
+                filterServicesByGroup(activeServiceGroupKey);
+            } catch (error) {
+                console.error('Error loading clinical services:', error);
+                showNotification('Không thể tải danh sách dịch vụ!', 'error');
+            }
+        }
+
+        function renderClinicalServicesTable(servicesToRender) {
+            const tbody = document.getElementById('clinicalServicesTableBody');
+            tbody.innerHTML = '';
+            servicesToRender.forEach(service => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input type="text" value="${service.name}" class="edit-service-name" data-id="${service.id}"></td>
+                    <td>
+                        <select class="edit-service-group" data-id="${service.id}">
+                            ${buildServiceGroupOptionsHtml(service.service_group || '')}
+                        </select>
+                    </td>
+                    <td><input type="text" value="${service.provider_unit || ''}" class="edit-service-provider-unit" data-id="${service.id}" list="provider-units"></td>
+                    <td><input type="number" value="${service.price}" class="edit-service-price" data-id="${service.id}"></td>
+                    <td>
+                        <button class="btn small-btn save-edit-btn" data-id="${service.id}">Lưu</button>
+                        <button class="btn small-btn delete-btn" data-id="${service.id}">Xóa</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+             // Re-attach event listeners after rendering
+            attachClinicalServiceEventListeners();
+        attachProviderUnitInputListeners();
+        }
+
+        function attachClinicalServiceEventListeners() {
+             // Gắn sự kiện cho nút Lưu và Xóa
+            document.querySelectorAll('.save-edit-btn').forEach(btn => {
+                btn.onclick = async function() {
+                    const id = this.dataset.id;
+                    const name = document.querySelector(`.edit-service-name[data-id='${id}']`).value;
+                    const price = document.querySelector(`.edit-service-price[data-id='${id}']`).value;
+                    const serviceGroup = document.querySelector(`.edit-service-group[data-id='${id}']`).value;
+                    const providerUnit = document.querySelector(`.edit-service-provider-unit[data-id='${id}']`).value;
+
+                    if (!name || price === '' || serviceGroup === '') {
+                        showNotification('Vui lòng điền đầy đủ thông tin dịch vụ.', 'warning');
+                        return;
+                    }
+
+                    try {
+                         const res = await fetch(`/api/clinical-services/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, price: parseFloat(price), service_group: serviceGroup, provider_unit: providerUnit })
+                    });
+                        if (!res.ok) {
+                             const errorData = await res.json();
+                             throw new Error(errorData.message || 'Failed to update service');
+                        }
+                    showNotification('Đã cập nhật dịch vụ!', 'success');
+                    loadClinicalServicesTable();
+                    } catch (error) {
+                         console.error('Error updating service:', error);
+                         showNotification('Lỗi khi cập nhật dịch vụ: ' + error.message, 'error');
+                    }
+                };
+            });
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.onclick = async function() {
+                    if (!confirm('Bạn có chắc muốn xóa dịch vụ này?')) return;
+                    const id = this.dataset.id;
+                    try {
+                         const res = await fetch(`/api/clinical-services/${id}`, { method: 'DELETE' });
+                         if (!res.ok) {
+                              const errorData = await res.json();
+                              throw new Error(errorData.message || 'Failed to delete service');
+                         }
+                    showNotification('Đã xóa dịch vụ!', 'success');
+                    loadClinicalServicesTable();
+                    } catch (error) {
+                         console.error('Error deleting service:', error);
+                         showNotification('Lỗi khi xóa dịch vụ: ' + error.message, 'error');
+                    }
+                };
+            });
+        }
+
+        document.getElementById('addClinicalServiceForm').onsubmit = async function(e) {
+            e.preventDefault();
+            const serviceGroup = document.getElementById('newServiceGroup').value; // Get selected group
+            const name = document.getElementById('newServiceName').value;
+            const price = document.getElementById('newServicePrice').value;
+            const providerUnit = document.getElementById('newServiceProviderUnit').value; // Get value from input with datalist
+
+            if (!name || price === '' || serviceGroup === '') {
+                 showNotification('Vui lòng điền đầy đủ thông tin dịch vụ.', 'warning');
+                 return;
+            }
+
+            try {
+                 const res = await fetch('/api/clinical-services', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, price: parseFloat(price), service_group: serviceGroup, provider_unit: providerUnit })
+                });
+                 if (!res.ok) {
+                      const errorData = await res.json();
+                      throw new Error(errorData.message || 'Failed to add service');
+                 }
+
+                showNotification('Đã thêm dịch vụ mới!', 'success');
+                this.reset();
+                // Reload all services after adding a new one
+                loadClinicalServicesTable();
+            } catch (error) {
+                 console.error('Error adding service:', error);
+                 showNotification('Lỗi khi thêm dịch vụ: ' + error.message, 'error');
+            }
+        };
+
+        // Load data when the page loads
+        document.addEventListener('DOMContentLoaded', async () => {
+            attachProviderUnitInputListeners();
+            const addPackageModal = document.getElementById('add-package-modal');
+            if (addPackageModal) {
+                addPackageModal.classList.add('hidden');
+            }
+            await loadServiceGroups();
+            await loadClinicalServicesTable();
+            loadProviderUnitsFromServer();
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const initialTab = urlParams.get('tab') || 'clinical-services-management'; // Default to clinical services tab
+
+            // Find the corresponding button and trigger click
+            const initialButton = document.querySelector(`.header-nav-btn[data-type="${initialTab}"], button#${initialTab}`);
+            if (initialButton) {
+                initialButton.click();
+            } else {
+                const fallbackBtn = document.querySelector('.header-nav-btn');
+                if (fallbackBtn) {
+                    fallbackBtn.click();
+                }
+            }
+
+            // The event listeners for the new package modal are attached directly now
+            setActiveServiceGroupButton('__all__');
+            filterServicesByGroup('__all__');
+        });
+
+        document.getElementById('show-add-package-modal-btn').addEventListener('click', () => {
+            document.getElementById('add-package-modal').classList.remove('hidden');
+            renderClinicalServicesForPackageModal(); // Load services into the modal
+        });
+
+        // Close modal
+        document.getElementById('close-add-package-modal').addEventListener('click', closeAddPackageModal);
+        document.getElementById('cancel-add-package').addEventListener('click', closeAddPackageModal);
+
+        function closeAddPackageModal() {
+             document.getElementById('add-package-modal').classList.add('hidden');
+             document.getElementById('add-package-form').reset(); // Reset form
+             // Optionally uncheck all checkboxes
+             document.querySelectorAll('#package-services-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+        }
+
+        // Function to load clinical services into the package modal
+        function renderClinicalServicesForPackageModal() {
+            const listDiv = document.getElementById('package-services-list');
+            listDiv.innerHTML = ''; // Clear previous list
+
+            if (!allClinicalServices || allClinicalServices.length === 0) {
+                listDiv.innerHTML = '<p>Không có dịch vụ cận lâm sàng nào được tìm thấy.</p>';
+                return;
+            }
+
+            allClinicalServices.forEach(service => {
+                const checkboxId = `package-service-${service.id}`;
+                const label = document.createElement('label');
+                label.className = 'package-service-item';
+                label.setAttribute('for', checkboxId);
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'service-name';
+                nameSpan.textContent = service.name;
+
+                const priceSpan = document.createElement('span');
+                priceSpan.className = 'service-price';
+                priceSpan.textContent = `${Number(service.price || 0).toLocaleString()}đ`;
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = checkboxId;
+                checkbox.value = service.id;
+                checkbox.dataset.price = service.price;
+
+                label.appendChild(nameSpan);
+                label.appendChild(priceSpan);
+                label.appendChild(checkbox);
+
+                listDiv.appendChild(label);
+            });
+        }
+
+        // Function to load and display clinical service packages
+        let allPackages = []; // Store packages for editing
+
+        async function loadPackages() {
+            const listDiv = document.getElementById('existing-packages-list');
+            listDiv.innerHTML = '<p>Đang tải danh sách gói...</p>'; // Loading message
+
+            try {
+                const response = await fetch('/api/clinical-service-packages');
+                if (!response.ok) throw new Error('Failed to load packages');
+                allPackages = await response.json(); // Store packages
+
+                listDiv.innerHTML = ''; // Clear loading message
+
+                if (allPackages.length === 0) {
+                    listDiv.innerHTML = '<p>Chưa có gói cận lâm sàng nào được tạo.</p>';
+                    return;
+                }
+
+                // Create a table or list to display packages
+                const table = document.createElement('table');
+                table.className = 'admin-table'; // Use existing table style
+                table.innerHTML = `
+                    <thead>
+                        <tr>
+                            <th>Tên gói</th>
+                            <th>Mô tả</th>
+                            <th>Giá</th>
+                            <th>Dịch vụ bao gồm</th>
+                            <th>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${allPackages.map(pkg => `
+                            <tr>
+                                <td>${pkg.name}</td>
+                                <td>${pkg.description || ''}</td>
+                                <td>${pkg.price.toLocaleString()}đ</td>
+                                <td>
+                                    ${pkg.services.map(svc => svc.name).join(', ')}
+                                </td>
+                                <td>
+                                     <button class="btn small-btn edit-package-btn" data-id="${pkg.id}">Sửa</button>
+                                     <button class="btn small-btn delete-package-btn" data-id="${pkg.id}">Xóa</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                `;
+                listDiv.appendChild(table);
+
+                 // Attach event listeners for edit/delete buttons
+                 attachPackageEventListeners();
+
+            } catch (error) {
+                console.error('Error loading packages:', error);
+                listDiv.innerHTML = '<p style="color: red;">Lỗi khi tải danh sách gói cận lâm sàng.</p>';
+                showNotification('Không thể tải danh sách gói cận lâm sàng!', 'error');
+            }
+        }
+
+        // Attach event listeners for package edit/delete buttons
+        function attachPackageEventListeners() {
+            // Delete button listener
+             document.querySelectorAll('.delete-package-btn').forEach(btn => {
+                 btn.addEventListener('click', async function() {
+                     if (!confirm('Bạn có chắc muốn xóa gói cận lâm sàng này?')) return;
+                     const packageId = this.dataset.id;
+                     try {
+                         const response = await fetch(`/api/clinical-service-packages/${packageId}`, { method: 'DELETE' });
+                         if (!response.ok) {
+                             const errorData = await response.json();
+                             throw new Error(errorData.message || 'Failed to delete package');
+                         }
+                         showNotification('Đã xóa gói cận lâm sàng thành công!', 'success');
+                         loadPackages(); // Reload the list
+                     } catch (error) {
+                         console.error('Error deleting package:', error);
+                         showNotification('Lỗi khi xóa gói cận lâm sàng: ' + error.message, 'error');
+                     }
+                 });
+             });
+
+              // Edit button listener
+             document.querySelectorAll('.edit-package-btn').forEach(btn => {
+                 btn.addEventListener('click', function() {
+                     const packageId = this.dataset.id;
+                     openEditPackageModal(packageId);
+                 });
+             });
+        }
+
+        // Function to open the modal for editing a package
+        function openEditPackageModal(packageId) {
+            // Find the package in the loaded data
+            const packageToEdit = allPackages.find(pkg => pkg.id == packageId);
+            if (!packageToEdit) {
+                showNotification('Không tìm thấy thông tin gói để sửa.', 'error');
+                return;
+            }
+
+            // Set modal title
+            document.querySelector('#add-package-modal h3').textContent = 'Sửa gói cận lâm sàng';
+
+            // Fill the form with package data
+            document.getElementById('packageName').value = packageToEdit.name;
+            document.getElementById('packageDescription').value = packageToEdit.description;
+            document.getElementById('packagePrice').value = packageToEdit.price;
+
+            // Mark selected services in the checklist
+            renderClinicalServicesForPackageModal(); // First render all services
+            packageToEdit.services.forEach(selectedService => {
+                const checkbox = document.querySelector(`#package-services-list input[type="checkbox"][value="${selectedService.id}"]`);
+                if (checkbox) {
+                    checkbox.checked = true;
+                }
+            });
+
+            // Store the package ID in the form dataset for later use in submit handler
+            const packageForm = document.getElementById('add-package-form');
+            packageForm.dataset.packageId = packageId;
+
+            // Change the submit button text (optional)
+            packageForm.querySelector('button[type="submit"]').textContent = 'Cập nhật gói';
+
+            // Show the modal
+            document.getElementById('add-package-modal').classList.remove('hidden');
+        }
+
+        // Handle form submission for adding or updating a package
+        document.getElementById('add-package-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const packageForm = document.getElementById('add-package-form');
+            const packageId = packageForm.dataset.packageId; // Get packageId if editing
+
+            const packageName = document.getElementById('packageName').value;
+            const packageDescription = document.getElementById('packageDescription').value;
+            const packagePrice = parseFloat(document.getElementById('packagePrice').value);
+            const selectedServiceIds = Array.from(document.querySelectorAll('#package-services-list input[type="checkbox"]:checked')).map(cb => parseInt(cb.value));
+
+            if (!packageName || isNaN(packagePrice)) {
+                 showNotification('Vui lòng điền đầy đủ Tên gói và Giá gói.', 'warning');
+                 return;
+            }
+
+            if (selectedServiceIds.length === 0) {
+                showNotification('Vui lòng chọn ít nhất một dịch vụ cho gói.', 'warning');
+                return;
+            }
+
+            const method = packageId ? 'PUT' : 'POST';
+            const url = packageId ? `/api/clinical-service-packages/${packageId}` : '/api/clinical-service-packages';
+
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: packageName,
+                        description: packageDescription,
+                        price: packagePrice,
+                        service_ids: selectedServiceIds
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showNotification(`Đã ${packageId ? 'cập nhật' : 'thêm mới'} gói cận lâm sàng thành công!`, 'success');
+                    closeAddPackageModal(); // Close modal on success
+                    loadPackages(); // Reload the list
+                } else {
+                    showNotification(`Lỗi khi ${packageId ? 'cập nhật' : 'thêm mới'} gói: ${result.message || response.statusText}`, 'error');
+                }
+
+            } catch (error) {
+                console.error(`Error ${packageId ? 'updating' : 'adding'} package:`, error);
+                showNotification(`Có lỗi xảy ra khi ${packageId ? 'cập nhật' : 'thêm mới'} gói cận lâm sàng.`, 'error');
+            }
+        });
+
+         // Reset modal state when opening for Add New
+         document.getElementById('show-add-package-modal-btn').addEventListener('click', () => {
+             document.querySelector('#add-package-modal h3').textContent = 'Thêm gói cận lâm sàng mới';
+             document.getElementById('add-package-form').reset();
+             delete document.getElementById('add-package-form').dataset.packageId; // Remove packageId
+             document.getElementById('add-package-form').querySelector('button[type="submit"]').textContent = 'Lưu gói';
+             document.getElementById('add-package-modal').classList.remove('hidden');
+             renderClinicalServicesForPackageModal(); // Load services into the modal
+         });
+
+        // Close modal
+        document.getElementById('close-add-package-modal').addEventListener('click', closeAddPackageModal);
+        document.getElementById('cancel-add-package').addEventListener('click', closeAddPackageModal);
+
+        function closeAddPackageModal() {
+             document.getElementById('add-package-modal').classList.add('hidden');
+             // Reset form state is now handled when opening for Add New
+        }
+
+        // Function to load clinical services into the package modal
+        function renderClinicalServicesForPackageModal() {
+            const listDiv = document.getElementById('package-services-list');
+            listDiv.innerHTML = ''; // Clear previous list
+
+            if (!allClinicalServices || allClinicalServices.length === 0) {
+                listDiv.innerHTML = '<p>Không có dịch vụ cận lâm sàng nào được tìm thấy.</p>';
+                return;
+            }
+
+            allClinicalServices.forEach(service => {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <label>
+                        <input type="checkbox" value="${service.id}" data-price="${service.price}"> ${service.name} (${service.price.toLocaleString()}đ)
+                    </label>
+                `;
+                listDiv.appendChild(div);
+            });
+        }
+
+        // Lọc dịch vụ theo nhóm
+        function filterServicesByGroup(groupKey) {
+            if (groupKey === '__all__') {
+                renderClinicalServicesTable(allClinicalServices);
+                return;
+            }
+            const normalizedKey = normalizeText(groupKey);
+            const filtered = allClinicalServices.filter(service => normalizeText(service.service_group) === normalizedKey);
+            renderClinicalServicesTable(filtered);
+        }
+
+        // Ẩn/hiện mục quản lý gói khi click nút
+        const packageBtn = document.getElementById('package-management-btn');
+        const packageSection = document.getElementById('package-management-section');
+        const clinicalSection = document.getElementById('clinical-services-management');
+        packageBtn.addEventListener('click', () => {
+            const isShow = packageSection.style.display === 'none';
+            packageSection.style.display = isShow ? 'block' : 'none';
+            clinicalSection.style.display = isShow ? 'none' : 'block';
+            if (isShow) {
+                loadPackages(); // Luôn load danh sách gói khi mở
+            }
+        });
+
+        // Service group modal interactions
+        document.getElementById('manage-service-groups-btn').addEventListener('click', openServiceGroupModal);
+        document.getElementById('close-service-group-modal').addEventListener('click', closeServiceGroupModal);
+
+        document.getElementById('add-service-group-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('new-service-group-input');
+            const newName = input.value.trim();
+            if (!newName) {
+                showNotification('Vui lòng nhập tên nhóm.', 'warning');
+                return;
+            }
+            try {
+                const res = await fetch('/api/clinical-service-groups', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName })
+                });
+                const result = await res.json();
+                if (!res.ok) throw new Error(result.message || 'Không thể thêm nhóm.');
+
+                if (Array.isArray(result.groups)) {
+                    serviceGroups = result.groups;
+                }
+                renderServiceGroupFilters();
+                renderNewServiceGroupOptions();
+                populateRenameGroupSelect();
+                renderClinicalServicesTable(allClinicalServices);
+                showNotification('Đã thêm nhóm dịch vụ mới!', 'success');
+                input.value = '';
+            } catch (error) {
+                console.error('Error adding service group:', error);
+                showNotification(error.message || 'Lỗi khi thêm nhóm dịch vụ.', 'error');
+            }
+        });
+
+        document.getElementById('rename-service-group-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const select = document.getElementById('rename-group-select');
+            const newNameInput = document.getElementById('rename-group-name-input');
+            const oldName = select.value;
+            const newName = newNameInput.value.trim();
+
+            if (!oldName || !newName) {
+                showNotification('Vui lòng chọn nhóm và nhập tên mới.', 'warning');
+                return;
+            }
+            try {
+                const res = await fetch('/api/clinical-service-groups/rename', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ old_name: oldName, new_name: newName })
+                });
+                const result = await res.json();
+                if (!res.ok) throw new Error(result.message || 'Không thể cập nhật tên nhóm.');
+
+                if (Array.isArray(result.groups)) {
+                    serviceGroups = result.groups;
+                }
+                renderServiceGroupFilters();
+                renderNewServiceGroupOptions();
+                populateRenameGroupSelect();
+                await loadClinicalServicesTable();
+                showNotification('Đã cập nhật tên nhóm dịch vụ!', 'success');
+                newNameInput.value = '';
+            } catch (error) {
+                console.error('Error renaming service group:', error);
+                showNotification(error.message || 'Lỗi khi cập nhật tên nhóm.', 'error');
+            }
+        });
+
+    </script>
+    
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

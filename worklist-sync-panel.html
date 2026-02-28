@@ -1,0 +1,142 @@
+<!-- Worklist Sync Section for Admin Panel -->
+<div id="worklistSyncSection" style="margin: 20px 0; padding: 20px; background: #f5f5f5; border-radius: 8px; display: none;">
+    <h3>🔄 Đồng bộ Worklist DICOM</h3>
+    <p style="color: #666;">Đồng bộ thông tin chỉ định siêu âm từ hệ thống chính sang Worklist của máy siêu âm</p>
+    
+    <div style="margin: 15px 0;">
+        <button id="syncWorklistBtn" class="btn btn-primary" style="margin-right: 10px;">
+            <i class="icon">↻</i> Đồng bộ Worklist Ngay
+        </button>
+        <span id="syncStatus" style="display: none; margin-left: 10px;">
+            <i class="spinner" style="display: inline-block; animation: spin 1s linear infinite;">⟳</i>
+            <span id="syncMessage"></span>
+        </span>
+    </div>
+    
+    <div id="syncResult" style="margin-top: 15px; padding: 10px; border-radius: 4px; display: none;">
+        <p id="syncResultText"></p>
+    </div>
+    
+    <div style="margin-top: 10px; font-size: 12px; color: #999;">
+        <p>ℹ️ Worklist sẽ tự động đồng bộ mỗi 5 phút</p>
+        <p>Lần đồng bộ cuối: <span id="lastSyncTime">Chưa cập nhật</span></p>
+    </div>
+</div>
+
+<style>
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.spinner {
+    animation: spin 1s linear infinite;
+}
+</style>
+
+<script>
+// Kiểm tra quyền manage_worklist và hiển thị section
+async function initWorklistSync() {
+    try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+        
+        // Lấy danh sách permissions
+        const res = await fetch('/api/permissions', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        const data = await res.json();
+        const permissions = data.permissions || [];
+        
+        // Hiển thị nếu có quyền manage_worklist
+        if (permissions.includes('manage_worklist')) {
+            document.getElementById('worklistSyncSection').style.display = 'block';
+            setupWorklistSyncHandlers();
+        }
+    } catch (e) {
+        console.log('Could not initialize worklist sync:', e);
+    }
+}
+
+function setupWorklistSyncHandlers() {
+    const syncBtn = document.getElementById('syncWorklistBtn');
+    
+    if (!syncBtn) return;
+    
+    syncBtn.addEventListener('click', async () => {
+        await performWorklistSync();
+    });
+    
+    // Load last sync time
+    updateLastSyncTime();
+}
+
+async function performWorklistSync() {
+    const syncBtn = document.getElementById('syncWorklistBtn');
+    const syncStatus = document.getElementById('syncStatus');
+    const syncResult = document.getElementById('syncResult');
+    const syncMessage = document.getElementById('syncMessage');
+    const syncResultText = document.getElementById('syncResultText');
+    
+    try {
+        syncBtn.disabled = true;
+        syncStatus.style.display = 'inline';
+        syncResult.style.display = 'none';
+        syncMessage.textContent = 'Đang đồng bộ...';
+        
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch('/api/mwl-sync', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        syncStatus.style.display = 'none';
+        syncResult.style.display = 'block';
+        
+        if (data.success) {
+            syncResult.style.backgroundColor = '#d4edda';
+            syncResult.style.color = '#155724';
+            syncResult.style.borderLeft = '4px solid #28a745';
+            syncResultText.innerHTML = `<strong>✓ Thành công:</strong> ${data.message}<br>${data.details || ''}`;
+            updateLastSyncTime();
+        } else {
+            syncResult.style.backgroundColor = '#f8d7da';
+            syncResult.style.color = '#721c24';
+            syncResult.style.borderLeft = '4px solid #dc3545';
+            syncResultText.innerHTML = `<strong>✗ Lỗi:</strong> ${data.message}<br>${data.error || ''}`;
+        }
+        
+        // Tự động ẩn result sau 5 giây
+        setTimeout(() => {
+            syncResult.style.display = 'none';
+        }, 5000);
+        
+    } catch (error) {
+        syncStatus.style.display = 'none';
+        syncResult.style.display = 'block';
+        syncResult.style.backgroundColor = '#f8d7da';
+        syncResult.style.color = '#721c24';
+        syncResult.style.borderLeft = '4px solid #dc3545';
+        syncResultText.innerHTML = `<strong>✗ Lỗi:</strong> ${error.message}`;
+    } finally {
+        syncBtn.disabled = false;
+    }
+}
+
+function updateLastSyncTime() {
+    const lastTime = localStorage.getItem('lastWorklistSync');
+    if (lastTime) {
+        const date = new Date(lastTime);
+        document.getElementById('lastSyncTime').textContent = date.toLocaleString('vi-VN');
+    }
+}
+
+// Khởi tạo khi admin panel load
+document.addEventListener('DOMContentLoaded', initWorklistSync);
+</script>

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VR PACS - Enhanced DICOM Viewer</title>
+  
+  <!-- AI Assistant CSS -->
+  <link rel="stylesheet" href="/ai-assistant.css">
+
+  <!-- Cornerstone vendor scripts (giữ cùng cấu trúc thư mục với file gốc của bạn) -->
+  <script src="/static/vendor/cornerstone.js"></script>
+  <script src="/static/vendor/cornerstoneMath.js"></script>
+  <script src="/static/vendor/dicomParser.js"></script>
+  <script src="/static/vendor/cornerstoneWADOImageLoader.js"></script>
+  <script src="/static/vendor/cornerstoneTools.js"></script>
+
+  <style>
+    :root { --bg:#151515; --panel:#1e1e1e; --accent:#2b7cff; --text:#eee; }
+    html,body{height:100%;margin:0;font-family:Inter, Arial, sans-serif;background:var(--bg);color:var(--text)}
+    .app {display:grid;grid-template-columns:300px 1fr;grid-template-rows:56px 1fr;height:100vh;gap:10px}
+    header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:8px 16px;background:linear-gradient(90deg,#101010,#171717);box-shadow:0 2px 6px rgba(0,0,0,0.6)}
+    .logo{font-weight:700;color:var(--accent)}
+    .controls{margin-left:auto;display:flex;gap:8px;align-items:center}
+    .sidebar{padding:12px;background:var(--panel);overflow:auto}
+    .viewer-wrap{padding:12px;display:flex;flex-direction:column;gap:8px}
+    #dicomImage{flex:1;background:black;border-radius:8px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+    .toolbar{display:flex;gap:8px;padding:8px;background:rgba(0,0,0,0.35);border-radius:8px}
+    button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--text);padding:6px 10px;border-radius:6px;cursor:pointer}
+    button.active{border-color:var(--accent);box-shadow:0 0 6px rgba(43,124,255,0.15)}
+    .info{font-size:13px;color:#cfcfcf;margin-bottom:8px}
+    .list-item{padding:8px;border-radius:6px;margin-bottom:6px;background:rgba(255,255,255,0.02);cursor:pointer}
+    .list-item:hover{background:rgba(255,255,255,0.03)}
+    .status{font-size:13px;color:#bdbdbd}
+    .spinner{width:36px;height:36px;border-radius:50%;border:4px solid rgba(255,255,255,0.08);border-top-color:var(--accent);animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .bottom-controls{display:flex;gap:8px;align-items:center}
+    input,select{background:#111;border:1px solid rgba(255,255,255,0.04);color:var(--text);padding:6px;border-radius:6px}
+    .patient-meta{font-size:13px;color:#ddd}
+    .warning{color:#ffb86b}
+    .error{color:#ff6b6b}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="logo">VR PACS — Enhanced</div>
+      <div class="status" id="connectionStatus">Chưa kết nối</div>
+      <div class="controls">
+        <label style="font-size:13px">PACS Base URL</label>
+        <input id="pacsBaseUrl" placeholder="http://localhost:8042 (Orthanc)" style="width:300px" />
+        <button id="connectBtn">Kết nối</button>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <div style="margin-bottom:8px">
+        <div style="font-weight:600;margin-bottom:6px">Tìm Study (QIDO-RS)</div>
+        <input id="patientSearch" placeholder="Tên bệnh nhân / PatientID" style="width:100%" />
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button id="searchBtn">Tìm</button>
+          <button id="loadSampleBtn">Load sample.dcm</button>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div style="font-weight:700;margin-bottom:6px">Danh sách Study</div>
+        <div id="studyList" aria-live="polite"></div>
+      </div>
+
+      <div style="margin-top:14px">
+        <div style="font-weight:700;margin-bottom:6px">Lưu trữ annotations</div>
+        <div style="display:flex;gap:6px">
+          <button id="saveAnnoBtn">Lưu local</button>
+          <button id="loadAnnoBtn">Tải local</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="viewer-wrap">
+      <div class="info">
+        <div id="patientInfo" class="patient-meta">Không có study được load</div>
+      </div>
+
+      <div class="toolbar" role="toolbar" aria-label="Viewer toolbar">
+        <button id="wwwcBtn" class="active">WW/WC</button>
+        <button id="panBtn">Pan</button>
+        <button id="zoomBtn">Zoom</button>
+        <button id="lengthBtn">Measure</button>
+        <button id="stackPrev">◀</button>
+        <button id="stackNext">▶</button>
+        <button id="playPause">Play</button>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          <div id="loadingIndicator" style="display:none"><div class="spinner"></div></div>
+          <div id="message" class="status">Sẵn sàng</div>
+        </div>
+      </div>
+
+      <div id="dicomImage"></div>
+
+      <div class="bottom-controls">
+        <div class="status">Frame: <span id="frameIndex">0</span> / <span id="frameCount">0</span></div>
+        <div style="margin-left:auto">Tool state lưu ở localStorage (key: vrpacs_annotations)</div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // --- Basic config ---
+    const viewerElement = document.getElementById('dicomImage');
+    const messageEl = document.getElementById('message');
+    const loadingEl = document.getElementById('loadingIndicator');
+
+    // Enable cornerstone + tools
+    cornerstone.enable(viewerElement);
+    cornerstoneTools.init({ showSVGCursors: true, globalToolSyncEnabled: true });
+
+    cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
+    cornerstoneWADOImageLoader.configure({ beforeSend: function(xhr) { xhr.setRequestHeader('Accept','application/dicom'); } });
+
+    // Tool registration (CornerstoneTools v5+)
+    const { LengthTool, PanTool, ZoomTool, WwwcTool, StackScrollTool, StackScrollMouseWheelTool } = cornerstoneTools;
+    cornerstoneTools.addTool(LengthTool);
+    cornerstoneTools.addTool(PanTool);
+    cornerstoneTools.addTool(ZoomTool);
+    cornerstoneTools.addTool(WwwcTool);
+    cornerstoneTools.addTool(StackScrollTool);
+    cornerstoneTools.addTool(StackScrollMouseWheelTool);
+
+    // UI elements
+    const wwwcBtn = document.getElementById('wwwcBtn');
+    const panBtn = document.getElementById('panBtn');
+    const zoomBtn = document.getElementById('zoomBtn');
+    const lengthBtn = document.getElementById('lengthBtn');
+    const stackPrev = document.getElementById('stackPrev');
+    const stackNext = document.getElementById('stackNext');
+    const playPause = document.getElementById('playPause');
+    const frameIndexEl = document.getElementById('frameIndex');
+    const frameCountEl = document.getElementById('frameCount');
+
+    let imageIds = []; // array of wadouri imageIds for stack
+    let currentIndex = 0;
+    let playInterval = null;
+
+    function setMessage(text, type='info'){
+      messageEl.textContent = text;
+      messageEl.className = 'status ' + (type==='error'?'error': type==='warn'?'warning':'');
+    }
+
+    function showLoading(show){ loadingEl.style.display = show ? 'block' : 'none'; }
+
+    // Activate default tools for element
+    function activateTool(toolName, options={}){
+      // deactivate all first
+      ['Wwwc','Pan','Zoom','Length'].forEach(name => cornerstoneTools.setToolPassiveForElement(viewerElement, name));
+      cornerstoneTools.setToolActiveForElement(viewerElement, toolName, options);
+      // highlight active button
+      [wwwcBtn, panBtn, zoomBtn, lengthBtn].forEach(btn => btn.classList.remove('active'));
+      const mapping = { 'Wwwc': wwwcBtn, 'Pan': panBtn, 'Zoom': zoomBtn, 'Length': lengthBtn };
+      if(mapping[toolName]) mapping[toolName].classList.add('active');
+    }
+
+    // Button events
+    wwwcBtn.onclick = () => activateTool('Wwwc', { mouseButtonMask: 1 });
+    panBtn.onclick = () => activateTool('Pan', { mouseButtonMask: 2 });
+    zoomBtn.onclick = () => activateTool('Zoom', { mouseButtonMask: 4 });
+    lengthBtn.onclick = () => activateTool('Length', { mouseButtonMask: 1 });
+
+    stackPrev.onclick = () => {
+      if(imageIds.length===0) return;
+      currentIndex = Math.max(0, currentIndex-1);
+      displayIndex(currentIndex);
+    }
+    stackNext.onclick = () => {
+      if(imageIds.length===0) return;
+      currentIndex = Math.min(imageIds.length-1, currentIndex+1);
+      displayIndex(currentIndex);
+    }
+
+    playPause.onclick = () => {
+      if(playInterval){ clearInterval(playInterval); playInterval = null; playPause.textContent = 'Play'; }
+      else { playInterval = setInterval(()=>{ currentIndex = (currentIndex+1) % imageIds.length; displayIndex(currentIndex); }, 150); playPause.textContent='Pause'; }
+    }
+
+    // Stack handling: create stack object for cornerstone
+    function setStack(ids){
+      imageIds = ids.slice();
+      frameCountEl.textContent = imageIds.length;
+      if(imageIds.length===0){ frameIndexEl.textContent='0'; setMessage('Không có frame'); return; }
+      // Create stack state
+      const stack = { currentImageIdIndex: 0, imageIds };
+      cornerstoneTools.addStackStateManager(viewerElement, ['stack']);
+      cornerstoneTools.clearToolState(viewerElement, 'stack');
+      cornerstoneTools.setToolState(viewerElement, 'stack', stack);
+
+      // enable stack mouse wheel
+      cornerstoneTools.setToolActiveForElement(viewerElement, 'StackScrollMouseWheel', {});
+
+      currentIndex = 0;
+      displayIndex(0);
+    }
+
+    function displayIndex(index){
+      if(!imageIds[index]) return;
+      showLoading(true);
+      cornerstone.loadAndCacheImage(imageIds[index]).then(image => {
+        const viewport = cornerstone.getDefaultViewportForImage(viewerElement, image);
+        cornerstone.displayImage(viewerElement, image, viewport);
+        frameIndexEl.textContent = index+1;
+        frameCountEl.textContent = imageIds.length;
+        showLoading(false);
+      }).catch(err=>{
+        console.error(err); setMessage('Lỗi load image: '+err.message,'error'); showLoading(false);
+      });
+    }
+
+    // --- Sample loader (tải 1 file sample hoặc chuỗi giả) ---
+    document.getElementById('loadSampleBtn').addEventListener('click', ()=>{
+      // nếu sample chỉ 1 frame
+      const sample = 'wadouri:/static/vendor/sample.dcm';
+      setStack([sample]);
+      setMessage('Đã load sample.dcm');
+      updatePatientInfo({PatientName:'Sample', PatientID:'0001', StudyDescription:'Sample study'});
+    });
+
+    // --- PACS connect + QIDO-RS (tùy chọn) ---
+    document.getElementById('connectBtn').addEventListener('click', async ()=>{
+      const base = document.getElementById('pacsBaseUrl').value.trim();
+      if(!base){ setMessage('Nhập PACS Base URL','warn'); return; }
+      // test QIDO-RS /studies endpoint
+      const url = base.replace(/\/$/, '') + '/studies?limit=10';
+      setMessage('Đang kiểm tra kết nối...'); showLoading(true);
+      try{
+        const res = await fetch(url, {headers:{'Accept':'application/json'}});
+        if(!res.ok) throw new Error(res.statusText || 'HTTP '+res.status);
+        const data = await res.json();
+        setMessage('Kết nối thành công: tìm thấy ' + (data.length||0) + ' study');
+        document.getElementById('connectionStatus').textContent = 'Đã kết nối';
+        // Hiển thị danh sách tối giản (Orthanc returns array of studies)
+        const list = document.getElementById('studyList'); list.innerHTML='';
+        (data||[]).forEach(study => {
+          const div = document.createElement('div');
+          div.className='list-item';
+          div.textContent = (study.PatientName||'Unknown') + ' — ' + (study.StudyDescription||study.StudyInstanceUID||'');
+          div.onclick = () => loadStudyFromQIDO(base, study.StudyInstanceUID);
+          list.appendChild(div);
+        });
+      }catch(err){
+        console.error(err); setMessage('Không thể kết nối: '+err.message,'error');
+      }finally{ showLoading(false); }
+    });
+
+    async function loadStudyFromQIDO(baseUrl, studyInstanceUID){
+      setMessage('Đang lấy series từ PACS...'); showLoading(true);
+      try{
+        // QIDO to get series for study (Orthanc compatible)
+        const seriesUrl = baseUrl.replace(/\/$/, '') + '/studies/' + encodeURIComponent(studyInstanceUID) + '/series';
+        const res = await fetch(seriesUrl, {headers:{'Accept':'application/json'}});
+        if(!res.ok) throw new Error(res.statusText||res.status);
+        const series = await res.json();
+        if(!Array.isArray(series) || series.length===0) throw new Error('Không có series');
+        // lấy instances của series đầu tiên (Orthanc path)
+        const instancesUrl = baseUrl.replace(/\/$/, '') + '/series/' + encodeURIComponent(series[0].SeriesInstanceUID) + '/instances';
+        const r2 = await fetch(instancesUrl, {headers:{'Accept':'application/json'}});
+        const instances = await r2.json();
+        // chuyển sang wadouri imageIds (Orthanc cung cấp /instances/{id}/file or /instances/{id}/content)
+        const ids = instances.map(inst => 'wadouri:' + baseUrl.replace(/\/$/, '') + '/instances/' + encodeURIComponent(inst.ID) + '/file');
+        setStack(ids);
+        updatePatientInfo(series[0]);
+        setMessage('Load study thành công');
+      }catch(err){ console.error(err); setMessage('Lỗi load study: '+err.message, 'error'); }
+      finally{ showLoading(false); }
+    }
+
+    // Simple patient info updater
+    function updatePatientInfo(meta){
+      const info = document.getElementById('patientInfo');
+      const name = meta.PatientName || meta.MainDicomTags?.PatientName || 'Unknown';
+      const pid = meta.PatientID || meta.MainDicomTags?.PatientID || '';
+      const study = meta.StudyDescription || meta.MainDicomTags?.StudyDescription || meta.StudyInstanceUID || '';
+      info.textContent = `Patient: ${name} — ID: ${pid} — Study: ${study}`;
+    }
+
+    // --- Search button (simple QIDO example) ---
+    document.getElementById('searchBtn').addEventListener('click', async ()=>{
+      const q = document.getElementById('patientSearch').value.trim();
+      const base = document.getElementById('pacsBaseUrl').value.trim();
+      if(!base){ setMessage('Nhập PACS Base URL trước khi tìm','warn'); return; }
+      if(!q){ setMessage('Nhập tên hoặc PatientID để tìm','warn'); return; }
+      setMessage('Đang tìm...'); showLoading(true);
+      try{
+        // QIDO example: ?PatientName= or ?PatientID=
+        const url = base.replace(/\/$/, '') + '/studies?PatientName=' + encodeURIComponent(q) + '&limit=20';
+        const res = await fetch(url, {headers:{'Accept':'application/json'}});
+        if(!res.ok) throw new Error(res.statusText||res.status);
+        const data = await res.json();
+        const list = document.getElementById('studyList'); list.innerHTML='';
+        (data||[]).forEach(study => {
+          const div = document.createElement('div');
+          div.className='list-item';
+          div.textContent = (study.PatientName||'Unknown') + ' — ' + (study.StudyDescription||study.StudyInstanceUID||'');
+          div.onclick = () => loadStudyFromQIDO(base, study.StudyInstanceUID);
+          list.appendChild(div);
+        });
+        setMessage('Hoàn tất tìm');
+      }catch(err){ console.error(err); setMessage('Lỗi tìm: '+err.message,'error'); }
+      finally{ showLoading(false); }
+    });
+
+    // --- Annotation save/load (localStorage) ---
+    document.getElementById('saveAnnoBtn').addEventListener('click', ()=>{
+      try{
+        const toolState = cornerstoneTools.globalImageIdSpecificToolStateManager.saveState();
+        const serialized = JSON.stringify(toolState);
+        localStorage.setItem('vrpacs_annotations', serialized);
+        setMessage('Đã lưu annotations vào localStorage');
+      }catch(err){ console.error(err); setMessage('Lỗi lưu annotations: '+err.message,'error'); }
+    });
+
+    document.getElementById('loadAnnoBtn').addEventListener('click', ()=>{
+      try{
+        const raw = localStorage.getItem('vrpacs_annotations');
+        if(!raw){ setMessage('Không có annotations trong localStorage','warn'); return; }
+        const state = JSON.parse(raw);
+        cornerstoneTools.globalImageIdSpecificToolStateManager.restoreState(state);
+        setMessage('Đã tải annotations từ localStorage');
+      }catch(err){ console.error(err); setMessage('Lỗi load annotations: '+err.message,'error'); }
+    });
+
+    // --- Initialize default tool ---
+    activateTool('Wwwc', { mouseButtonMask: 1 });
+
+    // Accessibility: keyboard left/right to change frames
+    window.addEventListener('keydown', (e)=>{
+      if(e.key==='ArrowLeft') stackPrev.click();
+      if(e.key==='ArrowRight') stackNext.click();
+      if(e.key===' ') { e.preventDefault(); playPause.click(); }
+    });
+
+    // Onload: try to show sample if exists
+    window.addEventListener('load', ()=>{
+      // If you have sample.dcm in static/vendor, show it
+      const sampleUrl = '/static/vendor/sample.dcm';
+      fetch(sampleUrl, {method:'HEAD'}).then(r=>{ if(r.ok){ /* leave sample load to button */ } });
+    });
+
+    // Helpful debug logs
+    console.log('VR PACS enhanced viewer initialized');
+  </script>
+    
+    <!-- Footer -->
+  <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

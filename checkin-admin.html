@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Check-in - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            background: #f8fafc;
+            margin: 0;
+            font-family: 'Roboto', Arial, sans-serif;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+        
+        .header-section {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        
+        .clinic-info {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 1rem;
+        }
+        
+        .clinic-logo {
+            height: 60px;
+        }
+        
+        .clinic-text h1 {
+            color: #1565c0;
+            font-size: 1.5rem;
+            margin: 0 0 0.5rem 0;
+            font-weight: bold;
+        }
+        
+        .clinic-text p {
+            color: #e53935;
+            font-size: 1rem;
+            margin: 0;
+            font-weight: 600;
+        }
+        
+        .stats-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #1565c0;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 1rem;
+        }
+        
+        .management-section {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            padding: 2rem;
+        }
+        
+        .section-title {
+            color: #1565c0;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: #1565c0;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #0d47a1;
+        }
+        
+        .btn-success {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #43a047;
+        }
+        
+        .btn-warning {
+            background: #ff9800;
+            color: white;
+        }
+        
+        .btn-warning:hover {
+            background: #f57c00;
+        }
+        
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #d32f2f;
+        }
+        
+        .checkin-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        
+        .checkin-table th,
+        .checkin-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .checkin-table th {
+            background: #f8f9fa;
+            color: #1565c0;
+            font-weight: bold;
+        }
+        
+        .checkin-table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .queue-number {
+            background: #1565c0;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-weight: bold;
+            display: inline-block;
+            min-width: 40px;
+            text-align: center;
+        }
+        
+        .status-badge {
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        
+        .status-waiting {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+        
+        .status-serving {
+            background: #e8f5e8;
+            color: #4caf50;
+        }
+        
+        .status-completed {
+            background: #f3e5f5;
+            color: #9c27b0;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .btn-small {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.9rem;
+        }
+        
+        .current-serving {
+            background: #4caf50 !important;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #666;
+        }
+        
+        .empty-state i {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header-section">
+            <div class="clinic-info">
+                <img src="logo_phu_san_dai_anh.png" alt="Logo Phòng khám Đại Anh" class="clinic-logo">
+                <div class="clinic-text">
+                    <h1>Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                    <p>Uy Tín - Niềm Tin - Chất Lượng</p>
+                </div>
+            </div>
+            <div style="color: #1565c0; font-size: 1.3rem; font-weight: bold; margin-top: 1rem;">
+                <i class="fas fa-users-cog"></i> Quản lý Check-in
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-section">
+            <div class="stat-card">
+                <div class="stat-number" id="total-checkins">0</div>
+                <div class="stat-label">Tổng check-in hôm nay</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="current-queue">0</div>
+                <div class="stat-label">Số thứ tự hiện tại</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="waiting-count">0</div>
+                <div class="stat-label">Đang chờ khám</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="serving-count">0</div>
+                <div class="stat-label">Đang khám</div>
+            </div>
+        </div>
+
+        <!-- Management -->
+        <div class="management-section">
+            <div class="section-title">
+                <i class="fas fa-list-ul"></i> Danh sách Check-in hôm nay
+            </div>
+            
+            <div class="controls">
+                <button class="btn btn-primary" onclick="loadCheckinList()">
+                    <i class="fas fa-sync-alt"></i> Làm mới
+                </button>
+                <button class="btn btn-success" onclick="callNext()">
+                    <i class="fas fa-arrow-right"></i> Gọi bệnh nhân tiếp theo
+                </button>
+                <button class="btn btn-warning" onclick="resetDay()">
+                    <i class="fas fa-undo"></i> Reset ngày mới
+                </button>
+            </div>
+            
+            <div id="checkin-list-container">
+                <table class="checkin-table">
+                    <thead>
+                        <tr>
+                            <th>STT</th>
+                            <th>Họ tên</th>
+                            <th>Số điện thoại</th>
+                            <th>Thời gian check-in</th>
+                            <th>Trạng thái</th>
+                            <th>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="checkin-list-body">
+                        <!-- Danh sách sẽ được load bằng JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load thống kê
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/checkin/stats');
+                const stats = await response.json();
+                
+                document.getElementById('total-checkins').textContent = stats.total_checkins || 0;
+                document.getElementById('current-queue').textContent = stats.current_queue || 0;
+                document.getElementById('waiting-count').textContent = stats.waiting_count || 0;
+                
+                // Tính số đang khám
+                const waitingResponse = await fetch('/api/checkin/waiting-list');
+                const waitingList = await waitingResponse.json();
+                const servingCount = waitingList.filter(p => p.status === 'serving').length;
+                document.getElementById('serving-count').textContent = servingCount;
+                
+            } catch (error) {
+                console.error('Lỗi load thống kê:', error);
+            }
+        }
+
+        // Load danh sách check-in
+        async function loadCheckinList() {
+            try {
+                const response = await fetch('/api/checkin/waiting-list');
+                const checkinList = await response.json();
+                
+                const tbody = document.getElementById('checkin-list-body');
+                tbody.innerHTML = '';
+                
+                if (checkinList.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6">
+                                <div class="empty-state">
+                                    <i class="fas fa-inbox"></i>
+                                    <div>Chưa có bệnh nhân nào check-in hôm nay</div>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                checkinList.forEach(checkin => {
+                    const row = document.createElement('tr');
+                    
+                    let statusClass = 'status-waiting';
+                    let statusText = 'Đang chờ';
+                    
+                    if (checkin.status === 'serving') {
+                        statusClass = 'status-serving';
+                        statusText = 'Đang khám';
+                    } else if (checkin.status === 'completed') {
+                        statusClass = 'status-completed';
+                        statusText = 'Hoàn thành';
+                    }
+                    
+                    row.innerHTML = `
+                        <td>
+                            <span class="queue-number ${checkin.status === 'serving' ? 'current-serving' : ''}">${checkin.queue_number}</span>
+                        </td>
+                        <td>${checkin.name}</td>
+                        <td>${checkin.phone}</td>
+                        <td>${new Date(checkin.checkin_time).toLocaleTimeString('vi-VN')}</td>
+                        <td>
+                            <span class="status-badge ${statusClass}">${statusText}</span>
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                ${checkin.status === 'waiting' ? `
+                                    <button class="btn btn-success btn-small" onclick="updateStatus(${checkin.id}, 'serving')">
+                                        <i class="fas fa-play"></i> Bắt đầu khám
+                                    </button>
+                                ` : ''}
+                                ${checkin.status === 'serving' ? `
+                                    <button class="btn btn-primary btn-small" onclick="updateStatus(${checkin.id}, 'completed')">
+                                        <i class="fas fa-check"></i> Hoàn thành
+                                    </button>
+                                ` : ''}
+                                ${checkin.status === 'completed' ? `
+                                    <button class="btn btn-warning btn-small" onclick="updateStatus(${checkin.id}, 'waiting')">
+                                        <i class="fas fa-undo"></i> Đưa về chờ
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                
+                // Cập nhật thống kê
+                loadStats();
+                
+            } catch (error) {
+                console.error('Lỗi load danh sách check-in:', error);
+            }
+        }
+
+        // Cập nhật trạng thái
+        async function updateStatus(checkinId, newStatus) {
+            try {
+                const response = await fetch(`/api/checkin/${checkinId}/status`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status: newStatus })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    loadCheckinList();
+                } else {
+                    alert(result.error || 'Có lỗi xảy ra');
+                }
+            } catch (error) {
+                console.error('Lỗi cập nhật trạng thái:', error);
+                alert('Không thể kết nối đến server');
+            }
+        }
+
+        // Gọi bệnh nhân tiếp theo
+        async function callNext() {
+            try {
+                const response = await fetch('/api/checkin/waiting-list');
+                const waitingList = await response.json();
+                
+                // Tìm bệnh nhân đầu tiên đang chờ
+                const nextPatient = waitingList.find(p => p.status === 'waiting');
+                
+                if (!nextPatient) {
+                    alert('Không có bệnh nhân nào đang chờ');
+                    return;
+                }
+                
+                // Cập nhật trạng thái thành đang khám
+                await updateStatus(nextPatient.id, 'serving');
+                
+                // Thông báo
+                alert(`Đã gọi bệnh nhân số ${nextPatient.queue_number} - ${nextPatient.name}`);
+                
+            } catch (error) {
+                console.error('Lỗi gọi bệnh nhân tiếp theo:', error);
+                alert('Có lỗi xảy ra');
+            }
+        }
+
+        // Reset ngày mới
+        async function resetDay() {
+            if (!confirm('Bạn có chắc muốn reset tất cả dữ liệu check-in hôm nay? Hành động này không thể hoàn tác.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/checkin/reset-day', {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    alert('Đã reset dữ liệu ngày mới thành công');
+                    loadCheckinList();
+                } else {
+                    alert('Có lỗi xảy ra khi reset');
+                }
+            } catch (error) {
+                console.error('Lỗi reset ngày:', error);
+                alert('Không thể kết nối đến server');
+            }
+        }
+
+        // Khởi tạo trang
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCheckinList();
+            
+            // Tự động làm mới mỗi 10 giây
+            setInterval(() => {
+                loadCheckinList();
+            }, 10000);
+        });
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

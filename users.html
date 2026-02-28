@@ -3,525 +3,927 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản lý người dùng - Hệ thống quản trị Phòng khám Phụ Sản Đại Anh</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Quản lý người dùng và phân quyền - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="utilities.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        :root {
-            --primary-color: #1e88e5;
-            --secondary-color: #64b5f6;
-            --accent-color: #0d47a1;
-            --light-color: #e3f2fd;
-            --dark-color: #0a2351;
-            --success-color: #4caf50;
-            --warning-color: #ff9800;
-            --danger-color: #f44336;
-            --sidebar-width: 250px;
-        }
-        
-        body {
-            font-family: 'Roboto', sans-serif;
-            background-color: #f5f5f5;
-            margin: 0;
-            padding: 0;
-            overflow-x: hidden;
-        }
-        
-        .wrapper {
-            display: flex;
+        .user-table {
             width: 100%;
-            min-height: 100vh;
+            border-collapse: collapse;
+            margin-top: 20px;
         }
-        
-        /* Sidebar */
-        .sidebar {
-            width: var(--sidebar-width);
-            background-color: var(--dark-color);
-            color: white;
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            z-index: 999;
-            transition: all 0.3s;
-        }
-        
-        .sidebar.collapsed {
-            margin-left: calc(-1 * var(--sidebar-width));
-        }
-        
-        .sidebar-header {
-            padding: 20px;
-            background-color: var(--accent-color);
-            display: flex;
-            align-items: center;
-        }
-        
-        .sidebar-header img {
-            width: 40px;
-            height: auto;
-            margin-right: 10px;
-        }
-        
-        .sidebar-header h3 {
-            margin: 0;
-            font-size: 1.2rem;
-            font-weight: 700;
-        }
-        
-        .sidebar-menu {
-            padding: 20px 0;
-        }
-        
-        .menu-item {
-            padding: 10px 20px;
-            display: flex;
-            align-items: center;
-            color: rgba(255, 255, 255, 0.8);
-            text-decoration: none;
-            transition: all 0.3s;
-        }
-        
-        .menu-item:hover, .menu-item.active {
-            background-color: rgba(255, 255, 255, 0.1);
-            color: white;
-        }
-        
-        .menu-item i {
-            margin-right: 10px;
-            width: 20px;
-            text-align: center;
-        }
-        
-        .menu-divider {
-            height: 1px;
-            background-color: rgba(255, 255, 255, 0.1);
-            margin: 10px 20px;
-        }
-        
-        /* Content */
-        .content {
-            width: calc(100% - var(--sidebar-width));
-            margin-left: var(--sidebar-width);
-            transition: all 0.3s;
-        }
-        
-        .content.expanded {
-            width: 100%;
-            margin-left: 0;
-        }
-        
-        /* Navbar */
-        .top-navbar {
-            background-color: white;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-            padding: 15px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .navbar-left {
-            display: flex;
-            align-items: center;
-        }
-        
-        .toggle-sidebar {
-            background: none;
-            border: none;
-            color: var(--dark-color);
-            font-size: 1.2rem;
-            cursor: pointer;
-            margin-right: 15px;
-        }
-        
-        .page-title {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: var(--dark-color);
-            margin: 0;
-        }
-        
-        .navbar-right {
-            display: flex;
-            align-items: center;
-        }
-        
-        .user-dropdown {
-            position: relative;
-        }
-        
-        .user-info {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            padding: 5px 10px;
-            border-radius: 5px;
-            transition: all 0.3s;
-        }
-        
-        .user-info:hover {
-            background-color: var(--light-color);
-        }
-        
-        .user-avatar {
-            width: 35px;
-            height: 35px;
-            border-radius: 50%;
-            background-color: var(--primary-color);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 600;
-            margin-right: 10px;
-        }
-        
-        .user-name {
-            font-weight: 600;
-            margin-right: 5px;
-        }
-        
-        .dropdown-menu {
-            position: absolute;
-            top: 100%;
-            right: 0;
-            background-color: white;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-            border-radius: 5px;
-            padding: 10px 0;
-            min-width: 200px;
-            display: none;
-            z-index: 1000;
-        }
-        
-        .dropdown-menu.show {
-            display: block;
-        }
-        
-        .dropdown-item {
-            padding: 8px 20px;
-            display: flex;
-            align-items: center;
-            color: var(--dark-color);
-            text-decoration: none;
-            transition: all 0.3s;
-        }
-        
-        .dropdown-item:hover {
-            background-color: var(--light-color);
-        }
-        
-        .dropdown-item i {
-            margin-right: 10px;
-            width: 20px;
-            text-align: center;
-        }
-        
-        .dropdown-divider {
-            height: 1px;
-            background-color: #eee;
-            margin: 5px 0;
-        }
-        
-        /* Main content */
-        .main-content {
-            padding: 20px;
-        }
-        
-        .section-title {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: var(--dark-color);
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .btn-add {
-            background-color: var(--success-color);
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 5px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            transition: all 0.3s;
-        }
-        
-        .btn-add i {
-            margin-right: 5px;
-        }
-        
-        .btn-add:hover {
-            background-color: #3d8b40;
-            transform: translateY(-2px);
-        }
-        
-        .table-container {
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
-            padding: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .table {
-            margin-bottom: 0;
-        }
-        
-        .table th {
-            font-weight: 600;
-            color: var(--dark-color);
-            border-bottom-width: 1px;
-        }
-        
-        .badge {
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-weight: 500;
-        }
-        
-        .badge-admin {
-            background-color: var(--primary-color);
-            color: white;
-        }
-        
-        .badge-staff {
-            background-color: var(--success-color);
-            color: white;
-        }
-        
-        .badge-doctor {
-            background-color: var(--warning-color);
-            color: white;
-        }
-        
-        .badge-active {
-            background-color: var(--success-color);
-            color: white;
-        }
-        
-        .badge-inactive {
-            background-color: var(--danger-color);
-            color: white;
-        }
-        
-        .action-btn {
-            background: none;
-            border: none;
-            color: var(--primary-color);
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-right: 5px;
-        }
-        
-        .action-btn:hover {
-            color: var(--accent-color);
-        }
-        
-        .action-btn.edit {
-            color: var(--warning-color);
-        }
-        
-        .action-btn.delete {
-            color: var(--danger-color);
-        }
-        
-        /* Modal */
-        .modal-header {
-            background-color: var(--primary-color);
-            color: white;
-        }
-        
-        .modal-title {
-            font-weight: 600;
-        }
-        
-        .form-label {
-            font-weight: 500;
-            color: var(--dark-color);
-        }
-        
-        .form-control {
-            border-radius: 5px;
-            padding: 10px 15px;
+
+        .user-table th,
+        .user-table td {
+            padding: 12px;
             border: 1px solid #ddd;
+            text-align: left;
         }
-        
-        .form-control:focus {
-            box-shadow: 0 0 0 0.25rem rgba(30, 136, 229, 0.25);
-            border-color: var(--primary-color);
+
+        .user-table th {
+            background-color: #f5f5f5;
+            font-weight: bold;
         }
-        
-        .btn-primary {
-            background-color: var(--primary-color);
-            border: none;
-            font-weight: 500;
-            padding: 10px 20px;
+
+        .user-table tr:hover {
+            background-color: #f9f9f9;
         }
-        
-        .btn-primary:hover {
-            background-color: var(--accent-color);
+
+        .role-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            margin: 2px;
         }
-        
-        /* Responsive */
-        @media (max-width: 768px) {
-            .sidebar {
-                margin-left: calc(-1 * var(--sidebar-width));
-            }
-            
-            .sidebar.active {
-                margin-left: 0;
-            }
-            
-            .content {
-                width: 100%;
-                margin-left: 0;
-            }
+
+        .role-admin {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .role-doctor {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .role-nurse {
+            background-color: #17a2b8;
+            color: white;
+        }
+
+        .role-receptionist {
+            background-color: #ffc107;
+            color: black;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: #fff;
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 500px;
+        }
+
+        .role-checkbox-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .role-checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .status-active {
+            color: #28a745;
+        }
+
+        .status-inactive {
+            color: #dc3545;
+        }
+
+        /* Style cho nút hiển thị mật khẩu */
+        #togglePassword {
+            transition: color 0.3s ease;
+        }
+
+        #togglePassword:hover {
+            color: #007bff !important;
+        }
+
+        #togglePassword:focus {
+            outline: none;
+            color: #007bff;
+        }
+
+        #passwordIcon {
+            transition: transform 0.2s ease;
+        }
+
+        #togglePassword:hover #passwordIcon {
+            transform: scale(1.1);
+        }
+
+        /* Style cho nút hiển thị mật khẩu trong form người dùng */
+        #toggleUserPassword {
+            transition: color 0.3s ease;
+        }
+
+        #toggleUserPassword:hover {
+            color: #007bff !important;
+        }
+
+        #toggleUserPassword:focus {
+            outline: none;
+            color: #007bff;
+        }
+
+        #userPasswordIcon {
+            transition: transform 0.2s ease;
+        }
+
+        #toggleUserPassword:hover #userPasswordIcon {
+            transform: scale(1.1);
         }
     </style>
 </head>
 <body>
-    <div class="wrapper">
-        <!-- Sidebar -->
-        <nav id="sidebar" class="sidebar">
-            <div class="sidebar-header">
-                <img src="../clinic-website/images/clinic_logo.png" alt="Logo">
-                <h3>Phụ Sản Đại Anh</h3>
-            </div>
-            
-            <div class="sidebar-menu">
-                <a href="dashboard.html" class="menu-item">
-                    <i class="fas fa-tachometer-alt"></i>
-                    <span>Tổng quan</span>
-                </a>
-                
-                <a href="appointments.html" class="menu-item">
-                    <i class="fas fa-calendar-check"></i>
-                    <span>Lịch hẹn khám</span>
-                </a>
-                
-                <a href="patients.html" class="menu-item">
-                    <i class="fas fa-user-injured"></i>
-                    <span>Bệnh nhân</span>
-                </a>
-                
-                <a href="services.html" class="menu-item">
-                    <i class="fas fa-stethoscope"></i>
-                    <span>Dịch vụ</span>
-                </a>
-                
-                <a href="schedule.html" class="menu-item">
-                    <i class="fas fa-clock"></i>
-                    <span>Lịch làm việc</span>
-                </a>
-                
-                <a href="utilities.html" class="menu-item">
-                    <i class="fas fa-tools"></i>
-                    <span>Tiện ích</span>
-                </a>
-                
-                <div class="menu-divider"></div>
-                
-                <a href="reports.html" class="menu-item">
-                    <i class="fas fa-chart-bar"></i>
-                    <span>Báo cáo & Thống kê</span>
-                </a>
-                
-                <a href="settings.html" class="menu-item">
-                    <i class="fas fa-cog"></i>
-                    <span>Cài đặt</span>
-                </a>
-                
-                <a href="users.html" class="menu-item active">
-                    <i class="fas fa-users-cog"></i>
-                    <span>Quản lý người dùng</span>
-                </a>
-            </div>
-        </nav>
+    <div class="container">
+        <h1>Quản lý người dùng và phân quyền</h1>
         
-        <!-- Content -->
-        <div id="content" class="content">
-            <!-- Top Navbar -->
-            <nav class="top-navbar">
-                <div class="navbar-left">
-                    <button id="toggle-sidebar" class="toggle-sidebar">
-                        <i class="fas fa-bars"></i>
-                    </button>
-                    <h1 class="page-title">Quản lý người dùng</h1>
+        <!-- Phần đăng nhập -->
+        <div id="loginSection" class="login-section" style="max-width: 400px; margin: 20px auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;">
+            <h3 style="text-align: center; margin-bottom: 20px;">Đăng nhập để tiếp tục</h3>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="loginUsername">Tên đăng nhập:</label>
+                    <input type="text" id="loginUsername" required class="form-control" placeholder="Nhập tên đăng nhập">
                 </div>
-                
-                <div class="navbar-right">
-                    <div class="user-dropdown">
-                        <div class="user-info" id="user-dropdown-toggle">
-                            <div class="user-avatar">A</div>
-                            <span class="user-name">Admin</span>
-                            <i class="fas fa-chevron-down"></i>
-                        </div>
-                        
-                        <div class="dropdown-menu" id="user-dropdown-menu">
-                            <a href="profile.html" class="dropdown-item">
-                                <i class="fas fa-user"></i>
-                                <span>Hồ sơ cá nhân</span>
-                            </a>
-                            
-                            <a href="settings.html" class="dropdown-item">
-                                <i class="fas fa-cog"></i>
-                                <span>Cài đặt</span>
-                            </a>
-                            
-                            <div class="dropdown-divider"></div>
-                            
-                            <a href="index.html" class="dropdown-item">
-                                <i class="fas fa-sign-out-alt"></i>
-                                <span>Đăng xuất</span>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </nav>
-            
-            <!-- Main Content -->
-            <div class="main-content">
-                <!-- Users Table -->
-                <div class="table-container">
-                    <div class="section-title">
-                        <span>Danh sách người dùng</span>
-                        <button class="btn-add" data-bs-toggle="modal" data-bs-target="#addUserModal">
-                            <i class="fas fa-plus"></i> Thêm người dùng
+                <div class="form-group">
+                    <label for="loginPassword">Mật khẩu:</label>
+                    <div style="position: relative;">
+                        <input type="password" id="loginPassword" required class="form-control" placeholder="Nhập mật khẩu" style="padding-right: 45px;">
+                        <button type="button" id="togglePassword" onclick="togglePasswordVisibility()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #666; font-size: 16px;">
+                            <i class="fas fa-eye" id="passwordIcon"></i>
                         </button>
                     </div>
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Họ tên</th>
-                                    <th>Email</th>
-                                    <th>Vai trò</th>
-                                    <th>Trạng thái</th>
-                                    <th>Ngày tạo</th>
-                                    <th>Thao tác</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>#USR001</td>
-                                    <td>Admin</td>
-                                    <td>phusandaianh@gmail.com</td>
-                                    <td><span class="badge badge-admin">Quản trị viên</span></td>
-                                    <td><span class="badge badge-active">Hoạt động</span></td>
-                                    <td>26/03/2025</td>
-                                    <td>
-                                        <button class="action-btn view"><i class="fas fa-eye"></i></button>
-                                        <button class="action-btn edit"><i class="fas fa-edit"></i></button>
-                                        <button class="action-btn delete"><i class="fas fa-trash"></i></button>
-                                    </td>
-                                </tr>
-                                <tr>
-               <response clipped><NOTE>To save on context only part of this file has been shown to you. You should retry this tool after you have searched inside the file with `grep -n` in order to find the line numbers of what you are looking for.</NOTE>
+                </div>
+                <button type="submit" class="btn primary-btn" style="width: 100%;">
+                    <i class="fas fa-sign-in-alt"></i> Đăng nhập
+                </button>
+            </form>
+            <div style="text-align: center; margin-top: 15px;">
+                <button onclick="forgotPassword()" class="btn secondary-btn" style="font-size: 0.9em;">
+                    <i class="fas fa-key"></i> Quên mật khẩu?
+            </button>
+            </div>
+        </div>
+
+        <!-- Phần quản lý người dùng (ẩn ban đầu) -->
+        <div id="userManagementSection" style="display: none;">
+			<div class="actions" style="margin: 20px 0; display: flex; justify-content: space-between; align-items: center;">
+				<div style="display:flex; gap:8px; align-items:center;">
+					<button id="tabUsers" onclick="setActiveTab('users')" class="btn secondary-btn">
+						<i class="fas fa-list"></i> Danh sách người dùng
+					</button>
+					<button id="tabAddUser" onclick="handleAddUserTab()" class="btn primary-btn">
+						<i class="fas fa-plus"></i> Thêm người dùng mới
+					</button>
+					<button id="tabPermissions" onclick="setActiveTab('permissions')" class="btn secondary-btn">
+						<i class="fas fa-user-shield"></i> Phân quyền
+					</button>
+				</div>
+				<button onclick="logout()" class="btn secondary-btn">
+					<i class="fas fa-sign-out-alt"></i> Đăng xuất
+				</button>
+			</div>
+
+		<div class="table-container" id="userManagementTable">
+            <table class="user-table">
+                <thead>
+                    <tr>
+                        <th>Tên đăng nhập</th>
+                        <th>Họ tên</th>
+                        <th>Email</th>
+                        <th>Vai trò</th>
+                        <th>Trạng thái</th>
+                        <th>Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="userTableBody">
+                    <!-- Dữ liệu người dùng sẽ được thêm vào đây bằng JavaScript -->
+                </tbody>
+            </table>
+        </div>
+
+		<!-- Phân quyền theo vai trò -->
+		<div id="permissionsSection" style="display: none; margin-top: 20px;">
+			<div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 12px;">
+				<h2 style="margin:0; font-size: 1.2rem;">Phân quyền theo vai trò</h2>
+				<div class="btn-group">
+					<button type="button" class="btn secondary-btn" onclick="resetPermissionsToDefault()">
+						Mặc định
+					</button>
+					<button type="button" class="btn primary-btn" onclick="savePermissions()">
+						Lưu phân quyền
+					</button>
+				</div>
+			</div>
+			<div class="table-container">
+				<table class="user-table">
+					<thead>
+						<tr>
+							<th>Quyền</th>
+							<th>Admin</th>
+							<th>Bác sĩ</th>
+							<th>Y tá</th>
+							<th>Lễ tân</th>
+						</tr>
+					</thead>
+					<tbody id="permissionsTableBody">
+						<!-- Dòng quyền sẽ render bằng JS -->
+					</tbody>
+				</table>
+			</div>
+			<small style="display:block; margin-top:8px; color:#666;">Lưu ý: Phân quyền được lưu cục bộ và có thể tích hợp backend sau.</small>
+		</div>
+        </div>
+    </div>
+
+    <!-- Modal quên mật khẩu -->
+    <div id="forgotPasswordModal" class="modal">
+        <div class="modal-content">
+            <h2>Quên mật khẩu</h2>
+            
+            <!-- Tab tự động reset -->
+            <div id="autoResetTab">
+                <p>Nhập thông tin tài khoản để tự động reset mật khẩu:</p>
+                <form id="forgotPasswordForm" onsubmit="handleForgotPassword(event)">
+                    <div class="form-group">
+                        <label for="resetUsername">Tên đăng nhập:</label>
+                        <input type="text" id="resetUsername" required class="form-control" placeholder="Nhập tên đăng nhập">
+                    </div>
+                    <div class="form-group">
+                        <label for="resetEmail">Email đăng ký:</label>
+                        <input type="email" id="resetEmail" required class="form-control" placeholder="Nhập email đăng ký tài khoản">
+                    </div>
+                    <div class="btn-group">
+                        <button type="submit" class="btn primary-btn">
+                            <i class="fas fa-key"></i> Reset mật khẩu
+                        </button>
+                        <button type="button" onclick="showManualReset()" class="btn secondary-btn">
+                            <i class="fas fa-envelope"></i> Liên hệ thủ công
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Tab liên hệ thủ công -->
+            <div id="manualResetTab" style="display: none;">
+                <p>Nếu không thể reset tự động, vui lòng liên hệ với quản trị viên:</p>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                    <p><strong>📧 Email hỗ trợ:</strong> <a href="mailto:hangocdai.kq3@gmail.com" style="color: #007bff;">hangocdai.kq3@gmail.com</a></p>
+                    <p><strong>📞 Liên hệ:</strong> Vui lòng gửi email với tiêu đề "Quên mật khẩu - Phòng khám Đại Anh"</p>
+                    <p><strong>📝 Nội dung cần cung cấp:</strong></p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>Tên đăng nhập của bạn</li>
+                        <li>Họ tên đầy đủ</li>
+                        <li>Email đăng ký tài khoản</li>
+                        <li>Lý do cần reset mật khẩu</li>
+                    </ul>
+                </div>
+                <div class="btn-group">
+                    <button onclick="closeForgotPasswordModal()" class="btn primary-btn">Đã hiểu</button>
+                    <button onclick="sendResetEmail()" class="btn secondary-btn">
+                        <i class="fas fa-envelope"></i> Gửi email ngay
+                    </button>
+                    <button onclick="showAutoReset()" class="btn secondary-btn">
+                        <i class="fas fa-arrow-left"></i> Quay lại
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal thêm/sửa người dùng -->
+    <div id="userModal" class="modal">
+        <div class="modal-content">
+            <h2 id="modalTitle">Thêm người dùng mới</h2>
+            <form id="userForm" onsubmit="handleUserSubmit(event)">
+                <input type="hidden" id="userId">
+                <div class="form-group">
+                    <label for="username">Tên đăng nhập:</label>
+                    <input type="text" id="username" required class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="fullName">Họ tên:</label>
+                    <input type="text" id="fullName" required class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" required class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="password">Mật khẩu:</label>
+                    <div style="position: relative;">
+                        <input type="password" id="password" class="form-control" style="padding-right: 45px;">
+                        <button type="button" id="toggleUserPassword" onclick="toggleUserPasswordVisibility()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #666; font-size: 16px;">
+                            <i class="fas fa-eye" id="userPasswordIcon"></i>
+                        </button>
+                    </div>
+                    <small>Để trống nếu không muốn thay đổi mật khẩu</small>
+                </div>
+                <div class="form-group">
+                    <label>Vai trò:</label>
+                    <div class="role-checkbox-group">
+                        <div class="role-checkbox-item">
+                            <input type="checkbox" id="roleAdmin" value="admin">
+                            <label for="roleAdmin">Admin</label>
+                        </div>
+                        <div class="role-checkbox-item">
+                            <input type="checkbox" id="roleDoctor" value="doctor">
+                            <label for="roleDoctor">Bác sĩ</label>
+                        </div>
+                        <div class="role-checkbox-item">
+                            <input type="checkbox" id="roleNurse" value="nurse">
+                            <label for="roleNurse">Y tá</label>
+                        </div>
+                        <div class="role-checkbox-item">
+                            <input type="checkbox" id="roleReceptionist" value="receptionist">
+                            <label for="roleReceptionist">Lễ tân</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="status">Trạng thái:</label>
+                    <select id="status" required class="form-control">
+                        <option value="active">Hoạt động</option>
+                        <option value="inactive">Không hoạt động</option>
+                    </select>
+                </div>
+                <div class="btn-group">
+                    <button type="submit" class="btn primary-btn">Lưu</button>
+                    <button type="button" onclick="closeUserModal()" class="btn secondary-btn">Hủy</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Khởi tạo state
+        const state = {
+            users: [],
+            currentUser: null,
+            isLoggedIn: false,
+            rolePermissions: {}
+        };
+
+        // Hàm đăng nhập
+        async function login(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    state.currentUser = data.user;
+                    state.isLoggedIn = true;
+                    
+                    // Lưu token vào localStorage
+                    localStorage.setItem('authToken', data.token);
+                    localStorage.setItem('currentUser', JSON.stringify(data.user));
+                    
+                    // Ẩn form đăng nhập, hiện phần quản lý
+                    document.getElementById('loginSection').style.display = 'none';
+                    document.getElementById('userManagementSection').style.display = 'block';
+                    setActiveTab('users');
+                    // Load danh sách người dùng
+                    await loadUsers();
+                    
+                    alert('Đăng nhập thành công!');
+                } else {
+                    alert('Tên đăng nhập hoặc mật khẩu không đúng!');
+                }
+            } catch (error) {
+                console.error('Lỗi đăng nhập:', error);
+                alert('Có lỗi xảy ra khi đăng nhập. Vui lòng thử lại.');
+            }
+        }
+
+        // Hàm đăng xuất
+        function logout() {
+            state.currentUser = null;
+            state.isLoggedIn = false;
+            
+            // Xóa token khỏi localStorage
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('currentUser');
+            
+            // Ẩn phần quản lý, hiện form đăng nhập
+            document.getElementById('userManagementSection').style.display = 'none';
+            document.getElementById('loginSection').style.display = 'block';
+            
+            // Reset form đăng nhập
+            document.getElementById('loginForm').reset();
+            
+            alert('Đã đăng xuất thành công!');
+        }
+
+        // Kiểm tra đăng nhập khi tải trang
+        function checkLoginStatus() {
+            const token = localStorage.getItem('authToken');
+            const user = localStorage.getItem('currentUser');
+            
+            if (token && user) {
+                try {
+                    state.currentUser = JSON.parse(user);
+                    state.isLoggedIn = true;
+                    
+                    // Ẩn form đăng nhập, hiện phần quản lý
+                    document.getElementById('loginSection').style.display = 'none';
+                    document.getElementById('userManagementSection').style.display = 'block';
+                    
+                    // Load danh sách người dùng
+                    loadUsers();
+                } catch (error) {
+                    console.error('Lỗi khi kiểm tra đăng nhập:', error);
+                    logout();
+                }
+            }
+        }
+
+        // Hàm hiển thị/ẩn mật khẩu đăng nhập
+        function togglePasswordVisibility() {
+            const passwordInput = document.getElementById('loginPassword');
+            const passwordIcon = document.getElementById('passwordIcon');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                passwordIcon.className = 'fas fa-eye-slash';
+                passwordIcon.title = 'Ẩn mật khẩu';
+            } else {
+                passwordInput.type = 'password';
+                passwordIcon.className = 'fas fa-eye';
+                passwordIcon.title = 'Hiển thị mật khẩu';
+            }
+        }
+
+        // Hàm hiển thị/ẩn mật khẩu trong form người dùng
+        function toggleUserPasswordVisibility() {
+            const passwordInput = document.getElementById('password');
+            const passwordIcon = document.getElementById('userPasswordIcon');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                passwordIcon.className = 'fas fa-eye-slash';
+                passwordIcon.title = 'Ẩn mật khẩu';
+            } else {
+                passwordInput.type = 'password';
+                passwordIcon.className = 'fas fa-eye';
+                passwordIcon.title = 'Hiển thị mật khẩu';
+            }
+        }
+
+        // Hàm hiển thị modal quên mật khẩu
+        function forgotPassword() {
+            document.getElementById('forgotPasswordModal').style.display = 'block';
+        }
+
+        // Hàm đóng modal quên mật khẩu
+        function closeForgotPasswordModal() {
+            document.getElementById('forgotPasswordModal').style.display = 'none';
+        }
+
+        // Hàm xử lý form quên mật khẩu
+        async function handleForgotPassword(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('resetUsername').value;
+            const email = document.getElementById('resetEmail').value;
+            
+            try {
+                const response = await fetch('/api/forgot-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, email })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert(`✅ ${data.message}\n\nMật khẩu mới: ${data.new_password}\n\nVui lòng đăng nhập và thay đổi mật khẩu ngay!`);
+                    closeForgotPasswordModal();
+                } else {
+                    alert(`❌ ${data.error}`);
+                }
+            } catch (error) {
+                console.error('Error resetting password:', error);
+                alert('❌ Có lỗi xảy ra khi reset mật khẩu. Vui lòng thử lại.');
+            }
+        }
+
+        // Hàm chuyển sang tab liên hệ thủ công
+        function showManualReset() {
+            document.getElementById('autoResetTab').style.display = 'none';
+            document.getElementById('manualResetTab').style.display = 'block';
+        }
+
+        // Hàm chuyển về tab tự động reset
+        function showAutoReset() {
+            document.getElementById('manualResetTab').style.display = 'none';
+            document.getElementById('autoResetTab').style.display = 'block';
+        }
+
+        // Hàm gửi email reset mật khẩu
+        function sendResetEmail() {
+            const email = 'hangocdai.kq3@gmail.com';
+            const subject = 'Quên mật khẩu - Phòng khám Đại Anh';
+            const body = `Xin chào quản trị viên,
+
+Tôi cần hỗ trợ reset mật khẩu cho tài khoản của mình.
+
+Thông tin tài khoản:
+- Tên đăng nhập: [Vui lòng điền tên đăng nhập của bạn]
+- Họ tên: [Vui lòng điền họ tên đầy đủ]
+- Email đăng ký: [Vui lòng điền email đăng ký tài khoản]
+- Lý do: [Vui lòng điền lý do cần reset mật khẩu]
+
+Cảm ơn bạn đã hỗ trợ!
+
+Trân trọng,
+[Vui lòng điền tên của bạn]`;
+
+            const mailtoLink = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            window.open(mailtoLink);
+            
+            // Đóng modal sau khi mở email client
+            setTimeout(() => {
+                closeForgotPasswordModal();
+            }, 1000);
+        }
+
+        // Helper thêm Authorization header
+        function getAuthHeaders() {
+            const token = localStorage.getItem('authToken') || '';
+            return token ? { 'Authorization': `Bearer ${token}` } : {};
+        }
+
+        // Hàm để load danh sách người dùng
+        async function loadUsers() {
+            try {
+                const response = await fetch('/api/users', { headers: { ...getAuthHeaders() } });
+                if (!response.ok) throw new Error('Failed to load users');
+                state.users = await response.json();
+                renderUsers();
+            } catch (error) {
+                console.error('Error loading users:', error);
+                alert('Không thể tải danh sách người dùng. Vui lòng thử lại sau.');
+            }
+        }
+
+        // ====== Phân quyền theo vai trò ======
+        // Danh sách quyền sẽ lấy động từ backend
+        let DYNAMIC_PERMISSIONS = [];
+        const PERMISSION_LABELS = {
+            'manage_users': 'Quản lý người dùng',
+            'manage_worklist': 'Quản lý Worklist (DICOM MWL)',
+            'manage_appointments': 'Quản lý lịch hẹn',
+            'view_patients': 'Xem hồ sơ bệnh nhân',
+            'manage_patients': 'Quản lý bệnh nhân',
+            'manage_diagnosis': 'Quản lý chẩn đoán',
+            'view_reports': 'Xem báo cáo',
+            'system_config': 'Cấu hình hệ thống',
+            'manage_voluson_sync': 'Đồng bộ Voluson'
+        };
+
+        const ROLES = ['admin','doctor','nurse','receptionist'];
+
+        async function loadPermissionsFromStorage() {
+            try {
+                const token = localStorage.getItem('authToken') || '';
+                const res = await fetch('/api/role-permissions', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && typeof data === 'object') {
+                        state.rolePermissions = data;
+                        return;
+                    }
+                }
+                const saved = localStorage.getItem('rolePermissions');
+                if (saved) { state.rolePermissions = JSON.parse(saved); return; }
+            } catch (e) {}
+            // Mặc định
+            state.rolePermissions = {
+                admin: DEFAULT_PERMISSIONS.map(p => p.key),
+                doctor: ['view_patients','manage_appointments','manage_diagnosis','view_reports'],
+                nurse: ['view_patients','manage_appointments'],
+                receptionist: ['manage_appointments']
+            };
+        }
+
+        async function savePermissions() {
+            try {
+                const token = localStorage.getItem('authToken') || '';
+                const res = await fetch('/api/role-permissions', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify(state.rolePermissions)
+                });
+                if (!res.ok) throw new Error('Lưu lên server thất bại');
+                localStorage.setItem('rolePermissions', JSON.stringify(state.rolePermissions));
+                alert('Đã lưu phân quyền thành công');
+            } catch (e) {
+                console.error(e);
+                alert('Không thể lưu lên server, đã lưu tạm trên trình duyệt');
+                localStorage.setItem('rolePermissions', JSON.stringify(state.rolePermissions));
+            }
+        }
+
+        function resetPermissionsToDefault() {
+            localStorage.removeItem('rolePermissions');
+            loadPermissionsFromStorage();
+            renderPermissionsTable();
+        }
+
+        async function renderPermissionsTable() {
+            const tbody = document.getElementById('permissionsTableBody');
+            if (!tbody) return;
+            // Lấy danh sách quyền động nếu chưa có
+            if (DYNAMIC_PERMISSIONS.length === 0) {
+                try {
+                    const res = await fetch('/api/permissions');
+                    const data = await res.json();
+                    DYNAMIC_PERMISSIONS = (data.permissions || []);
+                } catch (e) { DYNAMIC_PERMISSIONS = []; }
+            }
+            tbody.innerHTML = DYNAMIC_PERMISSIONS.map(key => {
+                const label = PERMISSION_LABELS[key] || key;
+                return `
+                    <tr>
+                        <td>${label}</td>
+                        ${ROLES.map(role => `
+                            <td style="text-align:center;">
+                                <input type="checkbox" ${state.rolePermissions[role]?.includes(key) ? 'checked' : ''}
+                                       onchange="togglePermission('${role}','${key}', this.checked)">
+                            </td>
+                        `).join('')}
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function togglePermission(role, permKey, isChecked) {
+            const current = new Set(state.rolePermissions[role] || []);
+            if (isChecked) current.add(permKey); else current.delete(permKey);
+            state.rolePermissions[role] = Array.from(current);
+        }
+
+        async function showPermissionsTab() {
+            // Ẩn quản lý người dùng, hiện phân quyền
+            document.getElementById('userManagementTable').style.display = 'none';
+            document.getElementById('permissionsSection').style.display = 'block';
+            await loadPermissionsFromStorage();
+            await renderPermissionsTable();
+        }
+
+        function showUsersTab() {
+            document.getElementById('permissionsSection').style.display = 'none';
+            document.getElementById('userManagementTable').style.display = 'block';
+        }
+
+        // Tabs helper
+        function setActiveTab(tab) {
+            const tabUsers = document.getElementById('tabUsers');
+            const tabAdd = document.getElementById('tabAddUser');
+            const tabPerm = document.getElementById('tabPermissions');
+            [tabUsers, tabAdd, tabPerm].forEach(btn => btn && btn.classList.remove('primary-btn'));
+            [tabUsers, tabAdd, tabPerm].forEach(btn => btn && btn.classList.add('secondary-btn'));
+            if (tab === 'users') {
+                showUsersTab();
+                tabUsers.classList.remove('secondary-btn');
+                tabUsers.classList.add('primary-btn');
+            } else if (tab === 'permissions') {
+                showPermissionsTab();
+                tabPerm.classList.remove('secondary-btn');
+                tabPerm.classList.add('primary-btn');
+            }
+        }
+
+        function handleAddUserTab() {
+            setActiveTab('users');
+            showAddUserModal();
+        }
+
+        // Hàm render danh sách người dùng
+        function renderUsers() {
+            const tbody = document.getElementById('userTableBody');
+            tbody.innerHTML = state.users.map(user => `
+                <tr>
+                    <td>${user.username}</td>
+                    <td>${user.fullName}</td>
+                    <td>${user.email}</td>
+                    <td>${renderRoleBadges(user.roles)}</td>
+                    <td>
+                        <span class="status-${user.status}">
+                            <i class="fas fa-circle"></i>
+                            ${user.status === 'active' ? 'Hoạt động' : 'Không hoạt động'}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="btn-group">
+                            <button onclick="editUser('${user.id}')" class="btn primary-btn">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="deleteUser('${user.id}')" class="btn danger-btn">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Hàm render badges cho vai trò
+        function renderRoleBadges(roles) {
+            const roleLabels = {
+                admin: 'Admin',
+                doctor: 'Bác sĩ',
+                nurse: 'Y tá',
+                receptionist: 'Lễ tân'
+            };
+            
+            return roles.map(role => `
+                <span class="role-badge role-${role}">
+                    ${roleLabels[role]}
+                </span>
+            `).join('');
+        }
+
+        // Hàm hiện modal thêm người dùng
+        function showAddUserModal() {
+            document.getElementById('modalTitle').textContent = 'Thêm người dùng mới';
+            document.getElementById('userForm').reset();
+            document.getElementById('userId').value = '';
+            document.getElementById('password').required = true;
+            document.getElementById('userModal').style.display = 'block';
+        }
+
+        // Hàm đóng modal
+        function closeUserModal() {
+            document.getElementById('userModal').style.display = 'none';
+        }
+
+        // Hàm xử lý submit form
+        async function handleUserSubmit(event) {
+            event.preventDefault();
+            
+            const userId = document.getElementById('userId').value;
+            const formData = {
+                username: document.getElementById('username').value,
+                fullName: document.getElementById('fullName').value,
+                email: document.getElementById('email').value,
+                password: document.getElementById('password').value,
+                roles: getRoleSelection(),
+                status: document.getElementById('status').value
+            };
+
+            try {
+                const url = userId ? `/api/users/${userId}` : '/api/users';
+                const method = userId ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...getAuthHeaders()
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (!response.ok) throw new Error('Failed to save user');
+                
+                await loadUsers();
+                closeUserModal();
+                alert(userId ? 'Cập nhật thành công!' : 'Thêm người dùng thành công!');
+            } catch (error) {
+                console.error('Error saving user:', error);
+                alert('Có lỗi xảy ra. Vui lòng thử lại.');
+            }
+        }
+
+        // Hàm lấy danh sách vai trò được chọn
+        function getRoleSelection() {
+            const roles = ['admin', 'doctor', 'nurse', 'receptionist'];
+            return roles.filter(role => 
+                document.getElementById(`role${role.charAt(0).toUpperCase() + role.slice(1)}`).checked
+            );
+        }
+
+        // Hàm sửa người dùng
+        async function editUser(userId) {
+            try {
+                const response = await fetch(`/api/users/${userId}`, { headers: { ...getAuthHeaders() } });
+                if (!response.ok) throw new Error('Failed to load user');
+                const user = await response.json();
+                
+                document.getElementById('modalTitle').textContent = 'Sửa thông tin người dùng';
+                document.getElementById('userId').value = user.id;
+                document.getElementById('username').value = user.username;
+                document.getElementById('fullName').value = user.fullName;
+                document.getElementById('email').value = user.email;
+                document.getElementById('password').required = false;
+                document.getElementById('password').value = '';
+                document.getElementById('status').value = user.status;
+                
+                // Reset và set vai trò
+                const roles = ['admin', 'doctor', 'nurse', 'receptionist'];
+                roles.forEach(role => {
+                    document.getElementById(`role${role.charAt(0).toUpperCase() + role.slice(1)}`).checked = 
+                        user.roles.includes(role);
+                });
+                
+                document.getElementById('userModal').style.display = 'block';
+            } catch (error) {
+                console.error('Error loading user:', error);
+                alert('Không thể tải thông tin người dùng. Vui lòng thử lại.');
+            }
+        }
+
+        // Hàm xóa người dùng
+        async function deleteUser(userId) {
+            if (!confirm('Bạn có chắc chắn muốn xóa người dùng này?')) return;
+            
+            try {
+                const response = await fetch(`/api/users/${userId}`, {
+                    method: 'DELETE',
+                    headers: { ...getAuthHeaders() }
+                });
+                
+                if (!response.ok) throw new Error('Failed to delete user');
+                
+                await loadUsers();
+                alert('Xóa người dùng thành công!');
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                alert('Không thể xóa người dùng. Vui lòng thử lại.');
+            }
+        }
+
+        // Load danh sách người dùng khi trang được tải
+        document.addEventListener('DOMContentLoaded', function() {
+            // Thêm event listener cho form đăng nhập
+            document.getElementById('loginForm').addEventListener('submit', login);
+            
+            // Kiểm tra trạng thái đăng nhập
+            checkLoginStatus();
+
+            // Mặc định tab danh sách sáng khi đã vào khu vực quản lý
+            if (document.getElementById('userManagementSection').style.display === 'block') {
+                setActiveTab('users');
+            }
+        });
+
+        // Đóng modal khi click bên ngoài
+        window.onclick = function(event) {
+            const userModal = document.getElementById('userModal');
+            const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+            
+            if (event.target === userModal) {
+                closeUserModal();
+            }
+            if (event.target === forgotPasswordModal) {
+                closeForgotPasswordModal();
+            }
+        };
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

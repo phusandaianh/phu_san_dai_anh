@@ -232,9 +232,9 @@ async function bookAppointment(event) {
         name: document.getElementById('patient-name').value,
         phone: document.getElementById('patient-phone').value,
         address: document.getElementById('patient-address').value,
-        date_of_birth: document.getElementById('patient-dob').value,
-        appointment_date: document.getElementById('appointment-date').value,
-        service_type: document.getElementById('service-type').value
+        reason: document.getElementById('patient-reason').value,
+        appointment_time: document.getElementById('appointment-time').value,
+        // Có thể bổ sung thêm các trường ngày, bác sĩ nếu cần
     };
 
     try {

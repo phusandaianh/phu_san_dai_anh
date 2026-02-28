@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tiện ích cho mẹ bầu - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .utility-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-left: 4px solid #e91e63;
+        }
+        .utility-card h3 {
+            color: #e91e63;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .utility-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 3px solid #e91e63;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .utility-item:hover {
+            background: #e3f2fd;
+            transform: translateX(5px);
+        }
+        .utility-item h4 {
+            color: #333;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .utility-item h4 .toggle-icon {
+            transition: transform 0.3s ease;
+        }
+        .utility-item.expanded h4 .toggle-icon {
+            transform: rotate(180deg);
+        }
+        .utility-item .content {
+            display: none;
+        }
+        .utility-item.expanded .content {
+            display: block;
+        }
+        .utility-item p {
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .utility-item .date {
+            color: #e91e63;
+            font-weight: bold;
+        }
+        .add-utility-btn {
+            background: #e91e63;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 20px 0;
+            box-shadow: 0 4px 8px rgba(233, 30, 99, 0.3);
+            transition: all 0.3s ease;
+        }
+        .add-utility-btn:hover {
+            background: #c2185b;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(233, 30, 99, 0.4);
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            min-width: 400px;
+            max-width: 90vw;
+            position: relative;
+        }
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .form-group textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background: #e91e63;
+            color: white;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .utility-actions {
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .btn-small {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        .pregnancy-info {
+            background: linear-gradient(135deg, #e91e63, #f8bbd9);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        .pregnancy-info h2 {
+            margin: 0 0 10px 0;
+        }
+        .pregnancy-info p {
+            margin: 0;
+            opacity: 0.9;
+        }
+        
+        /* Tab System Styles */
+        .tabs-container {
+            background: white;
+            border-radius: 12px;
+            padding: 0;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .tabs-header {
+            display: flex;
+            flex-wrap: wrap;
+            border-bottom: 2px solid #e0e0e0;
+            background: #f8f9fa;
+            border-radius: 12px 12px 0 0;
+            overflow-x: auto;
+        }
+        
+        .tab-button {
+            flex: 1;
+            min-width: 150px;
+            padding: 15px 20px;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+        
+        .tab-button:hover {
+            background: #f0f0f0;
+            color: #e91e63;
+        }
+        
+        .tab-button.active {
+            color: #e91e63;
+            border-bottom-color: #e91e63;
+            background: white;
+        }
+        
+        .tab-button i {
+            font-size: 16px;
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 25px;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .tab-content-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .tab-content-header h3 {
+            color: #e91e63;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .add-utility-btn-inline {
+            background: #e91e63;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 4px rgba(233, 30, 99, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .add-utility-btn-inline:hover {
+            background: #c2185b;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(233, 30, 99, 0.4);
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .tab-button {
+                min-width: 120px;
+                padding: 12px 15px;
+                font-size: 12px;
+            }
+            
+            .tab-content-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+        }
+        .admin-header {
+            background-color: white;
+            color: #2196F3;
+            padding: 1rem 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #2196F3;
+        }
+        .admin-header .logo img {
+            height: 50px;
+            margin-right: 10px;
+        }
+        .admin-header .logo {
+            display: flex;
+            align-items: center;
+        }
+        .admin-header nav {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+        }
+        .admin-header .nav-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .admin-header .back-link {
+            color: #2196F3;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+        }
+        .admin-header .back-link.btn.secondary-btn {
+            background-color: transparent;
+            border: 1px solid #2196F3;
+            color: #2196F3;
+        }
+        .admin-main {
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.png" alt="Logo Phòng khám Đại Anh">
+            <div>
+                <h1>Tiện ích cho mẹ bầu</h1>
+                <p style="margin: 0; font-size: 0.9rem; color: #666;">Hỗ trợ mẹ bầu trong suốt thai kỳ</p>
+            </div>
+        </div>
+        <nav>
+            <div class="nav-row">
+                <a href="mom-apps.html" class="back-link btn secondary-btn" style="background:#4caf50; color:#fff; border-color:#4caf50;">
+                    <i class="fas fa-mobile-alt"></i> App mẹ bầu
+                </a>
+                <a href="index.html" class="back-link btn secondary-btn">
+                    <i class="fas fa-home"></i> Trang chủ
+                </a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="admin-main">
+        <div class="pregnancy-info">
+            <h2><i class="fas fa-heart"></i> Tiện ích cho mẹ bầu</h2>
+            <p>Hỗ trợ mẹ bầu trong suốt thai kỳ với các công cụ tiện ích và lời khuyên chuyên môn</p>
+        </div>
+
+        <!-- Tab System -->
+        <div class="tabs-container">
+            <div class="tabs-header">
+                <button class="tab-button active" onclick="switchTab('vaccination', event)">
+                    <i class="fas fa-syringe"></i>
+                    <span>Tiêm phòng mẹ</span>
+                </button>
+                <button class="tab-button" onclick="switchTab('baby-vaccination', event)">
+                    <i class="fas fa-baby"></i>
+                    <span>Tiêm phòng bé</span>
+                </button>
+                <button class="tab-button" onclick="switchTab('nutrition', event)">
+                    <i class="fas fa-apple-alt"></i>
+                    <span>Dinh dưỡng</span>
+                </button>
+                <button class="tab-button" onclick="switchTab('health', event)">
+                    <i class="fas fa-heartbeat"></i>
+                    <span>Sức khỏe</span>
+                </button>
+                <button class="tab-button" onclick="switchTab('add-new', event)">
+                    <i class="fas fa-plus"></i>
+                    <span>Thêm tiện ích mới</span>
+                </button>
+            </div>
+
+            <!-- Tab Content: Lịch tiêm phòng cho mẹ bầu -->
+            <div id="tab-vaccination" class="tab-content active">
+                <div class="tab-content-header">
+                    <h3><i class="fas fa-syringe"></i> Lịch tiêm phòng cho mẹ bầu</h3>
+                    <button class="add-utility-btn-inline" onclick="openAddModal('vaccination')">
+                        <i class="fas fa-plus"></i> Thêm lịch tiêm phòng
+                    </button>
+                </div>
+                <div id="vaccination-schedule">
+                    <!-- Vaccination items will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Tab Content: Lịch tiêm phòng cho bé -->
+            <div id="tab-baby-vaccination" class="tab-content">
+                <div class="tab-content-header">
+                    <h3><i class="fas fa-baby"></i> Lịch tiêm phòng cho bé</h3>
+                    <button class="add-utility-btn-inline" onclick="openAddModal('baby-vaccination')">
+                        <i class="fas fa-plus"></i> Thêm lịch tiêm phòng cho bé
+                    </button>
+                </div>
+                <div id="baby-vaccination-schedule">
+                    <!-- Baby vaccination items will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Tab Content: Dinh dưỡng cho bà bầu -->
+            <div id="tab-nutrition" class="tab-content">
+                <div class="tab-content-header">
+                    <h3><i class="fas fa-apple-alt"></i> Dinh dưỡng cho bà bầu</h3>
+                    <button class="add-utility-btn-inline" onclick="openAddModal('nutrition')">
+                        <i class="fas fa-plus"></i> Thêm lời khuyên dinh dưỡng
+                    </button>
+                </div>
+                <div id="nutrition-tips">
+                    <!-- Nutrition items will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Tab Content: Lời khuyên sức khỏe -->
+            <div id="tab-health" class="tab-content">
+                <div class="tab-content-header">
+                    <h3><i class="fas fa-heartbeat"></i> Lời khuyên sức khỏe</h3>
+                    <button class="add-utility-btn-inline" onclick="openAddModal('health')">
+                        <i class="fas fa-plus"></i> Thêm lời khuyên sức khỏe
+                    </button>
+                </div>
+                <div id="health-tips">
+                    <!-- Health tips will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Tab Content: Thêm tiện ích mới -->
+            <div id="tab-add-new" class="tab-content">
+                <div class="tab-content-header">
+                    <h3><i class="fas fa-plus-circle"></i> Thêm tiện ích mới</h3>
+                </div>
+                <div style="text-align: center; padding: 40px 20px;">
+                    <div style="background: linear-gradient(135deg, #e91e63, #f8bbd9); color: white; padding: 30px; border-radius: 12px; margin-bottom: 30px;">
+                        <i class="fas fa-plus-circle" style="font-size: 3rem; margin-bottom: 15px; display: block;"></i>
+                        <h3 style="margin: 0 0 10px 0;">Tạo tiện ích mới cho mẹ bầu</h3>
+                        <p style="margin: 0; opacity: 0.9;">Thêm các tiện ích, lời khuyên và thông tin hữu ích cho mẹ bầu</p>
+                    </div>
+                    <button onclick="openAddModal('')" class="add-utility-btn" style="font-size: 18px; padding: 18px 40px;">
+                        <i class="fas fa-plus"></i> Thêm tiện ích mới
+                    </button>
+                    <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: left;">
+                        <h4 style="color: #e91e63; margin-bottom: 15px;"><i class="fas fa-info-circle"></i> Các loại tiện ích có thể thêm:</h4>
+                        <ul style="list-style: none; padding: 0;">
+                            <li style="padding: 10px; margin-bottom: 8px; background: white; border-radius: 6px; border-left: 4px solid #e91e63;">
+                                <strong><i class="fas fa-syringe"></i> Lịch tiêm phòng cho mẹ bầu:</strong> Theo dõi các mũi tiêm cần thiết trong thai kỳ
+                            </li>
+                            <li style="padding: 10px; margin-bottom: 8px; background: white; border-radius: 6px; border-left: 4px solid #2196F3;">
+                                <strong><i class="fas fa-baby"></i> Lịch tiêm phòng cho bé:</strong> Lập kế hoạch tiêm phòng cho bé sau khi sinh
+                            </li>
+                            <li style="padding: 10px; margin-bottom: 8px; background: white; border-radius: 6px; border-left: 4px solid #4CAF50;">
+                                <strong><i class="fas fa-apple-alt"></i> Dinh dưỡng cho bà bầu:</strong> Lời khuyên về chế độ ăn uống và dinh dưỡng
+                            </li>
+                            <li style="padding: 10px; margin-bottom: 8px; background: white; border-radius: 6px; border-left: 4px solid #FF9800;">
+                                <strong><i class="fas fa-heartbeat"></i> Lời khuyên sức khỏe:</strong> Các lời khuyên về sức khỏe và chăm sóc thai kỳ
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Add/Edit Modal -->
+    <div id="utility-modal" class="modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+            <h3 id="modal-title">Thêm tiện ích mới</h3>
+            <form id="utility-form">
+                <div class="form-group">
+                    <label for="utility-type-select">Loại tiện ích:</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <select id="utility-type-select" style="flex: 1;" onchange="handleTypeSelectChange()">
+                            <option value="">Chọn loại tiện ích có sẵn</option>
+                        </select>
+                        <span style="font-weight: bold; color: #666;">hoặc</span>
+                        <input type="text" id="utility-type-new" style="flex: 1;" placeholder="Nhập loại tiện ích mới" oninput="handleNewTypeInput()">
+                    </div>
+                    <input type="hidden" id="utility-type" required>
+                    <small style="color: #666; font-size: 12px; margin-top: 5px; display: block;">
+                        <i class="fas fa-info-circle"></i> Chọn từ danh sách có sẵn hoặc nhập tên loại tiện ích mới
+                    </small>
+                </div>
+                <div class="form-group">
+                    <label for="utility-title">Tiêu đề:</label>
+                    <input type="text" id="utility-title" required placeholder="Nhập tiêu đề">
+                </div>
+                <div class="form-group">
+                    <label for="utility-description">Mô tả:</label>
+                    <textarea id="utility-description" placeholder="Nhập mô tả chi tiết"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="utility-date">Ngày thực hiện:</label>
+                    <input type="date" id="utility-date">
+                </div>
+                <div class="form-group">
+                    <label for="utility-week">Tuần thai (nếu có):</label>
+                    <input type="number" id="utility-week" min="1" max="42" placeholder="Tuần thai">
+                </div>
+                <div class="form-group">
+                    <label for="utility-notes">Ghi chú:</label>
+                    <textarea id="utility-notes" placeholder="Ghi chú thêm"></textarea>
+                </div>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+                    <button type="submit" class="btn btn-primary">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let utilities = [];
+        let currentEditId = null;
+        let utilityTypes = [];
+        let typeDisplayNames = {
+            'vaccination': 'Tiêm phòng mẹ',
+            'baby-vaccination': 'Tiêm phòng bé',
+            'nutrition': 'Dinh dưỡng',
+            'health': 'Sức khỏe'
+        };
+
+        // Load utility types from API
+        async function loadUtilityTypes() {
+            try {
+                const response = await fetch('/api/pregnancy-utilities/types');
+                if (response.ok) {
+                    const data = await response.json();
+                    utilityTypes = data.types || [];
+                    
+                    // Update select dropdown
+                    const select = document.getElementById('utility-type-select');
+                    select.innerHTML = '<option value="">Chọn loại tiện ích có sẵn</option>';
+                    utilityTypes.forEach(type => {
+                        const option = document.createElement('option');
+                        option.value = type;
+                        option.textContent = typeDisplayNames[type] || type.charAt(0).toUpperCase() + type.slice(1).replace(/-/g, ' ');
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Lỗi tải danh sách loại tiện ích:', error);
+            }
+        }
+
+        // Load utilities from API
+        async function loadUtilities() {
+            try {
+                const response = await fetch('/api/pregnancy-utilities');
+                if (response.ok) {
+                    utilities = await response.json();
+                } else {
+                    console.error('Lỗi tải danh sách tiện ích:', response.status);
+                    utilities = [];
+                }
+            } catch (error) {
+                console.error('Lỗi tải danh sách tiện ích:', error);
+                utilities = [];
+            }
+            // Render tabs first to create containers, then render utilities
+            renderDynamicTabs();
+            renderUtilities();
+        }
+        
+        // Handle type select change
+        function handleTypeSelectChange() {
+            const select = document.getElementById('utility-type-select');
+            const newInput = document.getElementById('utility-type-new');
+            const hiddenInput = document.getElementById('utility-type');
+            
+            if (select.value) {
+                hiddenInput.value = select.value;
+                newInput.value = '';
+                newInput.style.borderColor = '#ddd';
+            } else {
+                if (newInput.value) {
+                    hiddenInput.value = newInput.value.trim();
+                } else {
+                    hiddenInput.value = '';
+                }
+            }
+        }
+        
+        // Handle new type input
+        function handleNewTypeInput() {
+            const select = document.getElementById('utility-type-select');
+            const newInput = document.getElementById('utility-type-new');
+            const hiddenInput = document.getElementById('utility-type');
+            
+            if (newInput.value.trim()) {
+                hiddenInput.value = newInput.value.trim();
+                select.value = '';
+                select.style.borderColor = '#ddd';
+                newInput.style.borderColor = '#4CAF50';
+            } else {
+                if (select.value) {
+                    hiddenInput.value = select.value;
+                } else {
+                    hiddenInput.value = '';
+                }
+                newInput.style.borderColor = '#ddd';
+            }
+        }
+
+        // Initialize default data
+        async function initializeDefaultData() {
+            try {
+                const response = await fetch('/api/pregnancy-utilities/init-defaults', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    console.log('Default utilities created successfully');
+                    await loadUtilities();
+                } else {
+                    const result = await response.json();
+                    console.error('Error creating default utilities:', result.message);
+                }
+            } catch (error) {
+                console.error('Error creating default utilities:', error);
+            }
+        }
+
+        // Render all utilities
+        function renderUtilities() {
+            // Render default sections
+            renderUtilitySection('vaccination', 'vaccination-schedule');
+            renderUtilitySection('baby-vaccination', 'baby-vaccination-schedule');
+            renderUtilitySection('nutrition', 'nutrition-tips');
+            renderUtilitySection('health', 'health-tips');
+            
+            // Get all unique types from utilities
+            const allTypes = [...new Set(utilities.map(u => u.type))];
+            
+            // Render dynamic sections for custom types (only if container exists)
+            allTypes.forEach(type => {
+                if (!['vaccination', 'baby-vaccination', 'nutrition', 'health'].includes(type)) {
+                    const containerId = `custom-${type}`;
+                    const container = document.getElementById(containerId);
+                    if (container) {
+                        renderUtilitySection(type, containerId);
+                    } else {
+                        // Container doesn't exist yet, skip rendering (tab will be created next time)
+                        console.warn(`Container ${containerId} not found for type ${type}`);
+                    }
+                }
+            });
+        }
+        
+        // Render dynamic tabs for custom utility types
+        function renderDynamicTabs() {
+            const tabsHeader = document.querySelector('.tabs-header');
+            if (!tabsHeader) return;
+            
+            // Get all unique types from utilities
+            const allTypes = [...new Set(utilities.map(u => u.type))];
+            const customTypes = allTypes.filter(type => !['vaccination', 'baby-vaccination', 'nutrition', 'health'].includes(type));
+            
+            // Remove existing custom tab buttons (keep only default ones and "add-new")
+            const existingButtons = tabsHeader.querySelectorAll('.tab-button');
+            existingButtons.forEach(btn => {
+                const onclick = btn.getAttribute('onclick');
+                if (onclick && onclick.includes('tab-') && !onclick.includes('add-new')) {
+                    const tabName = onclick.match(/switchTab\('([^']+)'/)?.[1];
+                    if (tabName && !['vaccination', 'baby-vaccination', 'nutrition', 'health'].includes(tabName)) {
+                        btn.remove();
+                    }
+                }
+            });
+            
+            // Add custom type tabs before "add-new" button
+            const addNewButton = tabsHeader.querySelector('button[onclick*="add-new"]');
+            customTypes.forEach(type => {
+                const tabId = `tab-${type}`;
+                const existingTab = document.getElementById(tabId);
+                if (!existingTab) {
+                    // Create tab button
+                    const button = document.createElement('button');
+                    button.className = 'tab-button';
+                    button.setAttribute('onclick', `switchTab('${type}', event)`);
+                    button.innerHTML = `
+                        <i class="fas fa-star"></i>
+                        <span>${type.charAt(0).toUpperCase() + type.slice(1).replace(/-/g, ' ')}</span>
+                    `;
+                    tabsHeader.insertBefore(button, addNewButton);
+                    
+                    // Create tab content
+                    const tabsContainer = document.querySelector('.tabs-container');
+                    const addNewContent = document.getElementById('tab-add-new');
+                    const content = document.createElement('div');
+                    content.id = tabId;
+                    content.className = 'tab-content';
+                    content.innerHTML = `
+                        <div class="tab-content-header">
+                            <h3><i class="fas fa-star"></i> ${type.charAt(0).toUpperCase() + type.slice(1).replace(/-/g, ' ')}</h3>
+                            <button class="add-utility-btn-inline" onclick="openAddModal('${type}')">
+                                <i class="fas fa-plus"></i> Thêm tiện ích
+                            </button>
+                        </div>
+                        <div id="custom-${type}">
+                            <!-- Custom type items will be loaded here -->
+                        </div>
+                    `;
+                    tabsContainer.insertBefore(content, addNewContent);
+                }
+            });
+        }
+
+        // Render specific utility section
+        function renderUtilitySection(type, containerId) {
+            const container = document.getElementById(containerId);
+            
+            // Check if container exists
+            if (!container) {
+                console.warn(`Container ${containerId} not found for type ${type}`);
+                return;
+            }
+            
+            const typeUtilities = utilities.filter(u => u.type === type);
+            
+            if (typeUtilities.length === 0) {
+                container.innerHTML = '<p style="color: #666; font-style: italic;">Chưa có thông tin nào.</p>';
+                return;
+            }
+
+            container.innerHTML = typeUtilities.map(utility => `
+                <div class="utility-item" onclick="toggleUtility(${utility.id})">
+                    <h4>
+                        ${utility.title}
+                        <i class="fas fa-chevron-down toggle-icon"></i>
+                    </h4>
+                    <div class="content">
+                        <p>${utility.description}</p>
+                        ${utility.date ? `<p class="date"><i class="fas fa-calendar"></i> ${formatDate(utility.date)}</p>` : ''}
+                        ${utility.week ? `<p><i class="fas fa-clock"></i> Tuần thai: ${utility.week}</p>` : ''}
+                        ${utility.notes ? `<p><i class="fas fa-sticky-note"></i> ${utility.notes}</p>` : ''}
+                        <div class="utility-actions">
+                            <button class="btn btn-primary btn-small" onclick="event.stopPropagation(); editUtility(${utility.id})">
+                                <i class="fas fa-edit"></i> Sửa
+                            </button>
+                            <button class="btn btn-danger btn-small" onclick="event.stopPropagation(); deleteUtility(${utility.id})">
+                                <i class="fas fa-trash"></i> Xóa
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('vi-VN');
+        }
+
+        // Toggle utility expand/collapse
+        function toggleUtility(utilityId) {
+            const utilityElement = document.querySelector(`[onclick="toggleUtility(${utilityId})"]`);
+            if (utilityElement) {
+                utilityElement.classList.toggle('expanded');
+            }
+        }
+
+        // Open add modal
+        function openAddModal(type) {
+            currentEditId = null;
+            document.getElementById('modal-title').textContent = 'Thêm tiện ích mới';
+            document.getElementById('utility-form').reset();
+            
+            // Reset type inputs
+            const select = document.getElementById('utility-type-select');
+            const newInput = document.getElementById('utility-type-new');
+            const hiddenInput = document.getElementById('utility-type');
+            
+            if (type) {
+                // If type is provided, set it
+                if (utilityTypes.includes(type)) {
+                    select.value = type;
+                    newInput.value = '';
+                    hiddenInput.value = type;
+                } else {
+                    // New type
+                    select.value = '';
+                    newInput.value = type;
+                    hiddenInput.value = type;
+                }
+            } else {
+                // Clear all
+                select.value = '';
+                newInput.value = '';
+                hiddenInput.value = '';
+            }
+            
+            document.getElementById('utility-modal').style.display = 'flex';
+        }
+
+        // Edit utility
+        function editUtility(id) {
+            // Convert id to number if it's a string
+            const utilityId = typeof id === 'string' ? parseInt(id, 10) : id;
+            
+            const utility = utilities.find(u => u.id === utilityId || u.id === id);
+            if (!utility) {
+                console.error('Utility not found:', id, utilityId);
+                alert('Không tìm thấy tiện ích để chỉnh sửa!');
+                return;
+            }
+
+            currentEditId = utility.id; // Use the actual id from utility object
+            document.getElementById('modal-title').textContent = 'Sửa tiện ích';
+            
+            // Set type inputs
+            const select = document.getElementById('utility-type-select');
+            const newInput = document.getElementById('utility-type-new');
+            const hiddenInput = document.getElementById('utility-type');
+            
+            if (!select || !newInput || !hiddenInput) {
+                console.error('Form elements not found');
+                alert('Lỗi: Không tìm thấy form!');
+                return;
+            }
+            
+            if (utilityTypes.includes(utility.type)) {
+                select.value = utility.type;
+                newInput.value = '';
+            } else {
+                select.value = '';
+                newInput.value = utility.type || '';
+            }
+            hiddenInput.value = utility.type || '';
+            
+            // Set form fields
+            const titleField = document.getElementById('utility-title');
+            const descField = document.getElementById('utility-description');
+            const dateField = document.getElementById('utility-date');
+            const weekField = document.getElementById('utility-week');
+            const notesField = document.getElementById('utility-notes');
+            
+            if (titleField) titleField.value = utility.title || '';
+            if (descField) descField.value = utility.description || '';
+            if (dateField) dateField.value = utility.date || '';
+            if (weekField) weekField.value = utility.week || '';
+            if (notesField) notesField.value = utility.notes || '';
+            
+            document.getElementById('utility-modal').style.display = 'flex';
+        }
+
+        // Delete utility
+        async function deleteUtility(id) {
+            // Find the item element for optimistic UI updates
+            const itemEl = document.querySelector(`.utility-item[onclick="toggleUtility(${id})"]`);
+            const deleteBtn = itemEl ? itemEl.querySelector('.btn-danger') : null;
+            
+            if (!confirm('Bạn có chắc muốn xóa tiện ích này?')) {
+                return;
+            }
+            
+            // Disable delete button while processing
+            if (deleteBtn) {
+                deleteBtn.disabled = true;
+                deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xóa...';
+            }
+            
+            try {
+                const response = await fetch(`/api/pregnancy-utilities/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    // Optimistically remove from utilities array
+                    utilities = utilities.filter(u => u.id !== id);
+                    // Re-render sections
+                    renderDynamicTabs();
+                    renderUtilities();
+                    alert('Đã xóa tiện ích thành công!');
+                } else {
+                    const result = await response.json();
+                    throw new Error(result.message || 'Không thể xóa tiện ích');
+                }
+            } catch (error) {
+                console.error('Lỗi xóa tiện ích:', error);
+                alert('Lỗi xóa tiện ích: ' + (error.message || 'Không xác định'));
+            } finally {
+                // Restore button state if element still exists
+                if (deleteBtn) {
+                    deleteBtn.disabled = false;
+                    deleteBtn.innerHTML = '<i class="fas fa-trash"></i> Xóa';
+                }
+            }
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('utility-modal').style.display = 'none';
+        }
+
+        // Handle form submission
+        document.getElementById('utility-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Get type from hidden input (set by select or new input)
+            const typeValue = document.getElementById('utility-type').value.trim();
+            
+            if (!typeValue) {
+                alert('Vui lòng chọn hoặc nhập loại tiện ích!');
+                return;
+            }
+            
+            // Get form values
+            const title = document.getElementById('utility-title').value.trim();
+            if (!title) {
+                alert('Vui lòng nhập tiêu đề!');
+                return;
+            }
+            
+            const formData = {
+                type: typeValue,
+                title: title,
+                description: document.getElementById('utility-description').value.trim(),
+                date: document.getElementById('utility-date').value || null,
+                week: document.getElementById('utility-week').value || null,
+                notes: document.getElementById('utility-notes').value.trim()
+            };
+            
+            // Remove empty fields to avoid sending empty strings
+            if (!formData.description) delete formData.description;
+            if (!formData.date) delete formData.date;
+            if (!formData.week) delete formData.week;
+            if (!formData.notes) delete formData.notes;
+
+            try {
+                let response;
+                if (currentEditId) {
+                    // Edit existing utility
+                    response = await fetch(`/api/pregnancy-utilities/${currentEditId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(formData)
+                    });
+                } else {
+                    // Add new utility
+                    response = await fetch('/api/pregnancy-utilities', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(formData)
+                    });
+                }
+
+                if (response.ok) {
+                    const result = await response.json();
+                    
+                    // Reload types and utilities to get new types
+                    await loadUtilityTypes();
+                    await loadUtilities();
+                    closeModal();
+                    
+                    // Switch to the tab of the new/edited utility type
+                    if (!currentEditId) {
+                        // New utility - switch to its tab after a short delay to ensure tabs are rendered
+                        setTimeout(() => {
+                            switchTab(typeValue, null);
+                            // Find and activate the tab button
+                            document.querySelectorAll('.tab-button').forEach(btn => {
+                                const onclick = btn.getAttribute('onclick');
+                                if (onclick && onclick.includes(`'${typeValue}'`)) {
+                                    btn.classList.add('active');
+                                } else {
+                                    btn.classList.remove('active');
+                                }
+                            });
+                        }, 500); // Increased delay to ensure tabs are created
+                    }
+                    
+                    alert(result.message || (currentEditId ? 'Đã cập nhật tiện ích thành công!' : 'Đã tạo tiện ích thành công!'));
+                } else {
+                    const result = await response.json();
+                    const errorMsg = result.message || 'Có lỗi xảy ra khi lưu tiện ích';
+                    alert('Lỗi: ' + errorMsg);
+                    console.error('Error response:', result);
+                }
+            } catch (error) {
+                console.error('Lỗi lưu tiện ích:', error);
+                alert('Lỗi lưu tiện ích!');
+            }
+        });
+
+        // Tab switching function
+        function switchTab(tabName, event) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tab buttons
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            const selectedContent = document.getElementById(`tab-${tabName}`);
+            if (selectedContent) {
+                selectedContent.classList.add('active');
+            }
+            
+            // Add active class to clicked tab button
+            if (event && event.target) {
+                const button = event.target.closest('.tab-button');
+                if (button) {
+                    button.classList.add('active');
+                }
+            } else {
+                // Fallback: find button by tab name
+                document.querySelectorAll('.tab-button').forEach(button => {
+                    if (button.onclick && button.onclick.toString().includes(tabName)) {
+                        button.classList.add('active');
+                    }
+                });
+            }
+            
+            // If switching to add-new tab, optionally auto-open modal
+            if (tabName === 'add-new') {
+                // Tab content is shown, user can click button to open modal
+            }
+        }
+
+        // Initialize
+        loadUtilityTypes().then(() => {
+            loadUtilities();
+        });
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+</body>
+</html>

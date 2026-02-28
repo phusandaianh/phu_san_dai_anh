@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Quản lý Worklist - MWL Admin</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { font-family: Roboto, Arial, sans-serif; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px }
+    th, td { border: 1px solid #ddd; padding: 8px }
+    th { background: #f4f4f4 }
+    .actions button { margin-right: 6px }
+    .form-inline input { margin-right: 6px }
+  </style>
+</head>
+<body>
+  <h1>Quản lý Modality Worklist</h1>
+  <p>Chỉ dành cho quản trị viên. Đăng nhập và truyền token vào header <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+
+  <div>
+    <button id="refreshBtn">Làm mới</button>
+    <button id="syncBtn">Đồng bộ ngay</button>
+    <button id="newBtn">Thêm entry mới</button>
+  </div>
+
+  <table id="entriesTable">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>PatientName</th>
+        <th>PatientID</th>
+        <th>BirthDate</th>
+        <th>StudyDescription</th>
+        <th>Modality</th>
+        <th>ScheduledDate</th>
+        <th>ScheduledTime</th>
+        <th>Accession</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <!-- Simple modal for add/edit -->
+  <div id="modal" style="display:none; position:fixed; left:0; top:0; right:0; bottom:0; background:rgba(0,0,0,0.5);">
+    <div style="background:white; width:720px; margin:60px auto; padding:16px; border-radius:6px;">
+      <h3 id="modalTitle">New Entry</h3>
+      <div class="form-inline">
+        <input id="fPatientName" placeholder="PatientName">
+        <input id="fPatientID" placeholder="PatientID">
+        <input id="fBirthDate" placeholder="YYYYMMDD">
+      </div>
+      <div style="margin-top:8px;">
+        <input id="fStudyDesc" placeholder="StudyDescription" style="width:60%">
+        <input id="fModality" placeholder="Modality" style="width:120px">
+      </div>
+      <div style="margin-top:8px;">
+        <input id="fScheduledDate" placeholder="YYYYMMDD">
+        <input id="fScheduledTime" placeholder="HHMMSS">
+        <input id="fAccession" placeholder="AccessionNumber">
+      </div>
+      <div style="margin-top:12px;">
+        <button id="saveBtn">Lưu</button>
+        <button id="cancelBtn">Hủy</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api/mwl-entries'
+    const SYNC_API = '/api/mwl-sync'
+    let token = '' // set your Bearer token here or via prompt
+
+    function authHeaders() {
+      return token ? { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token } : { 'Content-Type': 'application/json' }
+    }
+
+    async function fetchEntries(){
+      const res = await fetch(API_BASE, { headers: authHeaders() })
+      const data = await res.json()
+      if(!data.success){ alert('Error: '+(data.error||JSON.stringify(data))); return }
+      const tbody = document.querySelector('#entriesTable tbody')
+      tbody.innerHTML = ''
+      data.entries.forEach(e=>{
+        const tr = document.createElement('tr')
+        tr.innerHTML = `
+          <td>${e.id}</td>
+          <td>${e.PatientName||''}</td>
+          <td>${e.PatientID||''}</td>
+          <td>${e.PatientBirthDate||''}</td>
+          <td>${e.StudyDescription||''}</td>
+          <td>${e.Modality||''}</td>
+          <td>${e.ScheduledProcedureStepStartDate||''}</td>
+          <td>${e.ScheduledProcedureStepStartTime||''}</td>
+          <td>${e.AccessionNumber||''}</td>
+          <td class="actions">
+            <button onclick="editEntry(${e.id})">Edit</button>
+            <button onclick="deleteEntry(${e.id})">Delete</button>
+          </td>`
+        tbody.appendChild(tr)
+      })
+    }
+
+    async function syncNow(){
+      const res = await fetch(SYNC_API, { method: 'POST', headers: authHeaders() })
+      const data = await res.json()
+      if(!data.success){ alert('Sync error: '+(data.error||JSON.stringify(data))); return }
+      alert('Imported: '+data.imported)
+      await fetchEntries()
+    }
+
+    function openModal(mode, entry){
+      document.getElementById('modalTitle').innerText = mode==='edit' ? 'Edit Entry' : 'New Entry'
+      document.getElementById('fPatientName').value = entry?.PatientName || ''
+      document.getElementById('fPatientID').value = entry?.PatientID || ''
+      document.getElementById('fBirthDate').value = entry?.PatientBirthDate || ''
+      document.getElementById('fStudyDesc').value = entry?.StudyDescription || ''
+      document.getElementById('fModality').value = entry?.Modality || 'US'
+      document.getElementById('fScheduledDate').value = entry?.ScheduledProcedureStepStartDate || ''
+      document.getElementById('fScheduledTime').value = entry?.ScheduledProcedureStepStartTime || ''
+      document.getElementById('fAccession').value = entry?.AccessionNumber || ''
+      document.getElementById('modal').style.display = 'block'
+      document.getElementById('saveBtn').dataset.editId = entry?.id || ''
+    }
+
+    async function saveEntry(){
+      const id = document.getElementById('saveBtn').dataset.editId
+      const payload = {
+        PatientName: document.getElementById('fPatientName').value,
+        PatientID: document.getElementById('fPatientID').value,
+        PatientBirthDate: document.getElementById('fBirthDate').value,
+        StudyDescription: document.getElementById('fStudyDesc').value,
+        Modality: document.getElementById('fModality').value,
+        ScheduledProcedureStepStartDate: document.getElementById('fScheduledDate').value,
+        ScheduledProcedureStepStartTime: document.getElementById('fScheduledTime').value,
+        AccessionNumber: document.getElementById('fAccession').value
+      }
+      let res
+      if(id){
+        res = await fetch(API_BASE+'/'+id, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(payload) })
+      } else {
+        res = await fetch(API_BASE, { method: 'POST', headers: authHeaders(), body: JSON.stringify(payload) })
+      }
+      const data = await res.json()
+      if(!data.success){ alert('Save error: '+(data.error||JSON.stringify(data))); return }
+      document.getElementById('modal').style.display = 'none'
+      await fetchEntries()
+    }
+
+    async function deleteEntry(id){
+      if(!confirm('Xóa entry #' + id + '?')) return
+      const res = await fetch(API_BASE+'/'+id, { method: 'DELETE', headers: authHeaders() })
+      const data = await res.json()
+      if(!data.success){ alert('Delete error: '+(data.error||JSON.stringify(data))); return }
+      await fetchEntries()
+    }
+
+    function editEntry(id){
+      // load entry from table row or call API
+      fetch(API_BASE, { headers: authHeaders() }).then(r=>r.json()).then(d=>{
+        const e = d.entries.find(x=>x.id==id)
+        openModal('edit', e)
+      })
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', fetchEntries)
+    document.getElementById('syncBtn').addEventListener('click', syncNow)
+    document.getElementById('newBtn').addEventListener('click', ()=>openModal('new', {}))
+    document.getElementById('cancelBtn').addEventListener('click', ()=>document.getElementById('modal').style.display='none')
+    document.getElementById('saveBtn').addEventListener('click', saveEntry)
+
+    // Prompt for token on load
+    (async ()=>{
+      token = prompt('Nhập Bearer token (để quản trị):') || ''
+      await fetchEntries()
+    })()
+  </script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

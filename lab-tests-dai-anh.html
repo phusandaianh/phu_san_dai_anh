@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý danh sách các loại thủ thuật, tiêm HPV - Phòng khám Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="utilities.css">
+    <style>
+        /* Override container width to use full viewport width */
+        main.container { max-width: 100%; padding: 0 12px; margin-top: 12px; }
+        
+        .tabs { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+        .tab-btn { padding:6px 10px; border:1px solid #ccc; border-radius:6px; background:#f5f5f5; cursor:pointer; }
+        .tab-btn.active { background:#2196F3; color:#fff; border-color:#2196F3; }
+        .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:10px 0; }
+        table { width:100%; border-collapse:collapse; font-size:14px; }
+        th, td { padding:8px; border: none; }
+        th { background:#f7f7f7; border-bottom:1px solid #e0e0e0; }
+        td { border: none; }
+        .small { width:100px; }
+        /* Make patient row inputs/selects match button size */
+        tbody input, tbody select { font-size: 16px; padding:6px; box-sizing: border-box; border: none; outline: none; }
+        tbody input:focus, tbody select:focus { border: none; outline: none; }
+        /* Make name column wider so full names are visible */
+        th:nth-child(2), td:nth-child(2) { min-width: 220px; }
+        /* Specific large input style for name/new-name */
+        .lab-input-large { font-size:16px; padding:6px; width:100%; min-width:200px; box-sizing: border-box; border: none; outline: none; }
+        .lab-input-large:focus { border: none; outline: none; }
+        /* Remove border from all inputs and selects in table */
+        table input, table select { border: none; outline: none; }
+        table input:focus, table select:focus { border: none; outline: none; }
+        .right { text-align:right; }
+        .table-wrapper { overflow-x:auto; margin: 0 -12px; padding: 0 12px; }
+        .waiting { opacity: 0.6; }
+        .btn-sync-range.active { background-color: #1976d2; }
+        .status-option { padding: 6px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 4px; }
+        .status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; background: #f5f5f5; padding: 8px; border-radius: 4px; }
+        .status-row .delete-btn { padding: 4px 8px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .status-row .delete-btn:hover { background: #d32f2f; }
+        .provider-badge { 
+            display: inline-block; 
+            padding: 4px 12px; 
+            background: #e3f2fd; 
+            color: #1976d2; 
+            border-radius: 12px; 
+            font-size: 0.85rem; 
+            font-weight: 500;
+            margin-left: 8px;
+        }
+        #new-name {
+            flex: 0 0 260px;
+            max-width: 320px;
+        }
+        @media (max-width: 640px){
+            #new-name {
+                flex: 1 1 100%;
+                max-width: none;
+            }
+        }
+        .date-quick-fill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .lab-table th:last-child,
+        .lab-table td:last-child {
+            width: 110px;
+            min-width: 110px;
+        }
+    </style>
+</head>
+<body>
+    <header class="header" style="position: sticky; top: 0; z-index: 10; background: #fff;">
+        <div style="padding: 0 12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between; max-width: 100%;">
+                <h2 style="margin: 0; font-size: 1.4rem;">
+                    Danh sách thủ thuật các loại
+                    <span class="provider-badge">Phòng khám Đại Anh</span>
+                </h2>
+                <a class="btn secondary-btn" href="examination-list.html">Quay về danh sách khám</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container" style="margin-top: 12px;">
+    <div class="tabs" id="month-tabs"></div>
+    <input type="hidden" id="view-mode" value="month">
+    <div class="tabs" id="service-tabs"></div>
+
+        <div class="toolbar" style="gap:6px; flex-wrap:wrap;">
+            <input id="search-q" type="text" placeholder="Tìm (tên, SĐT, loại…)" style="flex:1; min-width:200px;">
+            <button id="btn-sync" class="btn secondary-btn" style="padding:8px 12px; font-size:14px;">Đồng bộ tháng</button>
+            <button id="btn-sync-range" class="btn secondary-btn" style="padding:8px 12px; font-size:14px;">Đồng bộ theo ngày</button>
+            <button id="btn-export-pdf" class="btn primary-btn" style="padding:8px 12px; font-size:14px;">Xuất PDF</button>
+            <button id="btn-lab-settings" class="btn secondary-btn" style="padding:8px 12px; font-size:14px;">Cài đặt</button>
+            <div style="margin-left:auto;">Hàng: <span id="row-count">0</span></div>
+        </div>
+
+        <div class="toolbar" style="gap:6px; flex-wrap:wrap; margin:8px 0;">
+            <input id="new-name" class="lab-input-large" placeholder="Họ tên" style="min-width:200px;">
+            <div class="date-quick-fill">
+                <input id="new-date" type="date" class="small">
+                <button type="button" id="btn-date-today" class="btn secondary-btn" style="padding:6px 10px; font-size:13px;">Hôm nay</button>
+            </div>
+            <input id="new-phone" class="small" placeholder="SĐT">
+            <select id="new-provider" class="small" style="display:none;"><option value="">-- Đơn vị --</option></select>
+            <select id="new-test" class="small"><option value="">-- Tên dịch vụ --</option></select>
+            <input id="new-price" class="small" type="number" placeholder="Giá">
+            <button id="btn-add" class="btn primary-btn" style="padding:8px 12px; font-size:14px;">Thêm</button>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="lab-table">
+                <thead>
+                    <tr>
+                        <th>STT</th>
+                        <th>Họ tên</th>
+                        <th>Ngày <button id="btn-sort-date" class="btn small-btn" title="Sắp xếp theo ngày">↕</button></th>
+                        <th>SĐT</th>
+                        <th>Loại XN</th>
+                        <th class="right">Giá</th>
+                        <th>Ghi chú</th>
+                        <th>Hành động</th>
+                    </tr>
+                </thead>
+                <tbody id="lab-body"></tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- Modal: Lab Settings -->
+    <div id="lab-settings-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Cài đặt Lab</h3>
+            <div style="display:grid; gap:16px; max-width:480px;">
+                <div>
+                    <label>
+                        <input id="lab-clear-status" type="checkbox"> Xóa giá trị cột Trạng thái khi đồng bộ
+                    </label>
+                </div>
+
+                <div>
+                    <h4>Quản lý trạng thái xét nghiệm</h4>
+                    <div id="status-options-list" style="margin-bottom:8px;"></div>
+                    <div style="display:flex; gap:8px; margin-bottom:8px;">
+                        <input id="new-status-input" type="text" placeholder="Thêm trạng thái mới" style="flex:1;">
+                        <button id="add-status-btn" class="btn primary-btn">Thêm</button>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button id="lab-settings-close" class="btn secondary-btn">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Notification -->
+    <div id="notification-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px;">
+            <div id="notification-content">
+                <div id="notification-icon" style="font-size: 48px; text-align: center; margin-bottom: 16px;"></div>
+                <h3 id="notification-title" style="text-align: center; margin-bottom: 16px;"></h3>
+                <p id="notification-message" style="text-align: center; margin-bottom: 24px;"></p>
+                <div style="display: flex; gap: 8px; justify-content: center;">
+                    <button id="notification-ok" class="btn primary-btn" style="display: none;">OK</button>
+                    <button id="notification-cancel" class="btn secondary-btn" style="display: none;">Hủy</button>
+                    <button id="notification-confirm" class="btn primary-btn" style="display: none;">Xác nhận</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Sync Range -->
+    <div id="sync-range-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Đồng bộ theo ngày</h3>
+            <div style="display:grid; gap:8px; max-width:480px;">
+                <label>Ngày bắt đầu <input id="sync-start" type="date" class="small"></label>
+                <label>Ngày kết thúc <input id="sync-end" type="date" class="small"></label>
+                <label><input id="sync-clear-status" type="checkbox"> Xóa trạng thái khi đồng bộ</label>
+                <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
+                    <button id="sync-range-do" class="btn primary-btn">Đồng bộ</button>
+                    <button id="sync-range-close" class="btn secondary-btn">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add Service Tab -->
+    <div id="service-tab-modal" class="modal hidden">
+        <div class="modal-content" style="max-width:480px;">
+            <h3>Thêm tab dịch vụ</h3>
+            <div style="display:grid; gap:12px;">
+                <label>Chọn dịch vụ (thuộc "Phòng khám Đại Anh") chưa có tab
+                    <select id="service-tab-select" class="small" style="width:100%;"></select>
+                </label>
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button id="service-tab-add" class="btn primary-btn">Thêm</button>
+                    <button id="service-tab-close" class="btn secondary-btn">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+    const PROVIDER_NAME = 'Phòng khám Đại Anh';
+    const SERVICE_PRESET_TABS = ['Tất cả', 'Kế hoạch hóa GD', 'Điều trị lộ tuyến', 'Cấy que tránh thai'];
+    const state = { month: '', selectedProviders: [PROVIDER_NAME], q: '', rangeStart: null, rangeEnd: null, lastCheckedMonth: null, sortDate: null, serviceFilter: 'Tất cả', serviceTabs: [...SERVICE_PRESET_TABS] };
+    let settingsCache = null;
+    // status items are objects: { name: 'Chờ kết quả', color: '#d2b48c' }
+    window.LAB_STATUSES = [
+        { name: "Chờ kết quả", color: "#d2b48c" },
+        { name: "Đã nghe, thiếu kết quả", color: "#ffa726" },
+        { name: "Đã nghe", color: "#66bb6a" },
+        { name: "Không liên lạc được", color: "#ef5350" },
+        { name: "Nhắn tin", color: "#90a4ae" }
+    ];
+
+    // Helper: đặt giá trị ô đơn vị theo tên (so sánh không phân biệt hoa thường và bỏ khoảng trắng đầu/cuối)
+    function setProviderByName(name){
+        const sel = document.getElementById('new-provider');
+        if(!sel) return;
+        const target = String(name || '').trim().toLowerCase();
+        const match = Array.from(sel.options).find(o => {
+            const val = String(o.value || '').trim().toLowerCase();
+            const txt = String(o.textContent || '').trim().toLowerCase();
+            return val === target || txt === target;
+        });
+        if(match) sel.value = match.value;
+    }
+    function setDefaultProviderDA(){
+        setProviderByName(PROVIDER_NAME);
+    }
+
+    function buildMonthTabs(){
+        const tabs = document.getElementById('month-tabs');
+        tabs.innerHTML = '';
+        const today = new Date();
+        const y = today.getFullYear();
+        const currentM = today.getMonth()+1;
+        
+        // Tạo các tab cho tháng hiện tại (1-12)
+        for (let m=1; m<=12; m++){
+            const value = `${y}-${String(m).padStart(2,'0')}`;
+            const btn = document.createElement('button');
+            btn.className = 'tab-btn' + (m===currentM ? ' active' : '');
+            btn.dataset.value = value;
+            if (m===currentM) state.month = value;
+            btn.textContent = `T${m}.${y}`;
+            btn.onclick = ()=>{ 
+                document.querySelectorAll('#month-tabs .tab-btn').forEach(b=>b.classList.remove('active')); 
+                btn.classList.add('active'); 
+                state.month=value; 
+                loadRows(); 
+            };
+            tabs.appendChild(btn);
+        }
+        
+        // Kiểm tra và thêm tab tháng sau (nếu là ngày 1 của tháng hiện tại)
+        if (today.getDate() === 1) {
+            const nextM = currentM === 12 ? 1 : currentM + 1;
+            const nextY = currentM === 12 ? y + 1 : y;
+            const nextValue = `${nextY}-${String(nextM).padStart(2,'0')}`;
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'tab-btn';
+            nextBtn.dataset.value = nextValue;
+            nextBtn.textContent = `T${nextM}.${nextY}`;
+            nextBtn.style.background = '#fff3e0';
+            nextBtn.title = 'Tab tháng tiếp theo (mới)';
+            nextBtn.onclick = ()=>{ 
+                document.querySelectorAll('#month-tabs .tab-btn').forEach(b=>b.classList.remove('active')); 
+                nextBtn.classList.add('active'); 
+                state.month=nextValue; 
+                loadRows(); 
+            };
+            try{
+                const prevYear = nextY - 1;
+                const prevValue = `${prevYear}-${String(nextM).padStart(2,'0')}`;
+                const existingPrev = Array.from(tabs.querySelectorAll('.tab-btn')).find(b=>b.dataset && b.dataset.value === prevValue);
+                if (existingPrev) {
+                    tabs.removeChild(existingPrev);
+                }
+            }catch(e){ /* ignore */ }
+            tabs.appendChild(nextBtn);
+        }
+    }
+
+    function buildServiceTabs(){
+        const wrap = document.getElementById('service-tabs');
+        wrap.innerHTML = '';
+        state.serviceTabs.forEach(name => {
+            const btn = document.createElement('button');
+            btn.className = 'tab-btn' + (state.serviceFilter === name ? ' active' : '');
+            btn.dataset.type = 'service';
+            btn.dataset.value = name;
+            btn.textContent = name;
+            btn.onclick = ()=>{
+                state.serviceFilter = name;
+                // toggle active
+                Array.from(wrap.querySelectorAll('.tab-btn[data-type="service"]')).forEach(b=>b.classList.remove('active'));
+                btn.classList.add('active');
+                loadRows();
+                saveServiceTabs().catch(()=>{});
+            };
+            wrap.appendChild(btn);
+        });
+        // Add "Thêm tab" button
+        const addBtn = document.createElement('button');
+        addBtn.id = 'btn-add-service-tab';
+        addBtn.className = 'tab-btn';
+        addBtn.textContent = '+ Tab mới';
+        addBtn.title = 'Thêm tab dịch vụ mới (thuộc Phòng khám Đại Anh)';
+        addBtn.onclick = ()=>{
+            const all = Array.isArray(window.DA_SERVICE_NAMES) ? window.DA_SERVICE_NAMES : [];
+            // Danh sách đã có tab (lowercase) + nhóm "cấy que tránh thai" đã được đại diện
+            const existingLower = state.serviceTabs.map(n => String(n).trim().toLowerCase());
+            const hasGroupedImplant = existingLower.includes('cấy que tránh thai');
+            const available = all.filter(n => {
+                const lower = String(n).trim().toLowerCase();
+                if (existingLower.includes(lower)) return false;
+                if (hasGroupedImplant && lower.includes('cấy que tránh thai')) return false;
+                return true;
+            });
+            if (available.length === 0) {
+                showNotification('Thông báo', 'Không còn dịch vụ nào chưa có tab để thêm.', 'info');
+                return;
+            }
+            const sel = document.getElementById('service-tab-select');
+            sel.innerHTML = available.map(n => `<option value="${n}">${n}</option>`).join('');
+            document.getElementById('service-tab-modal').classList.remove('hidden');
+        };
+        wrap.appendChild(addBtn);
+    }
+
+    async function loadServiceTabs(){
+        try {
+            const res = await fetch('/api/lab-settings');
+            if (res.ok) {
+                const js = await res.json();
+                settingsCache = js;
+                let tabs = Array.isArray(js.service_tabs_dai_anh) && js.service_tabs_dai_anh.length ? js.service_tabs_dai_anh : null;
+                let filter = js.service_filter_dai_anh || null;
+                // Fallback localStorage nếu server chưa lưu trường mới
+                if (!tabs) {
+                    try {
+                        const lsTabs = JSON.parse(localStorage.getItem('da_service_tabs') || 'null');
+                        if (Array.isArray(lsTabs) && lsTabs.length) tabs = lsTabs;
+                    } catch(_) {}
+                }
+                if (!filter) {
+                    filter = (localStorage.getItem('da_service_filter') || null);
+                }
+                // Merge với preset và loại trùng
+                const merged = Array.from(new Set([...(tabs || []), ...SERVICE_PRESET_TABS]));
+                state.serviceTabs = merged.length ? merged : [...SERVICE_PRESET_TABS];
+                state.serviceFilter = filter || (state.serviceFilter || 'Tất cả');
+                if (!state.serviceTabs.includes(state.serviceFilter)) state.serviceFilter = 'Tất cả';
+                // Nếu filter đang trỏ tới tab tùy chỉnh (không thuộc preset) thì mặc định về "Tất cả" để tab mới là màu xám (inactive)
+                if (!SERVICE_PRESET_TABS.includes(state.serviceFilter)) {
+                    state.serviceFilter = 'Tất cả';
+                }
+            }
+        } catch(e) {
+            // ignore, fallback to defaults
+            try {
+                const lsTabs = JSON.parse(localStorage.getItem('da_service_tabs') || 'null');
+                const lsFilter = localStorage.getItem('da_service_filter') || null;
+                const merged = Array.from(new Set([...(Array.isArray(lsTabs)?lsTabs:[]), ...SERVICE_PRESET_TABS]));
+                state.serviceTabs = merged.length ? merged : [...SERVICE_PRESET_TABS];
+                state.serviceFilter = lsFilter && merged.includes(lsFilter) ? lsFilter : 'Tất cả';
+                if (!SERVICE_PRESET_TABS.includes(state.serviceFilter)) {
+                    state.serviceFilter = 'Tất cả';
+                }
+            } catch(_) {}
+        } finally {
+            buildServiceTabs();
+            // lưu lại filter mới nếu có thay đổi để lần sau không tự active tab tùy chỉnh
+            saveServiceTabs().catch(()=>{});
+        }
+    }
+
+    async function saveServiceTabs(){
+        try{
+            const payload = Object.assign({}, settingsCache || {}, {
+                service_tabs_dai_anh: state.serviceTabs,
+                service_filter_dai_anh: state.serviceFilter
+            });
+            const res = await fetch('/api/lab-settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+                settingsCache = await res.json();
+            }
+        }catch(e){
+            // silent fail, user can retry later
+        }
+        // Luôn lưu localStorage để đảm bảo không mất dữ liệu khi reload
+        try {
+            localStorage.setItem('da_service_tabs', JSON.stringify(state.serviceTabs));
+            localStorage.setItem('da_service_filter', state.serviceFilter || '');
+        } catch(_) {}
+    }
+
+    async function loadProviderUnits(){
+        const newProviderSel = document.getElementById('new-provider');
+        if (!newProviderSel) return;
+        // Chỉ hiển thị duy nhất đơn vị "Phòng khám Đại Anh"
+        newProviderSel.innerHTML = '';
+        const op = document.createElement('option');
+        op.value = PROVIDER_NAME;
+        op.textContent = PROVIDER_NAME;
+        newProviderSel.appendChild(op);
+        newProviderSel.value = PROVIDER_NAME;
+    }
+
+    async function loadServiceOptions(){
+        const testSel = document.getElementById('new-test'); 
+        testSel.innerHTML = '<option value="">-- Tên dịch vụ --</option>';
+        try {
+            const res = await fetch('/api/clinical-services'); 
+            if (!res.ok) return; 
+            const svcs = await res.json();
+            // Chỉ hiển thị dịch vụ thuộc đơn vị "Phòng khám Đại Anh"
+            const daSvcs = svcs.filter(s => (s.provider_unit || '') === PROVIDER_NAME);
+            window.DA_SERVICE_NAMES = daSvcs.map(s => s.name);
+            daSvcs.forEach(s=>{ 
+                const op=document.createElement('option'); 
+                op.value = String(s.id); 
+                op.textContent = s.name; 
+                op.dataset.price = s.price || 0; 
+                op.dataset.unit = s.provider_unit || ''; 
+                testSel.appendChild(op); 
+            });
+            // Auto-fill price và set đơn vị
+            testSel.onchange = () => {
+                const op = testSel.selectedOptions[0]; 
+                if (!op) return;
+                const p = parseFloat(op.dataset.price || '0');
+                const unit = op.dataset.unit || '';
+                if (!document.getElementById('new-price').value) document.getElementById('new-price').value = p;
+                if (unit) setProviderByName(unit);
+                else setDefaultProviderDA();
+            };
+        } catch (_) {}
+    }
+
+    async function loadRows(){
+        const viewMode = document.getElementById('view-mode').value;
+        const params = new URLSearchParams();
+        if(viewMode === 'range'){
+            if(state.rangeStart) params.set('start', state.rangeStart);
+            if(state.rangeEnd) params.set('end', state.rangeEnd);
+        }else{
+            if (state.month) params.set('month', state.month);
+        }
+        // Luôn filter theo "Phòng khám Đại Anh"
+        params.append('provider_unit', PROVIDER_NAME);
+        if (state.q) params.set('q', state.q);
+        const res = await fetch('/api/lab-orders?'+params.toString());
+        const tbody = document.getElementById('lab-body');
+        if (!res.ok){ tbody.innerHTML = '<tr><td colspan="8" style="color:red;text-align:center;">Không tải được dữ liệu</td></tr>'; return; }
+        let rows = await res.json();
+        // Lọc theo loại dịch vụ nếu có tab được chọn
+        if (state.serviceFilter && state.serviceFilter !== 'Tất cả') {
+            const key = state.serviceFilter.toLowerCase();
+            if (key === 'cấy que tránh thai') {
+                rows = rows.filter(r => String(r.test_type||'').toLowerCase().includes('cấy que tránh thai'));
+            } else {
+                rows = rows.filter(r => String(r.test_type||'').toLowerCase() === key);
+            }
+        }
+        // Sắp xếp theo ngày nếu có yêu cầu
+        if (state.sortDate) {
+            rows = rows.slice().sort((a, b) => {
+                const da = (a.test_date || '');
+                const db = (b.test_date || '');
+                if (!da && !db) return 0;
+                if (!da) return state.sortDate === 'asc' ? -1 : 1;
+                if (!db) return state.sortDate === 'asc' ? 1 : -1;
+                // YYYY-MM-DD so sánh chuỗi là đủ
+                if (da < db) return state.sortDate === 'asc' ? -1 : 1;
+                if (da > db) return state.sortDate === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        document.getElementById('row-count').textContent = rows.length;
+        tbody.innerHTML = rows.map((r, i)=>`
+            <tr>
+                <td>${i+1}</td>
+                <td><input class="lab-input-large" value="${r.patient_name||''}" data-id="${r.id}" data-field="patient_name"></td>
+                <td><input class="small" type="date" value="${r.test_date||''}" data-id="${r.id}" data-field="test_date"></td>
+                <td><input class="small" value="${r.patient_phone||''}" data-id="${r.id}" data-field="patient_phone"></td>
+                <td><input class="small" value="${r.test_type||''}" data-id="${r.id}" data-field="test_type"></td>
+                <td class="right"><input class="small" type="number" value="${r.price||0}" data-id="${r.id}" data-field="price"></td>
+                <td><input value="${r.note||''}" data-id="${r.id}" data-field="note"></td>
+                <td>
+                    <button class="btn small-btn" onclick="saveRow(${r.id})">Lưu</button>
+                    <button class="btn small-btn" onclick="delRow(${r.id})">Xóa</button>
+                </td>
+            </tr>
+        `).join('');
+
+    }
+
+    async function saveRow(id){ 
+        const inputs=document.querySelectorAll(`[data-id='${id}']`); 
+        const payload={}; 
+        inputs.forEach(el=>payload[el.dataset.field]=el.value); 
+        const res = await fetch(`/api/lab-orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); 
+        if(!res.ok) alert('Lưu thất bại'); 
+    }
+    
+    async function delRow(id){ 
+        if(!confirm('Xóa dòng này?')) return; 
+        const res=await fetch(`/api/lab-orders/${id}`,{method:'DELETE'}); 
+        if(res.ok) loadRows(); 
+    }
+
+    async function addRow(){
+        const name = document.getElementById('new-name').value;
+        const date = document.getElementById('new-date').value || new Date().toISOString().slice(0,10);
+        const phone = document.getElementById('new-phone').value;
+        // Tự động set provider là "Phòng khám Đại Anh" nếu chưa có
+        const provider = document.getElementById('new-provider').value || PROVIDER_NAME;
+        const testSel = document.getElementById('new-test');
+        const testName = testSel.selectedOptions[0] ? testSel.selectedOptions[0].textContent : '';
+        const priceVal = document.getElementById('new-price').value || (testSel.selectedOptions[0]?.dataset.price || 0);
+        if(!name) return alert('Nhập họ tên'); 
+        if(!testName) return alert('Chọn tên dịch vụ');
+        const payload={ patient_name:name, test_date:date, patient_phone:phone, provider_unit:provider, test_type:testName, price:priceVal };
+        const res=await fetch('/api/lab-orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        if(res.ok){ 
+            document.getElementById('new-name').value=''; 
+            document.getElementById('new-phone').value=''; 
+            document.getElementById('new-price').value=''; 
+            // đặt lại mặc định đơn vị là "Phòng khám Đại Anh"
+            setDefaultProviderDA();
+            document.getElementById('new-test').value=''; 
+            loadRows(); 
+        } else { 
+            alert('Thêm thất bại'); 
+        }
+    }
+
+    async function syncMonth(){ 
+        if(!state.month) return; 
+        const res=await fetch('/api/lab-orders/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month:state.month})}); 
+        if(res.ok) loadRows(); 
+    }
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+        buildMonthTabs();
+        loadServiceTabs().then(()=>{
+            loadRows();
+        });
+        loadProviderUnits();
+        loadServiceOptions();
+        document.getElementById('search-q').oninput = e=>{ state.q=e.target.value; loadRows(); };
+        document.getElementById('btn-add').onclick = addRow;
+        const todayBtn = document.getElementById('btn-date-today');
+        if (todayBtn) {
+            todayBtn.onclick = () => {
+                const dateInput = document.getElementById('new-date');
+                if (!dateInput) return;
+                const today = new Date().toISOString().slice(0,10);
+                dateInput.value = today;
+                dateInput.dispatchEvent(new Event('change', { bubbles: true }));
+            };
+        }
+        document.getElementById('btn-sync').onclick = ()=>{
+            document.getElementById('view-mode').value = 'month';
+            document.getElementById('btn-sync-range').classList.remove('active');
+            document.getElementById('btn-sync').classList.remove('waiting');
+            document.querySelectorAll('#month-tabs .tab-btn').forEach(b=>b.classList.remove('waiting'));
+            loadRows();
+            syncMonth();
+        };
+        document.getElementById('month-tabs').addEventListener('click', e=>{
+            if(e.target.classList.contains('tab-btn')){
+                document.getElementById('view-mode').value = 'month';
+                document.getElementById('btn-sync-range').classList.remove('active');
+                document.getElementById('btn-sync').classList.remove('waiting');
+                document.querySelectorAll('#month-tabs .tab-btn').forEach(b=>b.classList.remove('waiting'));
+                loadRows();
+            }
+        });
+        // Ẩn nút Cài đặt vì đã bỏ trạng thái
+        const btnSettings = document.getElementById('btn-lab-settings');
+        if (btnSettings) btnSettings.style.display = 'none';
+        document.getElementById('lab-settings-close').onclick = ()=>document.getElementById('lab-settings-modal').classList.add('hidden');
+        document.getElementById('btn-sync-range').onclick = ()=>{
+            const month = state.month;
+            let y = new Date().getFullYear(), m = new Date().getMonth()+1;
+            if(month){
+                const parts = month.split('-');
+                y = parseInt(parts[0]);
+                m = parseInt(parts[1]);
+            }
+            let prevY = y, prevM = m-1;
+            if(prevM < 1){ prevM = 12; prevY--; }
+            const prevFirst = `${prevY}-${String(prevM).padStart(2,'0')}-01`;
+            const prevLast = (()=>{
+                const d = new Date(prevY, prevM, 0);
+                return `${prevY}-${String(prevM).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            })();
+            let nextY = y, nextM = m+1;
+            if(nextM > 12){ nextM = 1; nextY++; }
+            const nextFirst = `${nextY}-${String(nextM).padStart(2,'0')}-01`;
+            const nextLast = (()=>{
+                const d = new Date(nextY, nextM, 0);
+                return `${nextY}-${String(nextM).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            })();
+            const firstDay = `${y}-${String(m).padStart(2,'0')}-01`;
+            const lastDay = (()=>{
+                const d = new Date(y, m, 0);
+                return `${y}-${String(m).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            })();
+            const minDay = prevFirst;
+            const maxDay = nextLast;
+            const syncStart = document.getElementById('sync-start');
+            const syncEnd = document.getElementById('sync-end');
+            syncStart.value = firstDay;
+            syncEnd.value = lastDay;
+            syncStart.min = minDay;
+            syncStart.max = maxDay;
+            syncEnd.min = minDay;
+            syncEnd.max = maxDay;
+            document.getElementById('sync-range-modal').classList.remove('hidden');
+        };
+        document.getElementById('sync-range-close').onclick = ()=>document.getElementById('sync-range-modal').classList.add('hidden');
+        document.getElementById('sync-range-do').onclick = doSyncRange;
+        document.getElementById('btn-export-pdf').onclick = exportPdf;
+        // Toggle sort by date
+        const sortBtn = document.getElementById('btn-sort-date');
+        if (sortBtn) {
+            const updateSortBtnUI = () => {
+                if (state.sortDate === 'asc') { sortBtn.textContent = '↑'; sortBtn.title = 'Đang tăng dần — bấm để giảm dần'; }
+                else if (state.sortDate === 'desc') { sortBtn.textContent = '↓'; sortBtn.title = 'Đang giảm dần — bấm để tăng dần'; }
+                else { sortBtn.textContent = '↕'; sortBtn.title = 'Sắp xếp theo ngày'; }
+            };
+            updateSortBtnUI();
+            sortBtn.onclick = () => {
+                state.sortDate = state.sortDate === 'asc' ? 'desc' : (state.sortDate === 'desc' ? null : 'asc');
+                updateSortBtnUI();
+                loadRows();
+            };
+        }
+        
+        let lastCheckedMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+        
+        function checkMonthRollover() {
+            const now = new Date();
+            const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            
+            if (currentMonth !== lastCheckedMonth) {
+                console.log(`[Lab-tests] Phát hiện thay đổi tháng từ ${lastCheckedMonth} sang ${currentMonth}`);
+                lastCheckedMonth = currentMonth;
+                buildMonthTabs();
+                if (now.getDate() === 1) {
+                    console.log(`[Lab-tests] Ngày 1 của tháng ${currentMonth} — tab tháng sau đã được tạo`);
+                }
+            }
+        }
+        
+        function getMillisToNextSundayEighteen() {
+            const now = new Date();
+            const dayOfWeek = now.getDay();
+            let daysUntilSunday = (7 - dayOfWeek) % 7;
+            if (daysUntilSunday === 0 && (now.getHours() > 18 || (now.getHours() === 18 && now.getMinutes() >= 0))) {
+                daysUntilSunday = 7;
+            }
+            const nextSunday = new Date(now);
+            nextSunday.setDate(nextSunday.getDate() + daysUntilSunday);
+            nextSunday.setHours(18, 0, 0, 0);
+            const msUntil = nextSunday - now;
+            return msUntil;
+        }
+        
+        function scheduleMonthlyCheck() {
+            const msUntil = getMillisToNextSundayEighteen();
+            setTimeout(() => {
+                checkMonthRollover();
+                scheduleMonthlyCheck();
+            }, msUntil);
+        }
+        
+        scheduleMonthlyCheck();
+        checkMonthRollover();
+    });
+
+    // Service tab modal handlers
+    document.addEventListener('DOMContentLoaded', ()=>{
+        const closeBtn = document.getElementById('service-tab-close');
+        const addBtn = document.getElementById('service-tab-add');
+        const modal = document.getElementById('service-tab-modal');
+        const sel = document.getElementById('service-tab-select');
+        if (closeBtn) closeBtn.onclick = ()=> modal.classList.add('hidden');
+        if (addBtn) addBtn.onclick = ()=>{
+            const name = (sel.value || '').trim();
+            if(!name) return;
+            // Không thêm trùng
+            if (!state.serviceTabs.includes(name)) {
+                state.serviceTabs.push(name);
+                buildServiceTabs();
+                loadRows();
+                saveServiceTabs().catch(()=>{});
+            }
+            modal.classList.add('hidden');
+        };
+    });
+
+    function renderStatusOptions() {
+        const container = document.getElementById('status-options-list');
+        container.innerHTML = window.LAB_STATUSES.map((statusObj, index) => {
+            const name = (typeof statusObj === 'string') ? statusObj : (statusObj.name || '');
+            const color = (typeof statusObj === 'string') ? defaultColorForName(statusObj) : (statusObj.color || defaultColorForName(name));
+            return `
+            <div class="status-row">
+                <input type="text" value="${name}" class="status-option" data-index="${index}" style="flex:1;">
+                <input type="color" value="${color}" class="status-color" data-index="${index}" title="Chọn màu" style="width:44px;height:34px;border:0;background:transparent;">
+                <button class="delete-btn" onclick="deleteStatus(${index})">
+                    Xóa
+                </button>
+            </div>
+        `}).join('');
+
+        container.querySelectorAll('.status-option').forEach(input => {
+            input.onchange = async () => {
+                const index = parseInt(input.dataset.index);
+                const newValue = input.value.trim();
+                if (!newValue) {
+                    showNotification('Lỗi', 'Trạng thái không được để trống', 'error');
+                    input.value = window.LAB_STATUSES[index].name || '';
+                    return;
+                }
+                if (window.LAB_STATUSES.some((s,i)=> (s.name||s) === newValue && i!==index)){
+                    showNotification('Lỗi', 'Trạng thái này đã tồn tại!', 'error');
+                    input.value = window.LAB_STATUSES[index].name || '';
+                    return;
+                }
+                if(typeof window.LAB_STATUSES[index] === 'string') window.LAB_STATUSES[index] = { name: newValue, color: defaultColorForName(newValue) };
+                else window.LAB_STATUSES[index].name = newValue;
+                try { await saveLabSettings(); renderStatusOptions(); loadRows(); } catch(e){ showNotification('Lỗi', 'Lưu thất bại: '+e.message, 'error'); }
+            };
+        });
+
+        container.querySelectorAll('.status-color').forEach(input => {
+            input.onchange = async () => {
+                const index = parseInt(input.dataset.index);
+                const newColor = input.value;
+                if(typeof window.LAB_STATUSES[index] === 'string') window.LAB_STATUSES[index] = { name: window.LAB_STATUSES[index], color: newColor };
+                else window.LAB_STATUSES[index].color = newColor;
+                try { await saveLabSettings(); renderStatusOptions(); loadRows(); } catch(e){ showNotification('Lỗi', 'Lưu thất bại: '+e.message, 'error'); }
+            };
+        });
+    }
+
+    window.deleteStatus = async function(index) {
+        const confirmed = await showConfirm('Xác nhận xóa', 'Bạn có chắc muốn xóa trạng thái này?');
+        if(confirmed) {
+            const oldValue = window.LAB_STATUSES[index];
+            window.LAB_STATUSES.splice(index, 1);
+            try {
+                await saveLabSettings();
+                renderStatusOptions();
+                loadRows();
+                showNotification('Thành công', 'Đã xóa trạng thái thành công', 'success');
+            } catch(e) {
+                showNotification('Lỗi', 'Lưu thất bại: ' + e.message, 'error');
+                window.LAB_STATUSES.splice(index, 0, oldValue);
+                renderStatusOptions();
+            }
+        }
+    };
+
+    async function loadLabSettings(){
+        try{
+            const res = await fetch('/api/lab-settings'); 
+            if(!res.ok) return; 
+            const js = await res.json();
+            if(js.status_options && Array.isArray(js.status_options)) {
+                window.LAB_STATUSES = js.status_options.map(s => typeof s === 'string' ? { name: s, color: defaultColorForName(s) } : (s.color ? s : { name: s.name, color: s.color || defaultColorForName(s.name) }));
+            }
+            document.getElementById('lab-clear-status').checked = !!js.clear_status_on_sync;
+            renderStatusOptions();
+        }catch(e){
+            console.error('Error loading settings:', e);
+        }
+    }
+
+    function defaultColorForName(name){
+        const n = (name||'').toLowerCase();
+        if(n.includes('đã nghe')) return '#66bb6a';
+        if(n.includes('không liên lạc') || n.includes('không liên lạc được')) return '#ef5350';
+        if(n.includes('chờ')) return '#d2b48c';
+        if(n.includes('thiếu')) return '#ffa726';
+        if(n.includes('nhắn')) return '#90a4ae';
+        return '#e0e0e0';
+    }
+
+    function showNotification(title, message, type = 'info', showConfirm = false) {
+        const modal = document.getElementById('notification-modal');
+        const icon = document.getElementById('notification-icon');
+        const titleEl = document.getElementById('notification-title');
+        const messageEl = document.getElementById('notification-message');
+        const okBtn = document.getElementById('notification-ok');
+        const cancelBtn = document.getElementById('notification-cancel');
+        const confirmBtn = document.getElementById('notification-confirm');
+
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+        
+        const colors = {
+            success: '#4CAF50',
+            error: '#f44336',
+            warning: '#ff9800',
+            info: '#2196F3'
+        };
+
+        icon.textContent = icons[type] || icons.info;
+        icon.style.color = colors[type] || colors.info;
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+
+        if (showConfirm) {
+            okBtn.style.display = 'none';
+            cancelBtn.style.display = 'inline-block';
+            confirmBtn.style.display = 'inline-block';
+        } else {
+            okBtn.style.display = 'inline-block';
+            cancelBtn.style.display = 'none';
+            confirmBtn.style.display = 'none';
+        }
+
+        modal.classList.remove('hidden');
+        const content = modal.querySelector('.modal-content');
+        content.style.animation = 'fadeInScale 0.3s ease-out';
+    }
+
+    function hideNotification() {
+        const modal = document.getElementById('notification-modal');
+        const content = modal.querySelector('.modal-content');
+        content.style.animation = 'fadeOutScale 0.2s ease-in';
+        setTimeout(() => {
+            modal.classList.add('hidden');
+            content.style.animation = '';
+        }, 200);
+    }
+
+    function showConfirm(title, message) {
+        return new Promise((resolve) => {
+            showNotification(title, message, 'warning', true);
+            const confirmBtn = document.getElementById('notification-confirm');
+            const cancelBtn = document.getElementById('notification-cancel');
+            
+            const handleConfirm = () => {
+                confirmBtn.removeEventListener('click', handleConfirm);
+                cancelBtn.removeEventListener('click', handleCancel);
+                hideNotification();
+                resolve(true);
+            };
+            
+            const handleCancel = () => {
+                confirmBtn.removeEventListener('click', handleConfirm);
+                cancelBtn.removeEventListener('click', handleCancel);
+                hideNotification();
+                resolve(false);
+            };
+            
+            confirmBtn.addEventListener('click', handleConfirm);
+            cancelBtn.addEventListener('click', handleCancel);
+        });
+    }
+
+    // Thiết lập listener để tự động refresh khi có thay đổi dịch vụ
+    function setupAutoSyncListener() {
+        // Sử dụng BroadcastChannel để lắng nghe thông báo từ các tab khác
+        if (typeof BroadcastChannel !== 'undefined') {
+            const channel = new BroadcastChannel('lab-tests-sync');
+            channel.onmessage = (event) => {
+                if (event.data && event.data.type === 'sync-request') {
+                    console.log('Nhận được yêu cầu đồng bộ tự động, đang refresh...');
+                    // Tự động refresh dữ liệu
+                    if (state.month) {
+                        loadRows();
+                    } else if (state.rangeStart && state.rangeEnd) {
+                        loadRowsByRange(state.rangeStart, state.rangeEnd);
+                    } else {
+                        loadRows();
+                    }
+                }
+            };
+        }
+        
+        // Fallback: lắng nghe localStorage event
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'lab-tests-sync-trigger') {
+                console.log('Nhận được yêu cầu đồng bộ tự động (localStorage), đang refresh...');
+                if (state.month) {
+                    loadRows();
+                } else if (state.rangeStart && state.rangeEnd) {
+                    loadRowsByRange(state.rangeStart, state.rangeEnd);
+                } else {
+                    loadRows();
+                }
+            }
+        });
+        
+        // Lắng nghe custom event
+        window.addEventListener('lab-tests-sync', () => {
+            console.log('Nhận được yêu cầu đồng bộ tự động (custom event), đang refresh...');
+            if (state.month) {
+                loadRows();
+            } else if (state.rangeStart && state.rangeEnd) {
+                loadRowsByRange(state.rangeStart, state.rangeEnd);
+            } else {
+                loadRows();
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('notification-ok').onclick = hideNotification;
+        document.getElementById('notification-modal').onclick = (e) => {
+            if (e.target.id === 'notification-modal') {
+                hideNotification();
+            }
+        };
+        
+        // Lắng nghe sự kiện đồng bộ tự động từ examination-list.html
+        setupAutoSyncListener();
+    });
+
+    async function saveLabSettings(){
+        try {
+            const payload = { 
+                status_options: window.LAB_STATUSES,
+                clear_status_on_sync: document.getElementById('lab-clear-status').checked
+            };
+
+            const res = await fetch('/api/lab-settings', { 
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify(payload) 
+            });
+
+            if(res.ok){ 
+                const result = await res.json();
+                if(result.status_options && Array.isArray(result.status_options)) {
+                    window.LAB_STATUSES = result.status_options.map(s => typeof s === 'string' ? { name: s, color: defaultColorForName(s) } : (s.color ? s : { name: s.name, color: s.color || defaultColorForName(s.name) }));
+                }
+                loadRows();
+            } else {
+                throw new Error('Lưu thất bại - vui lòng thử lại');
+            }
+        } catch(e) {
+            showNotification('Lỗi', e.message || 'Lưu thất bại', 'error');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('add-status-btn').onclick = async () => {
+            const input = document.getElementById('new-status-input');
+            const value = input.value.trim();
+            if(!value) { 
+                showNotification('Lỗi', 'Vui lòng nhập trạng thái mới', 'error'); 
+                return; 
+            }
+            if(window.LAB_STATUSES.some(s => (s.name||s) === value)) { 
+                showNotification('Lỗi', 'Trạng thái này đã tồn tại!', 'error'); 
+                return; 
+            }
+            const newObj = { name: value, color: defaultColorForName(value) };
+            window.LAB_STATUSES.push(newObj);
+            try {
+                await saveLabSettings();
+                input.value = '';
+                renderStatusOptions();
+                loadRows();
+                showNotification('Thành công', 'Đã thêm trạng thái mới thành công', 'success');
+            } catch (e) {
+                showNotification('Lỗi', 'Lưu thất bại: ' + e.message, 'error');
+                window.LAB_STATUSES.pop();
+                renderStatusOptions();
+            }
+        };
+
+        document.getElementById('new-status-input').onkeypress = (e) => {
+            if(e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('add-status-btn').click();
+            }
+        };
+    });
+
+    async function doSyncRange(){
+        const start = document.getElementById('sync-start').value;
+        const end = document.getElementById('sync-end').value;
+        const clearStatus = document.getElementById('sync-clear-status').checked;
+        if(!start || !end) return alert('Chọn ngày bắt đầu và kết thúc');
+        try{
+            const res = await fetch('/api/lab-orders/sync-range', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ start, end }) });
+            const data = await res.json();
+            if(!res.ok) return alert('Sync thất bại: '+(data.message||res.status));
+            alert(`Đã đồng bộ. Tạo: ${data.created}, Bỏ qua: ${data.skipped}`);
+            // Bỏ qua thao tác xóa trạng thái vì cột trạng thái đã được loại bỏ
+            document.getElementById('sync-range-modal').classList.add('hidden');
+            loadRowsByRange(start, end);
+        }catch(e){ console.error(e); alert('Lỗi khi đồng bộ: '+e.message); }
+    }
+
+    async function loadRowsByRange(start, end){
+        state.rangeStart = start;
+        state.rangeEnd = end;
+        document.getElementById('view-mode').value = 'range';
+        document.getElementById('btn-sync-range').classList.add('active');
+        document.getElementById('btn-sync').classList.add('waiting');
+        document.querySelectorAll('#month-tabs .tab-btn').forEach(b=>b.classList.add('waiting'));
+        loadRows();
+    }
+
+    async function exportPdf(){
+        try{
+            const params = new URLSearchParams();
+            const viewMode = document.getElementById('view-mode').value;
+            if(viewMode === 'range'){
+                if(state.rangeStart) params.set('start', state.rangeStart);
+                if(state.rangeEnd) params.set('end', state.rangeEnd);
+            } else {
+                if(state.month) params.set('month', state.month);
+            }
+            // Luôn filter theo "Phòng khám Đại Anh"
+            params.append('provider_unit', PROVIDER_NAME);
+            if(state.q) params.set('q', state.q);
+
+            const url = '/api/lab-orders?' + params.toString();
+            const res = await fetch(url);
+            if(!res.ok) return alert('Không tải được dữ liệu để xuất PDF');
+            let rows = await res.json();
+            if (state.serviceFilter && state.serviceFilter !== 'Tất cả') {
+                const key = state.serviceFilter.toLowerCase();
+                if (key === 'cấy que tránh thai') {
+                    rows = rows.filter(r => String(r.test_type||'').toLowerCase().includes('cấy que tránh thai'));
+                } else {
+                    rows = rows.filter(r => String(r.test_type||'').toLowerCase() === key);
+                }
+            }
+
+            let titleLabel = '';
+            if(viewMode === 'range' && state.rangeStart && state.rangeEnd) titleLabel = `${state.rangeStart} → ${state.rangeEnd}`;
+            else if(state.month) titleLabel = state.month;
+            else titleLabel = 'Danh sách xét nghiệm';
+
+            let html = `<!doctype html><html><head><meta charset="utf-8"><title>Danh sách xét nghiệm ${titleLabel} - Phòng khám Đại Anh</title>`;
+            html += `<style>body{font-family:Arial,Helvetica,sans-serif;font-size:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:6px}th{background:#eee}</style>`;
+            html += `</head><body>`;
+            html += `<h3>Danh sách xét nghiệm ${titleLabel} - Phòng khám Đại Anh</h3>`;
+            if(state.q) html += `<div>Tìm: ${escapeHtml(state.q)}</div>`;
+            if(state.serviceFilter && state.serviceFilter !== 'Tất cả') html += `<div>Dịch vụ: ${escapeHtml(state.serviceFilter)}</div>`;
+            html += `<table><thead><tr><th>STT</th><th>Họ tên</th><th>Ngày</th><th>SĐT</th><th>Loại XN</th><th>Giá</th><th>Ghi chú</th></tr></thead><tbody>`;
+            rows.forEach((r,i)=>{
+                html += `<tr><td>${i+1}</td><td>${escapeHtml(r.patient_name||'')}</td><td>${r.test_date||''}</td><td>${escapeHtml(r.patient_phone||'')}</td><td>${escapeHtml(r.test_type||'')}</td><td style="text-align:right">${r.price||''}</td><td>${escapeHtml(r.note||'')}</td></tr>`;
+            });
+            html += `</tbody></table></body></html>`;
+
+            const w = window.open('', '_blank');
+            if(!w) return alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+            w.document.write(html);
+            w.document.close();
+            setTimeout(()=>{ w.focus(); w.print(); }, 500);
+        }catch(e){ console.error(e); alert('Lỗi khi xuất PDF: '+e.message); }
+    }
+
+    function escapeHtml(str){ if(!str) return ''; return String(str).replace(/[&<>\"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]); }); }
+    </script>
+    
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+    <script src="footer-loader.js"></script>
+</body>
+</html>
+

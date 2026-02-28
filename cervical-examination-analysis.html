@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phân tích Soi Cổ Tử Cung - Phòng khám Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        .admin-header {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .admin-header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .admin-header .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .admin-header .logo img {
+            height: 40px;
+            width: auto;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .examination-form {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+
+        .examination-form h3 {
+            color: #ff6b6b;
+            margin-bottom: 20px;
+            font-size: 1.4rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #ff6b6b;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255, 107, 107, 0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .patient-info {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ff6b6b;
+        }
+
+        .patient-info h4 {
+            color: #ff6b6b;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .info-item {
+            background: white;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .info-item label {
+            font-weight: bold;
+            color: #333;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .info-item span {
+            color: #ff6b6b;
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+
+        /* Image Upload Styles */
+        .image-upload-section {
+            margin-bottom: 30px;
+        }
+        
+        .upload-area {
+            border: 3px dashed #ff6b6b;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            background: #fafafa;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+        
+        .upload-area:hover {
+            border-color: #ee5a24;
+            background: #f8f9fa;
+            transform: translateY(-2px);
+        }
+        
+        .upload-area.dragover {
+            border-color: #ee5a24;
+            background: #ffe0e0;
+            transform: scale(1.02);
+        }
+        
+        .upload-content i {
+            font-size: 3rem;
+            color: #ff6b6b;
+            margin-bottom: 15px;
+        }
+        
+        .upload-content p {
+            margin: 5px 0;
+            color: #333;
+        }
+        
+        .upload-hint {
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        .uploaded-image-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .image-preview {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        
+        .image-preview img {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .image-preview button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 8px 12px;
+            font-size: 12px;
+        }
+        
+        .analysis-controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        
+        .image-analysis-results {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .analysis-loading {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .analysis-loading i {
+            font-size: 2rem;
+            color: #ff6b6b;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .extracted-data {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            border-left: 4px solid #ff6b6b;
+        }
+        
+        .extracted-data h4 {
+            color: #ff6b6b;
+            margin-bottom: 10px;
+        }
+        
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .data-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .data-item label {
+            font-weight: bold;
+            color: #333;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .data-item span {
+            color: #ff6b6b;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .result-item {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            border-left: 4px solid #ff6b6b;
+        }
+
+        .result-item h4 {
+            color: #ff6b6b;
+            margin-bottom: 10px;
+        }
+
+        .status-indicator {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .status-normal {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .cervical-findings {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .findings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .finding-group {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #ff6b6b;
+        }
+
+        .finding-group h5 {
+            color: #ff6b6b;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .finding-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .finding-item:last-child {
+            border-bottom: none;
+        }
+
+        .finding-label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .finding-value {
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+
+        .abnormality-alert {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .abnormality-alert h5 {
+            margin: 0 0 10px 0;
+            font-weight: bold;
+        }
+
+        .recommendations {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .recommendations h5 {
+            margin: 0 0 10px 0;
+            font-weight: bold;
+        }
+
+        .recommendations ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .recommendations li {
+            margin-bottom: 5px;
+        }
+
+        .cervical-chart {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .btn-group {
+                flex-direction: column;
+            }
+            
+            .info-grid,
+            .data-grid,
+            .findings-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.PNG" alt="Logo">
+            <h1>Phân tích Soi Cổ Tử Cung</h1>
+        </div>
+        <div>
+            <a href="admin.html" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Quay lại
+            </a>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Patient Information -->
+        <div class="patient-info">
+            <h4><i class="fas fa-user"></i> Thông tin bệnh nhân</h4>
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>Bệnh nhân:</label>
+                    <span id="patient-name">Chưa chọn bệnh nhân</span>
+                </div>
+                <div class="info-item">
+                    <label>Ngày khám:</label>
+                    <span id="exam-date">-</span>
+                </div>
+                <div class="info-item">
+                    <label>Bác sĩ thực hiện:</label>
+                    <span id="doctor-name">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cervical Image Upload Section -->
+        <div class="examination-form">
+            <h3><i class="fas fa-camera"></i> Upload ảnh soi cổ tử cung</h3>
+            <div class="image-upload-section">
+                <div class="upload-area" id="upload-area">
+                    <div class="upload-content">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <p>Kéo thả ảnh soi cổ tử cung vào đây hoặc click để chọn file</p>
+                        <p class="upload-hint">Hỗ trợ: JPG, PNG, PDF (tối đa 10MB)</p>
+                    </div>
+                    <input type="file" id="cervical-image-input" accept="image/*,.pdf" style="display: none;">
+                </div>
+                <div class="uploaded-image-container" id="uploaded-image-container" style="display: none;">
+                    <div class="image-preview">
+                        <img id="cervical-image-preview" alt="Ảnh soi cổ tử cung">
+                        <button type="button" class="btn btn-danger" onclick="removeUploadedImage()">
+                            <i class="fas fa-trash"></i> Xóa ảnh
+                        </button>
+                    </div>
+                    <div class="analysis-controls">
+                        <button type="button" class="btn" onclick="analyzeCervicalImage()">
+                            <i class="fas fa-brain"></i> Phân tích ảnh soi cổ tử cung
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="clearImageAnalysis()">
+                            <i class="fas fa-eraser"></i> Xóa phân tích
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manual Cervical Examination Data Input -->
+        <div class="examination-form">
+            <h3><i class="fas fa-edit"></i> Nhập dữ liệu soi cổ tử cung thủ công</h3>
+            <form id="cervical-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="patient-select">Chọn bệnh nhân:</label>
+                        <select id="patient-select" required>
+                            <option value="">-- Chọn bệnh nhân --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="exam-date">Ngày khám:</label>
+                        <input type="datetime-local" id="exam-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="menstrual-cycle">Ngày kinh cuối:</label>
+                        <input type="date" id="menstrual-cycle">
+                    </div>
+                </div>
+
+                <!-- Cervical Findings -->
+                <div class="cervical-findings">
+                    <h4><i class="fas fa-search"></i> Kết quả soi cổ tử cung</h4>
+                    <div class="findings-grid">
+                        <div class="finding-group">
+                            <h5>Đặc điểm cổ tử cung</h5>
+                            <div class="finding-item">
+                                <span class="finding-label">Màu sắc:</span>
+                                <select id="cervical-color" style="width: 150px; padding: 5px;">
+                                    <option value="">-- Chọn màu --</option>
+                                    <option value="pink">Hồng</option>
+                                    <option value="red">Đỏ</option>
+                                    <option value="white">Trắng</option>
+                                    <option value="yellow">Vàng</option>
+                                </select>
+                            </div>
+                            <div class="finding-item">
+                                <span class="finding-label">Bề mặt:</span>
+                                <select id="cervical-surface" style="width: 150px; padding: 5px;">
+                                    <option value="">-- Chọn --</option>
+                                    <option value="smooth">Nhẵn</option>
+                                    <option value="rough">Gồ ghề</option>
+                                    <option value="irregular">Không đều</option>
+                                </select>
+                            </div>
+                            <div class="finding-item">
+                                <span class="finding-label">Kích thước:</span>
+                                <select id="cervical-size" style="width: 150px; padding: 5px;">
+                                    <option value="">-- Chọn --</option>
+                                    <option value="normal">Bình thường</option>
+                                    <option value="enlarged">To</option>
+                                    <option value="small">Nhỏ</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="finding-group">
+                            <h5>Dịch tiết</h5>
+                            <div class="finding-item">
+                                <span class="finding-label">Số lượng:</span>
+                                <select id="discharge-amount" style="width: 150px; padding: 5px;">
+                                    <option value="">-- Chọn --</option>
+                                    <option value="normal">Bình thường</option>
+                                    <option value="increased">Tăng</option>
+                                    <option value="decreased">Giảm</option>
+                                </select>
+                            </div>
+                            <div class="finding-item">
+                                <span class="finding-label">Màu sắc:</span>
+                                <select id="discharge-color" style="width: 150px; padding: 5px;">
+                                    <option value="">-- Chọn --</option>
+                                    <option value="clear">Trong</option>
+                                    <option value="white">Trắng</option>
+                                    <option value="yellow">Vàng</option>
+                                    <option value="green">Xanh</option>
+                                </select>
+                            </div>
+                            <div class="finding-item">
+                                <span class="finding-label">Đặc điểm:</span>
+                                <select id="discharge-character" style="width: 150px; padding: 5px;">
+                                    <option value="">-- Chọn --</option>
+                                    <option value="normal">Bình thường</option>
+                                    <option value="thick">Đặc</option>
+                                    <option value="thin">Lỏng</option>
+                                    <option value="frothy">Có bọt</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="finding-group">
+                            <h5>Bất thường</h5>
+                            <div class="finding-item">
+                                <span class="finding-label">Tổn thương:</span>
+                                <select id="lesions" style="width: 150px; padding: 5px;">
+                                    <option value="">-- Chọn --</option>
+                                    <option value="none">Không có</option>
+                                    <option value="erosion">Xói mòn</option>
+                                    <option value="polyp">Polyp</option>
+                                    <option value="cyst">Nang</option>
+                                    <option value="ulcer">Loét</option>
+                                </select>
+                            </div>
+                            <div class="finding-item">
+                                <span class="finding-label">Chảy máu:</span>
+                                <select id="bleeding" style="width: 150px; padding: 5px;">
+                                    <option value="">-- Chọn --</option>
+                                    <option value="none">Không</option>
+                                    <option value="contact">Chạm chảy máu</option>
+                                    <option value="spontaneous">Tự phát</option>
+                                </select>
+                            </div>
+                            <div class="finding-item">
+                                <span class="finding-label">Viêm:</span>
+                                <select id="inflammation" style="width: 150px; padding: 5px;">
+                                    <option value="">-- Chọn --</option>
+                                    <option value="none">Không</option>
+                                    <option value="mild">Nhẹ</option>
+                                    <option value="moderate">Vừa</option>
+                                    <option value="severe">Nặng</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Additional Information -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="cervical-position">Vị trí cổ tử cung:</label>
+                        <select id="cervical-position">
+                            <option value="">-- Chọn vị trí --</option>
+                            <option value="anterior">Trước</option>
+                            <option value="posterior">Sau</option>
+                            <option value="midline">Giữa</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="os-opening">Lỗ trong:</label>
+                        <select id="os-opening">
+                            <option value="">-- Chọn --</option>
+                            <option value="closed">Đóng</option>
+                            <option value="slightly-open">Hơi mở</option>
+                            <option value="open">Mở</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="consistency">Độ chắc:</label>
+                        <select id="consistency">
+                            <option value="">-- Chọn --</option>
+                            <option value="firm">Chắc</option>
+                            <option value="soft">Mềm</option>
+                            <option value="medium">Vừa</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="findings">Kết quả soi:</label>
+                    <textarea id="findings" placeholder="Mô tả chi tiết kết quả soi cổ tử cung..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="recommendations">Khuyến nghị:</label>
+                    <textarea id="recommendations" placeholder="Khuyến nghị cho bệnh nhân..."></textarea>
+                </div>
+
+                <div class="btn-group">
+                    <button type="button" class="btn" onclick="analyzeCervicalData()">
+                        <i class="fas fa-chart-line"></i> Phân tích dữ liệu
+                    </button>
+                    <button type="button" class="btn btn-success" onclick="saveCervicalResults()">
+                        <i class="fas fa-save"></i> Lưu kết quả
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="clearForm()">
+                        <i class="fas fa-eraser"></i> Xóa form
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Analysis Results -->
+        <div id="analysis-results" class="examination-form" style="display: none;">
+            <h3><i class="fas fa-chart-bar"></i> Kết quả phân tích</h3>
+            <div id="results-content"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentPatient = null;
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadPatients();
+            setCurrentDateTime();
+            initializeImageUpload();
+        });
+
+        // Load patients from database
+        async function loadPatients() {
+            try {
+                const response = await fetch('/api/patients');
+                const patients = await response.json();
+                
+                const select = document.getElementById('patient-select');
+                select.innerHTML = '<option value="">-- Chọn bệnh nhân --</option>';
+                
+                patients.forEach(patient => {
+                    const option = document.createElement('option');
+                    option.value = patient.id;
+                    option.textContent = `${patient.name} - ${patient.phone}`;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading patients:', error);
+            }
+        }
+
+        // Set current date and time
+        function setCurrentDateTime() {
+            const now = new Date();
+            const dateTimeString = now.toISOString().slice(0, 16);
+            document.getElementById('exam-date').value = dateTimeString;
+        }
+
+        // Update patient info when patient is selected
+        document.getElementById('patient-select').addEventListener('change', function() {
+            const patientId = this.value;
+            if (patientId) {
+                const selectedOption = this.options[this.selectedIndex];
+                document.getElementById('patient-name').textContent = selectedOption.textContent.split(' - ')[0];
+                document.getElementById('exam-date').textContent = new Date().toLocaleDateString('vi-VN');
+            } else {
+                document.getElementById('patient-name').textContent = 'Chưa chọn bệnh nhân';
+                document.getElementById('exam-date').textContent = '-';
+            }
+        });
+
+        // ============ Image Upload Functions ============
+        
+        // Initialize image upload functionality
+        function initializeImageUpload() {
+            const uploadArea = document.getElementById('upload-area');
+            const fileInput = document.getElementById('cervical-image-input');
+            
+            // Click to upload
+            uploadArea.addEventListener('click', () => fileInput.click());
+            
+            // File input change
+            fileInput.addEventListener('change', handleFileSelect);
+            
+            // Drag and drop
+            uploadArea.addEventListener('dragover', handleDragOver);
+            uploadArea.addEventListener('dragleave', handleDragLeave);
+            uploadArea.addEventListener('drop', handleDrop);
+        }
+        
+        // Handle drag over
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('dragover');
+        }
+        
+        // Handle drag leave
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+        }
+        
+        // Handle drop
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }
+        
+        // Handle file input change
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+        
+        // Handle file upload
+        function handleFile(file) {
+            // Validate file type
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+            if (!allowedTypes.includes(file.type)) {
+                alert('Chỉ hỗ trợ file JPG, PNG, PDF');
+                return;
+            }
+            
+            // Validate file size (10MB)
+            if (file.size > 10 * 1024 * 1024) {
+                alert('File quá lớn. Vui lòng chọn file nhỏ hơn 10MB');
+                return;
+            }
+            
+            // Display image preview
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                displayImagePreview(e.target.result, file);
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        // Display image preview
+        function displayImagePreview(imageSrc, file) {
+            const uploadArea = document.getElementById('upload-area');
+            const uploadedContainer = document.getElementById('uploaded-image-container');
+            const imagePreview = document.getElementById('cervical-image-preview');
+            
+            // Hide upload area, show uploaded container
+            uploadArea.style.display = 'none';
+            uploadedContainer.style.display = 'block';
+            
+            // Set image source
+            imagePreview.src = imageSrc;
+            
+            // Store file for analysis
+            uploadedContainer.dataset.fileName = file.name;
+            uploadedContainer.dataset.fileSize = file.size;
+            uploadedContainer.dataset.fileType = file.type;
+        }
+        
+        // Remove uploaded image
+        function removeUploadedImage() {
+            const uploadArea = document.getElementById('upload-area');
+            const uploadedContainer = document.getElementById('uploaded-image-container');
+            const fileInput = document.getElementById('cervical-image-input');
+            
+            // Reset everything
+            uploadArea.style.display = 'block';
+            uploadedContainer.style.display = 'none';
+            fileInput.value = '';
+            
+            // Clear any analysis results
+            clearImageAnalysis();
+        }
+        
+        // Analyze cervical image
+        async function analyzeCervicalImage() {
+            const patientId = document.getElementById('patient-select').value;
+            if (!patientId) {
+                alert('Vui lòng chọn bệnh nhân trước khi phân tích');
+                return;
+            }
+            
+            const uploadedContainer = document.getElementById('uploaded-image-container');
+            const imagePreview = document.getElementById('cervical-image-preview');
+            
+            if (!imagePreview.src) {
+                alert('Vui lòng upload ảnh soi cổ tử cung trước');
+                return;
+            }
+            
+            // Show loading
+            showAnalysisLoading();
+            
+            try {
+                // Convert image to base64
+                const base64Image = await convertImageToBase64(imagePreview.src);
+                
+                // Send to server for analysis
+                const response = await fetch('/api/analyze-cervical-image', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        patient_id: patientId,
+                        image_data: base64Image,
+                        file_name: uploadedContainer.dataset.fileName,
+                        file_type: uploadedContainer.dataset.fileType
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    displayImageAnalysisResults(result);
+                } else {
+                    const error = await response.json();
+                    alert('Lỗi khi phân tích ảnh: ' + error.message);
+                }
+            } catch (error) {
+                console.error('Error analyzing cervical image:', error);
+                alert('Lỗi khi phân tích ảnh soi cổ tử cung');
+            } finally {
+                hideAnalysisLoading();
+            }
+        }
+        
+        // Convert image to base64
+        function convertImageToBase64(imageSrc) {
+            return new Promise((resolve) => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                img.onload = function() {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    resolve(canvas.toDataURL('image/jpeg', 0.8));
+                };
+                
+                img.src = imageSrc;
+            });
+        }
+        
+        // Show analysis loading
+        function showAnalysisLoading() {
+            const uploadedContainer = document.getElementById('uploaded-image-container');
+            let loadingDiv = uploadedContainer.querySelector('.analysis-loading');
+            
+            if (!loadingDiv) {
+                loadingDiv = document.createElement('div');
+                loadingDiv.className = 'analysis-loading';
+                loadingDiv.innerHTML = '<i class="fas fa-spinner"></i><p>Đang phân tích ảnh soi cổ tử cung...</p>';
+                uploadedContainer.appendChild(loadingDiv);
+            }
+            
+            loadingDiv.style.display = 'block';
+        }
+        
+        // Hide analysis loading
+        function hideAnalysisLoading() {
+            const loadingDiv = document.querySelector('.analysis-loading');
+            if (loadingDiv) {
+                loadingDiv.style.display = 'none';
+            }
+        }
+        
+        // Display image analysis results
+        function displayImageAnalysisResults(result) {
+            const uploadedContainer = document.getElementById('uploaded-image-container');
+            
+            // Remove existing results
+            const existingResults = uploadedContainer.querySelector('.image-analysis-results');
+            if (existingResults) {
+                existingResults.remove();
+            }
+            
+            // Create results container
+            const resultsDiv = document.createElement('div');
+            resultsDiv.className = 'image-analysis-results';
+            
+            let statusClass = 'status-normal';
+            let statusText = 'Bình thường';
+            let statusIcon = 'fas fa-check-circle';
+            
+            if (result.analysis_status === 'warning') {
+                statusClass = 'status-warning';
+                statusText = 'Cần theo dõi';
+                statusIcon = 'fas fa-exclamation-triangle';
+            } else if (result.analysis_status === 'danger') {
+                statusClass = 'status-danger';
+                statusText = 'Bất thường';
+                statusIcon = 'fas fa-exclamation-circle';
+            }
+            
+            resultsDiv.innerHTML = `
+                <h4><i class="fas fa-brain"></i> Kết quả phân tích ảnh soi cổ tử cung</h4>
+                
+                <div class="extracted-data">
+                    <h4><i class="fas fa-chart-line"></i> Dữ liệu trích xuất từ ảnh</h4>
+                    <div class="data-grid">
+                        <div class="data-item">
+                            <label>Màu sắc</label>
+                            <span>${result.cervical_color || 'N/A'}</span>
+                        </div>
+                        <div class="data-item">
+                            <label>Bề mặt</label>
+                            <span>${result.cervical_surface || 'N/A'}</span>
+                        </div>
+                        <div class="data-item">
+                            <label>Tổn thương</label>
+                            <span>${result.lesions || 'N/A'}</span>
+                        </div>
+                        <div class="data-item">
+                            <label>Viêm</label>
+                            <span>${result.inflammation || 'N/A'}</span>
+                        </div>
+                        <div class="data-item">
+                            <label>Chảy máu</label>
+                            <span>${result.bleeding || 'N/A'}</span>
+                        </div>
+                        <div class="data-item">
+                            <label>Dịch tiết</label>
+                            <span>${result.discharge_character || 'N/A'}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="result-item">
+                    <h4><i class="${statusIcon}"></i> Tổng quan kết quả</h4>
+                    <p><strong>Điểm số:</strong> ${result.analysis_score}/${result.max_score}</p>
+                    <p><strong>Trạng thái:</strong> <span class="status-indicator ${statusClass}">${statusText}</span></p>
+                    <p><strong>Độ tin cậy:</strong> ${result.confidence}%</p>
+                </div>
+                
+                ${result.abnormalities && result.abnormalities.length > 0 ? `
+                <div class="abnormality-alert">
+                    <h5><i class="fas fa-exclamation-triangle"></i> Phát hiện bất thường</h5>
+                    <ul>
+                        ${result.abnormalities.map(ab => `<li>${ab}</li>`).join('')}
+                    </ul>
+                </div>
+                ` : ''}
+                
+                ${result.recommendations && result.recommendations.length > 0 ? `
+                <div class="recommendations">
+                    <h5><i class="fas fa-lightbulb"></i> Khuyến nghị</h5>
+                    <ul>
+                        ${result.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                    </ul>
+                </div>
+                ` : ''}
+                
+                <div class="btn-group" style="margin-top: 20px;">
+                    <button type="button" class="btn btn-success" onclick="saveImageAnalysisResults()">
+                        <i class="fas fa-save"></i> Lưu kết quả phân tích
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="applyImageDataToForm()">
+                        <i class="fas fa-edit"></i> Chỉnh sửa dữ liệu
+                    </button>
+                </div>
+            `;
+            
+            uploadedContainer.appendChild(resultsDiv);
+            
+            // Store analysis results for saving
+            uploadedContainer.dataset.analysisResults = JSON.stringify(result);
+        }
+        
+        // Clear image analysis
+        function clearImageAnalysis() {
+            const uploadedContainer = document.getElementById('uploaded-image-container');
+            const existingResults = uploadedContainer.querySelector('.image-analysis-results');
+            if (existingResults) {
+                existingResults.remove();
+            }
+            delete uploadedContainer.dataset.analysisResults;
+        }
+        
+        // Save image analysis results
+        async function saveImageAnalysisResults() {
+            const uploadedContainer = document.getElementById('uploaded-image-container');
+            const analysisResults = uploadedContainer.dataset.analysisResults;
+            
+            if (!analysisResults) {
+                alert('Không có kết quả phân tích để lưu');
+                return;
+            }
+            
+            try {
+                const result = JSON.parse(analysisResults);
+                const response = await fetch('/api/cervical-results', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        patient_id: result.patient_id,
+                        exam_date: new Date().toISOString().slice(0, 16),
+                        cervical_color: result.cervical_color,
+                        cervical_surface: result.cervical_surface,
+                        cervical_size: result.cervical_size,
+                        lesions: result.lesions,
+                        bleeding: result.bleeding,
+                        inflammation: result.inflammation,
+                        discharge_character: result.discharge_character,
+                        analysis_source: 'image_analysis'
+                    })
+                });
+                
+                if (response.ok) {
+                    alert('Đã lưu kết quả phân tích ảnh soi cổ tử cung thành công!');
+                } else {
+                    alert('Lỗi khi lưu kết quả phân tích');
+                }
+            } catch (error) {
+                console.error('Error saving image analysis results:', error);
+                alert('Lỗi khi lưu kết quả phân tích');
+            }
+        }
+        
+        // Apply image data to manual form
+        function applyImageDataToForm() {
+            const uploadedContainer = document.getElementById('uploaded-image-container');
+            const analysisResults = uploadedContainer.dataset.analysisResults;
+            
+            if (!analysisResults) {
+                alert('Không có dữ liệu để áp dụng');
+                return;
+            }
+            
+            try {
+                const result = JSON.parse(analysisResults);
+                
+                // Fill manual form with extracted data
+                if (result.cervical_color) document.getElementById('cervical-color').value = result.cervical_color;
+                if (result.cervical_surface) document.getElementById('cervical-surface').value = result.cervical_surface;
+                if (result.lesions) document.getElementById('lesions').value = result.lesions;
+                if (result.bleeding) document.getElementById('bleeding').value = result.bleeding;
+                if (result.inflammation) document.getElementById('inflammation').value = result.inflammation;
+                if (result.discharge_character) document.getElementById('discharge-character').value = result.discharge_character;
+                
+                alert('Đã áp dụng dữ liệu từ phân tích ảnh vào form thủ công. Bạn có thể chỉnh sửa và phân tích lại.');
+            } catch (error) {
+                console.error('Error applying image data:', error);
+                alert('Lỗi khi áp dụng dữ liệu');
+            }
+        }
+
+        // ============ Manual Analysis Functions ============
+        
+        // Analyze cervical data manually
+        async function analyzeCervicalData() {
+            const formData = getFormData();
+            
+            if (!formData.patient_id) {
+                alert('Vui lòng chọn bệnh nhân');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/analyze-cervical-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    displayAnalysisResults(result);
+                } else {
+                    const error = await response.json();
+                    alert('Lỗi khi phân tích: ' + error.message);
+                }
+            } catch (error) {
+                console.error('Error analyzing cervical data:', error);
+                alert('Lỗi khi phân tích dữ liệu soi cổ tử cung');
+            }
+        }
+        
+        // Get form data
+        function getFormData() {
+            return {
+                patient_id: document.getElementById('patient-select').value,
+                exam_date: document.getElementById('exam-date').value,
+                menstrual_cycle: document.getElementById('menstrual-cycle').value,
+                cervical_color: document.getElementById('cervical-color').value,
+                cervical_surface: document.getElementById('cervical-surface').value,
+                cervical_size: document.getElementById('cervical-size').value,
+                discharge_amount: document.getElementById('discharge-amount').value,
+                discharge_color: document.getElementById('discharge-color').value,
+                discharge_character: document.getElementById('discharge-character').value,
+                lesions: document.getElementById('lesions').value,
+                bleeding: document.getElementById('bleeding').value,
+                inflammation: document.getElementById('inflammation').value,
+                cervical_position: document.getElementById('cervical-position').value,
+                os_opening: document.getElementById('os-opening').value,
+                consistency: document.getElementById('consistency').value,
+                findings: document.getElementById('findings').value,
+                recommendations: document.getElementById('recommendations').value
+            };
+        }
+        
+        // Display analysis results
+        function displayAnalysisResults(result) {
+            const resultsDiv = document.getElementById('analysis-results');
+            const contentDiv = document.getElementById('results-content');
+            
+            let statusClass = 'status-normal';
+            let statusText = 'Bình thường';
+            let statusIcon = 'fas fa-check-circle';
+            
+            if (result.analysis_status === 'warning') {
+                statusClass = 'status-warning';
+                statusText = 'Cần theo dõi';
+                statusIcon = 'fas fa-exclamation-triangle';
+            } else if (result.analysis_status === 'danger') {
+                statusClass = 'status-danger';
+                statusText = 'Bất thường';
+                statusIcon = 'fas fa-exclamation-circle';
+            }
+            
+            contentDiv.innerHTML = `
+                <div class="result-item">
+                    <h4><i class="${statusIcon}"></i> Tổng quan kết quả</h4>
+                    <p><strong>Điểm số:</strong> ${result.analysis_score}/${result.max_score}</p>
+                    <p><strong>Trạng thái:</strong> <span class="status-indicator ${statusClass}">${statusText}</span></p>
+                    <p><strong>Độ tin cậy:</strong> ${result.confidence}%</p>
+                </div>
+                
+                ${result.abnormalities && result.abnormalities.length > 0 ? `
+                <div class="abnormality-alert">
+                    <h5><i class="fas fa-exclamation-triangle"></i> Phát hiện bất thường</h5>
+                    <ul>
+                        ${result.abnormalities.map(ab => `<li>${ab}</li>`).join('')}
+                    </ul>
+                </div>
+                ` : ''}
+                
+                ${result.recommendations && result.recommendations.length > 0 ? `
+                <div class="recommendations">
+                    <h5><i class="fas fa-lightbulb"></i> Khuyến nghị</h5>
+                    <ul>
+                        ${result.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                    </ul>
+                </div>
+                ` : ''}
+                
+                <div class="btn-group" style="margin-top: 20px;">
+                    <button type="button" class="btn btn-success" onclick="saveCervicalResults()">
+                        <i class="fas fa-save"></i> Lưu kết quả
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="clearForm()">
+                        <i class="fas fa-eraser"></i> Xóa form
+                    </button>
+                </div>
+            `;
+            
+            resultsDiv.style.display = 'block';
+        }
+        
+        // Save cervical results
+        async function saveCervicalResults() {
+            const formData = getFormData();
+            
+            try {
+                const response = await fetch('/api/cervical-results', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                if (response.ok) {
+                    alert('Đã lưu kết quả soi cổ tử cung thành công!');
+                } else {
+                    alert('Lỗi khi lưu kết quả soi cổ tử cung');
+                }
+            } catch (error) {
+                console.error('Error saving cervical results:', error);
+                alert('Lỗi khi lưu kết quả soi cổ tử cung');
+            }
+        }
+        
+        // Clear form
+        function clearForm() {
+            document.getElementById('cervical-form').reset();
+            document.getElementById('analysis-results').style.display = 'none';
+            setCurrentDateTime();
+        }
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

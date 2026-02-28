@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Địa chỉ Maps - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .maps-header {
+            background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
+            color: white;
+            padding: 2rem 0;
+            text-align: center;
+        }
+        
+        .maps-header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+        }
+        
+        .maps-header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .maps-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .maps-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .map-section {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .map-section h3 {
+            color: #333;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .map-section .icon {
+            color: #4caf50;
+            font-size: 1.8rem;
+        }
+        
+        .address-form {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #4caf50;
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+        }
+        
+        .btn {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        }
+        
+        .btn.secondary {
+            background: #6c757d;
+        }
+        
+        .btn.secondary:hover {
+            background: #5a6268;
+        }
+        
+        .btn.share {
+            background: #2196f3;
+        }
+        
+        .btn.share:hover {
+            background: #1976d2;
+        }
+        
+        .current-address {
+            background: #e8f5e8;
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 4px solid #4caf50;
+            margin-bottom: 1rem;
+        }
+        
+        .current-address h4 {
+            color: #2e7d32;
+            margin-bottom: 0.5rem;
+        }
+        
+        .current-address p {
+            color: #555;
+            margin: 0.25rem 0;
+        }
+        
+        .map-preview {
+            background: #f0f0f0;
+            height: 300px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 1.1rem;
+            margin-top: 1rem;
+        }
+        
+        .share-options {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        
+        .share-options h4 {
+            color: #333;
+            margin-bottom: 1rem;
+        }
+        
+        .share-buttons {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .share-btn {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .share-btn:hover {
+            background: #1976d2;
+            transform: translateY(-1px);
+        }
+        
+        .share-btn.facebook {
+            background: #3b5998;
+        }
+        
+        .share-btn.facebook:hover {
+            background: #2d4373;
+        }
+        
+        .share-btn.zalo {
+            background: #0068ff;
+        }
+        
+        .share-btn.zalo:hover {
+            background: #0056cc;
+        }
+        
+        .share-btn.whatsapp {
+            background: #25d366;
+        }
+        
+        .share-btn.whatsapp:hover {
+            background: #1da851;
+        }
+        
+        .back-to-admin {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: #4caf50;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+        
+        .back-to-admin:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        }
+        
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 1rem;
+            border-radius: 6px;
+            border: 1px solid #c3e6cb;
+            margin-bottom: 1rem;
+            display: none;
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 1rem;
+            border-radius: 6px;
+            border: 1px solid #f5c6cb;
+            margin-bottom: 1rem;
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            .maps-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .share-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="admin.html" class="back-to-admin">
+        <i class="fas fa-arrow-left"></i>
+        Quay lại Admin
+    </a>
+    
+    <header class="maps-header">
+        <div class="container">
+            <h1><i class="fas fa-map-marker-alt"></i> Địa chỉ Maps Phòng khám</h1>
+            <p>Quản lý và chia sẻ địa chỉ phòng khám trên bản đồ</p>
+        </div>
+    </header>
+    
+    <main class="maps-content">
+        <div class="maps-container">
+            <!-- Cập nhật địa chỉ -->
+            <div class="map-section">
+                <h3>
+                    <i class="fas fa-edit icon"></i>
+                    Cập nhật địa chỉ
+                </h3>
+                
+                <div id="successMessage" class="success-message">
+                    <i class="fas fa-check-circle"></i> Địa chỉ đã được cập nhật thành công!
+                </div>
+                
+                <div id="errorMessage" class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i> Có lỗi xảy ra khi cập nhật địa chỉ!
+                </div>
+                
+                <form id="addressForm" class="address-form">
+                    <div class="form-group">
+                        <label for="clinicName">Tên phòng khám</label>
+                        <input type="text" id="clinicName" name="clinicName" value="Phòng khám chuyên khoa Phụ Sản Đại Anh" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="address">Địa chỉ chi tiết</label>
+                        <textarea id="address" name="address" rows="3" placeholder="Nhập địa chỉ chi tiết của phòng khám..." required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="phone">Số điện thoại</label>
+                        <input type="tel" id="phone" name="phone" placeholder="Nhập số điện thoại liên hệ...">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" placeholder="Nhập email liên hệ...">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="coordinates">Tọa độ GPS (Latitude, Longitude)</label>
+                        <input type="text" id="coordinates" name="coordinates" placeholder="Ví dụ: 10.762622, 106.660172">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="googleMapsLink">Link Google Maps</label>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <input type="url" id="googleMapsLink" name="googleMapsLink" placeholder="https://maps.google.com/..." style="flex: 1;">
+                            <button type="button" class="btn" onclick="copyGoogleMapsLink()" title="Nhấp để sao chép link Google Maps của phòng khám" aria-label="Sao chép link Google Maps của phòng khám">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn">
+                        <i class="fas fa-save"></i> Lưu địa chỉ
+                    </button>
+                </form>
+            </div>
+            
+            <!-- Xem trước địa chỉ -->
+            <div class="map-section">
+                <h3>
+                    <i class="fas fa-eye icon"></i>
+                    Xem trước địa chỉ
+                </h3>
+                
+                <div id="currentAddress" class="current-address">
+                    <h4>Địa chỉ hiện tại:</h4>
+                    <p><strong>Tên:</strong> <span id="displayName">Phòng khám chuyên khoa Phụ Sản Đại Anh</span></p>
+                    <p><strong>Địa chỉ:</strong> <span id="displayAddress">Đang cập nhật...</span></p>
+                    <p><strong>Điện thoại:</strong> <span id="displayPhone">Đang cập nhật...</span></p>
+                    <p><strong>Email:</strong> <span id="displayEmail">Đang cập nhật...</span></p>
+                </div>
+                
+                <div class="map-preview" id="mapContainer">
+                    <iframe id="googleMap" src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3718.030146801113!2d106.25976408081718!3d21.270274229026402!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31350d673f2cf0bb%3A0xfe377310d9a78fac!2zUGjDsm5nIGtow6FtIGNodXnDqm4ga2hvYSBwaOG7pSBz4bqjbiDEkOG6oWkgQW5oIHPhu5EgMQ!5e0!3m2!1svi!2s!4v1742546282056!5m2!1svi!2s" width="100%" height="300" style="border:0; border-radius: 8px;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+                </div>
+                
+                <div class="share-options">
+                    <h4>Chia sẻ địa chỉ</h4>
+                    <div class="share-buttons">
+                        <button class="share-btn" onclick="copyToClipboard()">
+                            <i class="fas fa-copy"></i> Sao chép
+                        </button>
+                        <button class="share-btn facebook" onclick="shareToFacebook()">
+                            <i class="fab fa-facebook-f"></i> Facebook
+                        </button>
+                        <button class="share-btn zalo" onclick="shareToZalo()">
+                            <i class="fas fa-comment"></i> Zalo
+                        </button>
+                        <button class="share-btn whatsapp" onclick="shareToWhatsApp()">
+                            <i class="fab fa-whatsapp"></i> WhatsApp
+                        </button>
+                        <button class="share-btn" onclick="openGoogleMaps()">
+                            <i class="fas fa-external-link-alt"></i> Mở Maps
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Hướng dẫn sử dụng -->
+        <div class="map-section" style="grid-column: 1 / -1;">
+            <h3>
+                <i class="fas fa-info-circle icon"></i>
+                Hướng dẫn sử dụng
+            </h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
+                <div>
+                    <h4><i class="fas fa-map-marker-alt" style="color: #4caf50;"></i> Cập nhật địa chỉ</h4>
+                    <ul style="color: #666; line-height: 1.6;">
+                        <li>Nhập địa chỉ chi tiết của phòng khám</li>
+                        <li>Thêm số điện thoại và email liên hệ</li>
+                        <li>Nhập tọa độ GPS để hiển thị chính xác trên bản đồ</li>
+                        <li>Lưu thông tin để cập nhật</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4><i class="fas fa-share-alt" style="color: #2196f3;"></i> Chia sẻ địa chỉ</h4>
+                    <ul style="color: #666; line-height: 1.6;">
+                        <li>Sao chép địa chỉ để gửi qua tin nhắn</li>
+                        <li>Chia sẻ lên Facebook, Zalo, WhatsApp</li>
+                        <li>Mở trực tiếp trên Google Maps</li>
+                        <li>Gửi link cho bệnh nhân dễ dàng</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4><i class="fas fa-cog" style="color: #ff9800;"></i> Tùy chỉnh</h4>
+                    <ul style="color: #666; line-height: 1.6;">
+                        <li>Cập nhật thông tin liên hệ</li>
+                        <li>Thay đổi tọa độ GPS</li>
+                        <li>Tùy chỉnh link Google Maps</li>
+                        <li>Quản lý thông tin hiển thị</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <footer style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <p>&copy; 2024 Phòng khám Phụ Sản Đại Anh. Tất cả quyền được bảo lưu.</p>
+    </footer>
+
+    <script>
+        // Load saved address data
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSavedAddress();
+        });
+
+        // Load saved address from localStorage
+        function loadSavedAddress() {
+            const savedAddress = localStorage.getItem('clinicAddress');
+            if (savedAddress) {
+                const address = JSON.parse(savedAddress);
+                document.getElementById('clinicName').value = address.clinicName || '';
+                document.getElementById('address').value = address.address || '';
+                document.getElementById('phone').value = address.phone || '';
+                document.getElementById('email').value = address.email || '';
+                document.getElementById('coordinates').value = address.coordinates || '';
+                document.getElementById('googleMapsLink').value = address.googleMapsLink || '';
+                
+                updateDisplay();
+            }
+        }
+
+        // Save address form
+        document.getElementById('addressForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                clinicName: document.getElementById('clinicName').value,
+                address: document.getElementById('address').value,
+                phone: document.getElementById('phone').value,
+                email: document.getElementById('email').value,
+                coordinates: document.getElementById('coordinates').value,
+                googleMapsLink: document.getElementById('googleMapsLink').value
+            };
+            
+            // Save to localStorage
+            localStorage.setItem('clinicAddress', JSON.stringify(formData));
+            
+            // Update display
+            updateDisplay();
+            
+            // Show success message
+            showMessage('success', 'Địa chỉ đã được cập nhật thành công!');
+        });
+
+        // Update display
+        function updateDisplay() {
+            const savedAddress = JSON.parse(localStorage.getItem('clinicAddress') || '{}');
+            
+            document.getElementById('displayName').textContent = savedAddress.clinicName || 'Chưa cập nhật';
+            document.getElementById('displayAddress').textContent = savedAddress.address || 'Chưa cập nhật';
+            document.getElementById('displayPhone').textContent = savedAddress.phone || 'Chưa cập nhật';
+            document.getElementById('displayEmail').textContent = savedAddress.email || 'Chưa cập nhật';
+        }
+
+        // Show message
+        function showMessage(type, message) {
+            const successMsg = document.getElementById('successMessage');
+            const errorMsg = document.getElementById('errorMessage');
+            
+            if (type === 'success') {
+                successMsg.style.display = 'block';
+                errorMsg.style.display = 'none';
+                successMsg.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
+            } else {
+                errorMsg.style.display = 'block';
+                successMsg.style.display = 'none';
+                errorMsg.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}`;
+            }
+            
+            setTimeout(() => {
+                successMsg.style.display = 'none';
+                errorMsg.style.display = 'none';
+            }, 3000);
+        }
+
+        // Copy to clipboard
+        function copyToClipboard() {
+            const savedAddress = JSON.parse(localStorage.getItem('clinicAddress') || '{}');
+            const addressText = `${savedAddress.clinicName || ''}\n${savedAddress.address || ''}\nĐiện thoại: ${savedAddress.phone || ''}\nEmail: ${savedAddress.email || ''}`;
+            
+            navigator.clipboard.writeText(addressText).then(() => {
+                showMessage('success', 'Đã sao chép địa chỉ vào clipboard!');
+            }).catch(() => {
+                showMessage('error', 'Không thể sao chép vào clipboard!');
+            });
+        }
+
+        // Share to Facebook
+        function shareToFacebook() {
+            const savedAddress = JSON.parse(localStorage.getItem('clinicAddress') || '{}');
+            const text = `Địa chỉ phòng khám: ${savedAddress.clinicName || ''} - ${savedAddress.address || ''}`;
+            const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}&quote=${encodeURIComponent(text)}`;
+            window.open(url, '_blank');
+        }
+
+        // Share to Zalo
+        function shareToZalo() {
+            const savedAddress = JSON.parse(localStorage.getItem('clinicAddress') || '{}');
+            const text = `Địa chỉ phòng khám: ${savedAddress.clinicName || ''} - ${savedAddress.address || ''}`;
+            const url = `https://zalo.me/share?text=${encodeURIComponent(text)}`;
+            window.open(url, '_blank');
+        }
+
+        // Share to WhatsApp
+        function shareToWhatsApp() {
+            const savedAddress = JSON.parse(localStorage.getItem('clinicAddress') || '{}');
+            const text = `Địa chỉ phòng khám: ${savedAddress.clinicName || ''} - ${savedAddress.address || ''}`;
+            const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+            window.open(url, '_blank');
+        }
+
+        // Open Google Maps
+        function openGoogleMaps() {
+            const savedAddress = JSON.parse(localStorage.getItem('clinicAddress') || '{}');
+            
+            if (savedAddress.googleMapsLink) {
+                window.open(savedAddress.googleMapsLink, '_blank');
+            } else if (savedAddress.coordinates) {
+                const [lat, lng] = savedAddress.coordinates.split(',').map(coord => coord.trim());
+                const url = `https://www.google.com/maps?q=${lat},${lng}`;
+                window.open(url, '_blank');
+            } else if (savedAddress.address) {
+                const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(savedAddress.address)}`;
+                window.open(url, '_blank');
+            } else {
+                showMessage('error', 'Vui lòng nhập địa chỉ hoặc tọa độ GPS!');
+            }
+        }
+
+        // Copy Google Maps Link
+        function copyGoogleMapsLink() {
+            const mapsLink = document.getElementById('googleMapsLink').value;
+            if (mapsLink) {
+                navigator.clipboard.writeText(mapsLink).then(() => {
+                    showMessage('success', 'Đã sao chép địa chỉ Google Maps của phòng khám!');
+                    // Also show a browser alert as a clear notification
+                    try {
+                        alert('Đã sao chép địa chỉ Google Maps của phòng khám!');
+                    } catch (e) {
+                        // ignore if alert is blocked
+                    }
+                }).catch(() => {
+                    showMessage('error', 'Không thể sao chép địa chỉ Google Maps!');
+                });
+            } else {
+                showMessage('error', 'Chưa có địa chỉ Google Maps để sao chép!');
+            }
+        }
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

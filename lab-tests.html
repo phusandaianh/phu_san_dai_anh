@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý danh sách xét nghiệm theo tháng</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="utilities.css">
+    <style>
+        /* Override container width to use full viewport width */
+        main.container { max-width: 100%; padding: 0 12px; margin-top: 12px; }
+        
+        .tabs { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+        .tab-btn { padding:6px 10px; border:1px solid #ccc; border-radius:6px; background:#f5f5f5; cursor:pointer; }
+        .tab-btn.active { background:#2196F3; color:#fff; border-color:#2196F3; }
+        .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:10px 0; }
+        table { width:100%; border-collapse:collapse; font-size:14px; }
+        th, td { padding:8px; border: none; }
+        th { background:#f7f7f7; border-bottom:1px solid #e0e0e0; }
+        td { border: none; }
+        .small { width:100px; }
+        /* Make patient row inputs/selects match button size */
+        tbody input, tbody select { font-size: 16px; padding:6px; box-sizing: border-box; border: none; outline: none; }
+        tbody input:focus, tbody select:focus { border: none; outline: none; }
+        /* Make name column wider so full names are visible */
+        th:nth-child(2), td:nth-child(2) { min-width: 220px; }
+        /* Specific large input style for name/new-name */
+        .lab-input-large { font-size:16px; padding:6px; width:100%; min-width:200px; box-sizing: border-box; border: none; outline: none; }
+        .lab-input-large:focus { border: none; outline: none; }
+        /* Remove border from all inputs and selects in table */
+        table input, table select { border: none; outline: none; }
+        table input:focus, table select:focus { border: none; outline: none; }
+        .right { text-align:right; }
+        .table-wrapper { overflow-x:auto; margin: 0 -12px; padding: 0 12px; }
+        .waiting { opacity: 0.6; }
+        .btn-sync-range.active { background-color: #1976d2; }
+        .status-option { padding: 6px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 4px; }
+        .status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; background: #f5f5f5; padding: 8px; border-radius: 4px; }
+        .status-row .delete-btn { padding: 4px 8px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .status-row .delete-btn:hover { background: #d32f2f; }
+        /* Filter icon in header cell */
+        .th-filter-wrap { position: relative; display: inline-block; width: 100%; }
+        .th-filter-btn { position: absolute; right: 4px; bottom: 2px; background: transparent; border: 0; padding: 0; cursor: pointer; line-height: 0; }
+        .th-filter-btn svg { width: 14px; height: 14px; fill: #6b6b6b; }
+        .th-filter-btn:hover svg { fill: #333; }
+        .lab-table th:last-child,
+        .lab-table td:last-child {
+            width: 110px;
+            min-width: 110px;
+        }
+        #new-name {
+            flex: 0 0 260px;
+            max-width: 320px;
+        }
+        @media (max-width: 640px) {
+            #new-name {
+                flex: 1 1 100%;
+                max-width: none;
+            }
+        }
+        .date-quick-fill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+    </style>
+</head>
+<body>
+    <header class="header" style="position: sticky; top: 0; z-index: 10; background: #fff;">
+        <div style="padding: 0 12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between; max-width: 100%;">
+                <h2 style="margin: 0; font-size: 1.4rem;">Quản lý danh sách xét nghiệm (theo tháng)</h2>
+                <a class="btn secondary-btn" href="examination-list.html">Quay về danh sách khám</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container" style="margin-top: 12px;">
+    <div class="tabs" id="month-tabs"></div>
+    <input type="hidden" id="view-mode" value="month">
+
+        <div class="toolbar" style="gap:6px; flex-wrap:wrap;">
+            <input id="search-q" type="text" placeholder="Tìm (tên, SĐT, loại…)" style="flex:1; min-width:200px;">
+            <button id="btn-filter-provider" class="btn secondary-btn" style="padding:8px 12px; font-size:14px;">Lọc đơn vị</button>
+            <button id="btn-sync" class="btn secondary-btn" style="padding:8px 12px; font-size:14px;">Đồng bộ tháng</button>
+            <button id="btn-sync-range" class="btn secondary-btn" style="padding:8px 12px; font-size:14px;">Đồng bộ theo ngày</button>
+            <button id="btn-export-pdf" class="btn primary-btn" style="padding:8px 12px; font-size:14px;">Xuất PDF</button>
+            <button id="btn-lab-settings" class="btn secondary-btn" style="padding:8px 12px; font-size:14px;">Cài đặt</button>
+            <div style="margin-left:auto;">Hàng: <span id="row-count">0</span></div>
+        </div>
+
+        <div class="toolbar" style="gap:6px; flex-wrap:wrap; margin:8px 0;">
+            <input id="new-name" class="lab-input-large" placeholder="Họ tên" style="min-width:200px;">
+            <div class="date-quick-fill">
+                <input id="new-date" type="date" class="small">
+                <button type="button" id="btn-date-today" class="btn secondary-btn" style="padding:6px 10px; font-size:13px;">Hôm nay</button>
+            </div>
+            <input id="new-phone" class="small" placeholder="SĐT">
+            <select id="new-provider" class="small"><option value="">-- Đơn vị --</option></select>
+            <select id="new-test" class="small"><option value="">-- Tên dịch vụ --</option></select>
+            <input id="new-price" class="small" type="number" placeholder="Giá">
+            <select id="new-status" class="small">
+                <option value="chờ kết quả">chờ kết quả</option>
+                <option value="đã có kết quả">đã có kết quả</option>
+            </select>
+            <button id="btn-add" class="btn primary-btn" style="padding:8px 12px; font-size:14px;">Thêm</button>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="lab-table">
+                <thead>
+                    <tr>
+                        <th>STT</th>
+                        <th>Họ tên</th>
+                        <th>Ngày <button id="btn-sort-date" class="btn small-btn" title="Sắp xếp theo ngày">↕</button></th>
+                        <th>SĐT</th>
+                        <th>
+                            <div class="th-filter-wrap">Đơn vị
+                                <button id="btn-filter-provider-col" class="th-filter-btn" title="Lọc đơn vị" aria-label="Lọc">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M3 5h18l-7 8v5l-4 2v-7L3 5z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </th>
+                        <th>Loại XN</th>
+                        <th class="right">Giá</th>
+                        <th>Trạng thái</th>
+                        <th>Ghi chú</th>
+                        <th>Hành động</th>
+                    </tr>
+                </thead>
+                <tbody id="lab-body"></tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- Modal: Provider Filter -->
+    <div id="provider-filter-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Lọc theo đơn vị xét nghiệm</h3>
+            <div id="provider-checkboxes" style="display:grid; gap:8px; max-height:400px; overflow-y:auto; margin:16px 0; padding:12px; background:#f5f5f5; border-radius:6px;"></div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+                <button id="provider-filter-clear" class="btn secondary-btn">Bỏ chọn tất cả</button>
+                <button id="provider-filter-close" class="btn primary-btn">Xong</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Lab Settings -->
+    <div id="lab-settings-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Cài đặt Lab</h3>
+            <div style="display:grid; gap:16px; max-width:480px;">
+                <div>
+                    <!-- Reset tháng đã bị vô hiệu hoá; thay bằng chức năng Xuất PDF -->
+                    <label>
+                        <input id="lab-clear-status" type="checkbox"> Xóa giá trị cột Trạng thái khi đồng bộ
+                    </label>
+                </div>
+
+                <div>
+                    <h4>Quản lý trạng thái xét nghiệm</h4>
+                    <div id="status-options-list" style="margin-bottom:8px;"></div>
+                    <div style="display:flex; gap:8px; margin-bottom:8px;">
+                        <input id="new-status-input" type="text" placeholder="Thêm trạng thái mới" style="flex:1;">
+                        <button id="add-status-btn" class="btn primary-btn">Thêm</button>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button id="lab-settings-close" class="btn secondary-btn">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Notification -->
+    <div id="notification-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px;">
+            <div id="notification-content">
+                <div id="notification-icon" style="font-size: 48px; text-align: center; margin-bottom: 16px;"></div>
+                <h3 id="notification-title" style="text-align: center; margin-bottom: 16px;"></h3>
+                <p id="notification-message" style="text-align: center; margin-bottom: 24px;"></p>
+                <div style="display: flex; gap: 8px; justify-content: center;">
+                    <button id="notification-ok" class="btn primary-btn" style="display: none;">OK</button>
+                    <button id="notification-cancel" class="btn secondary-btn" style="display: none;">Hủy</button>
+                    <button id="notification-confirm" class="btn primary-btn" style="display: none;">Xác nhận</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Sync Range -->
+    <div id="sync-range-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Đồng bộ theo ngày</h3>
+            <div style="display:grid; gap:8px; max-width:480px;">
+                <label>Ngày bắt đầu <input id="sync-start" type="date" class="small"></label>
+                <label>Ngày kết thúc <input id="sync-end" type="date" class="small"></label>
+                <label><input id="sync-clear-status" type="checkbox"> Xóa trạng thái khi đồng bộ</label>
+                <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
+                    <button id="sync-range-do" class="btn primary-btn">Đồng bộ</button>
+                    <button id="sync-range-close" class="btn secondary-btn">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+    const state = { month: '', selectedProviders: [], q: '', rangeStart: null, rangeEnd: null, lastCheckedMonth: null, sortDate: null };
+    // status items are objects: { name: 'Chờ kết quả', color: '#d2b48c' }
+    window.LAB_STATUSES = [
+        { name: "Chờ kết quả", color: "#d2b48c" },
+        { name: "Đã nghe, thiếu kết quả", color: "#ffa726" },
+        { name: "Đã nghe", color: "#66bb6a" },
+        { name: "Không liên lạc được", color: "#ef5350" },
+        { name: "Nhắn tin", color: "#90a4ae" }
+    ];
+
+    function buildMonthTabs(){
+        const tabs = document.getElementById('month-tabs');
+        tabs.innerHTML = '';
+        const today = new Date();
+        const y = today.getFullYear();
+        const currentM = today.getMonth()+1;
+        
+        // Tạo các tab cho tháng hiện tại (1-12)
+        for (let m=1; m<=12; m++){
+            const value = `${y}-${String(m).padStart(2,'0')}`;
+            const btn = document.createElement('button');
+            btn.className = 'tab-btn' + (m===currentM ? ' active' : '');
+            // store month value on the element so we can find/remove by value later
+            btn.dataset.value = value;
+            if (m===currentM) state.month = value;
+            // Nhãn gồm tháng và năm: T1.2025, T2.2025, ..., T12.2025
+            btn.textContent = `T${m}.${y}`;
+            btn.onclick = ()=>{ 
+                document.querySelectorAll('#month-tabs .tab-btn').forEach(b=>b.classList.remove('active')); 
+                btn.classList.add('active'); 
+                state.month=value; 
+                loadRows(); 
+            };
+            tabs.appendChild(btn);
+        }
+        
+        // Kiểm tra và thêm tab tháng sau (nếu là ngày 1 của tháng hiện tại)
+        if (today.getDate() === 1) {
+            const nextM = currentM === 12 ? 1 : currentM + 1;
+            const nextY = currentM === 12 ? y + 1 : y;
+            const nextValue = `${nextY}-${String(nextM).padStart(2,'0')}`;
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'tab-btn';
+            nextBtn.dataset.value = nextValue;
+            nextBtn.textContent = `T${nextM}.${nextY}`;
+            nextBtn.style.background = '#fff3e0';
+            nextBtn.title = 'Tab tháng tiếp theo (mới)';
+            nextBtn.onclick = ()=>{ 
+                document.querySelectorAll('#month-tabs .tab-btn').forEach(b=>b.classList.remove('active')); 
+                nextBtn.classList.add('active'); 
+                state.month=nextValue; 
+                loadRows(); 
+            };
+            // Before appending, remove the old tab with same month but previous year (if any)
+            try{
+                const prevYear = nextY - 1;
+                const prevValue = `${prevYear}-${String(nextM).padStart(2,'0')}`;
+                const existingPrev = Array.from(tabs.querySelectorAll('.tab-btn')).find(b=>b.dataset && b.dataset.value === prevValue);
+                if (existingPrev) {
+                    tabs.removeChild(existingPrev);
+                }
+            }catch(e){ /* ignore */ }
+            tabs.appendChild(nextBtn);
+        }
+    }
+
+    async function loadProviderUnits(){
+        const newProviderSel = document.getElementById('new-provider'); newProviderSel.innerHTML = '<option value="">-- Đơn vị --</option>';
+        try {
+            const res = await fetch('/api/provider-units'); if (!res.ok) return; const units = await res.json();
+            // Store units globally for filter modal
+            window.allProviderUnits = units;
+            // Populate new-provider dropdown
+            units.forEach(u=>{
+                const op2=document.createElement('option'); op2.value=u; op2.textContent=u; newProviderSel.appendChild(op2);
+            });
+            // Render filter modal checkboxes
+            renderProviderFilterCheckboxes(units);
+        } catch (_) {}
+    }
+
+    function renderProviderFilterCheckboxes(units){
+        const container = document.getElementById('provider-checkboxes');
+        container.innerHTML = '';
+        units.forEach(u=>{
+            const label = document.createElement('label');
+            label.style.display = 'flex';
+            label.style.alignItems = 'center';
+            label.style.gap = '8px';
+            label.style.cursor = 'pointer';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.value = u;
+            checkbox.checked = (state.selectedProviders && state.selectedProviders.includes(u));
+            const span = document.createElement('span');
+            span.textContent = u;
+            label.appendChild(checkbox);
+            label.appendChild(span);
+            container.appendChild(label);
+        });
+    }
+
+    async function loadServiceOptions(){
+        const testSel = document.getElementById('new-test'); testSel.innerHTML = '<option value="">-- Tên dịch vụ --</option>';
+        try {
+            const res = await fetch('/api/clinical-services'); if (!res.ok) return; const svcs = await res.json();
+            svcs.forEach(s=>{ const op=document.createElement('option'); op.value = String(s.id); op.textContent = s.name; op.dataset.price = s.price || 0; op.dataset.unit = s.provider_unit || ''; testSel.appendChild(op); });
+            // Auto-fill price and unit when select changes
+            testSel.onchange = () => {
+                const op = testSel.selectedOptions[0]; if (!op) return;
+                const p = parseFloat(op.dataset.price || '0');
+                const unit = op.dataset.unit || '';
+                if (!document.getElementById('new-price').value) document.getElementById('new-price').value = p;
+                if (!document.getElementById('new-provider').value && unit) document.getElementById('new-provider').value = unit;
+            };
+        } catch (_) {}
+    }
+
+    async function loadRows(){
+        const viewMode = document.getElementById('view-mode').value;
+        const params = new URLSearchParams();
+        if(viewMode === 'range'){
+            if(state.rangeStart) params.set('start', state.rangeStart);
+            if(state.rangeEnd) params.set('end', state.rangeEnd);
+        }else{
+            if (state.month) params.set('month', state.month);
+        }
+        // Add all selected providers as separate query params
+        if (state.selectedProviders && state.selectedProviders.length > 0) {
+            state.selectedProviders.forEach(p => params.append('provider_unit', p));
+        }
+        if (state.q) params.set('q', state.q);
+        const res = await fetch('/api/lab-orders?'+params.toString());
+        const tbody = document.getElementById('lab-body');
+        if (!res.ok){ tbody.innerHTML = '<tr><td colspan="10" style="color:red;text-align:center;">Không tải được dữ liệu</td></tr>'; return; }
+        let rows = await res.json();
+        // Sắp xếp theo ngày nếu có chọn
+        if (state.sortDate) {
+            rows = rows.slice().sort((a, b) => {
+                const da = (a.test_date || '');
+                const db = (b.test_date || '');
+                if (!da && !db) return 0;
+                if (!da) return state.sortDate === 'asc' ? -1 : 1;
+                if (!db) return state.sortDate === 'asc' ? 1 : -1;
+                if (da < db) return state.sortDate === 'asc' ? -1 : 1;
+                if (da > db) return state.sortDate === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        document.getElementById('row-count').textContent = rows.length;
+        tbody.innerHTML = rows.map((r, i)=>`
+            <tr>
+                <td>${i+1}</td>
+                <td><input class="lab-input-large" value="${r.patient_name||''}" data-id="${r.id}" data-field="patient_name"></td>
+                <td><input class="small" type="date" value="${r.test_date||''}" data-id="${r.id}" data-field="test_date"></td>
+                <td><input class="small" value="${r.patient_phone||''}" data-id="${r.id}" data-field="patient_phone"></td>
+                <td><input class="small" value="${r.provider_unit||''}" data-id="${r.id}" data-field="provider_unit"></td>
+                <td><input class="small" value="${r.test_type||''}" data-id="${r.id}" data-field="test_type"></td>
+                <td class="right"><input class="small" type="number" value="${r.price||0}" data-id="${r.id}" data-field="price"></td>
+                <td>
+                    <select class="small status-select" data-id="${r.id}" data-field="status">${window.LAB_STATUSES.map(st=>`<option value="${st.name}" data-color="${st.color||''}" ${r.status===st.name?'selected':''}>${st.name}</option>`).join('')}</select>
+                </td>
+                <td><input value="${r.note||''}" data-id="${r.id}" data-field="note"></td>
+                <td>
+                    <button class="btn small-btn" onclick="saveRow(${r.id})">Lưu</button>
+                    <button class="btn small-btn" onclick="delRow(${r.id})">Xóa</button>
+                </td>
+            </tr>
+        `).join('');
+
+        // After rendering, style each status select to match selected option color
+        tbody.querySelectorAll('.status-select').forEach(sel => {
+            const opt = sel.selectedOptions[0];
+            const color = opt ? (opt.dataset.color || '') : '';
+            if(color) sel.style.background = color;
+            // When user changes status, update select background immediately
+            sel.onchange = async () => {
+                const chosen = sel.selectedOptions[0];
+                const c = chosen ? (chosen.dataset.color || '') : '';
+                if(c) sel.style.background = c; else sel.style.background = '';
+                
+                // Auto-save the status change
+                const id = sel.dataset.id;
+                const newStatus = sel.value;
+                try {
+                    const res = await fetch(`/api/lab-orders/${id}`, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ status: newStatus })
+                    });
+                    if(!res.ok) {
+                        showNotification('Lỗi', 'Không thể lưu trạng thái', 'error');
+                        // Reload rows to revert to previous state if save failed
+                        loadRows();
+                    }
+                } catch(e) {
+                    showNotification('Lỗi', 'Không thể lưu trạng thái: ' + e.message, 'error');
+                    // Reload rows to revert to previous state if save failed
+                    loadRows();
+                }
+            };
+        });
+    }
+
+    async function saveRow(id){ const inputs=document.querySelectorAll(`[data-id='${id}']`); const payload={}; inputs.forEach(el=>payload[el.dataset.field]=el.value); const res = await fetch(`/api/lab-orders/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); if(!res.ok) alert('Lưu thất bại'); }
+    async function delRow(id){ if(!confirm('Xóa dòng này?')) return; const res=await fetch(`/api/lab-orders/${id}`,{method:'DELETE'}); if(res.ok) loadRows(); }
+
+    async function addRow(){
+        const name = document.getElementById('new-name').value;
+        const date = document.getElementById('new-date').value || new Date().toISOString().slice(0,10);
+        const phone = document.getElementById('new-phone').value;
+        const provider = document.getElementById('new-provider').value;
+        const testSel = document.getElementById('new-test');
+        const testName = testSel.selectedOptions[0] ? testSel.selectedOptions[0].textContent : '';
+        const priceVal = document.getElementById('new-price').value || (testSel.selectedOptions[0]?.dataset.price || 0);
+        const status = document.getElementById('new-status').value;
+        if(!name) return alert('Nhập họ tên'); if(!testName) return alert('Chọn tên dịch vụ');
+        const payload={ patient_name:name, test_date:date, patient_phone:phone, provider_unit:provider, test_type:testName, price:priceVal, status };
+        const res=await fetch('/api/lab-orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        if(res.ok){ document.getElementById('new-name').value=''; document.getElementById('new-phone').value=''; document.getElementById('new-price').value=''; document.getElementById('new-provider').value=''; document.getElementById('new-test').value=''; loadRows(); } else { alert('Thêm thất bại'); }
+    }
+
+    async function syncMonth(){ if(!state.month) return; const res=await fetch('/api/lab-orders/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month:state.month})}); if(res.ok) loadRows(); }
+
+    // Load and save selected providers to database
+    async function loadSelectedProviders(){
+        try {
+            const res = await fetch('/api/lab-settings');
+            if (res.ok) {
+                const data = await res.json();
+                state.selectedProviders = data.selected_providers || [];
+            }
+        } catch (e) {
+            console.error('Error loading selected providers:', e);
+        }
+    }
+
+    async function saveSelectedProviders(){
+        try {
+            const res = await fetch('/api/lab-settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ selected_providers: state.selectedProviders })
+            });
+            if (!res.ok) console.error('Error saving selected providers');
+        } catch (e) {
+            console.error('Error saving selected providers:', e);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+        buildMonthTabs();
+        loadProviderUnits();
+        loadServiceOptions();
+        loadSelectedProviders().then(() => loadRows());
+        document.getElementById('search-q').oninput = e=>{ state.q=e.target.value; loadRows(); };
+        document.getElementById('btn-filter-provider').onclick = ()=>{ document.getElementById('provider-filter-modal').classList.remove('hidden'); };
+        document.getElementById('provider-filter-close').onclick = ()=>{
+            // Collect checked providers
+            const checked = Array.from(document.querySelectorAll('#provider-checkboxes input[type="checkbox"]:checked')).map(cb => cb.value);
+            state.selectedProviders = checked;
+            saveSelectedProviders();
+            document.getElementById('provider-filter-modal').classList.add('hidden');
+            loadRows();
+        };
+        document.getElementById('provider-filter-clear').onclick = ()=>{
+            document.querySelectorAll('#provider-checkboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
+        };
+        // Hide toolbar filter button (moved to column header)
+        const toolbarFilterBtn = document.getElementById('btn-filter-provider');
+        if (toolbarFilterBtn) toolbarFilterBtn.style.display = 'none';
+        // Column header filter button
+        const colFilterBtn = document.getElementById('btn-filter-provider-col');
+        if (colFilterBtn) {
+            colFilterBtn.onclick = ()=>{
+                document.getElementById('provider-filter-modal').classList.remove('hidden');
+            };
+        }
+        document.getElementById('btn-add').onclick = addRow;
+        document.getElementById('btn-sync').onclick = ()=>{
+            document.getElementById('view-mode').value = 'month';
+            document.getElementById('btn-sync-range').classList.remove('active');
+            document.getElementById('btn-sync').classList.remove('waiting');
+            document.querySelectorAll('#month-tabs .tab-btn').forEach(b=>b.classList.remove('waiting'));
+            loadRows();
+            syncMonth();
+        };
+        // Tab tháng click về chế độ tháng
+        document.getElementById('month-tabs').addEventListener('click', e=>{
+            if(e.target.classList.contains('tab-btn')){
+                document.getElementById('view-mode').value = 'month';
+                document.getElementById('btn-sync-range').classList.remove('active');
+                document.getElementById('btn-sync').classList.remove('waiting');
+                document.querySelectorAll('#month-tabs .tab-btn').forEach(b=>b.classList.remove('waiting'));
+                loadRows();
+            }
+        });
+        // New UI hooks
+        document.getElementById('btn-lab-settings').onclick = ()=>{ document.getElementById('lab-settings-modal').classList.remove('hidden'); loadLabSettings(); };
+    document.getElementById('lab-settings-close').onclick = ()=>document.getElementById('lab-settings-modal').classList.add('hidden');
+        document.getElementById('btn-sync-range').onclick = ()=>{
+            // Tính ngày đầu/cuối tháng hiện tại, tháng trước, tháng sau
+            const month = state.month;
+            let y = new Date().getFullYear(), m = new Date().getMonth()+1;
+            if(month){
+                const parts = month.split('-');
+                y = parseInt(parts[0]);
+                m = parseInt(parts[1]);
+            }
+            // Tháng trước
+            let prevY = y, prevM = m-1;
+            if(prevM < 1){ prevM = 12; prevY--; }
+            const prevFirst = `${prevY}-${String(prevM).padStart(2,'0')}-01`;
+            const prevLast = (()=>{
+                const d = new Date(prevY, prevM, 0);
+                return `${prevY}-${String(prevM).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            })();
+            // Tháng sau
+            let nextY = y, nextM = m+1;
+            if(nextM > 12){ nextM = 1; nextY++; }
+            const nextFirst = `${nextY}-${String(nextM).padStart(2,'0')}-01`;
+            const nextLast = (()=>{
+                const d = new Date(nextY, nextM, 0);
+                return `${nextY}-${String(nextM).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            })();
+            // Tháng hiện tại
+            const firstDay = `${y}-${String(m).padStart(2,'0')}-01`;
+            const lastDay = (()=>{
+                const d = new Date(y, m, 0);
+                return `${y}-${String(m).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            })();
+            // min: ngày đầu tháng trước, max: ngày cuối tháng sau
+            const minDay = prevFirst;
+            const maxDay = nextLast;
+            const syncStart = document.getElementById('sync-start');
+            const syncEnd = document.getElementById('sync-end');
+            syncStart.value = firstDay;
+            syncEnd.value = lastDay;
+            syncStart.min = minDay;
+            syncStart.max = maxDay;
+            syncEnd.min = minDay;
+            syncEnd.max = maxDay;
+            document.getElementById('sync-range-modal').classList.remove('hidden');
+        };
+        document.getElementById('sync-range-close').onclick = ()=>document.getElementById('sync-range-modal').classList.add('hidden');
+        document.getElementById('sync-range-do').onclick = doSyncRange;
+        document.getElementById('btn-export-pdf').onclick = exportPdf;
+        const todayBtn = document.getElementById('btn-date-today');
+        if (todayBtn) {
+            todayBtn.onclick = () => {
+                const dateInput = document.getElementById('new-date');
+                if (!dateInput) return;
+                const today = new Date().toISOString().slice(0, 10);
+                dateInput.value = today;
+                dateInput.dispatchEvent(new Event('change', { bubbles: true }));
+            };
+        }
+        // Toggle sort by date
+        const sortBtn = document.getElementById('btn-sort-date');
+        if (sortBtn) {
+            const updateSortBtnUI = () => {
+                if (state.sortDate === 'asc') { sortBtn.textContent = '↑'; sortBtn.title = 'Đang tăng dần — bấm để giảm dần'; }
+                else if (state.sortDate === 'desc') { sortBtn.textContent = '↓'; sortBtn.title = 'Đang giảm dần — bấm để bỏ sắp xếp'; }
+                else { sortBtn.textContent = '↕'; sortBtn.title = 'Sắp xếp theo ngày'; }
+            };
+            updateSortBtnUI();
+            sortBtn.onclick = () => {
+                state.sortDate = state.sortDate === 'asc' ? 'desc' : (state.sortDate === 'desc' ? null : 'asc');
+                updateSortBtnUI();
+                loadRows();
+            };
+        }
+        // populate sync modal provider
+        document.getElementById('sync-provider').innerHTML = document.getElementById('filter-provider').innerHTML;
+        
+        // ===== Bộ hẹn giờ kiểm tra thay đổi tháng/năm hàng tuần (chủ nhật 18:00) =====
+        // Lưu tháng/năm hiện tại để phát hiện khi có thay đổi
+        let lastCheckedMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+        
+        function checkMonthRollover() {
+            const now = new Date();
+            const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            
+            // Nếu tháng/năm thay đổi so với lần kiểm tra cuối cùng
+            if (currentMonth !== lastCheckedMonth) {
+                console.log(`[Lab-tests] Phát hiện thay đổi tháng từ ${lastCheckedMonth} sang ${currentMonth}`);
+                lastCheckedMonth = currentMonth;
+                
+                // Rebuild tabs để cập nhật nhãn năm và thêm tab tháng sau nếu cần
+                buildMonthTabs();
+                
+                // Nếu là ngày 1 của tháng, hiển thị thông báo
+                if (now.getDate() === 1) {
+                    console.log(`[Lab-tests] Ngày 1 của tháng ${currentMonth} — tab tháng sau đã được tạo`);
+                }
+            }
+        }
+        
+        // Hàm tính giờ đến chủ nhật 18:00 tiếp theo
+        function getMillisToNextSundayEighteen() {
+            const now = new Date();
+            const dayOfWeek = now.getDay(); // 0 = Chủ nhật, 1 = Thứ hai, ..., 6 = Thứ bảy
+            
+            // Tính ngày chủ nhật tiếp theo
+            let daysUntilSunday = (7 - dayOfWeek) % 7;
+            if (daysUntilSunday === 0 && (now.getHours() > 18 || (now.getHours() === 18 && now.getMinutes() >= 0))) {
+                // Nếu hôm nay là chủ nhật và đã qua 18:00, chờ đến chủ nhật tuần sau
+                daysUntilSunday = 7;
+            }
+            
+            const nextSunday = new Date(now);
+            nextSunday.setDate(nextSunday.getDate() + daysUntilSunday);
+            nextSunday.setHours(18, 0, 0, 0);
+            
+            const msUntil = nextSunday - now;
+            console.log(`[Lab-tests] Bộ hẹn giờ: kiểm tra tiếp theo vào ${nextSunday.toLocaleString('vi-VN')} (còn ${Math.round(msUntil / 1000 / 60)} phút)`);
+            return msUntil;
+        }
+        
+        // Hàm lập lịch kiểm tra định kỳ
+        function scheduleMonthlyCheck() {
+            const msUntil = getMillisToNextSundayEighteen();
+            setTimeout(() => {
+                checkMonthRollover();
+                // Sau khi chạy, lập lịch lại cho tuần tiếp theo
+                scheduleMonthlyCheck();
+            }, msUntil);
+        }
+        
+        // Bắt đầu bộ hẹn giờ
+        scheduleMonthlyCheck();
+        
+        // Kiểm tra ngay lần đầu (trong trường hợp trang load sau thay đổi tháng)
+        checkMonthRollover();
+    });
+
+    // Load lab settings
+    function renderStatusOptions() {
+        const container = document.getElementById('status-options-list');
+        container.innerHTML = window.LAB_STATUSES.map((statusObj, index) => {
+            const name = (typeof statusObj === 'string') ? statusObj : (statusObj.name || '');
+            const color = (typeof statusObj === 'string') ? defaultColorForName(statusObj) : (statusObj.color || defaultColorForName(name));
+            return `
+            <div class="status-row">
+                <input type="text" value="${name}" class="status-option" data-index="${index}" style="flex:1;">
+                <input type="color" value="${color}" class="status-color" data-index="${index}" title="Chọn màu" style="width:44px;height:34px;border:0;background:transparent;">
+                <button class="delete-btn" onclick="deleteStatus(${index})">
+                    Xóa
+                </button>
+            </div>
+        `}).join('');
+
+        // Name change listeners
+        container.querySelectorAll('.status-option').forEach(input => {
+            input.onchange = async () => {
+                const index = parseInt(input.dataset.index);
+                const newValue = input.value.trim();
+                if (!newValue) {
+                    showNotification('Lỗi', 'Trạng thái không được để trống', 'error');
+                    input.value = window.LAB_STATUSES[index].name || '';
+                    return;
+                }
+                // check duplicate name
+                if (window.LAB_STATUSES.some((s,i)=> (s.name||s) === newValue && i!==index)){
+                    showNotification('Lỗi', 'Trạng thái này đã tồn tại!', 'error');
+                    input.value = window.LAB_STATUSES[index].name || '';
+                    return;
+                }
+                // update name
+                if(typeof window.LAB_STATUSES[index] === 'string') window.LAB_STATUSES[index] = { name: newValue, color: defaultColorForName(newValue) };
+                else window.LAB_STATUSES[index].name = newValue;
+                try { await saveLabSettings(); renderStatusOptions(); loadRows(); } catch(e){ showNotification('Lỗi', 'Lưu thất bại: '+e.message, 'error'); }
+            };
+        });
+
+        // Color change listeners
+        container.querySelectorAll('.status-color').forEach(input => {
+            input.onchange = async () => {
+                const index = parseInt(input.dataset.index);
+                const newColor = input.value;
+                if(typeof window.LAB_STATUSES[index] === 'string') window.LAB_STATUSES[index] = { name: window.LAB_STATUSES[index], color: newColor };
+                else window.LAB_STATUSES[index].color = newColor;
+                try { await saveLabSettings(); renderStatusOptions(); loadRows(); } catch(e){ showNotification('Lỗi', 'Lưu thất bại: '+e.message, 'error'); }
+            };
+        });
+    }
+
+    window.deleteStatus = async function(index) {
+        const confirmed = await showConfirm('Xác nhận xóa', 'Bạn có chắc muốn xóa trạng thái này?');
+        if(confirmed) {
+            const oldValue = window.LAB_STATUSES[index];
+            window.LAB_STATUSES.splice(index, 1);
+            try {
+                await saveLabSettings();
+                renderStatusOptions();
+                loadRows();
+                showNotification('Thành công', 'Đã xóa trạng thái thành công', 'success');
+            } catch(e) {
+                showNotification('Lỗi', 'Lưu thất bại: ' + e.message, 'error');
+                window.LAB_STATUSES.splice(index, 0, oldValue);
+                renderStatusOptions();
+            }
+        }
+    };
+
+    async function loadLabSettings(){
+        try{
+            const res = await fetch('/api/lab-settings'); 
+            if(!res.ok) return; 
+            const js = await res.json();
+            if(js.status_options && Array.isArray(js.status_options)) {
+                window.LAB_STATUSES = js.status_options.map(s => typeof s === 'string' ? { name: s, color: defaultColorForName(s) } : (s.color ? s : { name: s.name, color: s.color || defaultColorForName(s.name) }));
+            }
+            // populate checkbox
+            document.getElementById('lab-clear-status').checked = !!js.clear_status_on_sync;
+            renderStatusOptions();
+        }catch(e){
+            console.error('Error loading settings:', e);
+        }
+    }
+
+    // Helper: get color for a status name
+    function getStatusColor(name){
+        if(!name) return '';
+        const s = window.LAB_STATUSES.find(x => (x.name || x) === name || x === name);
+        if(!s) return '';
+        return s.color || '';
+    }
+
+    // Notification modal functions
+    function showNotification(title, message, type = 'info', showConfirm = false) {
+        const modal = document.getElementById('notification-modal');
+        const icon = document.getElementById('notification-icon');
+        const titleEl = document.getElementById('notification-title');
+        const messageEl = document.getElementById('notification-message');
+        const okBtn = document.getElementById('notification-ok');
+        const cancelBtn = document.getElementById('notification-cancel');
+        const confirmBtn = document.getElementById('notification-confirm');
+
+        // Set icon and colors based on type
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+        
+        const colors = {
+            success: '#4CAF50',
+            error: '#f44336',
+            warning: '#ff9800',
+            info: '#2196F3'
+        };
+
+        icon.textContent = icons[type] || icons.info;
+        icon.style.color = colors[type] || colors.info;
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+
+        // Show/hide buttons
+        if (showConfirm) {
+            okBtn.style.display = 'none';
+            cancelBtn.style.display = 'inline-block';
+            confirmBtn.style.display = 'inline-block';
+        } else {
+            okBtn.style.display = 'inline-block';
+            cancelBtn.style.display = 'none';
+            confirmBtn.style.display = 'none';
+        }
+
+        modal.classList.remove('hidden');
+        
+        // Add fade in animation
+        const content = modal.querySelector('.modal-content');
+        content.style.animation = 'fadeInScale 0.3s ease-out';
+    }
+
+    function hideNotification() {
+        const modal = document.getElementById('notification-modal');
+        const content = modal.querySelector('.modal-content');
+        
+        // Add fade out animation
+        content.style.animation = 'fadeOutScale 0.2s ease-in';
+        
+        setTimeout(() => {
+            modal.classList.add('hidden');
+            content.style.animation = ''; // Reset animation
+        }, 200);
+    }
+
+    // Promise-based confirm function
+    function showConfirm(title, message) {
+        return new Promise((resolve) => {
+            showNotification(title, message, 'warning', true);
+            
+            const confirmBtn = document.getElementById('notification-confirm');
+            const cancelBtn = document.getElementById('notification-cancel');
+            
+            const handleConfirm = () => {
+                confirmBtn.removeEventListener('click', handleConfirm);
+                cancelBtn.removeEventListener('click', handleCancel);
+                hideNotification();
+                resolve(true);
+            };
+            
+            const handleCancel = () => {
+                confirmBtn.removeEventListener('click', handleConfirm);
+                cancelBtn.removeEventListener('click', handleCancel);
+                hideNotification();
+                resolve(false);
+            };
+            
+            confirmBtn.addEventListener('click', handleConfirm);
+            cancelBtn.addEventListener('click', handleCancel);
+        });
+    }
+
+    // Initialize notification modal event listeners
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('notification-ok').onclick = hideNotification;
+        document.getElementById('notification-modal').onclick = (e) => {
+            if (e.target.id === 'notification-modal') {
+                hideNotification();
+            }
+        };
+        
+        // Lắng nghe sự kiện đồng bộ tự động từ examination-list.html
+        setupAutoSyncListener();
+    });
+
+    // Thiết lập listener để tự động refresh khi có thay đổi dịch vụ
+    function setupAutoSyncListener() {
+        // Sử dụng BroadcastChannel để lắng nghe thông báo từ các tab khác
+        if (typeof BroadcastChannel !== 'undefined') {
+            const channel = new BroadcastChannel('lab-tests-sync');
+            channel.onmessage = (event) => {
+                if (event.data && event.data.type === 'sync-request') {
+                    console.log('Nhận được yêu cầu đồng bộ tự động, đang refresh...');
+                    // Tự động refresh dữ liệu
+                    if (state.month) {
+                        loadRows();
+                    } else if (state.rangeStart && state.rangeEnd) {
+                        loadRowsByRange(state.rangeStart, state.rangeEnd);
+                    } else {
+                        loadRows();
+                    }
+                }
+            };
+        }
+        
+        // Fallback: lắng nghe localStorage event
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'lab-tests-sync-trigger') {
+                console.log('Nhận được yêu cầu đồng bộ tự động (localStorage), đang refresh...');
+                if (state.month) {
+                    loadRows();
+                } else if (state.rangeStart && state.rangeEnd) {
+                    loadRowsByRange(state.rangeStart, state.rangeEnd);
+                } else {
+                    loadRows();
+                }
+            }
+        });
+        
+        // Lắng nghe custom event
+        window.addEventListener('lab-tests-sync', () => {
+            console.log('Nhận được yêu cầu đồng bộ tự động (custom event), đang refresh...');
+            if (state.month) {
+                loadRows();
+            } else if (state.rangeStart && state.rangeEnd) {
+                loadRowsByRange(state.rangeStart, state.rangeEnd);
+            } else {
+                loadRows();
+            }
+        });
+    }
+
+    async function saveLabSettings(){
+        try {
+            const payload = { 
+                status_options: window.LAB_STATUSES,
+                clear_status_on_sync: document.getElementById('lab-clear-status').checked
+            };
+
+            console.log('Saving settings:', payload);
+
+            const res = await fetch('/api/lab-settings', { 
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify(payload) 
+            });
+
+            if(res.ok){ 
+                const result = await res.json();
+                console.log('Save result:', result);
+                if(result.status_options && Array.isArray(result.status_options)) {
+                    // normalize into objects with name/color
+                    window.LAB_STATUSES = result.status_options.map(s => typeof s === 'string' ? { name: s, color: defaultColorForName(s) } : (s.color ? s : { name: s.name, color: s.color || defaultColorForName(s.name) }));
+                }
+                // do not alert or close modal on auto-save; just refresh rows
+                loadRows(); // Reload rows để cập nhật trạng thái trong bảng
+            } else {
+                console.error('Server response:', await res.text());
+                throw new Error('Lưu thất bại - vui lòng thử lại');
+            }
+        } catch(e) {
+            console.error('Error saving settings:', e);
+            // Provide gentle notification to user
+            showNotification('Lỗi', e.message || 'Lưu thất bại', 'error');
+        }
+    }
+
+    // Provide default colors for known status names
+    function defaultColorForName(name){
+        const n = (name||'').toLowerCase();
+        if(n.includes('đã nghe')) return '#66bb6a';
+        if(n.includes('không liên lạc') || n.includes('không liên lạc được')) return '#ef5350';
+        if(n.includes('chờ')) return '#d2b48c';
+        if(n.includes('thiếu')) return '#ffa726';
+        if(n.includes('nhắn')) return '#90a4ae';
+        return '#e0e0e0';
+    }
+
+    // Initialize status options management
+    document.addEventListener('DOMContentLoaded', () => {
+        // Add new status handler
+        document.getElementById('add-status-btn').onclick = async () => {
+            const input = document.getElementById('new-status-input');
+            const value = input.value.trim();
+            if(!value) { 
+                showNotification('Lỗi', 'Vui lòng nhập trạng thái mới', 'error'); 
+                return; 
+            }
+            if(window.LAB_STATUSES.some(s => (s.name||s) === value)) { 
+                showNotification('Lỗi', 'Trạng thái này đã tồn tại!', 'error'); 
+                return; 
+            }
+            const newObj = { name: value, color: defaultColorForName(value) };
+            window.LAB_STATUSES.push(newObj);
+            try {
+                await saveLabSettings();
+                input.value = '';
+                renderStatusOptions();
+                loadRows();
+                showNotification('Thành công', 'Đã thêm trạng thái mới thành công', 'success');
+            } catch (e) {
+                showNotification('Lỗi', 'Lưu thất bại: ' + e.message, 'error');
+                window.LAB_STATUSES.pop();
+                renderStatusOptions();
+            }
+        };
+
+        // Allow Enter key to add new status
+        document.getElementById('new-status-input').onkeypress = (e) => {
+            if(e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('add-status-btn').click();
+            }
+        };
+    });
+
+    async function doSyncRange(){
+        const start = document.getElementById('sync-start').value;
+        const end = document.getElementById('sync-end').value;
+        const clearStatus = document.getElementById('sync-clear-status').checked;
+        if(!start || !end) return alert('Chọn ngày bắt đầu và kết thúc');
+        try{
+            const res = await fetch('/api/lab-orders/sync-range', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ start, end }) });
+            const data = await res.json();
+            if(!res.ok) return alert('Sync thất bại: '+(data.message||res.status));
+            alert(`Đã đồng bộ. Tạo: ${data.created}, Bỏ qua: ${data.skipped}`);
+            // If clearStatus requested, fetch affected rows and set status to empty
+            if(clearStatus){
+                const params = new URLSearchParams(); params.set('start', start); params.set('end', end);
+                const r2 = await fetch('/api/lab-orders?'+params.toString()); if(r2.ok){ const rows = await r2.json();
+                    for(const row of rows){ try{ await fetch('/api/lab-orders/'+row.id, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ status: '' }) }); }catch(e){} }
+                }
+            }
+            document.getElementById('sync-range-modal').classList.add('hidden');
+            // Hiển thị danh sách theo đúng khoảng ngày vừa sync
+            loadRowsByRange(start, end);
+        }catch(e){ console.error(e); alert('Lỗi khi đồng bộ: '+e.message); }
+    }
+
+    // Hàm mới: loadRows theo khoảng ngày
+    async function loadRowsByRange(start, end){
+        state.rangeStart = start;
+        state.rangeEnd = end;
+        document.getElementById('view-mode').value = 'range';
+        document.getElementById('btn-sync-range').classList.add('active');
+        document.getElementById('btn-sync').classList.add('waiting');
+        document.querySelectorAll('#month-tabs .tab-btn').forEach(b=>b.classList.add('waiting'));
+        loadRows();
+    }
+
+    // Export current filtered rows to a printable PDF (opens print dialog)
+    async function exportPdf(){
+        try{
+            const params = new URLSearchParams();
+            const viewMode = document.getElementById('view-mode').value;
+            if(viewMode === 'range'){
+                if(state.rangeStart) params.set('start', state.rangeStart);
+                if(state.rangeEnd) params.set('end', state.rangeEnd);
+            } else {
+                if(state.month) params.set('month', state.month);
+            }
+            // Add all selected providers
+            if (state.selectedProviders && state.selectedProviders.length > 0) {
+                state.selectedProviders.forEach(p => params.append('provider_unit', p));
+            }
+            if(state.q) params.set('q', state.q);
+
+            const url = '/api/lab-orders?' + params.toString();
+            const res = await fetch(url);
+            if(!res.ok) return alert('Không tải được dữ liệu để xuất PDF');
+            const rows = await res.json();
+
+            // Title/heading depending on view
+            let titleLabel = '';
+            if(viewMode === 'range' && state.rangeStart && state.rangeEnd) titleLabel = `${state.rangeStart} → ${state.rangeEnd}`;
+            else if(state.month) titleLabel = state.month;
+            else titleLabel = 'Danh sách xét nghiệm';
+
+            // Build printable HTML
+            let html = `<!doctype html><html><head><meta charset="utf-8"><title>Danh sách xét nghiệm ${titleLabel}</title>`;
+            html += `<style>body{font-family:Arial,Helvetica,sans-serif;font-size:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:6px}th{background:#eee}</style>`;
+            html += `</head><body>`;
+            html += `<h3>Danh sách xét nghiệm ${titleLabel}</h3>`;
+            if(state.selectedProviders && state.selectedProviders.length > 0) html += `<div>Đơn vị lọc: ${state.selectedProviders.map(escapeHtml).join(', ')}</div>`;
+            if(state.q) html += `<div>Tìm: ${escapeHtml(state.q)}</div>`;
+            html += `<table><thead><tr><th>STT</th><th>Họ tên</th><th>Ngày</th><th>SĐT</th><th>Đơn vị</th><th>Loại XN</th><th>Giá</th><th>Trạng thái</th><th>Ghi chú</th></tr></thead><tbody>`;
+            rows.forEach((r,i)=>{
+                html += `<tr><td>${i+1}</td><td>${escapeHtml(r.patient_name||'')}</td><td>${r.test_date||''}</td><td>${escapeHtml(r.patient_phone||'')}</td><td>${escapeHtml(r.provider_unit||'')}</td><td>${escapeHtml(r.test_type||'')}</td><td style="text-align:right">${r.price||''}</td><td>${escapeHtml(r.status||'')}</td><td>${escapeHtml(r.note||'')}</td></tr>`;
+            });
+            html += `</tbody></table></body></html>`;
+
+            const w = window.open('', '_blank');
+            if(!w) return alert('Không thể mở cửa sổ in. Vui lòng cho phép popup.');
+            w.document.write(html);
+            w.document.close();
+            // Give browser a moment to render then open print
+            setTimeout(()=>{ w.focus(); w.print(); }, 500);
+        }catch(e){ console.error(e); alert('Lỗi khi xuất PDF: '+e.message); }
+    }
+
+    // Simple HTML escape used by export
+    function escapeHtml(str){ if(!str) return ''; return String(str).replace(/[&<>\"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]); }); }
+    </script>
+    
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js">    </script>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>
+
+

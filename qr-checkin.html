@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check-in QR Code - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            font-family: 'Roboto', Arial, sans-serif;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+        
+        .header-section {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        
+        .clinic-info {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .clinic-logo {
+            height: 80px;
+            border-radius: 10px;
+        }
+        
+        .clinic-text h1 {
+            color: #1565c0;
+            font-size: 1.8rem;
+            margin: 0 0 0.5rem 0;
+            font-weight: bold;
+        }
+        
+        .clinic-text p {
+            color: #e53935;
+            font-size: 1.1rem;
+            margin: 0;
+            font-weight: 600;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .qr-section {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        .qr-title {
+            color: #1565c0;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1.5rem;
+        }
+        
+        .qr-code-container {
+            background: #f8f9fa;
+            border: 3px dashed #1565c0;
+            border-radius: 15px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        #qr-code {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .qr-instructions {
+            color: #666;
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+        
+        .stats-section {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            padding: 2rem;
+        }
+        
+        .stats-title {
+            color: #1565c0;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 15px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .waiting-list {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            padding: 2rem;
+        }
+        
+        .waiting-title {
+            color: #1565c0;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1.5rem;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .waiting-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        
+        .waiting-table th,
+        .waiting-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .waiting-table th {
+            background: #f8f9fa;
+            color: #1565c0;
+            font-weight: bold;
+        }
+        
+        .waiting-table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .queue-number {
+            background: #1565c0;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-weight: bold;
+            display: inline-block;
+            min-width: 40px;
+            text-align: center;
+        }
+        
+        .current-serving {
+            background: #4caf50;
+        }
+        
+        .ticket-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .ticket-modal.hidden {
+            display: none;
+        }
+        
+        .ticket {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        
+        .ticket-header {
+            border-bottom: 2px dashed #1565c0;
+            padding-bottom: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .ticket-number {
+            font-size: 4rem;
+            font-weight: bold;
+            color: #1565c0;
+            margin: 1rem 0;
+        }
+        
+        .ticket-title {
+            color: #1565c0;
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        
+        .ticket-message {
+            color: #666;
+            font-size: 1rem;
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+        
+        .ticket-footer {
+            border-top: 2px dashed #1565c0;
+            padding-top: 1.5rem;
+            margin-top: 1.5rem;
+            color: #1565c0;
+            font-weight: 600;
+        }
+        
+        .close-ticket {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: #e53935;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+        
+        .print-ticket {
+            background: #1565c0;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 10px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+        
+        .print-ticket:hover {
+            background: #0d47a1;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .clinic-info {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .refresh-btn {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin-left: 1rem;
+        }
+        
+        .refresh-btn:hover {
+            background: #43a047;
+        }
+
+        .speak-btn {
+            background: #ff7043;
+            color: white;
+            border: none;
+            padding: 0.5rem 0.8rem;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .speak-btn:hover {
+            background: #f4511e;
+        }
+
+        .settings-btn {
+            background: #607d8b;
+            color: white;
+            border: none;
+            padding: 0.4rem 0.7rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+
+        .settings-btn:hover {
+            background: #546e7a;
+        }
+
+        .settings-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1100;
+        }
+
+        .settings-modal.active {
+            display: flex;
+        }
+
+        .settings-card {
+            background: #fff;
+            border-radius: 14px;
+            padding: 1.2rem;
+            width: 95%;
+            max-width: 600px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+        }
+
+        .settings-row { display: grid; grid-template-columns: 160px 1fr; gap: 1rem; align-items: start; }
+        .settings-row + .settings-row { margin-top: 0.9rem; }
+        .settings-actions { display: flex; gap: 0.6rem; justify-content: flex-end; margin-top: 1rem; }
+        .btn { border: none; padding: 0.6rem 1rem; border-radius: 8px; cursor: pointer; }
+        .btn.primary { background: #1565c0; color: #fff; }
+        .btn.secondary { background: #e0e0e0; }
+        .btn.warn { background: #ef5350; color: #fff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header-section">
+            <div class="clinic-info">
+                <img src="logo_phu_san_dai_anh.png" alt="Logo Phòng khám Đại Anh" class="clinic-logo">
+                <div class="clinic-text">
+                    <h1>Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                    <p>Uy Tín - Chất Lượng</p>
+                </div>
+            </div>
+            <div style="color: #1565c0; font-size: 1.3rem; font-weight: bold; margin-top: 1rem;">
+                <i class="fas fa-qrcode"></i> Hệ thống Check-in tự động
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- QR Code Section -->
+            <div class="qr-section">
+                <div class="qr-title">
+                    <i class="fas fa-mobile-alt"></i> Quét mã QR để Check-in
+                </div>
+                <div class="qr-code-container">
+                    <div id="qr-code"></div>
+                </div>
+                <div class="qr-instructions">
+                    <p><strong>Hướng dẫn sử dụng:</strong></p>
+                    <p>1. Mở camera hoặc ứng dụng quét QR trên điện thoại</p>
+                    <p>2. Quét mã QR phía trên</p>
+                    <p>3. Nhận số thứ tự khám của bạn</p>
+                    <p>4. Chờ đến lượt được gọi khám</p>
+                </div>
+            </div>
+
+            <!-- Stats Section -->
+            <div class="stats-section">
+                <div class="stats-title">Thống kê hôm nay</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="total-checkins">0</div>
+                        <div class="stat-label">Tổng check-in</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="current-queue">0</div>
+                        <div class="stat-label">Số thứ tự hiện tại</div>
+                    </div>
+                </div>
+                <div class="stat-card" style="margin: 0;">
+                    <div class="stat-number" id="waiting-count">0</div>
+                    <div class="stat-label">Bệnh nhân đang chờ</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Waiting List -->
+        <div class="waiting-list">
+            <div class="waiting-title">
+                <i class="fas fa-list"></i> Danh sách chờ khám
+                <button class="refresh-btn" onclick="loadWaitingList()">
+                    <i class="fas fa-sync-alt"></i> Làm mới
+                </button>
+            </div>
+            <table class="waiting-table">
+                <thead>
+                    <tr>
+                        <th>STT</th>
+                        <th>Họ tên</th>
+                        <th>Số điện thoại</th>
+                        <th>Thời gian check-in</th>
+                        <th>Trạng thái
+                            <button class="settings-btn" style="margin-left: 8px;" onclick="openAnnouncementSettings()">
+                                <i class="fas fa-cog"></i> Cài đặt
+                            </button>
+                        </th>
+                        <th style="text-align:right;">Gọi</th>
+                    </tr>
+                </thead>
+                <tbody id="waiting-list-body">
+                    <!-- Danh sách sẽ được load bằng JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Settings Modal for Announcement -->
+    <div id="announcement-settings" class="settings-modal" role="dialog" aria-modal="true">
+        <div class="settings-card">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 0.6rem;">
+                <div class="ticket-title">Cài đặt âm thanh thông báo</div>
+                <button class="btn secondary" onclick="closeAnnouncementSettings()">Đóng</button>
+            </div>
+
+            <div class="settings-row">
+                <label for="announcement-template" style="font-weight:600; color:#1565c0;">Mẫu nội dung</label>
+                <div>
+                    <textarea id="announcement-template" rows="3" style="width:100%; padding:0.6rem; border-radius:8px; border:1px solid #ddd;" placeholder="Mời khách hàng tiếp theo {name}, phiếu khám số {queue}, vào phòng khám."></textarea>
+                    <div style="font-size:0.9rem; color:#666; margin-top:0.3rem;">
+                        Biến có thể dùng: {name}, {queue}
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-row">
+                <label for="voice-select" style="font-weight:600; color:#1565c0;">Giọng đọc</label>
+                <div>
+                    <select id="voice-select" style="width:100%; padding:0.5rem; border-radius:8px; border:1px solid #ddd;"></select>
+                    <div style="font-size:0.9rem; color:#666; margin-top:0.3rem;">Ưu tiên giọng nữ tiếng Việt (vi-VN).</div>
+                </div>
+            </div>
+
+            <div class="settings-row">
+                <label style="font-weight:600; color:#1565c0;">Tốc độ & Cao độ</label>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.6rem;">
+                    <div>
+                        <div style="font-size:0.9rem; color:#444;">Tốc độ đọc</div>
+                        <input id="rate-input" type="range" min="0.6" max="1.4" step="0.1" value="1" style="width:100%;" />
+                    </div>
+                    <div>
+                        <div style="font-size:0.9rem; color:#444;">Cao độ</div>
+                        <input id="pitch-input" type="range" min="0.6" max="1.4" step="0.1" value="1" style="width:100%;" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-actions">
+                <button class="btn" onclick="testAnnouncementSample()"><i class="fas fa-volume-up"></i> Phát thử</button>
+                <button class="btn warn" onclick="resetAnnouncementDefaults()">Mặc định</button>
+                <button class="btn primary" onclick="saveAnnouncementSettings()">Lưu</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ticket Modal -->
+    <div id="ticket-modal" class="ticket-modal hidden">
+        <div class="ticket">
+            <button class="close-ticket" onclick="closeTicket()">&times;</button>
+            <div class="ticket-header">
+                <img src="logo_phu_san_dai_anh.png" alt="Logo" style="height: 50px; margin-bottom: 1rem;">
+                <div class="ticket-title">Phòng khám chuyên khoa Phụ Sản Đại Anh</div>
+                <div style="color: #e53935; font-weight: 600;">Uy Tín - Chất Lượng</div>
+            </div>
+            
+            <div class="ticket-number" id="ticket-number">1</div>
+            <div style="color: #1565c0; font-size: 1.1rem; font-weight: bold; margin-bottom: 1rem;">
+                SỐ THỨ TỰ KHÁM TRONG NGÀY
+            </div>
+            
+            <div class="ticket-message">
+                Rất hân hạnh được phục vụ quý khách
+            </div>
+            
+            <div class="ticket-footer">
+                Trân trọng cảm ơn
+            </div>
+            
+            <button class="print-ticket" onclick="printTicket()">
+                <i class="fas fa-print"></i> In phiếu
+            </button>
+        </div>
+    </div>
+
+    <!-- Include QR Code library -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    
+    <script>
+        // Tạo QR Code
+        function generateQRCode() {
+            const qrContainer = document.getElementById('qr-code');
+            const checkInUrl = `${window.location.origin}/qr-checkin?action=checkin`;
+            
+            QRCode.toCanvas(qrContainer, checkInUrl, {
+                width: 200,
+                height: 200,
+                colorDark: '#1565c0',
+                colorLight: '#ffffff',
+                margin: 2
+            }, function (error) {
+                if (error) {
+                    console.error('Lỗi tạo QR code:', error);
+                    qrContainer.innerHTML = '<p style="color: red;">Không thể tạo QR code</p>';
+                }
+            });
+        }
+
+        // Load thống kê
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/checkin/stats');
+                const stats = await response.json();
+                
+                document.getElementById('total-checkins').textContent = stats.total_checkins || 0;
+                document.getElementById('current-queue').textContent = stats.current_queue || 0;
+                document.getElementById('waiting-count').textContent = stats.waiting_count || 0;
+            } catch (error) {
+                console.error('Lỗi load thống kê:', error);
+            }
+        }
+
+        // Load danh sách chờ
+        async function loadWaitingList() {
+            try {
+                const response = await fetch('/api/checkin/waiting-list');
+                const waitingList = await response.json();
+                
+                const tbody = document.getElementById('waiting-list-body');
+                tbody.innerHTML = '';
+                
+                if (waitingList.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #666;">Chưa có bệnh nhân nào check-in</td></tr>';
+                    return;
+                }
+                
+                waitingList.forEach(patient => {
+                    const row = document.createElement('tr');
+                    const isCurrentServing = patient.status === 'serving';
+                    
+                    row.innerHTML = `
+                        <td><span class="queue-number ${isCurrentServing ? 'current-serving' : ''}">${patient.queue_number}</span></td>
+                        <td>${patient.name}</td>
+                        <td>${patient.phone}</td>
+                        <td>${new Date(patient.checkin_time).toLocaleTimeString('vi-VN')}</td>
+                        <td>
+                            ${patient.status === 'waiting' ? '<span style="color: #ff9800;">Đang chờ</span>' : 
+                              patient.status === 'serving' ? '<span style="color: #4caf50;">Đang khám</span>' : 
+                              '<span style="color: #666;">Hoàn thành</span>'}
+                        </td>
+                        <td style="text-align:right;">
+                            <button class="speak-btn" title="Gọi vào phòng" data-name="${patient.name}" data-queue="${patient.queue_number}">
+                                <i class="fas fa-volume-up"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Lỗi load danh sách chờ:', error);
+            }
+        }
+
+        // Hiển thị phiếu số thứ tự
+        function showTicket(queueNumber) {
+            document.getElementById('ticket-number').textContent = queueNumber;
+            document.getElementById('ticket-modal').classList.remove('hidden');
+        }
+
+        // Đóng phiếu
+        function closeTicket() {
+            document.getElementById('ticket-modal').classList.add('hidden');
+        }
+
+        // In phiếu
+        function printTicket() {
+            const ticketContent = document.querySelector('.ticket').innerHTML;
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>Phiếu số thứ tự</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        .ticket { max-width: 300px; margin: 0 auto; text-align: center; }
+                        .ticket-number { font-size: 3rem; font-weight: bold; color: #1565c0; margin: 1rem 0; }
+                        .close-ticket, .print-ticket { display: none; }
+                    </style>
+                </head>
+                <body>
+                    <div class="ticket">${ticketContent}</div>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        // Xử lý check-in từ QR code
+        async function handleCheckin() {
+            try {
+                const response = await fetch('/api/checkin', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        source: 'qr_code',
+                        timestamp: new Date().toISOString()
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showTicket(result.queue_number);
+                    loadStats();
+                    loadWaitingList();
+                } else {
+                    alert(result.message || 'Có lỗi xảy ra khi check-in');
+                }
+            } catch (error) {
+                console.error('Lỗi check-in:', error);
+                alert('Không thể kết nối đến server');
+            }
+        }
+
+        // Kiểm tra URL có chứa tham số check-in không
+        function checkForCheckin() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('action') === 'checkin') {
+                handleCheckin();
+                // Xóa tham số khỏi URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+
+        // Khởi tạo trang
+        document.addEventListener('DOMContentLoaded', function() {
+            generateQRCode();
+            loadStats();
+            loadWaitingList();
+            checkForCheckin();
+            initializeAnnouncementSettings();
+            
+            // Tự động làm mới mỗi 30 giây
+            setInterval(() => {
+                loadStats();
+                loadWaitingList();
+            }, 30000);
+        });
+
+        // Xử lý khi click vào QR code (để test)
+        document.getElementById('qr-code').addEventListener('click', function() {
+            if (confirm('Bạn có muốn test chức năng check-in không?')) {
+                handleCheckin();
+            }
+        });
+
+        // ================= Thông báo giọng nói =================
+        const ANNOUNCE_KEY = 'qr_announce_template_v1';
+        const VOICE_KEY = 'qr_announce_voice_v1';
+        const RATE_KEY = 'qr_announce_rate_v1';
+        const PITCH_KEY = 'qr_announce_pitch_v1';
+
+        function getDefaultTemplate() {
+            return 'Mời khách hàng {name}, phiếu khám số {queue}, vào phòng khám.';
+        }
+
+        let voiceLoadRetryTimer = null;
+        function openAnnouncementSettings() {
+            document.getElementById('announcement-settings').classList.add('active');
+            // Re-populate voices on open (some browsers only expose voices after user gesture)
+            populateVoices();
+            // If still empty, retry a few times
+            tryEnsureVoicesLoaded();
+            
+            // Tự động chọn giọng nữ tốt nhất nếu chưa có lựa chọn
+            setTimeout(() => {
+                const voiceSelect = document.getElementById('voice-select');
+                if (voiceSelect && voiceSelect.value === '' && voiceSelect.options.length > 1) {
+                    const bestFemaleVoice = Array.from(voiceSelect.options).find(opt => 
+                        opt.value && (opt.textContent.includes('Nữ') || opt.textContent.includes('Female'))
+                    );
+                    if (bestFemaleVoice) {
+                        voiceSelect.value = bestFemaleVoice.value;
+                        localStorage.setItem(VOICE_KEY, bestFemaleVoice.value);
+                    }
+                }
+            }, 500);
+        }
+        function closeAnnouncementSettings() {
+            document.getElementById('announcement-settings').classList.remove('active');
+            if (voiceLoadRetryTimer) {
+                clearTimeout(voiceLoadRetryTimer);
+                voiceLoadRetryTimer = null;
+            }
+        }
+
+        function initializeAnnouncementSettings() {
+            // Template
+            const saved = localStorage.getItem(ANNOUNCE_KEY) || getDefaultTemplate();
+            document.getElementById('announcement-template').value = saved;
+            // Rate & Pitch
+            const savedRate = parseFloat(localStorage.getItem(RATE_KEY) || '1');
+            const savedPitch = parseFloat(localStorage.getItem(PITCH_KEY) || '1');
+            document.getElementById('rate-input').value = savedRate;
+            document.getElementById('pitch-input').value = savedPitch;
+            // Load voices
+            populateVoices();
+            if (speechSynthesis.onvoiceschanged !== undefined) {
+                speechSynthesis.onvoiceschanged = populateVoices;
+            }
+            // Fallback retry in case onvoiceschanged doesn't fire
+            tryEnsureVoicesLoaded();
+        }
+
+        function populateVoices() {
+            const voiceSelect = document.getElementById('voice-select');
+            if (!voiceSelect) return;
+            const selected = localStorage.getItem(VOICE_KEY) || '';
+            const voices = window.speechSynthesis.getVoices();
+            
+            // Ưu tiên giọng nữ tiếng Việt
+            const femaleViPatterns = [
+                /Microsoft\s+HoaiMy/i, // Edge - vi-VN female
+                /Microsoft\s+My/i,
+                /Google\s+Ti(ếng|eng)\s*Vi(ệt|et)/i, // Chrome - Google Vietnamese
+                /Google\s+Vietnamese/i,
+                /Vietnamese.*Female/i,
+                /vi.*female/i,
+                /female.*vi/i,
+                /nữ.*vi/i,
+                /vi.*nữ/i
+            ];
+            
+            const isVi = v => (v.lang || '').toLowerCase().startsWith('vi') || /vietnamese|vi[\s\-]?vn/i.test(v.name);
+            const isFemale = v => /female|nu|nữ|my|hoaimy|woman|girl/i.test(v.name);
+            
+            // Lọc giọng tiếng Việt
+            let viVoices = voices.filter(isVi);
+            
+            // Nếu không có giọng Việt, lấy tất cả giọng nữ
+            if (viVoices.length === 0) {
+                viVoices = voices.filter(isFemale);
+            }
+            
+            // Nếu vẫn không có, lấy tất cả giọng
+            if (viVoices.length === 0) {
+                viVoices = voices;
+            }
+            
+            const vendorScore = v => {
+                for (let i = 0; i < femaleViPatterns.length; i++) {
+                    if (femaleViPatterns[i].test(v.name)) return femaleViPatterns.length - i;
+                }
+                return 0;
+            };
+            
+            const sorted = viVoices.slice().sort((a, b) => {
+                const va = vendorScore(a);
+                const vb = vendorScore(b);
+                if (va !== vb) return vb - va;
+                
+                // Ưu tiên giọng nữ
+                const fA = isFemale(a) ? 1 : 0;
+                const fB = isFemale(b) ? 1 : 0;
+                if (fA !== fB) return fB - fA;
+                
+                // Ưu tiên tiếng Việt
+                const viA = isVi(a) ? 1 : 0;
+                const viB = isVi(b) ? 1 : 0;
+                if (viA !== viB) return viB - viA;
+                
+                return a.name.localeCompare(b.name);
+            });
+            
+            voiceSelect.innerHTML = '';
+            if (sorted.length) {
+                sorted.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.name;
+                    const isFemaleVoice = isFemale(v);
+                    const isVietnamese = isVi(v);
+                    let label = v.name;
+                    if (isFemaleVoice && isVietnamese) {
+                        label += ' (Nữ - Tiếng Việt)';
+                    } else if (isFemaleVoice) {
+                        label += ' (Nữ)';
+                    } else if (isVietnamese) {
+                        label += ' (Tiếng Việt)';
+                    }
+                    opt.textContent = `${label} (${v.lang})`;
+                    if (v.name === selected) opt.selected = true;
+                    voiceSelect.appendChild(opt);
+                });
+                
+                // Nếu giọng đã lưu không còn trong danh sách, xóa lựa chọn
+                if (!Array.from(voiceSelect.options).some(o => o.value === selected)) {
+                    localStorage.removeItem(VOICE_KEY);
+                }
+            } else {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = 'Không tìm thấy giọng đọc. Vui lòng dùng Chrome/Edge và bật gói ngôn ngữ.';
+                voiceSelect.appendChild(opt);
+            }
+        }
+
+        function tryEnsureVoicesLoaded(attempt = 0) {
+            const maxAttempts = 10;
+            const delayMs = 300;
+            const voices = window.speechSynthesis.getVoices();
+            if (voices && voices.length) {
+                populateVoices();
+                return;
+            }
+            if (attempt >= maxAttempts) return;
+            voiceLoadRetryTimer = setTimeout(() => {
+                populateVoices();
+                tryEnsureVoicesLoaded(attempt + 1);
+            }, delayMs);
+        }
+
+        function saveAnnouncementSettings() {
+            const tmpl = document.getElementById('announcement-template').value.trim() || getDefaultTemplate();
+            localStorage.setItem(ANNOUNCE_KEY, tmpl);
+            const voiceName = document.getElementById('voice-select').value || '';
+            localStorage.setItem(VOICE_KEY, voiceName);
+            const rate = parseFloat(document.getElementById('rate-input').value || '1');
+            const pitch = parseFloat(document.getElementById('pitch-input').value || '1');
+            localStorage.setItem(RATE_KEY, String(rate));
+            localStorage.setItem(PITCH_KEY, String(pitch));
+            closeAnnouncementSettings();
+        }
+
+        function resetAnnouncementDefaults() {
+            document.getElementById('announcement-template').value = getDefaultTemplate();
+            document.getElementById('rate-input').value = 1;
+            document.getElementById('pitch-input').value = 1;
+        }
+
+        function buildAnnouncement(name, queue) {
+            const tmpl = localStorage.getItem(ANNOUNCE_KEY) || getDefaultTemplate();
+            return tmpl
+                .replace(/\{name\}/g, name || '')
+                .replace(/\{queue\}/g, String(queue || ''))
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function getPreferredVoice() {
+            const voices = window.speechSynthesis.getVoices();
+            const savedName = localStorage.getItem(VOICE_KEY) || '';
+            const isVi = v => (v.lang || '').toLowerCase().startsWith('vi') || /vietnamese|vi[\s\-]?vn/i.test(v.name);
+            const isFemale = v => /female|nu|nữ|my|hoaimy|woman|girl/i.test(v.name);
+            
+            // Ưu tiên giọng đã lưu
+            let voice = voices.find(v => v.name === savedName);
+            if (voice) return voice;
+            
+            // Tìm giọng nữ tiếng Việt ưu tiên
+            const femaleViPatterns = [
+                /Microsoft\s+HoaiMy/i,
+                /Microsoft\s+My/i,
+                /Google\s+Ti(ếng|eng)\s*Vi(ệt|et)/i,
+                /Google\s+Vietnamese/i,
+                /Vietnamese.*Female/i,
+                /vi.*female/i,
+                /female.*vi/i,
+                /nữ.*vi/i,
+                /vi.*nữ/i
+            ];
+            
+            for (const pattern of femaleViPatterns) {
+                const v = voices.find(vv => pattern.test(vv.name));
+                if (v) return v;
+            }
+            
+            // Tìm giọng nữ tiếng Việt bất kỳ
+            const viVoices = voices.filter(isVi);
+            const femaleVi = viVoices.find(v => isFemale(v));
+            if (femaleVi) return femaleVi;
+            
+            // Tìm giọng nữ bất kỳ
+            const femaleVoices = voices.filter(isFemale);
+            if (femaleVoices.length) return femaleVoices[0];
+            
+            // Tìm giọng tiếng Việt bất kỳ
+            if (viVoices.length) return viVoices[0];
+            
+            // Fallback: giọng đầu tiên có sẵn
+            return voices[0] || null;
+        }
+
+        function speakAnnouncement(name, queue) {
+            try {
+                const text = buildAnnouncement(name, queue);
+                if (!('speechSynthesis' in window)) {
+                    alert('Trình duyệt không hỗ trợ đọc văn bản (Speech Synthesis).');
+                    return;
+                }
+                window.speechSynthesis.cancel();
+                const utter = new SpeechSynthesisUtterance(text);
+                const voice = getPreferredVoice();
+                if (voice) {
+                    utter.voice = voice;
+                    utter.lang = voice.lang || 'vi-VN';
+                } else {
+                    utter.lang = 'vi-VN';
+                }
+                utter.rate = parseFloat(localStorage.getItem(RATE_KEY) || '1');
+                utter.pitch = parseFloat(localStorage.getItem(PITCH_KEY) || '1');
+                window.speechSynthesis.speak(utter);
+            } catch (e) {
+                console.error('Speech error:', e);
+            }
+        }
+
+        function testAnnouncementSample() {
+            const name = 'Nguyễn Thị A';
+            const queue = 15;
+            speakAnnouncement(name, queue);
+        }
+
+        // Delegate click on speak buttons
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.speak-btn');
+            if (btn) {
+                const name = btn.getAttribute('data-name');
+                const queue = btn.getAttribute('data-queue');
+                speakAnnouncement(name, queue);
+            }
+        });
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

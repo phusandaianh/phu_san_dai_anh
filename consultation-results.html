@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tư vấn kết quả xét nghiệm, siêu âm - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .consultation-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            text-align: center;
+        }
+        
+        .consultation-header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+        }
+        
+        .consultation-header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .consultation-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .consultation-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        .consultation-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .consultation-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        .consultation-card h3 {
+            color: #333;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .consultation-card .icon {
+            color: #667eea;
+            font-size: 1.8rem;
+        }
+        
+        .consultation-card p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+        }
+        
+        .consultation-card .features {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .consultation-card .features li {
+            padding: 0.5rem 0;
+            color: #555;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .consultation-card .features li i {
+            color: #4CAF50;
+            width: 16px;
+        }
+        
+        .coming-soon {
+            background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            text-align: center;
+            padding: 3rem 2rem;
+            border-radius: 12px;
+            margin-top: 2rem;
+        }
+        
+        .coming-soon h2 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+        
+        .coming-soon p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .back-to-admin {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+        
+        .back-to-admin:hover {
+            background: #5a6fd8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        /* Tab Navigation Styles */
+        .consultation-tabs {
+            background: white;
+            border-bottom: 3px solid #667eea;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .tab-nav {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 1rem 2rem;
+        }
+        
+        .tab-btn {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            color: #495057;
+            padding: 12px 20px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            white-space: nowrap;
+        }
+        
+        .tab-btn:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        .tab-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        .tab-content-section {
+            display: none;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        .tab-content-section.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Specialized consultation cards */
+        .specialized-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .specialized-card h3 {
+            color: white;
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+        
+        .specialized-card .icon {
+            font-size: 2rem;
+            color: #ffeb3b;
+        }
+        
+        .specialized-card p {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.1rem;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+        }
+        
+        .specialized-features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        
+        .feature-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 1rem;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .feature-item h4 {
+            color: #ffeb3b;
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+        
+        .feature-item p {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.95rem;
+            margin: 0;
+        }
+        
+        /* Upload status styles */
+        .upload-status {
+            padding: 0.75rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+            display: none;
+        }
+        
+        .upload-status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .upload-status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .upload-status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <a href="admin.html" class="back-to-admin">
+        <i class="fas fa-arrow-left"></i>
+        Quay lại Admin
+    </a>
+    
+    <header class="consultation-header">
+        <div class="container">
+            <h1><i class="fas fa-stethoscope"></i> Tư vấn kết quả xét nghiệm, siêu âm, HTSS</h1>
+            <p>Dịch vụ tư vấn chuyên nghiệp cho kết quả xét nghiệm và siêu âm, HTSS</p>
+        </div>
+    </header>
+    
+    <!-- Tab Navigation -->
+    <nav class="consultation-tabs">
+        <div class="tab-nav">
+            <a href="#general" class="tab-btn active" data-tab="general">
+                <i class="fas fa-stethoscope"></i> Tư vấn tổng quát
+            </a>
+            <a href="#nipt" class="tab-btn" data-tab="nipt">
+                <i class="fas fa-dna"></i> Tư vấn NIPT
+            </a>
+            <a href="#diabetes" class="tab-btn" data-tab="diabetes">
+                <i class="fas fa-tint"></i> Tiểu đường thai kỳ
+            </a>
+            <a href="#htss" class="tab-btn" data-tab="htss">
+                <i class="fas fa-heart"></i> Tư vấn TSG
+            </a>
+            <a href="#fertility" class="tab-btn" data-tab="fertility">
+                <i class="fas fa-baby"></i> Hỗ trợ sinh sản
+            </a>
+        </div>
+    </nav>
+    
+    <main class="consultation-content">
+        <!-- Tab 1: Tư vấn tổng quát -->
+        <div id="general" class="tab-content-section active">
+            <div class="consultation-grid">
+                <div class="consultation-card">
+                    <h3>
+                        <i class="fas fa-vial icon"></i>
+                        Tư vấn kết quả xét nghiệm
+                    </h3>
+                    <p>Dịch vụ tư vấn chuyên sâu về các kết quả xét nghiệm trong thai kỳ, giúp bạn hiểu rõ ý nghĩa và tầm quan trọng của từng chỉ số.</p>
+                    <ul class="features">
+                        <li><i class="fas fa-check"></i> Giải thích chi tiết các chỉ số xét nghiệm</li>
+                        <li><i class="fas fa-check"></i> Tư vấn về tình trạng sức khỏe</li>
+                        <li><i class="fas fa-check"></i> Hướng dẫn chăm sóc phù hợp</li>
+                        <li><i class="fas fa-check"></i> Theo dõi và đánh giá định kỳ</li>
+                    </ul>
+                </div>
+                
+                <div class="consultation-card">
+                    <h3>
+                        <i class="fas fa-heartbeat icon"></i>
+                        Tư vấn kết quả siêu âm
+                    </h3>
+                    <p>Chuyên gia tư vấn về kết quả siêu âm thai, siêu âm tổng quát và các loại siêu âm chuyên khoa khác.</p>
+                    <ul class="features">
+                        <li><i class="fas fa-check"></i> Phân tích hình ảnh siêu âm</li>
+                        <li><i class="fas fa-check"></i> Đánh giá sự phát triển của thai nhi</li>
+                        <li><i class="fas fa-check"></i> Tư vấn về các bất thường (nếu có)</li>
+                        <li><i class="fas fa-check"></i> Hướng dẫn theo dõi tiếp theo</li>
+                    </ul>
+                </div>
+                
+                <div class="consultation-card">
+                    <h3>
+                        <i class="fas fa-user-md icon"></i>
+                        Tư vấn tổng hợp
+                    </h3>
+                    <p>Dịch vụ tư vấn toàn diện kết hợp cả xét nghiệm và siêu âm để đưa ra đánh giá tổng thể về sức khỏe.</p>
+                    <ul class="features">
+                        <li><i class="fas fa-check"></i> Đánh giá tổng thể sức khỏe</li>
+                        <li><i class="fas fa-check"></i> Kết hợp nhiều kết quả khác nhau</li>
+                        <li><i class="fas fa-check"></i> Tư vấn chế độ dinh dưỡng</li>
+                        <li><i class="fas fa-check"></i> Lập kế hoạch theo dõi</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Tư vấn NIPT -->
+        <div id="nipt" class="tab-content-section">
+            <div class="specialized-card">
+                <h3>
+                    <i class="fas fa-dna icon"></i>
+                    Tư vấn kết quả xét nghiệm NIPT
+                </h3>
+                <p>Dịch vụ tư vấn chuyên sâu về kết quả xét nghiệm NIPT (Non-Invasive Prenatal Testing) - xét nghiệm sàng lọc trước sinh không xâm lấn.</p>
+                
+                <div class="specialized-features">
+                    <div class="feature-item">
+                        <h4><i class="fas fa-shield-alt"></i> Sàng lọc di truyền</h4>
+                        <p>Phân tích DNA tự do của thai nhi trong máu mẹ để phát hiện các bất thường nhiễm sắc thể</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-chart-line"></i> Độ chính xác cao</h4>
+                        <p>Độ chính xác lên đến 99% trong việc phát hiện các bất thường nhiễm sắc thể phổ biến</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-baby"></i> An toàn cho mẹ và bé</h4>
+                        <p>Không xâm lấn, chỉ cần lấy máu mẹ, hoàn toàn an toàn cho cả mẹ và thai nhi</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-clock"></i> Kết quả nhanh chóng</h4>
+                        <p>Thời gian trả kết quả từ 7-10 ngày làm việc, nhanh hơn các phương pháp truyền thống</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tab Navigation for NIPT Services -->
+            <div class="consultation-card" style="margin-top: 2rem;">
+                <div style="display: flex; gap: 1rem; margin-bottom: 2rem; border-bottom: 2px solid #e9ecef; padding-bottom: 1rem;">
+                    <button onclick="showNiptPricing()" class="btn" id="niptPricingTab" style="background: #667eea; white-space: nowrap;">
+                        <i class="fas fa-dollar-sign"></i> Bảng giá dịch vụ NIPT
+                    </button>
+                    <button onclick="showConsultationResults()" class="btn" id="consultationResultsTab" style="background: #f8f9fa; color: #495057; white-space: nowrap;">
+                        <i class="fas fa-file-medical"></i> Tư vấn kết quả
+                    </button>
+                </div>
+                
+                <!-- NIPT Pricing Tab -->
+                <div id="niptPricingContent">
+                    <h3>
+                        <i class="fas fa-dollar-sign icon"></i>
+                        Bảng giá dịch vụ NIPT
+                    </h3>
+                    <p>Thông tin chi tiết về các gói dịch vụ NIPT và giá cả cập nhật mới nhất.</p>
+                
+                <!-- Upload PDF Section -->
+                <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border: 2px dashed #dee2e6;">
+                    <h4 style="color: #333; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <i class="fas fa-upload"></i> Cập nhật bảng giá NIPT
+                    </h4>
+                    <p style="color: #666; margin-bottom: 1rem;">Upload file PDF bảng giá mới để cập nhật thông tin:</p>
+                    
+                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                        <input type="file" id="niptPricingFile" accept=".pdf" style="flex: 1; min-width: 200px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <button onclick="uploadNiptPricing()" class="btn" style="background: #28a745; white-space: nowrap;">
+                            <i class="fas fa-upload"></i> Upload PDF
+                        </button>
+                        <button onclick="viewCurrentPricing()" class="btn" style="background: #6f42c1; white-space: nowrap;">
+                            <i class="fas fa-eye"></i> Xem PDF
+                        </button>
+                        <button onclick="downloadCurrentPricing()" class="btn" style="background: #17a2b8; white-space: nowrap;">
+                            <i class="fas fa-download"></i> Tải xuống
+                        </button>
+                    </div>
+                    
+                    <div id="uploadStatus" style="margin-top: 1rem; padding: 0.75rem; border-radius: 4px; display: none;"></div>
+                </div>
+                
+                <!-- PDF Viewer -->
+                <div id="pdfViewer" style="display: none; background: white; border: 1px solid #e9ecef; border-radius: 8px; padding: 0; margin-top: 1.5rem;">
+                    <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px 8px 0 0; border: 1px solid #dee2e6; border-bottom: none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="fas fa-file-pdf" style="color: #dc3545; font-size: 1.2rem;"></i>
+                                <span style="font-weight: 600; color: #333;" id="pdfFileName">Bảng giá NIPT</span>
+                                <span style="color: #666; font-size: 0.9rem;" id="pdfFileSize"></span>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button onclick="downloadCurrentPricing()" class="btn" style="background: #17a2b8; padding: 6px 12px; font-size: 0.9rem;">
+                                    <i class="fas fa-download"></i> Tải xuống
+                                </button>
+                                <button onclick="sharePricingFile()" class="btn" style="background: #28a745; padding: 6px 12px; font-size: 0.9rem;">
+                                    <i class="fas fa-share-alt"></i> Chia sẻ
+                                </button>
+                                <button onclick="openFullscreen()" class="btn" style="background: #fd7e14; padding: 6px 12px; font-size: 0.9rem;">
+                                    <i class="fas fa-expand"></i> Toàn màn hình
+                                </button>
+                                <button onclick="viewCurrentPricing()" class="btn" style="background: #6f42c1; padding: 6px 12px; font-size: 0.9rem;">
+                                    <i class="fas fa-eye"></i> Xem PDF
+                                </button>
+                                <button onclick="closePdfViewer()" class="btn" style="background: #6c757d; padding: 6px 12px; font-size: 0.9rem;">
+                                    <i class="fas fa-times"></i> Đóng
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <iframe id="pricingPdf" width="100%" height="600" style="border: 1px solid #dee2e6; border-top: none; border-radius: 0 0 8px 8px;"></iframe>
+                </div>
+                </div>
+                
+                <!-- Consultation Results Tab -->
+                <div id="consultationResultsContent" style="display: none;">
+                    <h3>
+                        <i class="fas fa-file-medical icon"></i>
+                        Tư vấn kết quả xét nghiệm
+                    </h3>
+                    <p>Upload và chia sẻ kết quả tư vấn xét nghiệm cho bệnh nhân qua Zalo.</p>
+                    
+                    <!-- Upload Consultation Results Section -->
+                    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border: 2px dashed #dee2e6;">
+                        <h4 style="color: #333; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-upload"></i> Upload kết quả tư vấn
+                        </h4>
+                        <p style="color: #666; margin-bottom: 1rem;">Upload file PDF kết quả tư vấn để chia sẻ cho bệnh nhân:</p>
+                        
+                        <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                            <input type="file" id="consultationResultsFile" accept=".pdf" style="flex: 1; min-width: 200px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <button onclick="uploadConsultationResults()" class="btn" style="background: #28a745; white-space: nowrap;">
+                                <i class="fas fa-upload"></i> Upload PDF
+                            </button>
+                            <button onclick="viewConsultationResults()" class="btn" style="background: #6f42c1; white-space: nowrap;">
+                                <i class="fas fa-eye"></i> Xem PDF
+                            </button>
+                            <button onclick="shareToZalo()" class="btn" style="background: #0068ff; white-space: nowrap;">
+                                <i class="fas fa-share"></i> Chia sẻ Zalo
+                            </button>
+                        </div>
+                        
+                        <div id="consultationUploadStatus" style="margin-top: 1rem; padding: 0.75rem; border-radius: 4px; display: none;"></div>
+                    </div>
+                    
+                    <!-- Consultation Results PDF Viewer -->
+                    <div id="consultationPdfViewer" style="display: none; background: white; border: 1px solid #e9ecef; border-radius: 8px; padding: 0; margin-top: 1.5rem;">
+                        <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px 8px 0 0; border: 1px solid #dee2e6; border-bottom: none;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <i class="fas fa-file-medical" style="color: #28a745; font-size: 1.2rem;"></i>
+                                    <span style="font-weight: 600; color: #333;" id="consultationPdfFileName">Kết quả tư vấn</span>
+                                    <span style="color: #666; font-size: 0.9rem;" id="consultationPdfFileSize"></span>
+                                </div>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <button onclick="downloadConsultationResults()" class="btn" style="background: #17a2b8; padding: 6px 12px; font-size: 0.9rem;">
+                                        <i class="fas fa-download"></i> Tải xuống
+                                    </button>
+                                    <button onclick="shareToZalo()" class="btn" style="background: #0068ff; padding: 6px 12px; font-size: 0.9rem;">
+                                        <i class="fas fa-share"></i> Chia sẻ Zalo
+                                    </button>
+                                    <button onclick="openFullscreenConsultation()" class="btn" style="background: #fd7e14; padding: 6px 12px; font-size: 0.9rem;">
+                                        <i class="fas fa-expand"></i> Toàn màn hình
+                                    </button>
+                                    <button onclick="viewConsultationResults()" class="btn" style="background: #6f42c1; padding: 6px 12px; font-size: 0.9rem;">
+                                        <i class="fas fa-eye"></i> Xem PDF
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="consultationPdfContainer" style="width:100%; height:600px; position:relative; border: 1px solid #dee2e6; border-top: none; border-radius: 0 0 8px 8px;">
+                            <!-- PDF will be loaded here dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="coming-soon">
+                <h2><i class="fas fa-tools"></i> Tính năng đang phát triển</h2>
+                <p>Chúng tôi đang hoàn thiện các tính năng tư vấn NIPT:</p>
+                <ul style="list-style: none; padding: 0; margin-top: 1rem;">
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Upload kết quả NIPT và phân tích tự động</li>
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Giải thích chi tiết các chỉ số di truyền</li>
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Tư vấn về nguy cơ và khuyến nghị</li>
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Kết nối với chuyên gia di truyền</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Tab 3: Tiểu đường thai kỳ -->
+        <div id="diabetes" class="tab-content-section">
+            <div class="specialized-card">
+                <h3>
+                    <i class="fas fa-tint icon"></i>
+                    Tư vấn tiểu đường thai kỳ
+                </h3>
+                <p>Dịch vụ tư vấn chuyên sâu về tiểu đường thai kỳ, giúp mẹ bầu quản lý đường huyết và đảm bảo sức khỏe cho cả mẹ và bé.</p>
+                
+                <div class="specialized-features">
+                    <div class="feature-item">
+                        <h4><i class="fas fa-utensils"></i> Tư vấn dinh dưỡng</h4>
+                        <p>Hướng dẫn chế độ ăn phù hợp, kiểm soát carbohydrate và duy trì đường huyết ổn định</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-running"></i> Vận động an toàn</h4>
+                        <p>Tư vấn các bài tập phù hợp cho mẹ bầu bị tiểu đường, giúp kiểm soát đường huyết</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-heartbeat"></i> Theo dõi đường huyết</h4>
+                        <p>Hướng dẫn cách đo và theo dõi đường huyết tại nhà, nhận biết các dấu hiệu bất thường</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-baby"></i> Bảo vệ thai nhi</h4>
+                        <p>Tư vấn về tác động của tiểu đường lên thai nhi và cách phòng ngừa biến chứng</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="coming-soon">
+                <h2><i class="fas fa-tools"></i> Tính năng đang phát triển</h2>
+                <p>Chúng tôi đang hoàn thiện các tính năng tư vấn tiểu đường thai kỳ:</p>
+                <ul style="list-style: none; padding: 0; margin-top: 1rem;">
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Theo dõi đường huyết tự động</li>
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Lập kế hoạch dinh dưỡng cá nhân hóa</li>
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Nhắc nhở uống thuốc và đo đường huyết</li>
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Kết nối với chuyên gia dinh dưỡng</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Tab 4: Tư vấn TSG -->
+        <div id="htss" class="tab-content-section">
+            <div class="specialized-card">
+                <h3>
+                    <i class="fas fa-heart icon"></i>
+                    Tư vấn TSG (Tiền sản giật)
+                </h3>
+                <p>Dịch vụ tư vấn chuyên sâu về tiền sản giật (TSG), giúp mẹ bầu quản lý huyết áp và phòng ngừa biến chứng nguy hiểm.</p>
+                
+                <div class="specialized-features">
+                    <div class="feature-item">
+                        <h4><i class="fas fa-heartbeat"></i> Theo dõi huyết áp</h4>
+                        <p>Hướng dẫn cách đo huyết áp tại nhà, nhận biết các dấu hiệu nguy hiểm cần can thiệp</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-utensils"></i> Chế độ dinh dưỡng</h4>
+                        <p>Tư vấn chế độ ăn giảm muối, kiểm soát cân nặng và duy trì huyết áp ổn định</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-bed"></i> Nghỉ ngơi hợp lý</h4>
+                        <p>Hướng dẫn chế độ nghỉ ngơi, tránh stress và các hoạt động có thể làm tăng huyết áp</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-exclamation-triangle"></i> Phòng ngừa biến chứng</h4>
+                        <p>Tư vấn về các biến chứng nguy hiểm và cách phòng ngừa tiền sản giật</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="coming-soon">
+                <h2><i class="fas fa-tools"></i> Tính năng đang phát triển</h2>
+                <p>Chúng tôi đang hoàn thiện các tính năng tư vấn TSG:</p>
+                <ul style="list-style: none; padding: 0; margin-top: 1rem;">
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Theo dõi huyết áp tự động</li>
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Cảnh báo nguy cơ tiền sản giật</li>
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Tư vấn thuốc và điều trị</li>
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Kết nối với chuyên gia tim mạch</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Tab 5: Hỗ trợ sinh sản -->
+        <div id="fertility" class="tab-content-section">
+            <div class="specialized-card">
+                <h3>
+                    <i class="fas fa-baby icon"></i>
+                    Tư vấn Hỗ trợ sinh sản
+                </h3>
+                <p>Dịch vụ tư vấn chuyên sâu về các phương pháp hỗ trợ sinh sản, giúp các cặp vợ chồng hiểu rõ quy trình điều trị vô sinh và lựa chọn phương pháp phù hợp.</p>
+                
+                <div class="specialized-features">
+                    <div class="feature-item">
+                        <h4><i class="fas fa-user-md"></i> Quy trình khám điều trị vô sinh</h4>
+                        <p>Đánh giá toàn diện, xét nghiệm chuyên sâu và lập kế hoạch điều trị cá nhân hóa</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-syringe"></i> Quy trình bơm IUI</h4>
+                        <p>Thụ tinh nhân tạo trong tử cung - phương pháp ít xâm lấn, phù hợp cho nhiều trường hợp</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-microscope"></i> Quy trình IVF cổ điển</h4>
+                        <p>Thụ tinh trong ống nghiệm truyền thống với kích thích buồng trứng đầy đủ</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-seedling"></i> Quy trình Mini IVF</h4>
+                        <p>IVF với kích thích buồng trứng nhẹ nhàng, ít tác dụng phụ, phù hợp cho phụ nữ lớn tuổi</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-flask"></i> Quy trình CAPA IVM</h4>
+                        <p>Nuôi trưởng thành trứng trong phòng thí nghiệm - công nghệ tiên tiến, ít kích thích</p>
+                    </div>
+                    <div class="feature-item">
+                        <h4><i class="fas fa-chart-line"></i> Theo dõi và đánh giá</h4>
+                        <p>Giám sát quá trình điều trị, đánh giá kết quả và điều chỉnh phác đồ phù hợp</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chi tiết các quy trình -->
+            <div style="margin-top: 2rem;">
+                <h3 style="color: #333; margin-bottom: 1.5rem; text-align: center;">Chi tiết các quy trình điều trị</h3>
+                
+                <div class="consultation-grid">
+                    <div class="consultation-card">
+                        <h3><i class="fas fa-user-md icon"></i> Khám điều trị vô sinh</h3>
+                        <p>Quy trình đánh giá toàn diện để xác định nguyên nhân và lập kế hoạch điều trị phù hợp.</p>
+                        <ul class="features">
+                            <li><i class="fas fa-check"></i> Khám lâm sàng chi tiết</li>
+                            <li><i class="fas fa-check"></i> Xét nghiệm hormone sinh sản</li>
+                            <li><i class="fas fa-check"></i> Siêu âm buồng trứng, tử cung</li>
+                            <li><i class="fas fa-check"></i> Đánh giá tinh trùng</li>
+                            <li><i class="fas fa-check"></i> Lập phác đồ điều trị</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="consultation-card">
+                        <h3><i class="fas fa-syringe icon"></i> Bơm IUI</h3>
+                        <p>Thụ tinh nhân tạo trong tử cung - phương pháp đơn giản, ít xâm lấn.</p>
+                        <ul class="features">
+                            <li><i class="fas fa-check"></i> Kích thích buồng trứng nhẹ</li>
+                            <li><i class="fas fa-check"></i> Xử lý tinh trùng</li>
+                            <li><i class="fas fa-check"></i> Bơm tinh trùng vào tử cung</li>
+                            <li><i class="fas fa-check"></i> Theo dõi sau thủ thuật</li>
+                            <li><i class="fas fa-check"></i> Xét nghiệm thai</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="consultation-card">
+                        <h3><i class="fas fa-microscope icon"></i> IVF cổ điển</h3>
+                        <p>Thụ tinh trong ống nghiệm với kích thích buồng trứng đầy đủ.</p>
+                        <ul class="features">
+                            <li><i class="fas fa-check"></i> Kích thích buồng trứng mạnh</li>
+                            <li><i class="fas fa-check"></i> Chọc hút trứng</li>
+                            <li><i class="fas fa-check"></i> Thụ tinh trong phòng lab</li>
+                            <li><i class="fas fa-check"></i> Nuôi cấy phôi</li>
+                            <li><i class="fas fa-check"></i> Chuyển phôi vào tử cung</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="consultation-card">
+                        <h3><i class="fas fa-seedling icon"></i> Mini IVF</h3>
+                        <p>IVF với kích thích buồng trứng nhẹ nhàng, phù hợp cho phụ nữ lớn tuổi.</p>
+                        <ul class="features">
+                            <li><i class="fas fa-check"></i> Kích thích buồng trứng nhẹ</li>
+                            <li><i class="fas fa-check"></i> Ít thuốc, ít tác dụng phụ</li>
+                            <li><i class="fas fa-check"></i> Chọc hút ít trứng</li>
+                            <li><i class="fas fa-check"></i> Thụ tinh và nuôi cấy</li>
+                            <li><i class="fas fa-check"></i> Chuyển phôi chất lượng</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="consultation-card">
+                        <h3><i class="fas fa-flask icon"></i> CAPA IVM</h3>
+                        <p>Nuôi trưởng thành trứng trong phòng thí nghiệm - công nghệ tiên tiến.</p>
+                        <ul class="features">
+                            <li><i class="fas fa-check"></i> Lấy trứng chưa trưởng thành</li>
+                            <li><i class="fas fa-check"></i> Nuôi trưởng thành trong lab</li>
+                            <li><i class="fas fa-check"></i> Thụ tinh ICSI</li>
+                            <li><i class="fas fa-check"></i> Nuôi cấy phôi</li>
+                            <li><i class="fas fa-check"></i> Chuyển phôi</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="consultation-card">
+                        <h3><i class="fas fa-chart-line icon"></i> Theo dõi điều trị</h3>
+                        <p>Giám sát toàn bộ quá trình điều trị và đánh giá kết quả.</p>
+                        <ul class="features">
+                            <li><i class="fas fa-check"></i> Theo dõi đáp ứng thuốc</li>
+                            <li><i class="fas fa-check"></i> Siêu âm theo dõi</li>
+                            <li><i class="fas fa-check"></i> Điều chỉnh phác đồ</li>
+                            <li><i class="fas fa-check"></i> Đánh giá kết quả</li>
+                            <li><i class="fas fa-check"></i> Tư vấn tiếp theo</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="coming-soon">
+                <h2><i class="fas fa-tools"></i> Tính năng đang phát triển</h2>
+                <p>Chúng tôi đang hoàn thiện các tính năng tư vấn hỗ trợ sinh sản:</p>
+                <ul style="list-style: none; padding: 0; margin-top: 1rem;">
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Đánh giá khả năng sinh sản tự động</li>
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Lập kế hoạch điều trị cá nhân hóa</li>
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Theo dõi chu kỳ điều trị</li>
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Kết nối với chuyên gia sinh sản</li>
+                    <li style="padding: 0.5rem 0;"><i class="fas fa-arrow-right" style="margin-right: 0.5rem;"></i> Tư vấn tâm lý và hỗ trợ</li>
+                </ul>
+            </div>
+        </div>
+    </main>
+    
+    <footer style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+    </footer>
+
+    <script>
+        // Tab switching functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const tabButtons = document.querySelectorAll('.tab-btn');
+            const tabContents = document.querySelectorAll('.tab-content-section');
+
+            tabButtons.forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Remove active class from all buttons and contents
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    tabContents.forEach(content => content.classList.remove('active'));
+                    
+                    // Add active class to clicked button
+                    this.classList.add('active');
+                    
+                    // Show corresponding content
+                    const targetTab = this.getAttribute('data-tab');
+                    const targetContent = document.getElementById(targetTab);
+                    if (targetContent) {
+                        targetContent.classList.add('active');
+                    }
+                });
+            });
+
+            // Handle URL hash for direct tab access
+            const hash = window.location.hash;
+            if (hash) {
+                const targetTab = hash.substring(1);
+                const targetButton = document.querySelector(`[data-tab="${targetTab}"]`);
+                if (targetButton) {
+                    targetButton.click();
+                }
+            }
+        });
+
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // NIPT Pricing Management
+        let currentPricingFile = null;
+
+        // Load saved pricing file on page load
+        function loadSavedPricing() {
+            fetch('/api/get-pricing-file?type=nipt_pricing&info=true')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Load pricing file response:', data);
+                if (data.success && data.file) {
+                    currentPricingFile = data.file;
+                    console.log('Current pricing file loaded:', currentPricingFile);
+                    displayPricingFile();
+                } else {
+                    console.log('No pricing file found');
+                    currentPricingFile = null;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading pricing file:', error);
+                currentPricingFile = null;
+            });
+        }
+
+        // Upload NIPT pricing PDF
+        function uploadNiptPricing() {
+            const fileInput = document.getElementById('niptPricingFile');
+            const statusDiv = document.getElementById('uploadStatus');
+            
+            if (!fileInput.files[0]) {
+                showUploadStatus('error', 'Vui lòng chọn file PDF để upload!');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            
+            // Validate file type
+            if (file.type !== 'application/pdf') {
+                showUploadStatus('error', 'Chỉ được upload file PDF!');
+                return;
+            }
+            
+            // Validate file size (max 100MB)
+            if (file.size > 100 * 1024 * 1024) {
+                showUploadStatus('error', 'File quá lớn! Kích thước tối đa 500MB.');
+                return;
+            }
+            
+            // Show loading status
+            showUploadStatus('info', 'Đang upload file...');
+            
+            // Create FormData for file upload
+            const formData = new FormData();
+            formData.append('pricing_file', file);
+            formData.append('file_type', 'nipt_pricing');
+            
+            // Upload to server
+            fetch('/api/upload-pricing', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.status === 413) {
+                    return response.json().then(data => {
+                        throw new Error(data.message || 'File quá lớn! Kích thước tối đa 500MB.');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Upload response:', data);
+                if (data.success) {
+                    showUploadStatus('success', `Đã upload thành công: ${file.name}`);
+                    console.log('Upload successful, reloading pricing file...');
+                    loadSavedPricing(); // Reload from database
+                } else {
+                    showUploadStatus('error', data.message || 'Lỗi khi upload file!');
+                }
+                // Clear file input
+                fileInput.value = '';
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                showUploadStatus('error', error.message || 'Lỗi kết nối! Vui lòng thử lại.');
+                fileInput.value = '';
+            });
+        }
+
+        // Display pricing file
+        function displayPricingFile() {
+            if (!currentPricingFile) return;
+            
+            const pdfViewer = document.getElementById('pdfViewer');
+            const pricingPdf = document.getElementById('pricingPdf');
+            const pdfFileName = document.getElementById('pdfFileName');
+            const pdfFileSize = document.getElementById('pdfFileSize');
+            
+            // Show PDF viewer
+            pdfViewer.style.display = 'block';
+            
+            // Update file info
+            pdfFileName.textContent = currentPricingFile.original_filename || 'Bảng giá NIPT';
+            pdfFileSize.textContent = currentPricingFile.file_size ? `(${(currentPricingFile.file_size / 1024 / 1024).toFixed(1)} MB)` : '';
+            
+            // Set PDF source from database for viewing
+            pricingPdf.src = `/api/get-pricing-file?type=nipt_pricing`;
+        }
+
+        // View current pricing PDF
+        function viewCurrentPricing() {
+            if (!currentPricingFile) {
+                showUploadStatus('error', 'Chưa có file bảng giá để xem!');
+                return;
+            }
+            
+            // Show PDF viewer
+            const pdfViewer = document.getElementById('pdfViewer');
+            const pricingPdf = document.getElementById('pricingPdf');
+            const pdfFileName = document.getElementById('pdfFileName');
+            const pdfFileSize = document.getElementById('pdfFileSize');
+            
+            // Show PDF viewer
+            pdfViewer.style.display = 'block';
+            
+            // Update file info
+            pdfFileName.textContent = currentPricingFile.original_filename || 'Bảng giá NIPT';
+            pdfFileSize.textContent = currentPricingFile.file_size ? `(${(currentPricingFile.file_size / 1024 / 1024).toFixed(1)} MB)` : '';
+            
+            // Set PDF source for viewing (not download)
+            pricingPdf.src = `/api/get-pricing-file?type=nipt_pricing`;
+            
+            showUploadStatus('success', 'Đang hiển thị file PDF...');
+        }
+
+
+        // Close PDF viewer
+        function closePdfViewer() {
+            const pdfViewer = document.getElementById('pdfViewer');
+            
+            // Hide PDF viewer
+            pdfViewer.style.display = 'none';
+        }
+
+        // Download current pricing
+        function downloadCurrentPricing() {
+            if (!currentPricingFile) {
+                showUploadStatus('error', 'Chưa có file bảng giá để tải xuống!');
+                return;
+            }
+            
+            // Download from server
+            const link = document.createElement('a');
+            link.href = `/api/get-pricing-file?type=nipt_pricing&download=true`;
+            link.download = currentPricingFile.filename || 'nipt_pricing.pdf';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showUploadStatus('success', 'Đang tải xuống file...');
+        }
+
+        // Show upload status
+        function showUploadStatus(type, message) {
+            const statusDiv = document.getElementById('uploadStatus');
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success') {
+                statusDiv.style.background = '#d4edda';
+                statusDiv.style.color = '#155724';
+                statusDiv.style.border = '1px solid #c3e6cb';
+            } else if (type === 'error') {
+                statusDiv.style.background = '#f8d7da';
+                statusDiv.style.color = '#721c24';
+                statusDiv.style.border = '1px solid #f5c6cb';
+            } else if (type === 'info') {
+                statusDiv.style.background = '#d1ecf1';
+                statusDiv.style.color = '#0c5460';
+                statusDiv.style.border = '1px solid #bee5eb';
+            }
+            
+            let icon = 'exclamation-triangle';
+            if (type === 'success') icon = 'check-circle';
+            else if (type === 'info') icon = 'info-circle';
+            
+            statusDiv.innerHTML = `<i class="fas fa-${icon}"></i> ${message}`;
+            
+            // Auto hide after 5 seconds (except for info which might be loading)
+            if (type !== 'info') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Tab switching functions
+        function showNiptPricing() {
+            document.getElementById('niptPricingContent').style.display = 'block';
+            document.getElementById('consultationResultsContent').style.display = 'none';
+            document.getElementById('niptPricingTab').style.background = '#667eea';
+            document.getElementById('niptPricingTab').style.color = 'white';
+            document.getElementById('consultationResultsTab').style.background = '#f8f9fa';
+            document.getElementById('consultationResultsTab').style.color = '#495057';
+        }
+
+        function showConsultationResults() {
+            document.getElementById('niptPricingContent').style.display = 'none';
+            document.getElementById('consultationResultsContent').style.display = 'block';
+            document.getElementById('consultationResultsTab').style.background = '#667eea';
+            document.getElementById('consultationResultsTab').style.color = 'white';
+            document.getElementById('niptPricingTab').style.background = '#f8f9fa';
+            document.getElementById('niptPricingTab').style.color = '#495057';
+        }
+
+        // Consultation Results Management
+        let currentConsultationFile = null;
+
+        // Load saved consultation file on page load
+        function loadSavedConsultation() {
+            return fetch('/api/get-pricing-file?type=consultation_results&info=true')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Load consultation file response:', data);
+                if (data.success && data.file) {
+                    currentConsultationFile = data.file;
+                    console.log('Current consultation file loaded:', currentConsultationFile);
+                    // Automatically display the file when loaded
+                    displayConsultationFile();
+                    return Promise.resolve();
+                } else {
+                    console.log('No consultation file found');
+                    currentConsultationFile = null;
+                    return Promise.resolve();
+                }
+            })
+            .catch(error => {
+                console.error('Error loading consultation file:', error);
+                currentConsultationFile = null;
+                return Promise.reject(error);
+            });
+        }
+
+        // Upload consultation results PDF
+        function uploadConsultationResults() {
+            const fileInput = document.getElementById('consultationResultsFile');
+            const statusDiv = document.getElementById('consultationUploadStatus');
+            
+            if (!fileInput.files[0]) {
+                showConsultationStatus('error', 'Vui lòng chọn file PDF để upload!');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            
+            // Validate file type
+            if (file.type !== 'application/pdf') {
+                showConsultationStatus('error', 'Chỉ được upload file PDF!');
+                return;
+            }
+            
+            // Validate file size (max 500MB)
+            if (file.size > 500 * 1024 * 1024) {
+                showConsultationStatus('error', 'File quá lớn! Kích thước tối đa 500MB.');
+                return;
+            }
+            
+            // Show loading status
+            showConsultationStatus('info', 'Đang upload file...');
+            
+            // Create FormData for file upload
+            const formData = new FormData();
+            formData.append('pricing_file', file);
+            formData.append('file_type', 'consultation_results');
+            
+            // Upload to server
+            fetch('/api/upload-pricing', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.status === 413) {
+                    return response.json().then(data => {
+                        throw new Error(data.message || 'File quá lớn! Kích thước tối đa 500MB.');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    showConsultationStatus('success', `Đã upload và lưu thành công: ${file.name}`);
+                    // Reload from database and automatically display
+                    loadSavedConsultation().then(() => {
+                        // Automatically display the uploaded file
+                        if (currentConsultationFile) {
+                            displayConsultationFile();
+                            // Scroll to PDF viewer smoothly after a short delay
+                            setTimeout(() => {
+                                const pdfViewer = document.getElementById('consultationPdfViewer');
+                                if (pdfViewer) {
+                                    pdfViewer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                }
+                            }, 300);
+                        }
+                    }).catch(error => {
+                        console.error('Error loading consultation file after upload:', error);
+                    });
+                } else {
+                    showConsultationStatus('error', data.message || 'Lỗi khi upload file!');
+                }
+                // Clear file input
+                fileInput.value = '';
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                showConsultationStatus('error', error.message || 'Lỗi kết nối! Vui lòng thử lại.');
+                fileInput.value = '';
+            });
+        }
+
+        // Display consultation file
+        function displayConsultationFile() {
+            if (!currentConsultationFile) return;
+            
+            const pdfViewer = document.getElementById('consultationPdfViewer');
+            const container = document.getElementById('consultationPdfContainer');
+            const pdfFileName = document.getElementById('consultationPdfFileName');
+            const pdfFileSize = document.getElementById('consultationPdfFileSize');
+            
+            if (!container) {
+                console.error('PDF container not found');
+                return;
+            }
+            
+            // Show PDF viewer
+            pdfViewer.style.display = 'block';
+            
+            // Update file info
+            pdfFileName.textContent = currentConsultationFile.original_filename || 'Kết quả tư vấn';
+            pdfFileSize.textContent = currentConsultationFile.file_size ? `(${(currentConsultationFile.file_size / 1024 / 1024).toFixed(1)} MB)` : '';
+            
+            const pdfUrl = `/api/get-pricing-file?type=consultation_results`;
+            
+            // Clear existing content
+            container.innerHTML = '';
+            
+            // Try using object tag first (best compatibility)
+            const object = document.createElement('object');
+            object.data = pdfUrl + '#toolbar=1&navpanes=1&scrollbar=1&zoom=page-width';
+            object.type = 'application/pdf';
+            object.style.cssText = 'width:100%; height:100%; border:none;';
+            
+            // Fallback content inside object
+            const fallbackLink = document.createElement('a');
+            fallbackLink.href = pdfUrl;
+            fallbackLink.target = '_blank';
+            fallbackLink.style.cssText = 'display:block; padding:20px; text-align:center; color:#2196F3; text-decoration:none;';
+            fallbackLink.innerHTML = `
+                <i class="fas fa-file-pdf" style="font-size:3rem; color:#dc3545; margin-bottom:15px;"></i>
+                <p style="font-size:1.1rem; margin-bottom:10px;">PDF không thể hiển thị trực tiếp</p>
+                <p style="color:#666;">Click để mở trong tab mới</p>
+            `;
+            object.appendChild(fallbackLink);
+            container.appendChild(object);
+            
+            // Also try embed as alternative
+            setTimeout(() => {
+                const objElement = container.querySelector('object');
+                if (objElement) {
+                    const hasContent = objElement.offsetHeight > 100 && objElement.offsetWidth > 100;
+                    if (!hasContent) {
+                        // Object didn't work, try embed
+                        objElement.style.display = 'none';
+                        const embed = document.createElement('embed');
+                        embed.src = pdfUrl + '#toolbar=1&navpanes=1&scrollbar=1&zoom=page-width';
+                        embed.type = 'application/pdf';
+                        embed.style.cssText = 'width:100%; height:100%; border:none;';
+                        container.appendChild(embed);
+                        
+                        // If embed also fails, show manual options
+                        setTimeout(() => {
+                            const embedElement = container.querySelector('embed');
+                            if (embedElement && (embedElement.offsetHeight < 100 || embedElement.offsetWidth < 100)) {
+                                container.innerHTML = `
+                                    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; padding:40px; text-align:center;">
+                                        <i class="fas fa-file-pdf" style="color: #dc3545; font-size: 4rem; margin-bottom: 20px;"></i>
+                                        <p style="font-size: 1.2rem; margin-bottom: 10px; font-weight:bold;">File PDF: ${currentConsultationFile.original_filename}</p>
+                                        <p style="font-size: 1rem; margin-bottom: 30px; color:#666;">File quá lớn hoặc trình duyệt không hỗ trợ xem trực tiếp</p>
+                                        <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+                                            <a href="${pdfUrl}" target="_blank" class="btn" style="padding: 12px 24px; font-size:1rem; background:#2196F3; color:white; text-decoration:none;">
+                                                <i class="fas fa-external-link-alt"></i> Mở trong tab mới
+                                            </a>
+                                            <button onclick="downloadConsultationResults()" class="btn" style="padding: 12px 24px; font-size:1rem; background:#28a745; color:white;">
+                                                <i class="fas fa-download"></i> Tải xuống
+                                            </button>
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                        }, 3000);
+                    }
+                }
+            }, 2000);
+        }
+
+        // View consultation results PDF
+        function viewConsultationResults() {
+            if (!currentConsultationFile) {
+                showConsultationStatus('error', 'Chưa có file kết quả tư vấn để xem!');
+                return;
+            }
+            
+            // Use displayConsultationFile which has better PDF rendering
+            displayConsultationFile();
+            showConsultationStatus('success', 'Đang hiển thị file PDF...');
+        }
+
+        // Close consultation PDF viewer
+        function closeConsultationPdfViewer() {
+            const pdfViewer = document.getElementById('consultationPdfViewer');
+            
+            // Hide PDF viewer
+            pdfViewer.style.display = 'none';
+        }
+
+        // Download consultation results
+        function downloadConsultationResults() {
+            if (!currentConsultationFile) {
+                showConsultationStatus('error', 'Chưa có file kết quả tư vấn để tải xuống!');
+                return;
+            }
+            
+            // Download from server
+            const link = document.createElement('a');
+            link.href = `/api/get-pricing-file?type=consultation_results&download=true`;
+            link.download = currentConsultationFile.filename || 'consultation_results.pdf';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showConsultationStatus('success', 'Đang tải xuống file...');
+        }
+
+        // Share to Zalo
+        function shareToZalo() {
+            // Check if we have any file (either pricing or consultation)
+            const hasPricingFile = currentPricingFile !== null;
+            const hasConsultationFile = currentConsultationFile !== null;
+            
+            if (!hasPricingFile && !hasConsultationFile) {
+                showConsultationStatus('error', 'Chưa có file nào để chia sẻ!');
+                return;
+            }
+            
+            // Get Zalo phone number from user input or use default
+            const phoneNumber = prompt('Nhập số điện thoại Zalo của bệnh nhân:', '0858838616');
+            if (!phoneNumber) return;
+            
+            // Create Zalo share URL
+            let message = '';
+            let type = '';
+            if (hasConsultationFile) {
+                message = `Kết quả tư vấn xét nghiệm từ Phòng khám Phụ Sản Đại Anh`;
+                type = 'consultation';
+            } else if (hasPricingFile) {
+                message = `Bảng giá dịch vụ NIPT từ Phòng khám Phụ Sản Đại Anh`;
+                type = 'pricing';
+            }
+            
+            const cleanPhone = phoneNumber.replace(/\D/g, '');
+            
+            // Try to open Zalo app first, then fallback to web
+            openZaloApp(cleanPhone, message, type);
+        }
+
+        // Show consultation status
+        function showConsultationStatus(type, message) {
+            const statusDiv = document.getElementById('consultationUploadStatus');
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success') {
+                statusDiv.style.background = '#d4edda';
+                statusDiv.style.color = '#155724';
+                statusDiv.style.border = '1px solid #c3e6cb';
+            } else if (type === 'error') {
+                statusDiv.style.background = '#f8d7da';
+                statusDiv.style.color = '#721c24';
+                statusDiv.style.border = '1px solid #f5c6cb';
+            } else if (type === 'info') {
+                statusDiv.style.background = '#d1ecf1';
+                statusDiv.style.color = '#0c5460';
+                statusDiv.style.border = '1px solid #bee5eb';
+            }
+            
+            let icon = 'exclamation-triangle';
+            if (type === 'success') icon = 'check-circle';
+            else if (type === 'info') icon = 'info-circle';
+            
+            statusDiv.innerHTML = `<i class="fas fa-${icon}"></i> ${message}`;
+            
+            // Auto hide after 5 seconds (except for info which might be loading)
+            if (type !== 'info') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Share pricing file
+        function sharePricingFile() {
+            if (!currentPricingFile) {
+                showUploadStatus('error', 'Chưa có file bảng giá để chia sẻ!');
+                return;
+            }
+            
+            // Get Zalo phone number from user input or use default
+            const phoneNumber = prompt('Nhập số điện thoại Zalo của bệnh nhân:', '0858838616');
+            if (!phoneNumber) return;
+            
+            // Create Zalo share URL
+            const message = `Bảng giá dịch vụ NIPT từ Phòng khám Phụ Sản Đại Anh`;
+            const cleanPhone = phoneNumber.replace(/\D/g, '');
+            
+            // Try to open Zalo app first, then fallback to web
+            openZaloApp(cleanPhone, message, 'pricing');
+        }
+
+        // Open fullscreen for pricing PDF
+        function openFullscreen() {
+            if (!currentPricingFile) {
+                showUploadStatus('error', 'Chưa có file bảng giá để xem!');
+                return;
+            }
+            
+            const pdfUrl = `/api/get-pricing-file?type=nipt_pricing`;
+            window.open(pdfUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
+        }
+
+        // Open fullscreen for consultation PDF
+        function openFullscreenConsultation() {
+            if (!currentConsultationFile) {
+                showConsultationStatus('error', 'Chưa có file kết quả tư vấn để xem!');
+                return;
+            }
+            
+            const pdfUrl = `/api/get-pricing-file?type=consultation_results`;
+            window.open(pdfUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
+        }
+
+        // Open Zalo app first, fallback to web
+        function openZaloApp(phoneNumber, message, type) {
+            // Zalo app URL scheme
+            const zaloAppUrl = `zalo://chat?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
+            
+            // Zalo web URL as fallback
+            const zaloWebUrl = `https://zalo.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+            
+            // Try to open Zalo app first
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = zaloAppUrl;
+            document.body.appendChild(iframe);
+            
+            // Set timeout to check if app opened
+            setTimeout(() => {
+                // Remove iframe
+                document.body.removeChild(iframe);
+                
+                // Check if we're still on the same page (app didn't open)
+                // If user is still here after 1 second, open web version
+                const userAgent = navigator.userAgent.toLowerCase();
+                const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+                
+                if (isMobile) {
+                    // On mobile, try to open app first, then web
+                    window.location.href = zaloAppUrl;
+                    
+                    // Fallback to web after 2 seconds
+                    setTimeout(() => {
+                        window.open(zaloWebUrl, '_blank');
+                    }, 2000);
+                } else {
+                    // On desktop, open web version directly
+                    window.open(zaloWebUrl, '_blank');
+                }
+                
+                // Show success message
+                if (type === 'pricing') {
+                    showUploadStatus('success', 'Đang mở Zalo để chia sẻ bảng giá!');
+                } else {
+                    showConsultationStatus('success', 'Đang mở Zalo để chia sẻ kết quả tư vấn!');
+                }
+            }, 1000);
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSavedPricing();
+            loadSavedConsultation();
+        });
+    </script>
+    
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

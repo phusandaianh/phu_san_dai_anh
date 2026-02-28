@@ -1,0 +1,394 @@
+/* ========================================
+   LAB REQUEST TEMPLATE STYLES
+   Template cho phiếu chỉ định cận lâm sàng
+   ======================================== */
+
+/* CSS Variables */
+:root {
+  --template-primary-color: #0000cc;
+  --template-text-color: #000;
+  --template-border-color: #000;
+  --template-bg-color: #fff;
+  --template-padding: 20px;
+  --template-font-family: 'Times New Roman', serif;
+  --template-font-size: 14px;
+  --template-line-height: 1.4;
+  --template-border-width: 1px;
+  --template-border-radius: 0;
+  --template-shadow: none;
+}
+
+/* Base Template Container */
+.lab-request-container {
+  font-family: var(--template-font-family);
+  font-size: var(--template-font-size);
+  line-height: var(--template-line-height);
+  color: var(--template-text-color);
+  background-color: var(--template-bg-color);
+  padding: var(--template-padding);
+  max-width: 800px;
+  margin: 0 auto;
+  box-shadow: var(--template-shadow);
+}
+
+/* Header Section */
+.lab-request-header {
+  text-align: center;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--template-primary-color);
+  padding-bottom: 15px;
+}
+
+.lab-request-title {
+  color: var(--template-primary-color);
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Patient Information Grid */
+.patient-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 25px;
+  border: var(--template-border-width) solid var(--template-border-color);
+  border-radius: var(--template-border-radius);
+  overflow: hidden;
+}
+
+.patient-info-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: var(--template-border-width) solid var(--template-border-color);
+}
+
+.patient-info-row:last-child {
+  border-bottom: none;
+}
+
+.patient-info-row.full-width {
+  grid-template-columns: 1fr 2fr;
+}
+
+.patient-info-label {
+  padding: 12px 15px;
+  background-color: #f8f9fa;
+  border-right: var(--template-border-width) solid var(--template-border-color);
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+}
+
+.patient-info-value {
+  padding: 12px 15px;
+  border-right: var(--template-border-width) solid var(--template-border-color);
+  display: flex;
+  align-items: center;
+  min-height: 45px;
+}
+
+.patient-info-value:last-child {
+  border-right: none;
+}
+
+/* Diagnosis Section */
+.diagnosis-section {
+  margin-bottom: 25px;
+}
+
+.diagnosis-title {
+  color: var(--template-primary-color);
+  margin-bottom: 15px;
+  font-size: 1.2rem;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.diagnosis-content {
+  border: var(--template-border-width) solid var(--template-border-color);
+  padding: 20px;
+  min-height: 120px;
+  background-color: #fafafa;
+}
+
+/* Test Indications Section */
+.test-indications-section {
+  margin-bottom: 25px;
+}
+
+.test-indications-title {
+  color: var(--template-primary-color);
+  margin-bottom: 15px;
+  font-size: 1.2rem;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.test-indications-content {
+  border: var(--template-border-width) solid var(--template-border-color);
+  padding: 20px;
+  min-height: 150px;
+  background-color: #fafafa;
+}
+
+.test-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.test-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+.test-option input[type="checkbox"] {
+  margin: 0;
+  transform: scale(1.2);
+}
+
+.test-option label {
+  margin: 0;
+  font-weight: normal;
+  cursor: pointer;
+}
+
+.other-test {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--template-border-color);
+}
+
+.other-test-input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--template-border-color);
+  border-radius: 4px;
+  font-family: var(--template-font-family);
+  font-size: var(--template-font-size);
+}
+
+/* Signature Section */
+.signature-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 2px solid var(--template-primary-color);
+}
+
+.signature-box {
+  text-align: center;
+}
+
+.signature-label {
+  font-weight: bold;
+  margin-bottom: 15px;
+  color: var(--template-text-color);
+}
+
+.signature-line {
+  margin-top: 50px;
+  height: 2px;
+  background-color: var(--template-text-color);
+  position: relative;
+}
+
+.signature-line::after {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background: transparent;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .lab-request-container {
+    padding: 15px;
+    margin: 10px;
+  }
+  
+  .lab-request-title {
+    font-size: 1.4rem;
+  }
+  
+  .patient-info-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  
+  .patient-info-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .patient-info-row.full-width {
+    grid-template-columns: 1fr;
+  }
+  
+  .patient-info-label {
+    border-right: none;
+    border-bottom: var(--template-border-width) solid var(--template-border-color);
+  }
+  
+  .patient-info-value {
+    border-right: none;
+    border-bottom: var(--template-border-width) solid var(--template-border-color);
+  }
+  
+  .patient-info-value:last-child {
+    border-bottom: none;
+  }
+  
+  .signature-section {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  
+  .test-options {
+    grid-template-columns: 1fr;
+  }
+  
+  .diagnosis-content,
+  .test-indications-content {
+    padding: 15px;
+    min-height: 100px;
+  }
+}
+
+@media (max-width: 480px) {
+  .lab-request-container {
+    padding: 10px;
+    margin: 5px;
+  }
+  
+  .lab-request-title {
+    font-size: 1.2rem;
+  }
+  
+  .patient-info-label,
+  .patient-info-value {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  
+  .diagnosis-content,
+  .test-indications-content {
+    padding: 10px;
+    min-height: 80px;
+  }
+  
+  .signature-line {
+    margin-top: 30px;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .lab-request-container {
+    padding: 0;
+    margin: 0;
+    max-width: none;
+    box-shadow: none;
+    background: white;
+  }
+  
+  .lab-request-header {
+    border-bottom: 2px solid var(--template-primary-color);
+    margin-bottom: 20px;
+  }
+  
+  .lab-request-title {
+    color: var(--template-primary-color) !important;
+  }
+  
+  .patient-info-grid {
+    border: 2px solid var(--template-border-color);
+    break-inside: avoid;
+  }
+  
+  .patient-info-label {
+    background-color: #f0f0f0 !important;
+    -webkit-print-color-adjust: exact;
+    color-adjust: exact;
+  }
+  
+  .diagnosis-content,
+  .test-indications-content {
+    border: 2px solid var(--template-border-color);
+    background-color: white !important;
+    break-inside: avoid;
+  }
+  
+  .signature-section {
+    break-inside: avoid;
+    margin-top: 30px;
+  }
+  
+  .signature-line {
+    border-bottom: 1px solid var(--template-text-color);
+    background: none;
+  }
+  
+  /* Hide elements that shouldn't print */
+  .no-print {
+    display: none !important;
+  }
+  
+  /* Ensure proper page breaks */
+  .page-break {
+    page-break-before: always;
+  }
+  
+  /* Optimize for A4 paper */
+  @page {
+    size: A4;
+    margin: 1cm;
+  }
+}
+
+/* High contrast mode for accessibility */
+@media (prefers-contrast: high) {
+  :root {
+    --template-primary-color: #000;
+    --template-text-color: #000;
+    --template-border-color: #000;
+  }
+  
+  .patient-info-label {
+    background-color: #e0e0e0;
+  }
+  
+  .diagnosis-content,
+  .test-indications-content {
+    background-color: #f5f5f5;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --template-bg-color: #1a1a1a;
+    --template-text-color: #fff;
+    --template-border-color: #666;
+  }
+  
+  .patient-info-label {
+    background-color: #333;
+    color: #fff;
+  }
+  
+  .diagnosis-content,
+  .test-indications-content {
+    background-color: #2a2a2a;
+  }
+}

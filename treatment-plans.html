@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phác đồ điều trị - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .admin-header {
+            background-color: #2196F3;
+            color: white;
+            padding: 1rem 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .admin-header .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .admin-header .logo img {
+            height: 50px;
+            margin-right: 10px;
+        }
+
+        .admin-header .logo-text {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .admin-header .back-link {
+            color: white;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+        }
+
+        .admin-header .back-link.btn.secondary-btn {
+            background-color: transparent;
+            border: 1px solid white;
+            color: white;
+            padding: 6px 10px;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+
+        .treatment-plans-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .page-title {
+            color: #2196F3;
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 0;
+        }
+
+        .upload-section {
+            background: #f8f9fa;
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+        }
+
+        .upload-section:hover {
+            border-color: #2196F3;
+            background: #e3f2fd;
+        }
+
+        .upload-section.dragover {
+            border-color: #2196F3;
+            background: #e3f2fd;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            color: #2196F3;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            font-size: 1.1rem;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        .file-input {
+            position: absolute;
+            left: -9999px;
+            opacity: 0;
+        }
+
+        .file-input-label {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #2196F3;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            font-weight: 500;
+        }
+
+        .file-input-label:hover {
+            background: #1976D2;
+        }
+
+        .treatment-plans-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .treatment-plan-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+
+        .treatment-plan-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
+
+        .plan-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .plan-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #333;
+            margin: 0;
+            flex: 1;
+        }
+
+        .plan-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-btn {
+            padding: 6px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+         .view-btn {
+             background: #4CAF50;
+             color: white;
+         }
+
+         .view-btn:hover {
+             background: #45a049;
+         }
+
+        .download-btn {
+            background: #2196F3;
+            color: white;
+        }
+
+        .download-btn:hover {
+            background: #1976D2;
+        }
+
+        .delete-btn {
+            background: #f44336;
+            color: white;
+        }
+
+        .delete-btn:hover {
+            background: #da190b;
+        }
+
+        .plan-info {
+            margin-bottom: 15px;
+        }
+
+        .plan-info-item {
+            display: flex;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        .plan-info-label {
+            font-weight: 500;
+            color: #666;
+            min-width: 80px;
+        }
+
+        .plan-info-value {
+            color: #333;
+        }
+
+        .plan-description {
+            color: #666;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            margin-bottom: 15px;
+        }
+
+        .plan-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .plan-tag {
+            background: #e3f2fd;
+            color: #1976D2;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .empty-state i {
+            font-size: 4rem;
+            color: #ccc;
+            margin-bottom: 20px;
+        }
+
+        .empty-state h3 {
+            color: #999;
+            margin-bottom: 10px;
+        }
+
+        .search-filter-section {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .search-filter-row {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .filter-select {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+            background: white;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+
+         .modal.show {
+             display: flex;
+             align-items: center;
+             justify-content: center;
+         }
+
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+            margin: 0;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #666;
+            padding: 5px;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .form-textarea {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #2196F3;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1976D2;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 6px;
+            color: white;
+            font-weight: 500;
+            z-index: 1001;
+            animation: slideIn 0.3s ease;
+        }
+
+        .notification.success {
+            background: #4CAF50;
+        }
+
+        .notification.error {
+            background: #f44336;
+        }
+
+        .notification.warning {
+            background: #ff9800;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .treatment-plans-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .search-filter-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .search-input {
+                min-width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo.png" alt="Phòng khám Phụ Sản Đại Anh">
+            <div class="logo-text">
+                <h1 style="color: white; font-size: 1.2rem; margin: 0; font-weight: bold;">Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                <p class="admin-slogan" style="color: #ffeb3b; font-size: 0.9rem; margin: 5px 0 0 0; font-weight: bold; text-align: center;">Uy Tín - Chất Lượng</p>
+            </div>
+        </div>
+        <nav>
+            <a href="admin.html" class="back-link btn secondary-btn"><i class="fas fa-arrow-left"></i> Quay lại Admin</a>
+        </nav>
+    </header>
+
+    <main class="treatment-plans-container">
+        <div class="page-header">
+            <h1 class="page-title">
+                <i class="fas fa-file-medical"></i> Quản lý Phác đồ điều trị
+            </h1>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="upload-section" id="uploadSection">
+            <div class="upload-icon">
+                <i class="fas fa-cloud-upload-alt"></i>
+            </div>
+            <div class="upload-text">
+                Kéo thả file PDF vào đây hoặc click để chọn file
+            </div>
+            <div class="file-input-wrapper">
+                <input type="file" id="fileInput" class="file-input" accept=".pdf" multiple>
+                <label for="fileInput" class="file-input-label">
+                    <i class="fas fa-plus"></i> Chọn file PDF
+                </label>
+            </div>
+        </div>
+
+        <!-- PDF Management Section -->
+        <div class="pdf-management-section" style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; border: 2px dashed #dee2e6;">
+            <h4 style="color: #333; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fas fa-file-pdf"></i> Quản lý PDF phác đồ điều trị
+            </h4>
+            <p style="color: #666; margin-bottom: 1rem;">Upload và quản lý file PDF phác đồ điều trị:</p>
+            
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <input type="file" id="treatmentPlanFile" accept=".pdf" style="flex: 1; min-width: 200px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                <button onclick="uploadTreatmentPlan()" class="btn" style="background: #28a745; white-space: nowrap;">
+                    <i class="fas fa-upload"></i> Upload PDF
+                </button>
+                <button onclick="viewCurrentTreatmentPlan()" class="btn" style="background: #6f42c1; white-space: nowrap;">
+                    <i class="fas fa-eye"></i> Xem PDF
+                </button>
+                <button onclick="downloadCurrentTreatmentPlan()" class="btn" style="background: #17a2b8; white-space: nowrap;">
+                    <i class="fas fa-download"></i> Tải xuống
+                </button>
+                <button onclick="shareTreatmentPlanToZalo()" class="btn" style="background: #0068ff; white-space: nowrap;">
+                    <i class="fas fa-share"></i> Chia sẻ Zalo
+                </button>
+            </div>
+            
+            <div id="treatmentPlanUploadStatus" style="margin-top: 1rem; padding: 0.75rem; border-radius: 4px; display: none;"></div>
+        </div>
+
+        <!-- PDF Viewer Section -->
+        <div id="treatmentPlanPdfViewer" style="display: none; background: white; border: 1px solid #e9ecef; border-radius: 8px; padding: 0; margin-top: 1.5rem;">
+            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px 8px 0 0; border: 1px solid #dee2e6; border-bottom: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <i class="fas fa-file-pdf" style="color: #dc3545; font-size: 1.2rem;"></i>
+                        <span style="font-weight: 600; color: #333;" id="treatmentPlanPdfFileName">Phác đồ điều trị</span>
+                        <span style="color: #666; font-size: 0.9rem;" id="treatmentPlanPdfFileSize"></span>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button onclick="downloadCurrentTreatmentPlan()" class="btn" style="background: #17a2b8; padding: 6px 12px; font-size: 0.9rem;">
+                            <i class="fas fa-download"></i> Tải xuống
+                        </button>
+                        <button onclick="shareTreatmentPlanToZalo()" class="btn" style="background: #0068ff; padding: 6px 12px; font-size: 0.9rem;">
+                            <i class="fas fa-share"></i> Chia sẻ Zalo
+                        </button>
+                        <button onclick="openTreatmentPlanFullscreen()" class="btn" style="background: #fd7e14; padding: 6px 12px; font-size: 0.9rem;">
+                            <i class="fas fa-expand"></i> Toàn màn hình
+                        </button>
+                        <button onclick="viewCurrentTreatmentPlan()" class="btn" style="background: #6f42c1; padding: 6px 12px; font-size: 0.9rem;">
+                            <i class="fas fa-eye"></i> Xem PDF
+                        </button>
+                        <button onclick="closeTreatmentPlanPdfViewer()" class="btn" style="background: #6c757d; padding: 6px 12px; font-size: 0.9rem;">
+                            <i class="fas fa-times"></i> Đóng
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <iframe id="treatmentPlanPdf" width="100%" height="600" style="border: 1px solid #dee2e6; border-top: none; border-radius: 0 0 8px 8px;"></iframe>
+        </div>
+
+        <!-- Search and Filter Section -->
+        <div class="search-filter-section">
+            <div class="search-filter-row">
+                <input type="text" id="searchInput" class="search-input" placeholder="Tìm kiếm phác đồ điều trị...">
+                <select id="hospitalFilter" class="filter-select">
+                    <option value="">Tất cả bệnh viện</option>
+                </select>
+                <select id="categoryFilter" class="filter-select">
+                    <option value="">Tất cả chuyên khoa</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Treatment Plans Grid -->
+        <div class="treatment-plans-grid" id="treatmentPlansGrid">
+            <!-- Treatment plans will be loaded here -->
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="emptyState" style="display: none;">
+            <i class="fas fa-file-medical"></i>
+            <h3>Chưa có phác đồ điều trị nào</h3>
+            <p>Hãy tải lên file PDF đầu tiên để bắt đầu quản lý phác đồ điều trị</p>
+        </div>
+    </main>
+
+    <!-- Add/Edit Treatment Plan Modal -->
+    <div class="modal" id="treatmentPlanModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">Thêm phác đồ điều trị</h2>
+                <button class="close-btn" id="closeModal">&times;</button>
+            </div>
+            <form id="treatmentPlanForm">
+                <input type="hidden" id="planId" name="id">
+                
+                <div class="form-group">
+                    <label for="planName" class="form-label">Tên phác đồ *</label>
+                    <input type="text" id="planName" name="name" class="form-input" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="planDescription" class="form-label">Mô tả</label>
+                    <textarea id="planDescription" name="description" class="form-textarea" placeholder="Mô tả chi tiết về phác đồ điều trị..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="planHospital" class="form-label">Bệnh viện *</label>
+                    <input type="text" id="planHospital" name="hospital" class="form-input" required placeholder="Tên bệnh viện">
+                </div>
+
+                <div class="form-group">
+                    <label for="planCategory" class="form-label">Chuyên khoa *</label>
+                    <select id="planCategory" name="category" class="form-input" required>
+                        <option value="">Chọn chuyên khoa</option>
+                        <option value="sản">Sản khoa</option>
+                        <option value="phụ khoa">Phụ khoa</option>
+                        <option value="nhi">Nhi khoa</option>
+                        <option value="tim mạch">Tim mạch</option>
+                        <option value="nội khoa">Nội khoa</option>
+                        <option value="ngoại khoa">Ngoại khoa</option>
+                        <option value="khác">Khác</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="planTags" class="form-label">Tags (phân cách bằng dấu phẩy)</label>
+                    <input type="text" id="planTags" name="tags" class="form-input" placeholder="Ví dụ: cấp cứu, phẫu thuật, điều trị nội khoa">
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelBtn">Hủy</button>
+                    <button type="submit" class="btn btn-primary">Lưu</button>
+                </div>
+            </form>
+         </div>
+     </div>
+
+     <script>
+        let treatmentPlans = [];
+        let filteredPlans = [];
+
+        // DOM Elements
+        const uploadSection = document.getElementById('uploadSection');
+        const fileInput = document.getElementById('fileInput');
+        const searchInput = document.getElementById('searchInput');
+        const hospitalFilter = document.getElementById('hospitalFilter');
+        const categoryFilter = document.getElementById('categoryFilter');
+        const treatmentPlansGrid = document.getElementById('treatmentPlansGrid');
+        const emptyState = document.getElementById('emptyState');
+        const modal = document.getElementById('treatmentPlanModal');
+        const modalTitle = document.getElementById('modalTitle');
+         const form = document.getElementById('treatmentPlanForm');
+         const closeModal = document.getElementById('closeModal');
+         const cancelBtn = document.getElementById('cancelBtn');
+
+        // Treatment Plan PDF Management
+        let currentTreatmentPlanFile = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTreatmentPlans();
+            setupEventListeners();
+            loadSavedTreatmentPlan();
+        });
+
+        function setupEventListeners() {
+            // File upload
+            fileInput.addEventListener('change', handleFileUpload);
+            uploadSection.addEventListener('dragover', handleDragOver);
+            uploadSection.addEventListener('dragleave', handleDragLeave);
+            uploadSection.addEventListener('drop', handleDrop);
+
+            // Search and filter
+            searchInput.addEventListener('input', filterPlans);
+            hospitalFilter.addEventListener('change', filterPlans);
+            categoryFilter.addEventListener('change', filterPlans);
+
+            // Modal
+            closeModal.addEventListener('click', hideModal);
+            cancelBtn.addEventListener('click', hideModal);
+            form.addEventListener('submit', handleFormSubmit);
+
+             // Click outside modal to close
+             modal.addEventListener('click', (e) => {
+                 if (e.target === modal) {
+                     hideModal();
+                 }
+             });
+        }
+
+        async function loadTreatmentPlans() {
+            try {
+                const response = await fetch('/api/treatment-plans');
+                if (response.ok) {
+                    treatmentPlans = await response.json();
+                    filteredPlans = [...treatmentPlans];
+                    renderPlans();
+                    updateFilters();
+                } else {
+                    console.error('Failed to load treatment plans');
+                }
+            } catch (error) {
+                console.error('Error loading treatment plans:', error);
+            }
+        }
+
+        function renderPlans() {
+            if (filteredPlans.length === 0) {
+                treatmentPlansGrid.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            treatmentPlansGrid.style.display = 'grid';
+            emptyState.style.display = 'none';
+
+            treatmentPlansGrid.innerHTML = filteredPlans.map(plan => {
+                const canEdit = plan.source === 'treatment_plan';
+                return `
+                <div class="treatment-plan-card">
+                    <div class="plan-header">
+                        <h3 class="plan-title">${(plan.name || '').replace(/</g, '&lt;')}</h3>
+                         <div class="plan-actions">
+                             ${canEdit ? `<button class="action-btn view-btn" onclick="viewPlan('${(plan.id + '').replace(/'/g, "\\'")}')" title="Chỉnh sửa"><i class="fas fa-edit"></i></button>` : ''}
+                             <button class="action-btn download-btn" onclick="downloadPlan('${(plan.id + '').replace(/'/g, "\\'")}')" title="Tải xuống">
+                                 <i class="fas fa-download"></i>
+                             </button>
+                             <button class="action-btn delete-btn" onclick="deletePlan('${(plan.id + '').replace(/'/g, "\\'")}')" title="Xóa">
+                                 <i class="fas fa-trash"></i>
+                             </button>
+                         </div>
+                    </div>
+                    <div class="plan-info">
+                        <div class="plan-info-item">
+                            <span class="plan-info-label">Bệnh viện:</span>
+                            <span class="plan-info-value">${(plan.hospital || '').replace(/</g, '&lt;')}</span>
+                        </div>
+                        <div class="plan-info-item">
+                            <span class="plan-info-label">Chuyên khoa:</span>
+                            <span class="plan-info-value">${(plan.category || '').replace(/</g, '&lt;')}</span>
+                        </div>
+                        <div class="plan-info-item">
+                            <span class="plan-info-label">Ngày tải:</span>
+                            <span class="plan-info-value">${plan.created_at ? new Date(plan.created_at).toLocaleDateString('vi-VN') : '-'}</span>
+                        </div>
+                        ${plan.file_size ? `<div class="plan-info-item"><span class="plan-info-label">Kích thước:</span><span class="plan-info-value">${(plan.file_size / 1024).toFixed(1)} KB</span></div>` : ''}
+                    </div>
+                    ${plan.description ? `<div class="plan-description">${plan.description.replace(/</g, '&lt;')}</div>` : ''}
+                    ${plan.tags ? `
+                        <div class="plan-tags">
+                            ${(plan.tags || '').split(',').map(tag => tag.trim()).filter(Boolean).map(tag => `<span class="plan-tag">${tag.replace(/</g, '&lt;')}</span>`).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `}).join('');
+        }
+
+        function updateFilters() {
+            // Update hospital filter
+            const hospitals = [...new Set(treatmentPlans.map(plan => plan.hospital))];
+            hospitalFilter.innerHTML = '<option value="">Tất cả bệnh viện</option>' +
+                hospitals.map(hospital => `<option value="${hospital}">${hospital}</option>`).join('');
+
+            // Update category filter
+            const categories = [...new Set(treatmentPlans.map(plan => plan.category))];
+            categoryFilter.innerHTML = '<option value="">Tất cả chuyên khoa</option>' +
+                categories.map(category => `<option value="${category}">${category}</option>`).join('');
+        }
+
+        function filterPlans() {
+            const searchTerm = searchInput.value.toLowerCase();
+            const selectedHospital = hospitalFilter.value;
+            const selectedCategory = categoryFilter.value;
+
+            filteredPlans = treatmentPlans.filter(plan => {
+                const matchesSearch = !searchTerm || 
+                    (plan.name || '').toLowerCase().includes(searchTerm) ||
+                    (plan.description || '').toLowerCase().includes(searchTerm) ||
+                    (plan.hospital || '').toLowerCase().includes(searchTerm);
+                
+                const matchesHospital = !selectedHospital || plan.hospital === selectedHospital;
+                const matchesCategory = !selectedCategory || plan.category === selectedCategory;
+
+                return matchesSearch && matchesHospital && matchesCategory;
+            });
+
+            renderPlans();
+        }
+
+        // File upload handlers
+        function handleDragOver(e) {
+            e.preventDefault();
+            uploadSection.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            uploadSection.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            uploadSection.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            handleFiles(files);
+        }
+
+        function handleFileUpload(e) {
+            const files = e.target.files;
+            handleFiles(files);
+        }
+
+        async function handleFiles(files) {
+            for (const file of files) {
+                if (file.type === 'application/pdf') {
+                    await uploadFile(file);
+                } else {
+                    showNotification('Chỉ chấp nhận file PDF', 'warning');
+                }
+            }
+        }
+
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('name', file.name.replace('.pdf', ''));
+            formData.append('hospital', 'Bệnh viện chưa xác định');
+            formData.append('category', 'sản');
+
+            try {
+                const response = await fetch('/api/treatment-plans/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const newPlan = await response.json();
+                    newPlan.id = 'tp-' + newPlan.id;
+                    newPlan.source = 'treatment_plan';
+                    treatmentPlans.unshift(newPlan);
+                    filteredPlans = [...treatmentPlans];
+                    renderPlans();
+                    updateFilters();
+                    showNotification('Tải lên thành công!', 'success');
+                } else {
+                    throw new Error('Upload failed');
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                showNotification('Lỗi khi tải lên file', 'error');
+            }
+        }
+
+        // Modal functions
+        function showModal(plan = null) {
+            if (plan) {
+                modalTitle.textContent = 'Chỉnh sửa phác đồ điều trị';
+                const numId = (plan.source === 'treatment_plan' && String(plan.id).startsWith('tp-')) ? String(plan.id).replace('tp-', '') : plan.id;
+                document.getElementById('planId').value = numId;
+                document.getElementById('planName').value = plan.name;
+                document.getElementById('planDescription').value = plan.description || '';
+                document.getElementById('planHospital').value = plan.hospital;
+                document.getElementById('planCategory').value = plan.category;
+                document.getElementById('planTags').value = plan.tags || '';
+            } else {
+                modalTitle.textContent = 'Thêm phác đồ điều trị';
+                form.reset();
+            }
+            modal.classList.add('show');
+        }
+
+        function hideModal() {
+            modal.classList.remove('show');
+            form.reset();
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const planData = Object.fromEntries(formData.entries());
+            
+            try {
+                let response;
+                if (planData.id) {
+                    // Update existing plan (numeric id for TreatmentPlan)
+                    response = await fetch(`/api/treatment-plans/${planData.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(planData)
+                    });
+                } else {
+                    // Create new plan
+                    response = await fetch('/api/treatment-plans', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(planData)
+                    });
+                }
+
+                if (response.ok) {
+                    const updatedPlan = await response.json();
+                    updatedPlan.id = 'tp-' + updatedPlan.id;
+                    updatedPlan.source = 'treatment_plan';
+                    if (planData.id) {
+                        const index = treatmentPlans.findIndex(p => String(p.id) === 'tp-' + planData.id);
+                        treatmentPlans[index] = updatedPlan;
+                    } else {
+                        treatmentPlans.unshift(updatedPlan);
+                    }
+                    filteredPlans = [...treatmentPlans];
+                    renderPlans();
+                    updateFilters();
+                    hideModal();
+                    showNotification('Lưu thành công!', 'success');
+                } else {
+                    throw new Error('Save failed');
+                }
+            } catch (error) {
+                console.error('Save error:', error);
+                showNotification('Lỗi khi lưu', 'error');
+            }
+        }
+
+         // Action functions
+         function viewPlan(planId) {
+             const plan = treatmentPlans.find(p => String(p.id) === String(planId));
+             if (plan && plan.source === 'treatment_plan') {
+                 showModal(plan);
+             }
+         }
+
+        async function downloadPlan(planId) {
+            try {
+                const response = await fetch(`/api/treatment-plans/${encodeURIComponent(planId)}/download`);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    const plan = treatmentPlans.find(p => String(p.id) === String(planId)) || filteredPlans.find(p => String(p.id) === String(planId));
+                    a.download = (plan && plan.file_name) ? plan.file_name : `${(plan && plan.name) || 'phac-do'}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                } else {
+                    throw new Error('Download failed');
+                }
+            } catch (error) {
+                console.error('Download error:', error);
+                showNotification('Lỗi khi tải xuống', 'error');
+            }
+        }
+
+        async function deletePlan(planId) {
+            if (!confirm('Bạn có chắc chắn muốn xóa phác đồ điều trị này?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/treatment-plans/delete/${encodeURIComponent(planId)}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    treatmentPlans = treatmentPlans.filter(p => String(p.id) !== String(planId));
+                    filteredPlans = filteredPlans.filter(p => String(p.id) !== String(planId));
+                    renderPlans();
+                    updateFilters();
+                    showNotification('Xóa thành công!', 'success');
+                } else {
+                    const data = await response.json().catch(() => ({}));
+                    throw new Error(data.message || 'Delete failed');
+                }
+            } catch (error) {
+                console.error('Delete error:', error);
+                showNotification(error.message || 'Lỗi khi xóa', 'error');
+            }
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        // Treatment Plan PDF Management Functions
+        function loadSavedTreatmentPlan() {
+            fetch('/api/get-pricing-file?type=treatment_plans&info=true')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Load treatment plan file response:', data);
+                if (data.success && data.file) {
+                    currentTreatmentPlanFile = data.file;
+                    console.log('Current treatment plan file loaded:', currentTreatmentPlanFile);
+                    displayTreatmentPlanFile();
+                } else {
+                    console.log('No treatment plan file found');
+                    currentTreatmentPlanFile = null;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading treatment plan file:', error);
+                currentTreatmentPlanFile = null;
+            });
+        }
+
+        function uploadTreatmentPlan() {
+            const fileInput = document.getElementById('treatmentPlanFile');
+            const statusDiv = document.getElementById('treatmentPlanUploadStatus');
+            
+            if (!fileInput.files[0]) {
+                showTreatmentPlanStatus('error', 'Vui lòng chọn file PDF để upload!');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            
+            // Validate file type
+            if (file.type !== 'application/pdf') {
+                showTreatmentPlanStatus('error', 'Chỉ được upload file PDF!');
+                return;
+            }
+            
+            // Validate file size (max 500MB)
+            if (file.size > 500 * 1024 * 1024) {
+                showTreatmentPlanStatus('error', 'File quá lớn! Kích thước tối đa 500MB.');
+                return;
+            }
+            
+            // Show loading status
+            showTreatmentPlanStatus('info', 'Đang upload file...');
+            
+            // Create FormData for file upload
+            const formData = new FormData();
+            formData.append('pricing_file', file);
+            formData.append('file_type', 'treatment_plans');
+            
+            // Upload to server
+            fetch('/api/upload-pricing', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.status === 413) {
+                    return response.json().then(data => {
+                        throw new Error(data.message || 'File quá lớn! Kích thước tối đa 500MB.');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Upload response:', data);
+                if (data.success) {
+                    showTreatmentPlanStatus('success', `Đã upload thành công: ${file.name}`);
+                    console.log('Upload successful, reloading treatment plan file...');
+                    loadSavedTreatmentPlan(); // Reload from database
+                    loadTreatmentPlans(); // Cập nhật danh sách phác đồ
+                } else {
+                    showTreatmentPlanStatus('error', data.message || 'Lỗi khi upload file!');
+                }
+                // Clear file input
+                fileInput.value = '';
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                showTreatmentPlanStatus('error', error.message || 'Lỗi kết nối! Vui lòng thử lại.');
+                fileInput.value = '';
+            });
+        }
+
+        function displayTreatmentPlanFile() {
+            if (!currentTreatmentPlanFile) return;
+            
+            const pdfViewer = document.getElementById('treatmentPlanPdfViewer');
+            const treatmentPlanPdf = document.getElementById('treatmentPlanPdf');
+            const pdfFileName = document.getElementById('treatmentPlanPdfFileName');
+            const pdfFileSize = document.getElementById('treatmentPlanPdfFileSize');
+            
+            // Show PDF viewer
+            pdfViewer.style.display = 'block';
+            
+            // Update file info
+            pdfFileName.textContent = currentTreatmentPlanFile.original_filename || 'Phác đồ điều trị';
+            pdfFileSize.textContent = currentTreatmentPlanFile.file_size ? `(${(currentTreatmentPlanFile.file_size / 1024 / 1024).toFixed(1)} MB)` : '';
+            
+            // Set PDF source from database for viewing
+            treatmentPlanPdf.src = `/api/get-pricing-file?type=treatment_plans`;
+        }
+
+        function viewCurrentTreatmentPlan() {
+            if (!currentTreatmentPlanFile) {
+                showTreatmentPlanStatus('error', 'Chưa có file phác đồ điều trị để xem!');
+                return;
+            }
+            
+            // Show PDF viewer
+            const pdfViewer = document.getElementById('treatmentPlanPdfViewer');
+            const treatmentPlanPdf = document.getElementById('treatmentPlanPdf');
+            const pdfFileName = document.getElementById('treatmentPlanPdfFileName');
+            const pdfFileSize = document.getElementById('treatmentPlanPdfFileSize');
+            
+            // Show PDF viewer
+            pdfViewer.style.display = 'block';
+            
+            // Update file info
+            pdfFileName.textContent = currentTreatmentPlanFile.original_filename || 'Phác đồ điều trị';
+            pdfFileSize.textContent = currentTreatmentPlanFile.file_size ? `(${(currentTreatmentPlanFile.file_size / 1024 / 1024).toFixed(1)} MB)` : '';
+            
+            // Set PDF source for viewing (not download)
+            treatmentPlanPdf.src = `/api/get-pricing-file?type=treatment_plans`;
+            
+            showTreatmentPlanStatus('success', 'Đang hiển thị file PDF...');
+        }
+
+        function closeTreatmentPlanPdfViewer() {
+            const pdfViewer = document.getElementById('treatmentPlanPdfViewer');
+            
+            // Hide PDF viewer
+            pdfViewer.style.display = 'none';
+        }
+
+        function downloadCurrentTreatmentPlan() {
+            if (!currentTreatmentPlanFile) {
+                showTreatmentPlanStatus('error', 'Chưa có file phác đồ điều trị để tải xuống!');
+                return;
+            }
+            
+            // Download from server
+            const link = document.createElement('a');
+            link.href = `/api/get-pricing-file?type=treatment_plans&download=true`;
+            link.download = currentTreatmentPlanFile.filename || 'treatment_plans.pdf';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showTreatmentPlanStatus('success', 'Đang tải xuống file...');
+        }
+
+        function shareTreatmentPlanToZalo() {
+            if (!currentTreatmentPlanFile) {
+                showTreatmentPlanStatus('error', 'Chưa có file phác đồ điều trị để chia sẻ!');
+                return;
+            }
+            
+            // Get Zalo phone number from user input or use default
+            const phoneNumber = prompt('Nhập số điện thoại Zalo của bệnh nhân:', '0858838616');
+            if (!phoneNumber) return;
+            
+            // Create Zalo share URL
+            const message = `Phác đồ điều trị từ Phòng khám Phụ Sản Đại Anh`;
+            const cleanPhone = phoneNumber.replace(/\D/g, '');
+            
+            // Try to open Zalo app first, then fallback to web
+            openTreatmentPlanZaloApp(cleanPhone, message);
+        }
+
+        function openTreatmentPlanFullscreen() {
+            if (!currentTreatmentPlanFile) {
+                showTreatmentPlanStatus('error', 'Chưa có file phác đồ điều trị để xem!');
+                return;
+            }
+            
+            const pdfUrl = `/api/get-pricing-file?type=treatment_plans`;
+            window.open(pdfUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
+        }
+
+        function openTreatmentPlanZaloApp(phoneNumber, message) {
+            // Zalo app URL scheme
+            const zaloAppUrl = `zalo://chat?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
+            
+            // Zalo web URL as fallback
+            const zaloWebUrl = `https://zalo.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+            
+            // Try to open Zalo app first
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = zaloAppUrl;
+            document.body.appendChild(iframe);
+            
+            // Set timeout to check if app opened
+            setTimeout(() => {
+                // Remove iframe
+                document.body.removeChild(iframe);
+                
+                // Check if we're still on the same page (app didn't open)
+                // If user is still here after 1 second, open web version
+                const userAgent = navigator.userAgent.toLowerCase();
+                const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+                
+                if (isMobile) {
+                    // On mobile, try to open app first, then web
+                    window.location.href = zaloAppUrl;
+                    
+                    // Fallback to web after 2 seconds
+                    setTimeout(() => {
+                        window.open(zaloWebUrl, '_blank');
+                    }, 2000);
+                } else {
+                    // On desktop, open web version directly
+                    window.open(zaloWebUrl, '_blank');
+                }
+                
+                // Show success message
+                showTreatmentPlanStatus('success', 'Đang mở Zalo để chia sẻ phác đồ điều trị!');
+            }, 1000);
+        }
+
+        function showTreatmentPlanStatus(type, message) {
+            const statusDiv = document.getElementById('treatmentPlanUploadStatus');
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success') {
+                statusDiv.style.background = '#d4edda';
+                statusDiv.style.color = '#155724';
+                statusDiv.style.border = '1px solid #c3e6cb';
+            } else if (type === 'error') {
+                statusDiv.style.background = '#f8d7da';
+                statusDiv.style.color = '#721c24';
+                statusDiv.style.border = '1px solid #f5c6cb';
+            } else if (type === 'info') {
+                statusDiv.style.background = '#d1ecf1';
+                statusDiv.style.color = '#0c5460';
+                statusDiv.style.border = '1px solid #bee5eb';
+            }
+            
+            let icon = 'exclamation-triangle';
+            if (type === 'success') icon = 'check-circle';
+            else if (type === 'info') icon = 'info-circle';
+            
+            statusDiv.innerHTML = `<i class="fas fa-${icon}"></i> ${message}`;
+            
+            // Auto hide after 5 seconds (except for info which might be loading)
+            if (type !== 'info') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

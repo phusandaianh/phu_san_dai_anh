@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ý nghĩa các xét nghiệm - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .admin-header {
+            background-color: white;
+            color: #2196F3;
+            padding: 1rem 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #2196F3;
+        }
+        .admin-header .logo img {
+            height: 50px;
+            margin-right: 10px;
+        }
+        .admin-header .logo {
+            display: flex;
+            align-items: center;
+        }
+        .admin-header nav {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+        }
+        .admin-header .nav-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .admin-header .back-link {
+            color: #2196F3;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+        }
+        .admin-header .back-link.btn.secondary-btn {
+            background-color: transparent;
+            border: 1px solid #2196F3;
+            color: #2196F3;
+        }
+        .admin-main {
+            padding: 20px;
+        }
+        .search-filters {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .search-filters input, .search-filters select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .search-filters input[type="text"] {
+            min-width: 200px;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn-primary {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .data-table {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .table-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .table-header h3 {
+            margin: 0;
+            color: #333;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        .btn-small {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            min-width: 600px;
+            max-width: 90vw;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .form-group textarea {
+            height: 120px;
+            resize: vertical;
+        }
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+        .form-row .form-group {
+            flex: 1;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .test-item {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .test-item h4 {
+            margin: 0 0 10px 0;
+            color: #2196F3;
+        }
+        .test-item .test-category {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+        .test-item .test-meaning {
+            color: #666;
+            line-height: 1.6;
+        }
+        .test-item .test-normal-range {
+            background: #e8f5e8;
+            color: #2e7d32;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.png" alt="Logo Phòng khám Đại Anh">
+            <div>
+                <h1>Ý nghĩa các xét nghiệm</h1>
+                <p>Quản lý ý nghĩa và giải thích xét nghiệm</p>
+            </div>
+        </div>
+        <nav>
+            <div class="nav-row">
+                <a href="index.html" class="back-link btn secondary-btn">
+                    <i class="fas fa-home"></i> Trang chủ
+                </a>
+                <a href="admin.html" class="back-link btn secondary-btn">
+                    <i class="fas fa-cog"></i> Quản trị
+                </a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="admin-main">
+        <!-- Search and Filters -->
+        <div class="search-filters">
+            <input type="text" id="search-name" placeholder="Tìm theo tên xét nghiệm">
+            <select id="filter-category">
+                <option value="">Tất cả loại xét nghiệm</option>
+                <option value="blood">Xét nghiệm máu</option>
+                <option value="urine">Xét nghiệm nước tiểu</option>
+                <option value="hormone">Xét nghiệm nội tiết</option>
+                <option value="pregnancy">Xét nghiệm thai kỳ</option>
+                <option value="infection">Xét nghiệm nhiễm trùng</option>
+                <option value="tumor">Xét nghiệm khối u</option>
+                <option value="genetic">Xét nghiệm di truyền</option>
+            </select>
+            <button class="btn btn-primary" onclick="searchTests()">
+                <i class="fas fa-search"></i> Tìm kiếm
+            </button>
+            <button class="btn btn-secondary" onclick="clearFilters()">
+                <i class="fas fa-times"></i> Xóa bộ lọc
+            </button>
+            <button class="btn btn-success" onclick="openAddModal()">
+                <i class="fas fa-plus"></i> Thêm xét nghiệm
+            </button>
+        </div>
+
+        <!-- Tests List -->
+        <div class="data-table">
+            <div class="table-header">
+                <h3><i class="fas fa-flask"></i> Danh sách xét nghiệm và ý nghĩa</h3>
+            </div>
+            <div class="table-container">
+                <table id="tests-table">
+                    <thead>
+                        <tr>
+                            <th>STT</th>
+                            <th>Tên xét nghiệm</th>
+                            <th>Loại xét nghiệm</th>
+                            <th>Ý nghĩa</th>
+                            <th>Giá trị bình thường</th>
+                            <th>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tests-tbody">
+                        <!-- Tests will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="no-data" id="no-tests" style="display: none;">
+                <i class="fas fa-flask" style="font-size: 48px; color: #ccc; margin-bottom: 15px;"></i>
+                <p>Chưa có xét nghiệm nào</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Add/Edit Modal -->
+    <div id="test-modal" class="modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+            <h3 id="test-modal-title">Thêm xét nghiệm</h3>
+            <form id="test-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="test-name">Tên xét nghiệm *</label>
+                        <input type="text" id="test-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="test-category">Loại xét nghiệm *</label>
+                        <select id="test-category" required>
+                            <option value="">Chọn loại xét nghiệm</option>
+                            <option value="blood">Xét nghiệm máu</option>
+                            <option value="urine">Xét nghiệm nước tiểu</option>
+                            <option value="hormone">Xét nghiệm nội tiết</option>
+                            <option value="pregnancy">Xét nghiệm thai kỳ</option>
+                            <option value="infection">Xét nghiệm nhiễm trùng</option>
+                            <option value="tumor">Xét nghiệm khối u</option>
+                            <option value="genetic">Xét nghiệm di truyền</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="test-meaning">Ý nghĩa xét nghiệm *</label>
+                    <textarea id="test-meaning" placeholder="Giải thích ý nghĩa của xét nghiệm này..." required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="test-normal-range">Giá trị bình thường</label>
+                    <input type="text" id="test-normal-range" placeholder="Ví dụ: 3.5-5.0 g/dL, < 5.0 mg/dL">
+                </div>
+                <div class="form-group">
+                    <label for="test-indications">Chỉ định xét nghiệm</label>
+                    <textarea id="test-indications" placeholder="Khi nào cần làm xét nghiệm này..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="test-preparation">Chuẩn bị trước khi xét nghiệm</label>
+                    <textarea id="test-preparation" placeholder="Hướng dẫn chuẩn bị cho bệnh nhân..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="test-notes">Ghi chú thêm</label>
+                    <textarea id="test-notes" placeholder="Thông tin bổ sung về xét nghiệm..."></textarea>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+                    <button type="submit" class="btn btn-primary">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let tests = [];
+        let currentEditId = null;
+
+        // Load tests from API
+        async function loadTests() {
+            try {
+                const response = await fetch('/api/test-meanings');
+                if (response.ok) {
+                    tests = await response.json();
+                    renderTests();
+                } else {
+                    console.error('Lỗi tải danh sách xét nghiệm:', response.status);
+                }
+            } catch (error) {
+                console.error('Lỗi tải danh sách xét nghiệm:', error);
+            }
+        }
+
+        // Render tests table
+        function renderTests() {
+            const tbody = document.getElementById('tests-tbody');
+            const noData = document.getElementById('no-tests');
+            
+            if (tests.length === 0) {
+                tbody.innerHTML = '';
+                noData.style.display = 'block';
+                return;
+            }
+
+            noData.style.display = 'none';
+            tbody.innerHTML = tests.map((test, index) => `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${test.name}</td>
+                    <td><span class="test-category">${getCategoryText(test.category)}</span></td>
+                    <td>${test.meaning ? test.meaning.substring(0, 100) + '...' : 'Không có'}</td>
+                    <td>${test.normal_range || 'Không có'}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-primary btn-small" onclick="viewTest(${test.id})" title="Xem chi tiết">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-secondary btn-small" onclick="editTest(${test.id})" title="Sửa">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-danger btn-small" onclick="deleteTest(${test.id})" title="Xóa">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Get category text
+        function getCategoryText(category) {
+            const categoryMap = {
+                'blood': 'Xét nghiệm máu',
+                'urine': 'Xét nghiệm nước tiểu',
+                'hormone': 'Xét nghiệm nội tiết',
+                'pregnancy': 'Xét nghiệm thai kỳ',
+                'infection': 'Xét nghiệm nhiễm trùng',
+                'tumor': 'Xét nghiệm khối u',
+                'genetic': 'Xét nghiệm di truyền'
+            };
+            return categoryMap[category] || category;
+        }
+
+        // Search tests
+        function searchTests() {
+            const name = document.getElementById('search-name').value;
+            const category = document.getElementById('filter-category').value;
+
+            let filteredTests = tests.filter(test => {
+                const matchesName = !name || test.name.toLowerCase().includes(name.toLowerCase());
+                const matchesCategory = !category || test.category === category;
+                return matchesName && matchesCategory;
+            });
+
+            // Update display
+            const tbody = document.getElementById('tests-tbody');
+            const noData = document.getElementById('no-tests');
+            
+            if (filteredTests.length === 0) {
+                tbody.innerHTML = '';
+                noData.style.display = 'block';
+            } else {
+                noData.style.display = 'none';
+                tbody.innerHTML = filteredTests.map((test, index) => `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${test.name}</td>
+                        <td><span class="test-category">${getCategoryText(test.category)}</span></td>
+                        <td>${test.meaning ? test.meaning.substring(0, 100) + '...' : 'Không có'}</td>
+                        <td>${test.normal_range || 'Không có'}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn btn-primary btn-small" onclick="viewTest(${test.id})" title="Xem chi tiết">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-secondary btn-small" onclick="editTest(${test.id})" title="Sửa">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-danger btn-small" onclick="deleteTest(${test.id})" title="Xóa">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        // Clear filters
+        function clearFilters() {
+            document.getElementById('search-name').value = '';
+            document.getElementById('filter-category').value = '';
+            renderTests();
+        }
+
+        // Open add modal
+        function openAddModal() {
+            currentEditId = null;
+            document.getElementById('test-modal-title').textContent = 'Thêm xét nghiệm';
+            document.getElementById('test-form').reset();
+            document.getElementById('test-modal').style.display = 'flex';
+        }
+
+        // Edit test
+        function editTest(id) {
+            const test = tests.find(t => t.id === id);
+            if (!test) return;
+
+            currentEditId = id;
+            document.getElementById('test-modal-title').textContent = 'Sửa xét nghiệm';
+            document.getElementById('test-name').value = test.name;
+            document.getElementById('test-category').value = test.category;
+            document.getElementById('test-meaning').value = test.meaning || '';
+            document.getElementById('test-normal-range').value = test.normal_range || '';
+            document.getElementById('test-indications').value = test.indications || '';
+            document.getElementById('test-preparation').value = test.preparation || '';
+            document.getElementById('test-notes').value = test.notes || '';
+            document.getElementById('test-modal').style.display = 'flex';
+        }
+
+        // View test
+        function viewTest(id) {
+            const test = tests.find(t => t.id === id);
+            if (!test) return;
+
+            let content = `
+                <div class="test-item">
+                    <h4>${test.name}</h4>
+                    <span class="test-category">${getCategoryText(test.category)}</span>
+                    <div class="test-meaning">
+                        <strong>Ý nghĩa:</strong><br>
+                        ${test.meaning || 'Không có thông tin'}
+                    </div>
+            `;
+            
+            if (test.normal_range) {
+                content += `<div class="test-normal-range"><strong>Giá trị bình thường:</strong> ${test.normal_range}</div>`;
+            }
+            
+            if (test.indications) {
+                content += `<div style="margin-top: 10px;"><strong>Chỉ định:</strong><br>${test.indications}</div>`;
+            }
+            
+            if (test.preparation) {
+                content += `<div style="margin-top: 10px;"><strong>Chuẩn bị:</strong><br>${test.preparation}</div>`;
+            }
+            
+            if (test.notes) {
+                content += `<div style="margin-top: 10px;"><strong>Ghi chú:</strong><br>${test.notes}</div>`;
+            }
+            
+            content += `</div>`;
+            
+            alert(content.replace(/<[^>]*>/g, '')); // Simple text display
+        }
+
+        // Delete test
+        async function deleteTest(id) {
+            if (!confirm('Bạn có chắc muốn xóa xét nghiệm này?')) return;
+
+            try {
+                const response = await fetch(`/api/test-meanings/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    await loadTests();
+                    alert('Đã xóa xét nghiệm thành công!');
+                } else {
+                    const result = await response.json();
+                    alert('Lỗi xóa xét nghiệm: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Lỗi xóa xét nghiệm:', error);
+                alert('Lỗi xóa xét nghiệm!');
+            }
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('test-modal').style.display = 'none';
+        }
+
+        // Handle form submission
+        document.getElementById('test-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const formData = {
+                name: document.getElementById('test-name').value,
+                category: document.getElementById('test-category').value,
+                meaning: document.getElementById('test-meaning').value,
+                normal_range: document.getElementById('test-normal-range').value,
+                indications: document.getElementById('test-indications').value,
+                preparation: document.getElementById('test-preparation').value,
+                notes: document.getElementById('test-notes').value
+            };
+
+            try {
+                let response;
+                if (currentEditId) {
+                    // Edit existing test
+                    response = await fetch(`/api/test-meanings/${currentEditId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(formData)
+                    });
+                } else {
+                    // Add new test
+                    response = await fetch('/api/test-meanings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(formData)
+                    });
+                }
+
+                if (response.ok) {
+                    await loadTests();
+                    closeModal();
+                    alert(currentEditId ? 'Đã cập nhật xét nghiệm thành công!' : 'Đã thêm xét nghiệm thành công!');
+                } else {
+                    const result = await response.json();
+                    alert('Lỗi: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Lỗi lưu xét nghiệm:', error);
+                alert('Lỗi lưu xét nghiệm!');
+            }
+        });
+
+        // Initialize
+        async function initializePage() {
+            try {
+                // Load data
+                await loadTests();
+            } catch (error) {
+                console.error('Lỗi khởi tạo trang:', error);
+            }
+        }
+        
+        initializePage();
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

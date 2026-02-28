@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phiếu Chỉ Định Cận Lâm Sàng - Cải tiến</title>
+    <link rel="stylesheet" href="lab-request-template.css">
+    <style>
+        /* Demo styles - remove in production */
+        .demo-controls {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        
+        .demo-controls button {
+            margin: 2px;
+            padding: 5px 10px;
+            border: 1px solid #ccc;
+            background: #f5f5f5;
+            cursor: pointer;
+        }
+        
+        .demo-controls button:hover {
+            background: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Demo Controls -->
+    <div class="demo-controls no-print">
+        <button onclick="fillSampleData()">Điền dữ liệu mẫu</button>
+        <button onclick="clearData()">Xóa dữ liệu</button>
+        <button onclick="window.print()">In phiếu</button>
+        <button onclick="toggleMobile()">Toggle Mobile</button>
+    </div>
+
+    <!-- Lab Request Template -->
+    <div class="lab-request-container">
+        <!-- Header Section -->
+        <div class="lab-request-header">
+            <h1 class="lab-request-title">PHIẾU CHỈ ĐỊNH CẬN LÂM SÀNG</h1>
+        </div>
+        
+        <!-- Patient Information Grid -->
+        <div class="patient-info-grid">
+            <div class="patient-info-row">
+                <div class="patient-info-label">Họ tên:</div>
+                <div class="patient-info-value" contenteditable="true" data-field="patient_name">Nguyễn Thị Minh Anh</div>
+                <div class="patient-info-label">Tuổi:</div>
+                <div class="patient-info-value" contenteditable="true" data-field="patient_age">28</div>
+            </div>
+            <div class="patient-info-row full-width">
+                <div class="patient-info-label">Địa chỉ:</div>
+                <div class="patient-info-value" contenteditable="true" data-field="patient_address">123 Đường ABC, Quận 1, TP.HCM</div>
+            </div>
+            <div class="patient-info-row">
+                <div class="patient-info-label">SĐT:</div>
+                <div class="patient-info-value" contenteditable="true" data-field="patient_phone">0901234567</div>
+                <div class="patient-info-label">Ngày sinh:</div>
+                <div class="patient-info-value" contenteditable="true" data-field="patient_dob">15/03/1995</div>
+            </div>
+        </div>
+
+        <!-- Diagnosis Section -->
+        <div class="diagnosis-section">
+            <h2 class="diagnosis-title">CHẨN ĐOÁN</h2>
+            <div class="diagnosis-content">
+                <div contenteditable="true" data-field="diagnosis">
+                    Khám phụ khoa định kỳ<br>
+                    Nghi ngờ rối loạn kinh nguyệt
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Indications Section -->
+        <div class="test-indications-section">
+            <h2 class="test-indications-title">CHỈ ĐỊNH XÉT NGHIỆM</h2>
+            <div class="test-indications-content">
+                <div class="test-options">
+                    <div class="test-option">
+                        <input type="checkbox" id="ultrasound_abdomen" data-field="ultrasound_abdomen">
+                        <label for="ultrasound_abdomen">Siêu âm ổ bụng</label>
+                    </div>
+                    <div class="test-option">
+                        <input type="checkbox" id="ultrasound_pelvis" data-field="ultrasound_pelvis">
+                        <label for="ultrasound_pelvis">Siêu âm tử cung phần phụ</label>
+                    </div>
+                    <div class="test-option">
+                        <input type="checkbox" id="ultrasound_pregnancy" data-field="ultrasound_pregnancy">
+                        <label for="ultrasound_pregnancy">Siêu âm thai</label>
+                    </div>
+                    <div class="test-option">
+                        <input type="checkbox" id="blood_test" data-field="blood_test">
+                        <label for="blood_test">Xét nghiệm máu</label>
+                    </div>
+                    <div class="test-option">
+                        <input type="checkbox" id="urine_test" data-field="urine_test">
+                        <label for="urine_test">Xét nghiệm nước tiểu</label>
+                    </div>
+                    <div class="test-option">
+                        <input type="checkbox" id="hormone_test" data-field="hormone_test">
+                        <label for="hormone_test">Xét nghiệm nội tiết</label>
+                    </div>
+                </div>
+                
+                <div class="other-test">
+                    <label for="other_test">Khác:</label>
+                    <input type="text" id="other_test" class="other-test-input" placeholder="Ghi rõ xét nghiệm khác..." data-field="other_test">
+                </div>
+            </div>
+        </div>
+
+        <!-- Signature Section -->
+        <div class="signature-section">
+            <div class="signature-box">
+                <div class="signature-label">Bác sĩ chỉ định</div>
+                <div class="signature-line"></div>
+                <div style="margin-top: 10px; font-weight: bold;" contenteditable="true" data-field="doctor_name">BS. Nguyễn Văn A</div>
+            </div>
+            <div class="signature-box">
+                <div class="signature-label">Ngày chỉ định</div>
+                <div class="signature-line"></div>
+                <div style="margin-top: 10px; font-weight: bold;" contenteditable="true" data-field="request_date">15/01/2024</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Demo functions
+        function fillSampleData() {
+            // Fill sample data
+            document.querySelector('[data-field="patient_name"]').textContent = 'Nguyễn Thị Minh Anh';
+            document.querySelector('[data-field="patient_age"]').textContent = '28';
+            document.querySelector('[data-field="patient_address"]').textContent = '123 Đường ABC, Quận 1, TP.HCM';
+            document.querySelector('[data-field="patient_phone"]').textContent = '0901234567';
+            document.querySelector('[data-field="patient_dob"]').textContent = '15/03/1995';
+            document.querySelector('[data-field="diagnosis"]').innerHTML = 'Khám phụ khoa định kỳ<br>Nghi ngờ rối loạn kinh nguyệt';
+            document.querySelector('[data-field="doctor_name"]').textContent = 'BS. Nguyễn Văn A';
+            document.querySelector('[data-field="request_date"]').textContent = '15/01/2024';
+            
+            // Check some test options
+            document.getElementById('ultrasound_pelvis').checked = true;
+            document.getElementById('blood_test').checked = true;
+            document.getElementById('urine_test').checked = true;
+        }
+        
+        function clearData() {
+            document.querySelectorAll('[contenteditable="true"]').forEach(el => {
+                el.textContent = '';
+            });
+            document.querySelectorAll('input[type="checkbox"]').forEach(el => {
+                el.checked = false;
+            });
+            document.querySelectorAll('input[type="text"]').forEach(el => {
+                el.value = '';
+            });
+        }
+        
+        function toggleMobile() {
+            document.body.classList.toggle('mobile-preview');
+        }
+        
+        // Auto-save functionality
+        document.addEventListener('input', function(e) {
+            if (e.target.hasAttribute('data-field')) {
+                const field = e.target.getAttribute('data-field');
+                const value = e.target.type === 'checkbox' ? e.target.checked : e.target.textContent || e.target.value;
+                console.log(`Saving ${field}: ${value}`);
+                // Here you would save to localStorage or send to server
+                localStorage.setItem(`lab_request_${field}`, value);
+            }
+        });
+        
+        // Load saved data
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('[data-field]').forEach(el => {
+                const field = el.getAttribute('data-field');
+                const saved = localStorage.getItem(`lab_request_${field}`);
+                if (saved !== null) {
+                    if (el.type === 'checkbox') {
+                        el.checked = saved === 'true';
+                    } else if (el.contentEditable === 'true') {
+                        el.textContent = saved;
+                    } else {
+                        el.value = saved;
+                    }
+                }
+            });
+        });
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

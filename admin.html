@@ -7,6 +7,103 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        .admin-header {
+            background-color: #2196F3; /* Nền xanh */
+            color: white; /* Chữ trắng */
+            padding: 1rem 20px; /* Tăng padding để header to lên */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .admin-header .logo img {
+             height: 50px; /* Điều chỉnh kích thước logo nếu cần */
+             margin-right: 10px;
+        }
+
+         .admin-header .logo {
+             display: flex;
+             align-items: center;
+             gap: 15px;
+         }
+         
+         .admin-header .logo-text {
+             display: flex;
+             flex-direction: column;
+             align-items: flex-start;
+         }
+
+        .admin-header nav {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px; /* Khoảng cách giữa 2 hàng */
+        }
+        .admin-header .nav-row {
+            display: flex;
+            align-items: center;
+            gap: 8px; /* Khoảng cách giữa các nút trong hàng */
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .admin-header .back-link {
+            color: white; /* Đảm bảo chữ trắng cho nút quay lại */
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+        }
+         
+        .admin-header .back-link.btn.secondary-btn {
+            /* Override default secondary button styles for white text on blue */
+            background-color: transparent;
+            border: 1px solid white;
+            color: white;
+            padding: 6px 10px;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+
+        .header-nav-btn {
+            background-color: white; /* Nền trắng cho nút */
+            color: #333; /* Chữ màu tối */
+            border: 1px solid #ccc;
+            padding: 6px 10px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.3s ease;
+            font-size: 0.85rem;
+            white-space: nowrap;
+            min-width: fit-content;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .header-nav-btn:hover {
+            background-color: #f0f0f0;
+        }
+
+        .header-nav-btn.active {
+            background-color: #0d47a1; /* Nền xanh đậm khi active */
+            color: white; /* Chữ trắng khi active */
+            border-color: #0d47a1;
+        }
+
+        .header-nav-btn.checkin-btn {
+            background-color: #4caf50 !important;
+            color: white !important;
+            border-color: #4caf50 !important;
+            font-weight: 600;
+        }
+
+        .header-nav-btn.checkin-btn:hover {
+            background-color: #43a047 !important;
+            border-color: #43a047 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+        }
+
         .modal.hidden {
             display: none !important;
         }
@@ -188,122 +285,74 @@
             border-radius: 4px;
             background: white;
         }
-        .doctor-templates {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            z-index: 1000;
-            display: none;
-        }
-        .doctor-template-item {
-            padding: 8px 12px;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: background-color 0.2s;
-        }
-        .doctor-template-item:hover {
-            background-color: #f5f5f5;
-        }
-        .doctor-template-item .edit-template {
-            color: #007bff;
-            visibility: hidden;
-        }
-        .doctor-template-item:hover .edit-template {
-            visibility: visible;
-        }
-        .doctor-template-edit {
-            display: none;
-            padding: 8px;
-            background: #f8f9fa;
-            border-top: 1px solid #ddd;
-        }
-        .doctor-template-edit input {
-            width: calc(100% - 16px);
-            padding: 6px 8px;
-            margin-bottom: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        .doctor-template-edit .buttons {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-        }
-        .doctor-template-edit button {
-            padding: 4px 8px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .doctor-template-edit .save-template {
-            background: #28a745;
-            color: white;
-        }
-        .doctor-template-edit .cancel-edit {
-            background: #dc3545;
-            color: white;
-        }
     </style>
 </head>
 <body>
     <header class="admin-header">
         <div class="logo">
             <img src="logo.png" alt="Phòng khám Phụ Sản Đại Anh">
-            <h1>Quản trị nội dung</h1>
+            <div class="logo-text">
+                <h1 style="color: white; font-size: 1.2rem; margin: 0; font-weight: bold;">Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                <p class="admin-slogan" style="color: #ffeb3b; font-size: 0.9rem; margin: 5px 0 0 0; font-weight: bold; text-align: center;">Uy Tín - Chất Lượng</p>
+            </div>
         </div>
         <nav>
-            <a href="/" class="back-link"><i class="fas fa-arrow-left"></i> Quay lại trang chủ</a>
+            <div class="nav-row">
+                <a href="/" class="back-link btn secondary-btn"><i class="fas fa-arrow-left"></i> Quay lại trang chủ</a>
+                <a href="qr-checkin" class="header-nav-btn checkin-btn" title="Hệ thống Check-in QR Code">
+                    <i class="fas fa-qrcode"></i> Check-in QR
+                </a>
+                <a href="home-content.html" class="header-nav-btn">Nội dung trang chủ</a>
+                <a href="http://localhost:5000/dicom_viewer.html" class="header-nav-btn" style="background-color:#0ea5e9;color:white;" title="Xem/đo ảnh DICOM">
+                    <i class="fas fa-x-ray"></i> DICOM Viewer
+                </a>
+                <button class="header-nav-btn" data-tab="examination-settings">Danh sách khám</button>
+                <a href="clinical-services-admin.html" class="header-nav-btn">Quản lý dịch vụ cận lâm sàng</a>
+                <a href="lab-tests.html" class="header-nav-btn">Tổng hợp danh sách xét nghiệm</a>
+                <a href="lab-tests-dai-anh.html" class="header-nav-btn" style="background-color:#1976d2;color:white;">
+                    <i class="fas fa-vial"></i> Danh Sách Thủ Thuật - Đại Anh
+                </a>
+                <a href="clinical-form-templates.html" class="header-nav-btn">Mẫu phiếu cận lâm sàng</a>
+                <a href="voluson-sync-admin.html" class="header-nav-btn" style="background-color: #ff9800; color: white;">
+                    <i class="fas fa-sync"></i> Đồng bộ Voluson E10
+                </a>
+                <a id="mwlAdminLink" href="mwl-admin.html" class="header-nav-btn" style="background-color: #3f51b5; color: white; display: none;">
+                    <i class="fas fa-list"></i> Quản lý Worklist (MWL)
+                </a>
+                <button id="syncWorklistHeaderBtn" class="header-nav-btn" style="background-color: #00bcd4; color: white; display: none; border: none; cursor: pointer;">
+                    <i class="fas fa-sync"></i> Đồng bộ Worklist
+                </button>
+                <a href="ctg-analysis.html" class="header-nav-btn"><i class="fas fa-heartbeat"></i> Phân tích CTG Tim Thai</a>
+                <a href="lab-pricelist.html" class="header-nav-btn">Bảng giá xét nghiệm</a>
+            </div>
+            <div class="nav-row">
+                <a href="booking-content-admin.html" class="header-nav-btn">Nội dung trang đặt lịch khám</a>
+                <a href="doctor-schedule.html" class="header-nav-btn">Lịch khám</a>
+                <a href="patient-records.html" class="header-nav-btn">Hồ sơ bệnh án</a>
+                <a href="prescription-management.html" class="header-nav-btn">Đơn thuốc</a>
+                <a href="test-meanings.html" class="header-nav-btn">Ý nghĩa các xét nghiệm</a>
+                <a href="disease-tests.html" class="header-nav-btn">Bệnh lý và xét nghiệm</a>
+                <a href="cervical-examination-analysis.html" class="header-nav-btn">Soi cổ tử cung</a>
+                <a href="ultrasound-analysis.html" class="header-nav-btn">Siêu âm thai</a>
+                <a href="ultrasound-general.html" class="header-nav-btn"><i class="fas fa-stethoscope"></i> Siêu âm tổng quát</a>
+                <a href="staff-training.html" class="header-nav-btn"><i class="fas fa-graduation-cap"></i> Đào tạo nhân viên</a>
+                <a href="treatment-plans.html" class="header-nav-btn"><i class="fas fa-file-medical"></i> Phác đồ điều trị</a>
+                <a href="medical-charts.html" class="header-nav-btn" style="background-color: #607d8b; color: white;"><i class="fas fa-chart-line"></i> Bảng biểu</a>
+                <a href="consultation-results.html" class="header-nav-btn" style="background-color: #e91e63; color: white;"><i class="fas fa-comments"></i> Tư vấn kết quả, HTSS</a>
+                <a href="clinic-maps.html" class="header-nav-btn" style="background-color: #4caf50; color: white;"><i class="fas fa-map-marker-alt"></i> Địa chỉ Maps</a>
+                <a href="users.html" class="header-nav-btn" style="background-color: #9c27b0; color: white;"><i class="fas fa-users"></i> Quản lý người dùng</a>
+                <a href="ai-assistant-admin.html" class="header-nav-btn" style="background-color: #667eea; color: white;"><i class="fas fa-robot"></i> Quản lý trợ lý AI</a>
+            </div>
         </nav>
     </header>
 
     <main class="admin-main">
         <div class="admin-tabs">
-            <button class="tab-btn active" data-tab="home-content">Nội dung trang chủ</button>
-            <button class="tab-btn" data-tab="examination-settings">Danh sách khám</button>
-            <button class="tab-btn" data-tab="clinical-services-management">Quản lý dịch vụ cận lâm sàng</button>
-            <button class="tab-btn" data-tab="booking-content">Nội dung trang đặt lịch khám</button>
-            <button class="tab-btn" data-tab="work-schedule-management">Quản lý lịch làm việc bác sĩ</button>
+            <!-- Remove these buttons from here -->
         </div>
 
-        <div class="tab-content active" id="home-content">
-            <form id="homeContentForm" class="admin-form">
-                <div class="form-group">
-                    <label for="heroTitle">Tiêu đề chính</label>
-                    <input type="text" id="heroTitle" name="heroTitle" required>
-                </div>
-                <div class="form-group">
-                    <label for="heroDescription">Mô tả ngắn</label>
-                    <textarea id="heroDescription" name="heroDescription" rows="3" required></textarea>
-                </div>
-                
-                <h3>Dịch vụ</h3>
-                <div id="servicesList" class="items-list">
-                    <!-- Services will be added here dynamically -->
-                </div>
-                <button type="button" class="add-item-btn" onclick="addService()">
-                    <i class="fas fa-plus"></i> Thêm dịch vụ
-                </button>
 
-                <h3>Thông tin liên hệ</h3>
-                <div id="contactInfoList" class="items-list">
-                    <!-- Contact info will be added here dynamically -->
-                </div>
-                <button type="button" class="add-item-btn" onclick="addContactInfo()">
-                    <i class="fas fa-plus"></i> Thêm thông tin liên hệ
-                </button>
-
-                <button type="submit" class="save-btn">Lưu thay đổi</button>
-            </form>
-        </div>
-
-        <div class="tab-content" id="examination-settings">
+        <div class="tab-content active" id="examination-settings">
             <form id="examinationSettingsForm" class="admin-form">
                 <div class="form-group">
                     <label for="examinationTitle">Tiêu đề trang</label>
@@ -327,32 +376,52 @@
         </div>
 
         <div class="tab-content" id="clinical-services-management">
-            <h3>Quản lý dịch vụ cận lâm sàng</h3>
-            <form id="addClinicalServiceForm" class="admin-form" style="margin-bottom: 24px;">
+            <!-- Content moved to clinical-services-admin.html -->
+        </div>
+
+        <div class="tab-content" id="ai-assistant-management">
+            <div class="admin-form" style="max-width: 800px; margin: 0 auto;">
+                <h2 style="margin-bottom: 20px; color: #2196F3;">
+                    <i class="fas fa-robot"></i> Quản lý trợ lý AI
+                </h2>
+                
                 <div class="form-group">
-                    <input type="text" id="newServiceName" placeholder="Tên dịch vụ" required>
+                    <label style="font-weight: bold; margin-bottom: 10px; display: block;">Avatar hiện tại</label>
+                    <div id="current-avatar-container" style="margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px; text-align: center;">
+                        <div id="avatar-loading" style="color: #666;">Đang tải...</div>
+                        <div id="avatar-preview" style="display: none;">
+                            <img id="avatar-image" src="" alt="Avatar trợ lý AI" style="max-width: 200px; max-height: 200px; border-radius: 50%; border: 3px solid #667eea; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+                            <div id="avatar-info" style="margin-top: 15px; color: #666; font-size: 14px;"></div>
+                        </div>
+                        <div id="avatar-none" style="display: none; color: #999;">
+                            <i class="fas fa-image" style="font-size: 48px; margin-bottom: 10px;"></i>
+                            <p>Chưa có avatar. Vui lòng tải ảnh lên.</p>
+                        </div>
+                    </div>
                 </div>
+
                 <div class="form-group">
-                    <textarea id="newServiceDescription" placeholder="Mô tả dịch vụ" required></textarea>
+                    <label for="avatar-upload" style="font-weight: bold; margin-bottom: 10px; display: block;">
+                        <i class="fas fa-upload"></i> Tải ảnh avatar mới
+                    </label>
+                    <input type="file" id="avatar-upload" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp" style="margin-bottom: 10px;">
+                    <div id="upload-preview" style="display: none; margin-top: 15px; text-align: center;">
+                        <p style="font-weight: bold; margin-bottom: 10px;">Xem trước:</p>
+                        <img id="preview-image" src="" alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 50%; border: 3px solid #667eea; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+                    </div>
+                    <p style="color: #666; font-size: 12px; margin-top: 5px;">
+                        <i class="fas fa-info-circle"></i> Định dạng hỗ trợ: PNG, JPG, JPEG, GIF, WEBP. Ảnh sẽ tự động được đổi tên thành ai-assistant-avatar.jpg
+                    </p>
                 </div>
+
                 <div class="form-group">
-                    <input type="number" id="newServicePrice" placeholder="Giá dịch vụ" required>
+                    <button type="button" id="upload-avatar-btn" class="save-btn" style="width: 100%; padding: 12px; font-size: 16px;" disabled>
+                        <i class="fas fa-upload"></i> Tải ảnh lên
+                    </button>
                 </div>
-                <button type="submit" class="btn primary-btn">Thêm dịch vụ</button>
-            </form>
-            <table class="admin-table">
-                <thead>
-                    <tr>
-                        <th>Tên dịch vụ</th>
-                        <th>Mô tả</th>
-                        <th>Giá</th>
-                        <th>Thao tác</th>
-                    </tr>
-                </thead>
-                <tbody id="clinicalServicesTableBody">
-                    <!-- Dịch vụ sẽ được load ở đây -->
-                </tbody>
-            </table>
+
+                <div id="upload-status" style="display: none; margin-top: 15px; padding: 10px; border-radius: 4px;"></div>
+            </div>
         </div>
 
         <div class="tab-content" id="booking-content">
@@ -369,6 +438,9 @@
                 <h4>Dịch vụ nổi bật</h4>
                 <div id="bookingServicesList" class="items-list"></div>
                 <button type="button" class="add-item-btn" onclick="addBookingService()"><i class="fas fa-plus"></i> Thêm dịch vụ</button>
+                <h4>Lý do khám</h4>
+                <div id="bookingReasonsList" class="items-list"></div>
+                <button type="button" class="add-item-btn" onclick="addBookingReason()"><i class="fas fa-plus"></i> Thêm lý do</button>
                 <h4>Tiện ích cho mẹ bầu</h4>
                 <div id="bookingUtilitiesList" class="items-list"></div>
                 <button type="button" class="add-item-btn" onclick="addBookingUtility()"><i class="fas fa-plus"></i> Thêm tiện ích</button>
@@ -385,8 +457,17 @@
         </div>
 
         <div class="tab-content" id="work-schedule-management">
-            <h3>Quản lý lịch làm việc bác sĩ</h3>
+            <h3><a href="doctor-schedule.html" style="text-decoration: none; color: inherit;">Lên lịch khám bệnh của phòng khám</a></h3>
             
+            <div style="margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center;">
+                <label for="shift-duration-select" style="font-weight:bold;">Thời lượng ca khám:</label>
+                <select id="shift-duration-select" style="padding:6px 12px; border-radius:6px;">
+                    <option value="10">10 phút</option>
+                    <option value="15" selected>15 phút</option>
+                    <option value="20">20 phút</option>
+                </select>
+            </div>
+
             <div class="schedule-controls" style="margin-bottom: 1rem; display: flex; gap: 1rem; align-items: center;">
                 <button id="prev-month" class="btn secondary-btn">
                     <i class="fas fa-chevron-left"></i> Tháng trước
@@ -437,47 +518,85 @@
                     <option value="Bác sĩ CK2 Ngọc Đại">
                     <option value="Thạc sĩ Quỳnh Anh + Bác sĩ CK2 Ngọc Đại">
                 </datalist>
+                <button class="doctor-template-settings" title="Cài đặt mẫu bác sĩ" style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #666;">
+                    <i class="fas fa-cog"></i>
+                </button>
             </div>
         </template>
+
+        <!-- Doctor Template Settings Modal -->
+        <div id="doctor-template-modal" class="modal hidden" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;z-index:1000;">
+            <div class="modal-content" style="background:#fff;padding:2rem 1.5rem;border-radius:14px;min-width:320px;max-width:95vw;position:relative;">
+                <button id="close-doctor-template-modal" style="position:absolute;top:10px;right:10px;font-size:1.2rem;background:none;border:none;cursor:pointer;">&times;</button>
+                <h3>Quản lý mẫu tên bác sĩ</h3>
+                <div id="doctor-templates-list" style="margin: 1rem 0;">
+                    <!-- Templates will be added here -->
+                </div>
+                <button id="add-doctor-template" class="btn secondary-btn" style="margin-top: 1rem;">
+                    <i class="fas fa-plus"></i> Thêm mẫu
+                </button>
+            </div>
+        </div>
     </main>
 
     <footer class="admin-footer">
-        <p>&copy; 2024 Phòng khám Phụ Sản Đại Anh. All rights reserved.</p>
+        <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
     </footer>
 
     <script>
+        // AI Assistant Avatar Management - Global variables
+        let selectedFile = null;
+        let avatarEventListenersInitialized = false;
+
         // Tab switching
-        document.querySelectorAll('.tab-btn').forEach(button => {
+        document.querySelectorAll('.header-nav-btn').forEach(button => {
             button.addEventListener('click', () => {
-                document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                // Remove active class from all header navigation buttons
+                document.querySelectorAll('.header-nav-btn').forEach(btn => btn.classList.remove('active'));
+                // Remove active class from all tab content divs
                 document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
                 
+                // Add active class to the clicked button and corresponding tab content
                 button.classList.add('active');
                 document.getElementById(button.dataset.tab).classList.add('active');
+
+                 // Call specific load functions if needed for the tab
+                 const tabId = button.dataset.tab;
+                 if (tabId === 'examination-settings') {
+                     loadExaminationSettings();
+                 } else if (tabId === 'clinical-services-management') {
+                      loadClinicalServicesTable();
+                 } else if (tabId === 'booking-content') {
+                      loadBookingContent();
+                 } else if (tabId === 'work-schedule-management') {
+                      renderSchedule(); // Assuming this loads the schedule data
+                 } else if (tabId === 'ai-assistant-management') {
+                      loadAIAssistantAvatar();
+                 }
+
             });
         });
 
-        // Load existing content
-        async function loadContent() {
-            try {
-                // Load home content
-                const homeResponse = await fetch('/api/home-content');
-                const homeData = await homeResponse.json();
-                
-                document.getElementById('heroTitle').value = homeData.heroTitle;
-                document.getElementById('heroDescription').value = homeData.heroDescription;
-                
-                const servicesList = document.getElementById('servicesList');
-                homeData.services.forEach(service => {
-                    addService(service.name, service.description);
-                });
-                
-                const contactInfoList = document.getElementById('contactInfoList');
-                homeData.contactInfo.forEach(contact => {
-                    addContactInfo(contact.type, contact.value);
-                });
+        // Load existing content on page load and set initial active tab
+        document.addEventListener('DOMContentLoaded', async () => {
+             
+             // Set initial active tab based on URL hash or default
+             const urlParams = new URLSearchParams(window.location.search);
+             const initialTab = urlParams.get('tab') || 'examination-settings';
+             
+             // Find the corresponding button and trigger click
+             const initialButton = document.querySelector(`.header-nav-btn[data-tab="${initialTab}"]`);
+             if (initialButton) {
+                 initialButton.click();
+             } else {
+                  // Default to the first button if initialTab is invalid
+                 document.querySelector('.header-nav-btn').click();
+             }
+        });
 
-                // Load examination settings
+        // Load examination settings
+        async function loadExaminationSettings() {
+            try {
                 const examResponse = await fetch('/api/examination-settings');
                 const examData = await examResponse.json();
                 
@@ -489,47 +608,12 @@
                     addClinicalService(service.name, service.description, service.price);
                 });
             } catch (error) {
-                console.error('Error loading content:', error);
-                alert('Có lỗi xảy ra khi tải nội dung');
+                console.error('Error loading examination settings:', error);
+                alert('Có lỗi xảy ra khi tải cài đặt khám');
             }
         }
 
         // Form submission handlers
-        document.getElementById('homeContentForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const formData = {
-                heroTitle: document.getElementById('heroTitle').value,
-                heroDescription: document.getElementById('heroDescription').value,
-                services: Array.from(document.querySelectorAll('.service-item')).map(item => ({
-                    name: item.querySelector('input[name="serviceName"]').value,
-                    description: item.querySelector('textarea[name="serviceDescription"]').value
-                })),
-                contactInfo: Array.from(document.querySelectorAll('.contact-item')).map(item => ({
-                    type: item.querySelector('input[name="contactType"]').value,
-                    value: item.querySelector('input[name="contactValue"]').value
-                }))
-            };
-
-            try {
-                const response = await fetch('/api/home-content', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(formData)
-                });
-
-                if (response.ok) {
-                    alert('Nội dung trang chủ đã được cập nhật');
-                } else {
-                    throw new Error('Failed to update content');
-                }
-            } catch (error) {
-                console.error('Error updating content:', error);
-                alert('Có lỗi xảy ra khi cập nhật nội dung');
-            }
-        });
 
         document.getElementById('examinationSettingsForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -565,41 +649,6 @@
         });
 
         // Dynamic form elements
-        function addService(name = '', description = '') {
-            const servicesList = document.getElementById('servicesList');
-            const serviceItem = document.createElement('div');
-            serviceItem.className = 'service-item';
-            serviceItem.innerHTML = `
-                <div class="form-group">
-                    <input type="text" name="serviceName" placeholder="Tên dịch vụ" value="${name}" required>
-                </div>
-                <div class="form-group">
-                    <textarea name="serviceDescription" placeholder="Mô tả dịch vụ" required>${description}</textarea>
-                </div>
-                <button type="button" class="delete-btn" onclick="this.parentElement.remove()">
-                    <i class="fas fa-trash"></i>
-                </button>
-            `;
-            servicesList.appendChild(serviceItem);
-        }
-
-        function addContactInfo(type = '', value = '') {
-            const contactInfoList = document.getElementById('contactInfoList');
-            const contactItem = document.createElement('div');
-            contactItem.className = 'contact-item';
-            contactItem.innerHTML = `
-                <div class="form-group">
-                    <input type="text" name="contactType" placeholder="Loại thông tin" value="${type}" required>
-                </div>
-                <div class="form-group">
-                    <input type="text" name="contactValue" placeholder="Giá trị" value="${value}" required>
-                </div>
-                <button type="button" class="delete-btn" onclick="this.parentElement.remove()">
-                    <i class="fas fa-trash"></i>
-                </button>
-            `;
-            contactInfoList.appendChild(contactItem);
-        }
 
         function addClinicalService(name = '', description = '', price = '') {
             const clinicalServicesList = document.getElementById('clinicalServicesList');
@@ -621,9 +670,6 @@
             `;
             clinicalServicesList.appendChild(serviceItem);
         }
-
-        // Load content when page loads
-        document.addEventListener('DOMContentLoaded', loadContent);
 
         // Quản lý dịch vụ cận lâm sàng
         async function loadClinicalServicesTable() {
@@ -699,6 +745,10 @@
             const servicesList = document.getElementById('bookingServicesList');
             servicesList.innerHTML = '';
             (data.services || []).forEach(s => addBookingService(s));
+            // Lý do
+            const reasonsList = document.getElementById('bookingReasonsList');
+            reasonsList.innerHTML = '';
+            (data.reasons || []).forEach(r => addBookingReason(r));
             // Tiện ích
             const utilitiesList = document.getElementById('bookingUtilitiesList');
             utilitiesList.innerHTML = '';
@@ -718,18 +768,25 @@
             div.innerHTML = `<input type="text" class="booking-utility-input" value="${val}"> <button type="button" class="delete-btn" onclick="this.parentElement.remove()"><i class='fas fa-trash'></i></button>`;
             document.getElementById('bookingUtilitiesList').appendChild(div);
         }
+        function addBookingReason(val = '') {
+            const div = document.createElement('div');
+            div.className = 'service-item';
+            div.innerHTML = `<input type="text" class="booking-reason-input" value="${val}"> <button type="button" class="delete-btn" onclick="this.parentElement.remove()"><i class='fas fa-trash'></i></button>`;
+            document.getElementById('bookingReasonsList').appendChild(div);
+        }
         document.getElementById('bookingContentForm').onsubmit = async function(e) {
             e.preventDefault();
             const title = document.getElementById('bookingTitle').value;
             const description = document.getElementById('bookingDescription').value;
             const services = Array.from(document.querySelectorAll('.booking-service-input')).map(i => i.value);
+            const reasons = Array.from(document.querySelectorAll('.booking-reason-input')).map(i => i.value);
             const utilities = Array.from(document.querySelectorAll('.booking-utility-input')).map(i => i.value);
             const schedule = document.getElementById('bookingSchedule').value;
             const contact = document.getElementById('bookingContact').value;
             const res = await fetch('/api/booking-content', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, description, services, utilities, schedule, contact })
+                body: JSON.stringify({ title, description, services, reasons, utilities, schedule, contact })
             });
             if (res.ok) {
                 alert('Đã lưu nội dung trang đặt lịch khám!');
@@ -745,6 +802,18 @@
 
         // Work Schedule Management
         let currentDate = new Date();
+        // Lưu và lấy thời lượng ca khám
+        const shiftDurationSelect = document.getElementById('shift-duration-select');
+        function getShiftDuration() {
+            return parseInt(localStorage.getItem('shiftDuration') || shiftDurationSelect.value);
+        }
+        function setShiftDuration(val) {
+            localStorage.setItem('shiftDuration', val);
+        }
+        shiftDurationSelect.value = localStorage.getItem('shiftDuration') || '15';
+        shiftDurationSelect.addEventListener('change', function() {
+            setShiftDuration(this.value);
+        });
 
         function renderSchedule() {
             const list = document.getElementById('appointment-list');
@@ -789,103 +858,6 @@
             loadShiftsForDay(date, shiftsContainer);
         }
 
-        // Thêm biến để lưu trữ mẫu tên bác sĩ
-        let doctorTemplates = [
-            "Thạc sĩ Quỳnh Anh",
-            "Bác sĩ CK2 Ngọc Đại",
-            "Thạc sĩ Quỳnh Anh + Bác sĩ CK2 Ngọc Đại"
-        ];
-
-        function createDoctorSelect() {
-            const container = document.createElement('div');
-            container.className = 'doctor-select-container';
-            container.innerHTML = `
-                <input type="text" class="doctor-select-input" placeholder="Nhập tên bác sĩ">
-                <div class="doctor-templates">
-                    ${doctorTemplates.map((template, index) => `
-                        <div class="doctor-template-item" data-index="${index}">
-                            <span class="template-text">${template}</span>
-                            <i class="fas fa-edit edit-template"></i>
-                        </div>
-                    `).join('')}
-                    <div class="doctor-template-edit">
-                        <input type="text" class="template-edit-input" placeholder="Nhập tên bác sĩ mới">
-                        <div class="buttons">
-                            <button class="save-template">
-                                <i class="fas fa-save"></i> Lưu
-                            </button>
-                            <button class="cancel-edit">
-                                <i class="fas fa-times"></i> Hủy
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            const input = container.querySelector('.doctor-select-input');
-            const templates = container.querySelector('.doctor-templates');
-            const templateItems = container.querySelectorAll('.doctor-template-item');
-            const editPanel = container.querySelector('.doctor-template-edit');
-            const editInput = container.querySelector('.template-edit-input');
-            let currentEditIndex = -1;
-
-            // Hiển thị danh sách mẫu khi focus vào input
-            input.addEventListener('focus', () => {
-                templates.style.display = 'block';
-            });
-
-            // Ẩn danh sách mẫu khi click ra ngoài
-            document.addEventListener('click', (e) => {
-                if (!container.contains(e.target)) {
-                    templates.style.display = 'none';
-                    editPanel.style.display = 'none';
-                }
-            });
-
-            // Xử lý click vào mẫu
-            templateItems.forEach(item => {
-                item.addEventListener('click', (e) => {
-                    if (!e.target.classList.contains('edit-template')) {
-                        input.value = item.querySelector('.template-text').textContent;
-                        templates.style.display = 'none';
-                    }
-                });
-
-                // Xử lý nút sửa
-                const editBtn = item.querySelector('.edit-template');
-                editBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    currentEditIndex = parseInt(item.dataset.index);
-                    editInput.value = doctorTemplates[currentEditIndex];
-                    editPanel.style.display = 'block';
-                    templateItems.forEach(i => i.style.display = 'none');
-                });
-            });
-
-            // Xử lý nút lưu template
-            container.querySelector('.save-template').addEventListener('click', () => {
-                const newValue = editInput.value.trim();
-                if (newValue && currentEditIndex >= 0) {
-                    doctorTemplates[currentEditIndex] = newValue;
-                    // Cập nhật giao diện
-                    templateItems[currentEditIndex].querySelector('.template-text').textContent = newValue;
-                    // Reset trạng thái
-                    editPanel.style.display = 'none';
-                    templateItems.forEach(i => i.style.display = 'flex');
-                    currentEditIndex = -1;
-                }
-            });
-
-            // Xử lý nút hủy
-            container.querySelector('.cancel-edit').addEventListener('click', () => {
-                editPanel.style.display = 'none';
-                templateItems.forEach(i => i.style.display = 'flex');
-                currentEditIndex = -1;
-            });
-
-            return container;
-        }
-
         function createShiftRow(date, shift = null) {
             const row = document.createElement('div');
             row.className = 'shift-row';
@@ -900,7 +872,15 @@
             row.innerHTML = `
                 <input type="time" class="start-time" value="${shift ? shift.start_time : ''}" required ${shift && shift.is_locked ? 'disabled' : ''}>
                 <input type="time" class="end-time" value="${shift ? shift.end_time : ''}" required ${shift && shift.is_locked ? 'disabled' : ''}>
-                <div class="doctor-select-wrapper"></div>
+                <div class="doctor-select-container" style="position: relative; width: 100%;">
+                    <input type="text" class="doctor-select" placeholder="Nhập tên bác sĩ" list="doctor-list" ${shift && shift.is_locked ? 'disabled' : ''}>
+                    <datalist id="doctor-list">
+                        ${doctorTemplates.map(template => `<option value="${template}">`).join('')}
+                    </datalist>
+                    <button class="doctor-template-settings" title="Cài đặt mẫu bác sĩ" style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #666;">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
                 <div class="actions">
                     <button class="save-btn" title="Lưu" ${shift && shift.is_locked ? 'style="display: none;"' : ''}>
                         <i class="fas fa-save"></i> Lưu
@@ -914,16 +894,8 @@
                 </div>
             `;
 
-            // Thêm doctor select vào wrapper
-            const doctorSelectWrapper = row.querySelector('.doctor-select-wrapper');
-            const doctorSelect = createDoctorSelect();
-            doctorSelectWrapper.appendChild(doctorSelect);
-
             if (shift && shift.doctor_name) {
-                doctorSelect.querySelector('.doctor-select-input').value = shift.doctor_name;
-            }
-            if (shift && shift.is_locked) {
-                doctorSelect.querySelector('.doctor-select-input').disabled = true;
+                row.querySelector('.doctor-select').value = shift.doctor_name;
             }
 
             // Format date for API
@@ -939,7 +911,7 @@
                 saveBtn.onclick = async () => {
                     const startTime = row.querySelector('.start-time').value;
                     const endTime = row.querySelector('.end-time').value;
-                    const doctorName = row.querySelector('.doctor-select-input').value;
+                    const doctorName = row.querySelector('.doctor-select').value;
                     
                     if (!startTime || !endTime || !doctorName) {
                         alert('Vui lòng điền đầy đủ thông tin!');
@@ -953,26 +925,60 @@
                             `/api/admin/work-schedule/${shiftId}` : 
                             '/api/admin/work-schedule';
                         
-                        const response = await fetch(url, {
+                        const requestData = {
+                            date: dateStr,
+                            start_time: startTime,
+                            end_time: endTime,
+                            doctor_name: doctorName,
+                            is_locked: true
+                        };
+
+                        console.log('Sending request:', {
+                            url,
                             method,
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                date: dateStr,
-                                start_time: startTime,
-                                end_time: endTime,
-                                doctor_name: doctorName,
-                                is_locked: true
-                            })
+                            data: requestData
                         });
 
-                        if (!response.ok) {
-                            throw new Error('Failed to save shift');
+                        const response = await fetch(url, {
+                            method,
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify(requestData)
+                        });
+
+                        let errorMessage = '';
+                        let responseData = null;
+
+                        const contentType = response.headers.get('content-type');
+                        if (contentType && contentType.includes('application/json')) {
+                            try {
+                                responseData = await response.json();
+                            } catch (e) {
+                                console.error('Error parsing JSON:', e);
+                                errorMessage = 'Invalid JSON response from server';
+                            }
+                        } else {
+                            const text = await response.text();
+                            console.error('Non-JSON response:', text);
+                            errorMessage = 'Server returned non-JSON response';
                         }
 
-                        const savedShift = await response.json();
-                        
+                        if (!response.ok) {
+                            throw new Error(
+                                responseData?.message || 
+                                errorMessage || 
+                                `HTTP error! status: ${response.status}`
+                            );
+                        }
+
+                        if (!responseData) {
+                            throw new Error('No data received from server');
+                        }
+
                         // Update row data
-                        row.dataset.shiftId = savedShift.id;
+                        row.dataset.shiftId = responseData.id;
                         row.dataset.isLocked = 'true';
 
                         // Add fade effect and disable inputs
@@ -980,9 +986,21 @@
                         inputs.forEach(input => input.disabled = true);
                         saveBtn.style.display = 'none';
                         editBtn.style.display = 'inline-flex';
+
+                        // Show success message
+                        showNotification('Đã lưu ca khám thành công!', 'success');
+
+                        // Try to sync, but don't block on failure
+                        try {
+                            await syncWorkSchedule();
+                        } catch (syncError) {
+                            console.error('Sync error:', syncError);
+                            showNotification('Đã lưu ca khám nhưng không đồng bộ được: ' + syncError.message, 'warning');
+                        }
+
                     } catch (error) {
                         console.error('Error saving shift:', error);
-                        alert('Có lỗi xảy ra khi lưu ca khám!');
+                        showNotification('Lỗi: ' + error.message, 'error');
                     }
                 };
             }
@@ -1009,19 +1027,34 @@
                         });
 
                         if (!response.ok) {
-                            throw new Error('Failed to delete shift');
+                            const errorData = await response.json();
+                            throw new Error(errorData.message || 'Failed to delete shift');
                         }
 
                         row.remove();
+                        
+                        // Sync work schedule after deleting
+                        await syncWorkSchedule();
                     } catch (error) {
                         console.error('Error deleting shift:', error);
-                        alert('Có lỗi xảy ra khi xóa ca khám!');
+                        alert('Có lỗi xảy ra khi xóa ca khám: ' + error.message);
                     }
                 } else {
                     row.remove();
                 }
             };
             
+            // Nếu là ca mới, tự động set thời lượng mặc định
+            if (!shift) {
+                const duration = getShiftDuration();
+                const now = new Date();
+                const start = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                const endDate = new Date(now.getTime() + duration * 60000);
+                const end = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
+                row.querySelector('.start-time').value = start;
+                row.querySelector('.end-time').value = end;
+            }
+
             return row;
         }
 
@@ -1044,6 +1077,100 @@
             }
         }
 
+        // Add sync function
+        async function syncWorkSchedule() {
+            try {
+                const startDate = new Date();
+                const endDate = new Date();
+                endDate.setDate(endDate.getDate() + 30);
+                
+                const startDateStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
+                const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+                
+                console.log('Fetching shifts for sync...');
+                const response = await fetch(`/api/admin/work-schedule?start_date=${startDateStr}&end_date=${endDateStr}`, {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                let shifts = [];
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    shifts = await response.json();
+                } else {
+                    const text = await response.text();
+                    console.error('Non-JSON response from shifts API:', text);
+                    throw new Error('Server returned non-JSON response');
+                }
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch shifts: ${response.status}`);
+                }
+
+                console.log('Formatting shifts for sync...');
+                const formattedShifts = shifts.map(shift => ({
+                    id: shift.id,
+                    date: shift.date,
+                    start_time: shift.start_time,
+                    end_time: shift.end_time,
+                    doctor_name: shift.doctor_name,
+                    is_locked: shift.is_locked,
+                    is_available: true
+                }));
+
+                console.log('Sending sync request...');
+                const syncResponse = await fetch('/api/work-schedule/sync', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        shifts: formattedShifts,
+                        sync_date: new Date().toISOString()
+                    })
+                });
+
+                let syncData = null;
+                if (contentType && contentType.includes('application/json')) {
+                    try {
+                        syncData = await syncResponse.json();
+                    } catch (e) {
+                        console.error('Error parsing sync response:', e);
+                        throw new Error('Invalid JSON response from sync endpoint');
+                    }
+                } else {
+                    const text = await syncResponse.text();
+                    console.error('Non-JSON response from sync API:', text);
+                    throw new Error('Sync endpoint returned non-JSON response');
+                }
+
+                if (!syncResponse.ok) {
+                    throw new Error(syncData?.message || `Sync failed: ${syncResponse.status}`);
+                }
+
+                console.log('Sync completed successfully:', syncData);
+                showNotification('Đã đồng bộ lịch làm việc thành công!', 'success');
+
+            } catch (error) {
+                console.error('Sync error:', error);
+                throw error; // Re-throw to be handled by caller
+            }
+        }
+
+        // Add CSS for animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes fadeInOut {
+                0% { opacity: 0; transform: translateY(20px); }
+                10% { opacity: 1; transform: translateY(0); }
+                90% { opacity: 1; transform: translateY(0); }
+                100% { opacity: 0; transform: translateY(20px); }
+            }
+        `;
+        document.head.appendChild(style);
+
         // Initialize calendar controls
         document.getElementById('prev-month').onclick = () => {
             currentDate.setMonth(currentDate.getMonth() - 1);
@@ -1062,6 +1189,388 @@
                 renderSchedule();
             });
         }
+
+        // Doctor Template Management
+        let doctorTemplates = [
+            "Thạc sĩ Quỳnh Anh",
+            "Bác sĩ CK2 Ngọc Đại",
+            "Thạc sĩ Quỳnh Anh + Bác sĩ CK2 Ngọc Đại"
+        ];
+
+        function updateDoctorTemplates() {
+            const datalist = document.getElementById('doctor-list');
+            datalist.innerHTML = '';
+            doctorTemplates.forEach(template => {
+                const option = document.createElement('option');
+                option.value = template;
+                datalist.appendChild(option);
+            });
+        }
+
+        function renderDoctorTemplates() {
+            const container = document.getElementById('doctor-templates-list');
+            container.innerHTML = '';
+            doctorTemplates.forEach((template, index) => {
+                const div = document.createElement('div');
+                div.style.display = 'flex';
+                div.style.gap = '8px';
+                div.style.marginBottom = '8px';
+                div.innerHTML = `
+                    <input type="text" value="${template}" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <button class="btn small-btn delete-template" data-index="${index}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                `;
+                container.appendChild(div);
+
+                // Add event listener for input change
+                const input = div.querySelector('input');
+                input.addEventListener('change', () => {
+                    doctorTemplates[index] = input.value;
+                    updateDoctorTemplates();
+                });
+
+                // Add event listener for delete button
+                const deleteBtn = div.querySelector('.delete-template');
+                deleteBtn.addEventListener('click', () => {
+                    doctorTemplates.splice(index, 1);
+                    renderDoctorTemplates();
+                    updateDoctorTemplates();
+                });
+            });
+        }
+
+        // Initialize doctor template management
+        document.addEventListener('DOMContentLoaded', () => {
+            updateDoctorTemplates();
+            
+            // Show modal when clicking settings button
+            document.querySelectorAll('.doctor-template-settings').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.getElementById('doctor-template-modal').classList.remove('hidden');
+                    renderDoctorTemplates();
+                });
+            });
+
+            // Close modal
+            document.getElementById('close-doctor-template-modal').addEventListener('click', () => {
+                document.getElementById('doctor-template-modal').classList.add('hidden');
+            });
+
+            // Add new template
+            document.getElementById('add-doctor-template').addEventListener('click', () => {
+                doctorTemplates.push('');
+                renderDoctorTemplates();
+                updateDoctorTemplates();
+            });
+        });
+
+        // Add notification helper function
+        function showNotification(message, type = 'info') {
+            const colors = {
+                success: '#4CAF50',
+                error: '#f44336',
+                warning: '#ff9800',
+                info: '#2196F3'
+            };
+
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background: ${colors[type]};
+                color: white;
+                padding: 10px 20px;
+                border-radius: 4px;
+                z-index: 1000;
+                animation: fadeInOut 3s ease-in-out;
+                max-width: 80vw;
+                word-wrap: break-word;
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+        
+        // Function to update slogan display
+        function updateSloganDisplay(slogan) {
+            const sloganElement = document.querySelector('.admin-slogan');
+            if (sloganElement) {
+                sloganElement.textContent = slogan;
+            }
+        }
+        
+        // Add event listener for slogan input
+        const sloganInput = document.getElementById('slogan');
+        if (sloganInput) {
+            sloganInput.addEventListener('input', function() {
+                updateSloganDisplay(this.value);
+            });
+        }
+
+        // Initialize event listeners for avatar upload
+        function initializeAvatarEventListeners() {
+            // Check if already initialized
+            if (avatarEventListenersInitialized) {
+                return;
+            }
+            
+            const avatarUpload = document.getElementById('avatar-upload');
+            const uploadBtn = document.getElementById('upload-avatar-btn');
+            const previewDiv = document.getElementById('upload-preview');
+            const previewImg = document.getElementById('preview-image');
+
+            if (!avatarUpload || !uploadBtn || !previewDiv || !previewImg) {
+                console.log('Avatar elements not found, will retry when tab opens');
+                return;
+            }
+
+            // File input change handler
+            avatarUpload.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    selectedFile = file;
+                    
+                    // Validate file type
+                    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+                    if (!allowedTypes.includes(file.type)) {
+                        alert('Định dạng file không được hỗ trợ. Vui lòng chọn file ảnh (PNG, JPG, JPEG, GIF, WEBP).');
+                        e.target.value = '';
+                        selectedFile = null;
+                        uploadBtn.disabled = true;
+                        previewDiv.style.display = 'none';
+                        return;
+                    }
+                    
+                    // Validate file size (max 5MB)
+                    if (file.size > 5 * 1024 * 1024) {
+                        alert('File quá lớn. Vui lòng chọn file nhỏ hơn 5MB.');
+                        e.target.value = '';
+                        selectedFile = null;
+                        uploadBtn.disabled = true;
+                        previewDiv.style.display = 'none';
+                        return;
+                    }
+                    
+                    // Show preview
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        previewImg.src = e.target.result;
+                        previewDiv.style.display = 'block';
+                        uploadBtn.disabled = false;
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    selectedFile = null;
+                    uploadBtn.disabled = true;
+                    previewDiv.style.display = 'none';
+                }
+            });
+
+            // Upload button click handler
+            uploadBtn.addEventListener('click', async function() {
+                if (!selectedFile) {
+                    alert('Vui lòng chọn file ảnh trước.');
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+                
+                uploadBtn.disabled = true;
+                uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tải lên...';
+                
+                const statusDiv = document.getElementById('upload-status');
+                statusDiv.style.display = 'none';
+                
+                try {
+                    const response = await fetch('/api/ai-assistant/avatar/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        statusDiv.style.display = 'block';
+                        statusDiv.style.backgroundColor = '#d4edda';
+                        statusDiv.style.color = '#155724';
+                        statusDiv.style.border = '1px solid #c3e6cb';
+                        statusDiv.innerHTML = '<i class="fas fa-check-circle"></i> ' + data.message;
+                        
+                        // Reset form
+                        avatarUpload.value = '';
+                        selectedFile = null;
+                        previewDiv.style.display = 'none';
+                        
+                        // Reload avatar
+                        await loadAIAssistantAvatar();
+                        
+                        // Show success message
+                        setTimeout(() => {
+                            statusDiv.style.display = 'none';
+                        }, 3000);
+                    } else {
+                        statusDiv.style.display = 'block';
+                        statusDiv.style.backgroundColor = '#f8d7da';
+                        statusDiv.style.color = '#721c24';
+                        statusDiv.style.border = '1px solid #f5c6cb';
+                        statusDiv.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + (data.error || 'Có lỗi xảy ra khi tải ảnh lên.');
+                    }
+                } catch (error) {
+                    statusDiv.style.display = 'block';
+                    statusDiv.style.backgroundColor = '#f8d7da';
+                    statusDiv.style.color = '#721c24';
+                    statusDiv.style.border = '1px solid #f5c6cb';
+                    statusDiv.innerHTML = '<i class="fas fa-exclamation-circle"></i> Lỗi kết nối: ' + error.message;
+                } finally {
+                    uploadBtn.disabled = false;
+                    uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Tải ảnh lên';
+                }
+            });
+
+            avatarEventListenersInitialized = true;
+            console.log('Avatar event listeners initialized');
+        }
+
+        // Load current avatar
+        async function loadAIAssistantAvatar() {
+            try {
+                // Initialize event listeners when loading avatar
+                initializeAvatarEventListeners();
+                
+                const response = await fetch('/api/ai-assistant/avatar');
+                const data = await response.json();
+                
+                const loadingDiv = document.getElementById('avatar-loading');
+                const previewDiv = document.getElementById('avatar-preview');
+                const noneDiv = document.getElementById('avatar-none');
+                
+                if (!loadingDiv || !previewDiv || !noneDiv) {
+                    console.log('Avatar display elements not found');
+                    return;
+                }
+                
+                loadingDiv.style.display = 'none';
+                
+                if (data.success && data.avatar) {
+                    const avatar = data.avatar;
+                    const img = document.getElementById('avatar-image');
+                    const info = document.getElementById('avatar-info');
+                    
+                    if (img && info) {
+                        // Add timestamp to prevent caching
+                        img.onerror = function() {
+                            console.log('Failed to load avatar image:', avatar.file_path);
+                            previewDiv.style.display = 'none';
+                            noneDiv.style.display = 'block';
+                        };
+                        img.onload = function() {
+                            console.log('Avatar image loaded successfully');
+                        };
+                        // Set src after error handlers
+                        img.src = avatar.file_path + '?t=' + new Date().getTime();
+                        
+                        const fileSizeKB = (avatar.file_size / 1024).toFixed(2);
+                        const uploadDate = avatar.uploaded_at ? new Date(avatar.uploaded_at).toLocaleString('vi-VN') : 'Không xác định';
+                        info.innerHTML = `
+                            <div><strong>Tên file gốc:</strong> ${avatar.original_filename || 'N/A'}</div>
+                            <div><strong>Kích thước:</strong> ${fileSizeKB} KB</div>
+                            <div><strong>Người tải:</strong> ${avatar.uploaded_by || 'N/A'}</div>
+                            <div><strong>Ngày tải:</strong> ${uploadDate}</div>
+                        `;
+                        
+                        previewDiv.style.display = 'block';
+                        noneDiv.style.display = 'none';
+                    }
+                } else {
+                    previewDiv.style.display = 'none';
+                    noneDiv.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading avatar:', error);
+                const loadingDiv = document.getElementById('avatar-loading');
+                const noneDiv = document.getElementById('avatar-none');
+                if (loadingDiv) loadingDiv.style.display = 'none';
+                if (noneDiv) noneDiv.style.display = 'block';
+            }
+        }
     </script>
+    
+    <!-- Hiển thị/ẩn liên kết MWL dựa trên quyền của user (manage_worklist) -->
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const token = localStorage.getItem('authToken') || '';
+                const currentUserRaw = localStorage.getItem('currentUser');
+                if (!token || !currentUserRaw) return; // không đăng nhập
+                const currentUser = JSON.parse(currentUserRaw);
+                const res = await fetch('/api/role-permissions', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!res.ok) return;
+                const mapping = await res.json();
+                const roles = Array.isArray(currentUser.roles) ? currentUser.roles : [];
+                for (const r of roles) {
+                    const perms = mapping[r] || [];
+                    if (perms.includes('manage_worklist')) {
+                        const el = document.getElementById('mwlAdminLink');
+                        if (el) el.style.display = 'inline-flex';
+                        
+                        // Hiển thị nút Đồng bộ Worklist
+                        const syncBtn = document.getElementById('syncWorklistHeaderBtn');
+                        if (syncBtn) {
+                            syncBtn.style.display = 'inline-flex';
+                            syncBtn.addEventListener('click', performWorklistSyncFromHeader);
+                        }
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.debug('Could not evaluate MWL permission', e);
+            }
+        });
+        
+        // Handler cho nút Đồng bộ Worklist
+        async function performWorklistSyncFromHeader() {
+            const btn = document.getElementById('syncWorklistHeaderBtn');
+            const originalText = btn.innerHTML;
+            
+            try {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang đồng bộ...';
+                
+                const token = localStorage.getItem('authToken');
+                const response = await fetch('/api/mwl-sync', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification(`✓ ${data.message}`, 'success');
+                    // Save last sync time
+                    localStorage.setItem('lastWorklistSync', new Date().toISOString());
+                } else {
+                    showNotification(`✗ Lỗi: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showNotification(`✗ Lỗi: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+    </script>
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
 </body>
-</html> 
+</html>

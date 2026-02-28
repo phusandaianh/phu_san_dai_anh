@@ -1,0 +1,1555 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý lịch làm việc bác sĩ - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .modal.hidden {
+            display: none !important;
+        }
+        .calendar-day-header {
+            text-align: center;
+            font-weight: bold;
+            padding: 8px;
+            background: #f5f5f5;
+        }
+        .calendar-day {
+            padding: 8px;
+            min-height: 80px;
+            border: 1px solid #ddd;
+            cursor: pointer;
+            background: white;
+        }
+        .calendar-day:hover {
+            background: #f0f0f0;
+        }
+        .calendar-day.selected {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+        .calendar-day.other-month {
+            background: #f9f9f9;
+            color: #999;
+        }
+        .appointment-row {
+            display: grid;
+            grid-template-columns: 200px 120px 120px 1fr 200px;
+            gap: 10px;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-bottom: 5px;
+            background: white;
+        }
+        .appointment-row:hover {
+            background: #f5f5f5;
+        }
+        .appointment-row .date-display {
+            font-weight: bold;
+            color: #2196f3;
+        }
+        .appointment-row input[type="time"],
+        .appointment-row input[type="text"] {
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+        }
+        .appointment-row .actions {
+            display: flex;
+            gap: 5px;
+            justify-content: flex-end;
+        }
+        .day-schedule {
+            border: 1px solid #ddd;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+        }
+        .date-header {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            color: #1565c0;
+        }
+        .shifts-container {
+            margin-bottom: 1rem;
+        }
+        .shift-row {
+            display: grid;
+            grid-template-columns: 150px 150px 340px 140px 240px;
+            gap: 10px;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-bottom: 5px;
+            background: white;
+            border-radius: 4px;
+        }
+        .shift-row.locked {
+            background: #f5f5f5;
+        }
+        .add-shift-btn {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .add-shift-btn:hover {
+            background: #43a047;
+        }
+        .schedule-controls {
+            margin-bottom: 1rem;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        .schedule-controls h4 {
+            margin: 0;
+            min-width: 200px;
+            text-align: center;
+        }
+        .secondary-btn {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .secondary-btn:hover {
+            background: #1976d2;
+        }
+        .toggle-active { filter: brightness(1); opacity: 1 !important; box-shadow: 0 0 0 2px rgba(0,0,0,0.08) inset; }
+        .toggle-inactive { opacity: 0.5; }
+        /* Prevent fixed header from overlapping page content */
+        #doctor-schedule-main {
+            padding-top: 120px; /* space for fixed header (logo + padding) */
+        }
+
+        @media (max-width: 800px) {
+            /* On small screens header is taller due to wrapping, give more space */
+            #doctor-schedule-main { padding-top: 140px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container" style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="display:flex;align-items:center;gap:16px;">
+            <img src="logo_phu_san_dai_anh.png" alt="Logo Phòng khám Đại Anh" class="clinic-logo" style="height:60px;">
+            <div class="logo-text" style="text-align: center; flex-grow: 1;">
+                <h1 class="logo" style="margin: 0; white-space: nowrap;">Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                <p class="slogan" style="color: red; margin: 5px 0 0 0;">Uy Tín - Niềm Tin - Chất Lượng</p>
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;">
+                <button id="show-doctor-list-btn" class="btn secondary-btn" style="font-size:1rem;">Danh sách bác sĩ phòng khám</button>
+                <button id="show-doctor-schedule-btn" class="btn secondary-btn" style="font-size:1rem;">Lịch làm việc của bác sĩ</button>
+                <button id="manage-templates-btn" class="btn secondary-btn" style="font-size:1rem;background:#9c27b0;color:white;" title="Quản lý ca khám mẫu">
+                    <i class="fas fa-cog"></i> Quản lý ca khám mẫu
+                </button>
+                <button id="toggle-register-btn" class="btn secondary-btn" style="font-size:1rem;background:#e53935;color:white;" title="Ẩn/hiện nút đăng ký khám">
+                    <i class="fas fa-eye"></i> Ẩn nút đăng ký
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container" id="doctor-schedule-main">
+        <h2>Quản lý lịch làm việc bác sĩ</h2>
+        
+        <div class="schedule-controls">
+            <button id="prev-month" class="btn secondary-btn">
+                <i class="fas fa-chevron-left"></i> Tháng trước
+            </button>
+            <h4 id="current-month-display"></h4>
+            <button id="next-month" class="btn secondary-btn">
+                Tháng sau <i class="fas fa-chevron-right"></i>
+            </button>
+            <button id="global-doctor-template-btn" class="btn secondary-btn doctor-template-settings" style="margin-left:auto;background:#1976d2;color:white;" title="Danh sách bác sĩ khám theo ca">
+                <i class="fas fa-user-md"></i> Danh sách bác sĩ khám theo ca
+            </button>
+            <button id="set-default-slot-btn" class="btn secondary-btn" style="background:#009688;color:white;" title="Đặt phút khám mặc định cho các ca chưa có lịch">
+                <i class="fas fa-clock"></i> Mặc định phút khám
+            </button>
+            <!-- 'Tạo mẫu mặc định' button removed from schedule-controls (kept in Shift Templates modal) -->
+            <!-- Test button removed -->
+        </div>
+
+        <div id="appointment-list">
+            <!-- Appointment rows will be added here -->
+        </div>
+
+        <!-- Doctor Template Settings Modal -->
+        <div id="doctor-template-modal" class="modal hidden" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;z-index:1000;">
+            <div class="modal-content" style="background:#fff;padding:2rem 1.5rem;border-radius:14px;min-width:320px;max-width:95vw;position:relative;">
+                <button id="close-doctor-template-modal" style="position:absolute;top:10px;right:10px;font-size:1.2rem;background:none;border:none;cursor:pointer;">&times;</button>
+                <h3>Danh sách bác sĩ khám theo ca</h3>
+                <div id="doctor-templates-list" style="margin: 1rem 0;">
+                    <!-- Templates will be added here -->
+                </div>
+                <button id="add-doctor-template" class="btn secondary-btn" style="margin-top: 1rem;">
+                    <i class="fas fa-plus"></i> Thêm mẫu
+                </button>
+            </div>
+        </div>
+
+        <div id="doctor-list-modal" class="modal hidden" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;z-index:2000;">
+            <div class="modal-content" style="background:#fff;padding:2rem 1.5rem;border-radius:14px;min-width:350px;max-width:95vw;position:relative;min-height:200px;">
+                <button id="close-doctor-list-modal" style="position:absolute;top:10px;right:10px;font-size:1.2rem;background:none;border:none;cursor:pointer;">&times;</button>
+                <h3>Danh sách bác sĩ phòng khám</h3>
+                <div id="doctor-list-container"></div>
+                <button id="add-doctor-btn" class="btn primary-btn" style="margin-top:1rem;"><i class="fas fa-plus"></i> Thêm bác sĩ mới</button>
+            </div>
+        </div>
+
+        <!-- Shift Templates Modal -->
+        <div id="shift-templates-modal" class="modal hidden" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);display:none;align-items:center;justify-content:center;z-index:3000;">
+            <div class="modal-content" style="background:#fff;padding:2rem 1.5rem;border-radius:14px;min-width:600px;max-width:95vw;position:relative;max-height:80vh;overflow-y:auto;">
+                <button id="close-shift-templates-modal" style="position:absolute;top:10px;right:10px;font-size:1.2rem;background:none;border:none;cursor:pointer;">&times;</button>
+                <h3>Quản lý ca khám mẫu</h3>
+                <div id="shift-templates-container" style="margin: 1rem 0;">
+                    <!-- Templates will be loaded here -->
+                </div>
+                <div style="display:flex;gap:8px;margin-top:1rem;">
+                    <button id="add-shift-template-btn" class="btn primary-btn">
+                        <i class="fas fa-plus"></i> Thêm ca khám mẫu
+                    </button>
+                    <button id="init-default-templates-btn" class="btn secondary-btn" style="background:#ff9800;">
+                        <i class="fas fa-magic"></i> Tạo mẫu mặc định
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Doctor Template Management
+        let doctorTemplates = [];
+        const DEFAULT_SLOT_STORAGE_KEY = 'defaultShiftSlotMinutes';
+        const DEFAULT_SLOT_API_ENDPOINT = '/api/admin/work-schedule/default-slot-minutes';
+        let defaultSlotMinutes = 10;
+
+        function loadDefaultSlotFromCache() {
+            const cached = parseInt(localStorage.getItem(DEFAULT_SLOT_STORAGE_KEY), 10);
+            if (!Number.isNaN(cached) && cached > 0) {
+                defaultSlotMinutes = cached;
+            }
+        }
+        loadDefaultSlotFromCache();
+
+        function setDefaultSlotMinutes(minutes) {
+            defaultSlotMinutes = minutes;
+            try {
+                localStorage.setItem(DEFAULT_SLOT_STORAGE_KEY, String(minutes));
+            } catch (err) {
+                console.warn('Không thể lưu cấu hình phút mặc định:', err);
+            }
+        }
+
+        async function loadDefaultSlotMinutesFromServer() {
+            const response = await fetch(DEFAULT_SLOT_API_ENDPOINT);
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (err) {
+                data = {};
+            }
+            if (!response.ok) {
+                throw new Error(data.message || 'Không thể tải số phút mặc định');
+            }
+            const minutes = parseInt(data.slot_minutes, 10);
+            if (Number.isNaN(minutes) || minutes <= 0) {
+                throw new Error('Số phút mặc định không hợp lệ từ máy chủ');
+            }
+            setDefaultSlotMinutes(minutes);
+            return minutes;
+        }
+
+        async function saveDefaultSlotMinutesToServer(minutes) {
+            const response = await fetch(DEFAULT_SLOT_API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slot_minutes: minutes })
+            });
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (err) {
+                data = {};
+            }
+            if (!response.ok) {
+                throw new Error(data.message || 'Không thể lưu số phút mặc định');
+            }
+            const savedMinutes = parseInt(data.slot_minutes, 10);
+            if (!Number.isNaN(savedMinutes) && savedMinutes > 0) {
+                setDefaultSlotMinutes(savedMinutes);
+                return savedMinutes;
+            }
+            setDefaultSlotMinutes(minutes);
+            return minutes;
+        }
+
+        async function loadDoctorTemplates() {
+            try {
+                const response = await fetch('/api/doctor-templates');
+                if (response.ok) {
+                    const templates = await response.json();
+                    doctorTemplates = templates.map(t => t.name);
+                    updateDoctorTemplates();
+                } else {
+                    console.error('Lỗi tải danh sách mẫu bác sĩ:', response.status);
+                    // Fallback to default if API fails
+                    if (doctorTemplates.length === 0) {
+                        doctorTemplates = [
+                            "Thạc sĩ Quỳnh Anh",
+                            "Bác sĩ CK2 Ngọc Đại",
+                            "Thạc sĩ Quỳnh Anh + Bác sĩ CK2 Ngọc Đại"
+                        ];
+                        updateDoctorTemplates();
+                    }
+                }
+            } catch (error) {
+                console.error('Lỗi tải danh sách mẫu bác sĩ:', error);
+                // Fallback to default if API fails
+                if (doctorTemplates.length === 0) {
+                    doctorTemplates = [
+                        "Thạc sĩ Quỳnh Anh",
+                        "Bác sĩ CK2 Ngọc Đại",
+                        "Thạc sĩ Quỳnh Anh + Bác sĩ CK2 Ngọc Đại"
+                    ];
+                    updateDoctorTemplates();
+                }
+            }
+        }
+
+        function updateDoctorTemplates() {
+            const datalist = document.getElementById('doctor-list');
+            if (datalist) {
+                datalist.innerHTML = '';
+                doctorTemplates.forEach(template => {
+                    const option = document.createElement('option');
+                    option.value = template;
+                    datalist.appendChild(option);
+                });
+            }
+        }
+
+        // Work Schedule Management
+        let currentDate = new Date();
+
+        function renderSchedule() {
+            const list = document.getElementById('appointment-list');
+            list.innerHTML = '';
+            
+            // Update month display
+            const options = { month: 'long', year: 'numeric' };
+            document.getElementById('current-month-display').textContent = currentDate.toLocaleDateString('vi-VN', options);
+            
+            // Generate 30 days starting from current date
+            for(let i = 0; i < 30; i++) {
+                const date = new Date(currentDate);
+                date.setDate(date.getDate() + i);
+                createDaySchedule(date);
+            }
+            
+            // Update template selects after all days are created
+            setTimeout(() => {
+                updateTemplateSelects();
+            }, 50);
+        }
+
+        function createDaySchedule(date) {
+            const list = document.getElementById('appointment-list');
+            const dayContainer = document.createElement('div');
+            dayContainer.className = 'day-schedule';
+            
+            // Format date for display
+            const options = { weekday: 'long', day: 'numeric', month: 'numeric', year: 'numeric' };
+            const dateDisplay = date.toLocaleDateString('vi-VN', options);
+            const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            dayContainer.dataset.date = dateStr;
+            dayContainer.dataset.isClosed = 'false';
+            
+            dayContainer.innerHTML = `
+                <div class="date-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                    <span>${dateDisplay}</span>
+                    <div style="display:flex;gap:8px;">
+                        <button class="day-close-btn secondary-btn" style="padding:6px 10px;">
+                            <i class="fas fa-bed"></i> Nghỉ
+                        </button>
+                        <button class="day-open-btn secondary-btn" style="padding:6px 10px;background:#4caf50;">
+                            <i class="fas fa-undo"></i> Mở lại
+                        </button>
+                    </div>
+                </div>
+                <div class="shifts-container">
+                    <!-- Shifts will be added here -->
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <button class="add-shift-btn">
+                        <i class="fas fa-plus"></i> Thêm ca khám
+                    </button>
+                    <select class="template-select" style="padding:8px 12px;border:1px solid #ddd;border-radius:4px;background:white;">
+                        <option value="">Chọn ca khám mẫu...</option>
+                    </select>
+                    <button class="apply-template-btn" style="background:#9c27b0;color:white;border:none;padding:8px 12px;border-radius:4px;cursor:pointer;">
+                        <i class="fas fa-magic"></i> Áp dụng
+                    </button>
+                </div>
+            `;
+
+            const shiftsContainer = dayContainer.querySelector('.shifts-container');
+            const addShiftBtn = dayContainer.querySelector('.add-shift-btn');
+            const dayCloseBtn = dayContainer.querySelector('.day-close-btn');
+            const dayOpenBtn = dayContainer.querySelector('.day-open-btn');
+
+            addShiftBtn.onclick = () => {
+                const shiftRow = createShiftRow(date);
+                shiftsContainer.appendChild(shiftRow);
+            };
+
+            function setDayButtonsState(isClosed) {
+                if (isClosed) {
+                    dayCloseBtn.classList.add('toggle-active');
+                    dayCloseBtn.classList.remove('toggle-inactive');
+                    dayOpenBtn.classList.add('toggle-inactive');
+                    dayOpenBtn.classList.remove('toggle-active');
+                } else {
+                    dayOpenBtn.classList.add('toggle-active');
+                    dayOpenBtn.classList.remove('toggle-inactive');
+                    dayCloseBtn.classList.add('toggle-inactive');
+                    dayCloseBtn.classList.remove('toggle-active');
+                }
+                dayContainer.dataset.isClosed = isClosed ? 'true' : 'false';
+            }
+
+            dayCloseBtn.onclick = async () => {
+                const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                try {
+                    const res = await fetch('/api/admin/work-schedule/close-day', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ date: dateStr, is_closed: true })
+                    });
+                    if (!res.ok) throw new Error('close-day failed');
+                    alert('Đã đặt ngày này nghỉ làm việc.');
+                    // Refresh shifts for the day
+                    shiftsContainer.innerHTML = '';
+                    setDayButtonsState(true);
+                    loadShiftsForDay(date, shiftsContainer, dayCloseBtn, dayOpenBtn, dayContainer);
+                } catch (e) {
+                    alert('Không thể đặt nghỉ cho ngày này.');
+                }
+            };
+
+            dayOpenBtn.onclick = async () => {
+                const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                try {
+                    const res = await fetch('/api/admin/work-schedule/close-day', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ date: dateStr, is_closed: false })
+                    });
+                    if (!res.ok) throw new Error('open-day failed');
+                    alert('Đã mở lại lịch khám trong ngày.');
+                    shiftsContainer.innerHTML = '';
+                    setDayButtonsState(false);
+                    loadShiftsForDay(date, shiftsContainer, dayCloseBtn, dayOpenBtn, dayContainer);
+                } catch (e) {
+                    alert('Không thể mở lại lịch cho ngày này.');
+                }
+            };
+
+            list.appendChild(dayContainer);
+            loadShiftsForDay(date, shiftsContainer, dayCloseBtn, dayOpenBtn, dayContainer);
+            setupTemplateApplication(dayContainer, date);
+        }
+
+        function createShiftRow(date, shift = null) {
+            const row = document.createElement('div');
+            row.className = 'shift-row';
+            
+            row.dataset.shiftId = (shift && shift.id) ? shift.id : '';
+            row.dataset.isLocked = shift && shift.is_locked ? 'true' : 'false';
+            
+            if (shift && shift.is_locked) {
+                row.classList.add('locked');
+            }
+
+            row.innerHTML = `
+                <input type="time" class="start-time" value="${shift ? shift.start_time : ''}" required ${shift && shift.is_locked ? 'disabled' : ''}>
+                <input type="time" class="end-time" value="${shift ? shift.end_time : ''}" required ${shift && shift.is_locked ? 'disabled' : ''}>
+                <div class="doctor-select-container" style="position: relative; width: 100%;">
+                    <input type="text" class="doctor-select" placeholder="Nhập tên bác sĩ" list="doctor-list" ${shift && shift.is_locked ? 'disabled' : ''}>
+                    <datalist id="doctor-list">
+                        ${doctorTemplates.map(template => `<option value="${template}">`).join('')}
+                    </datalist>
+                </div>
+                <select class="slot-minutes" ${shift && shift.is_locked ? 'disabled' : ''}>
+                    <option value="5">5 phút</option>
+                    <option value="10">10 phút</option>
+                    <option value="15">15 phút</option>
+                    <option value="20">20 phút</option>
+                    <option value="30">30 phút</option>
+                </select>
+                <div class="actions">
+                    <button class="save-btn" title="Lưu" ${shift && shift.is_locked ? 'style="display: none;"' : ''}>
+                        <i class="fas fa-save"></i> Lưu
+                    </button>
+                    <button class="lock-btn" title="Khóa/Mở khóa" style="background: ${shift && shift.is_locked ? '#ffc107' : '#28a745'}; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">
+                        <i class="fas ${shift && shift.is_locked ? 'fa-lock' : 'fa-unlock'}"></i>
+                    </button>
+                    <button class="edit-btn" title="Sửa" ${!shift || !shift.is_locked ? 'style="display: none;"' : ''}>
+                        <i class="fas fa-edit"></i> Sửa
+                    </button>
+                    <button class="delete-btn" title="Xóa">
+                        <i class="fas fa-trash"></i> Xóa
+                    </button>
+                </div>
+            `;
+
+            if (shift && shift.doctor_name) {
+                row.querySelector('.doctor-select').value = shift.doctor_name;
+            }
+            const slotSelect = row.querySelector('.slot-minutes');
+            if (shift && typeof shift.slot_minutes !== 'undefined') {
+                slotSelect.value = String(shift.slot_minutes);
+            } else if (slotSelect && defaultSlotMinutes) {
+                slotSelect.value = String(defaultSlotMinutes);
+            }
+
+            // Format date for API
+            const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+            // Add event listeners
+            const saveBtn = row.querySelector('.save-btn');
+            const editBtn = row.querySelector('.edit-btn');
+            const deleteBtn = row.querySelector('.delete-btn');
+            const inputs = row.querySelectorAll('input, select');
+            
+            // Add real-time validation for time inputs
+            const startTimeInput = row.querySelector('.start-time');
+            const endTimeInput = row.querySelector('.end-time');
+            
+            function validateTimeInputs() {
+                const startTime = startTimeInput.value;
+                const endTime = endTimeInput.value;
+                
+                if (startTime && endTime) {
+                    if (startTime >= endTime) {
+                        endTimeInput.style.borderColor = '#f44336';
+                        endTimeInput.title = 'Giờ kết thúc phải lớn hơn giờ bắt đầu';
+                    } else {
+                        endTimeInput.style.borderColor = '#ddd';
+                        endTimeInput.title = '';
+                    }
+                }
+            }
+            
+            if (startTimeInput) {
+                startTimeInput.addEventListener('change', validateTimeInputs);
+            }
+            if (endTimeInput) {
+                endTimeInput.addEventListener('change', validateTimeInputs);
+            }
+            
+            if (saveBtn) {
+                saveBtn.onclick = async () => {
+                    const startTime = row.querySelector('.start-time').value;
+                    const endTime = row.querySelector('.end-time').value;
+                    const doctorName = row.querySelector('.doctor-select').value;
+                    const slotMinutes = parseInt(row.querySelector('.slot-minutes').value, 10);
+                    
+                    if (!startTime || !endTime || !doctorName) {
+                        alert('Vui lòng điền đầy đủ thông tin!');
+                        return;
+                    }
+                    
+                    // Validate time range
+                    if (startTime >= endTime) {
+                        alert('Giờ kết thúc phải lớn hơn giờ bắt đầu!');
+                        return;
+                    }
+                    
+                    // Check for time conflicts in the same day
+                    const dayContainer = row.closest('.day-schedule');
+                    const existingShifts = dayContainer.querySelectorAll('.shift-row');
+                    
+                    const conflictCheck = checkTimeConflict(startTime, endTime, existingShifts, row);
+                    if (conflictCheck.conflict) {
+                        alert(`Thời gian này trùng với ca khám khác (${conflictCheck.existingStart} - ${conflictCheck.existingEnd})!`);
+                        return;
+                    }
+                    
+                    try {
+                        const shiftId = row.dataset.shiftId;
+                        const method = (shiftId && shiftId !== 'undefined' && shiftId !== '') ? 'PUT' : 'POST';
+                        const url = (shiftId && shiftId !== 'undefined' && shiftId !== '') ? 
+                            `/api/admin/work-schedule/${shiftId}` : 
+                            '/api/admin/work-schedule';
+                        
+                        const requestData = {
+                            date: dateStr,
+                            start_time: startTime,
+                            end_time: endTime,
+                            doctor_name: doctorName,
+                            slot_minutes: slotMinutes
+                        };
+
+                        const response = await fetch(url, {
+                            method,
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify(requestData)
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Lỗi khi lưu ca khám');
+                        }
+
+                        const result = await response.json();
+                        if (result.id) {
+                            row.dataset.shiftId = result.id;
+                        }
+                        alert('Đã lưu ca khám!');
+                        
+                        alert('Đã lưu ca khám!');
+                    } catch (error) {
+                        console.error('Error:', error);
+                        alert('Có lỗi xảy ra khi lưu ca khám!');
+                    }
+                };
+            }
+
+            if (editBtn) {
+                editBtn.onclick = () => {
+                    row.dataset.isLocked = 'false';
+                    row.classList.remove('locked');
+                    editBtn.style.display = 'none';
+                    saveBtn.style.display = 'inline-block';
+                    inputs.forEach(input => input.disabled = false);
+                    
+                    // Cập nhật nút khóa: màu xanh, biểu tượng khóa mở
+                    const lockBtn = row.querySelector('.lock-btn');
+                    if (lockBtn) {
+                        lockBtn.style.background = '#28a745';
+                        lockBtn.innerHTML = '<i class="fas fa-unlock"></i>';
+                    }
+                };
+            }
+
+            const lockBtn = row.querySelector('.lock-btn');
+            if (lockBtn) {
+                lockBtn.onclick = async () => {
+                    const shiftId = row.dataset.shiftId;
+                    if (!shiftId || shiftId === 'undefined' || shiftId === '') { 
+                        alert('Bạn cần lưu ca khám trước khi khóa.'); 
+                        return; 
+                    }
+                    try {
+                        const response = await fetch(`/api/admin/work-schedule/${shiftId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ is_locked: row.dataset.isLocked !== 'true' })
+                        });
+                        if (!response.ok) throw new Error('Lock failed');
+                        const newLocked = row.dataset.isLocked !== 'true';
+                        row.dataset.isLocked = newLocked ? 'true' : 'false';
+                        if (newLocked) {
+                            row.classList.add('locked');
+                            inputs.forEach(input => input.disabled = true);
+                            saveBtn.style.display = 'none';
+                            editBtn.style.display = 'inline-block';
+                            // Cập nhật nút khóa: màu vàng, biểu tượng khóa đóng
+                            lockBtn.style.background = '#ffc107';
+                            lockBtn.innerHTML = '<i class="fas fa-lock"></i>';
+                        } else {
+                            row.classList.remove('locked');
+                            inputs.forEach(input => input.disabled = false);
+                            saveBtn.style.display = 'inline-block';
+                            editBtn.style.display = 'none';
+                            // Cập nhật nút khóa: màu xanh, biểu tượng khóa mở
+                            lockBtn.style.background = '#28a745';
+                            lockBtn.innerHTML = '<i class="fas fa-unlock"></i>';
+                        }
+                    } catch (e) {
+                        alert('Không thể cập nhật trạng thái khóa.');
+                    }
+                };
+            }
+
+            // per-shift close button removed per request
+
+            if (deleteBtn) {
+                deleteBtn.onclick = async () => {
+                    if (!confirm('Bạn có chắc muốn xóa ca khám này?')) {
+                        return;
+                    }
+
+                    const shiftId = row.dataset.shiftId;
+                    if (shiftId && shiftId !== 'undefined' && shiftId !== '') {
+                        try {
+                            const response = await fetch(`/api/admin/work-schedule/${shiftId}`, {
+                                method: 'DELETE'
+                            });
+
+                            if (!response.ok) {
+                                throw new Error('Lỗi khi xóa ca khám');
+                            }
+                        } catch (error) {
+                            console.error('Error:', error);
+                            alert('Có lỗi xảy ra khi xóa ca khám!');
+                            return;
+                        }
+                    }
+
+                    row.remove();
+                };
+            }
+
+            return row;
+        }
+
+        async function loadShiftsForDay(date, container, dayCloseBtn, dayOpenBtn, dayContainer = null) {
+            try {
+                const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                const response = await fetch(`/api/admin/work-schedule?date=${dateStr}`);
+                const shifts = await response.json();
+
+                // Determine if the day is closed (any shift has is_closed)
+                const isClosed = shifts.some(s => s.is_closed);
+                if (dayCloseBtn && dayOpenBtn) {
+                    if (isClosed) {
+                        dayCloseBtn.classList.add('toggle-active');
+                        dayCloseBtn.classList.remove('toggle-inactive');
+                        dayOpenBtn.classList.add('toggle-inactive');
+                        dayOpenBtn.classList.remove('toggle-active');
+                    } else {
+                        dayOpenBtn.classList.add('toggle-active');
+                        dayOpenBtn.classList.remove('toggle-inactive');
+                        dayCloseBtn.classList.add('toggle-inactive');
+                        dayCloseBtn.classList.remove('toggle-active');
+                    }
+                }
+                if (dayContainer) {
+                    dayContainer.dataset.isClosed = isClosed ? 'true' : 'false';
+                }
+
+                shifts.forEach(shift => {
+                    const row = createShiftRow(date, shift);
+                    container.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error loading shifts:', error);
+            }
+        }
+
+        // Initialize calendar controls
+        document.getElementById('prev-month').onclick = () => {
+            currentDate.setMonth(currentDate.getMonth() - 1);
+            renderSchedule();
+        };
+        
+        document.getElementById('next-month').onclick = () => {
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            renderSchedule();
+        };
+
+        // Doctor template modal
+        async function openDoctorTemplateModal() {
+            const modal = document.getElementById('doctor-template-modal');
+            modal.classList.remove('hidden');
+            await updateDoctorTemplatesList();
+        }
+
+        document.addEventListener('click', (event) => {
+            const templateBtn = event.target.closest('.doctor-template-settings');
+            if (!templateBtn) return;
+            openDoctorTemplateModal();
+        });
+
+        document.getElementById('close-doctor-template-modal').onclick = () => {
+            document.getElementById('doctor-template-modal').classList.add('hidden');
+        };
+
+        async function updateDoctorTemplatesList() {
+            const list = document.getElementById('doctor-templates-list');
+            list.innerHTML = '';
+            
+            // Load templates from database
+            try {
+                const response = await fetch('/api/doctor-templates');
+                if (response.ok) {
+                    const templates = await response.json();
+                    doctorTemplates = templates.map(t => t.name);
+                    
+                    templates.forEach((template) => {
+                        const div = document.createElement('div');
+                        div.style.display = 'flex';
+                        div.style.justifyContent = 'space-between';
+                        div.style.alignItems = 'center';
+                        div.style.padding = '8px';
+                        div.style.borderBottom = '1px solid #eee';
+                        div.innerHTML = `
+                            <span>${template.name}</span>
+                            <button class="delete-template-btn" data-id="${template.id}" style="background: none; border: none; color: #f44336; cursor: pointer;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        `;
+                        list.appendChild(div);
+                    });
+
+                    // Add delete handlers
+                    document.querySelectorAll('.delete-template-btn').forEach(btn => {
+                        btn.onclick = async () => {
+                            const id = parseInt(btn.dataset.id);
+                            if (!confirm('Bạn có chắc muốn xóa mẫu bác sĩ này?')) {
+                                return;
+                            }
+                            
+                            try {
+                                const response = await fetch(`/api/doctor-templates/${id}`, {
+                                    method: 'DELETE'
+                                });
+                                
+                                if (response.ok) {
+                                    await loadDoctorTemplates();
+                                    updateDoctorTemplatesList();
+                                    alert('Đã xóa mẫu bác sĩ thành công!');
+                                } else {
+                                    const error = await response.json();
+                                    alert(error.message || 'Lỗi khi xóa mẫu bác sĩ!');
+                                }
+                            } catch (error) {
+                                console.error('Lỗi xóa mẫu bác sĩ:', error);
+                                alert('Lỗi khi xóa mẫu bác sĩ!');
+                            }
+                        };
+                    });
+                } else {
+                    list.innerHTML = '<p>Lỗi tải danh sách mẫu bác sĩ</p>';
+                }
+            } catch (error) {
+                console.error('Lỗi tải danh sách mẫu bác sĩ:', error);
+                list.innerHTML = '<p>Lỗi tải danh sách mẫu bác sĩ</p>';
+            }
+        }
+
+        document.getElementById('add-doctor-template').onclick = async () => {
+            const template = prompt('Nhập tên mẫu bác sĩ mới:');
+            if (!template || !template.trim()) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/doctor-templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: template.trim() })
+                });
+                
+                if (response.ok) {
+                    await loadDoctorTemplates();
+                    updateDoctorTemplatesList();
+                    alert('Đã thêm mẫu bác sĩ thành công!');
+                } else {
+                    const error = await response.json();
+                    alert(error.message || 'Lỗi khi thêm mẫu bác sĩ!');
+                }
+            } catch (error) {
+                console.error('Lỗi thêm mẫu bác sĩ:', error);
+                alert('Lỗi khi thêm mẫu bác sĩ!');
+            }
+        };
+
+        // Nút hiển thị toàn bộ nội dung trang
+        document.getElementById('show-doctor-schedule-btn').onclick = function() {
+            document.getElementById('doctor-schedule-main').style.display = '';
+            window.scrollTo({top: document.getElementById('doctor-schedule-main').offsetTop, behavior: 'smooth'});
+        };
+
+        // Danh sách bác sĩ phòng khám (lưu trên backend)
+        let clinicDoctors = [];
+
+        async function loadClinicDoctors() {
+            try {
+                const response = await fetch('/api/clinic-doctors');
+                if (response.ok) {
+                    clinicDoctors = await response.json();
+                    console.log('Loaded doctors:', clinicDoctors);
+                } else {
+                    console.error('Lỗi tải danh sách bác sĩ:', response.status);
+                }
+            } catch (error) {
+                console.error('Lỗi tải danh sách bác sĩ:', error);
+            }
+        }
+
+        function renderDoctorList() {
+            const container = document.getElementById('doctor-list-container');
+            if (!clinicDoctors.length) {
+                container.innerHTML = '<p>Chưa có bác sĩ nào.</p>';
+                return;
+            }
+            container.innerHTML = clinicDoctors.map(doctor => `
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                    <input type="text" value="${doctor.degree}" style="width:140px;padding:6px;border-radius:4px;border:1px solid #ccc;" onchange="updateDoctorDegree(${doctor.id}, this.value)">
+                    <input type="text" value="${doctor.name}" style="flex:1;padding:6px;border-radius:4px;border:1px solid #ccc;" onchange="updateDoctorName(${doctor.id}, this.value)">
+                    <button class="btn small-btn" style="background:#f44336;color:white;" onclick="deleteDoctor(${doctor.id})"><i class="fas fa-trash"></i></button>
+                </div>
+            `).join('');
+        }
+        
+        window.updateDoctorDegree = async function(id, value) {
+            try {
+                const response = await fetch(`/api/clinic-doctors/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ degree: value })
+                });
+                if (response.ok) {
+                    const doctor = clinicDoctors.find(d => d.id === id);
+                    if (doctor) doctor.degree = value;
+                }
+            } catch (error) {
+                console.error('Lỗi cập nhật học vị:', error);
+            }
+        };
+        
+        window.updateDoctorName = async function(id, value) {
+            try {
+                const response = await fetch(`/api/clinic-doctors/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: value })
+                });
+                if (response.ok) {
+                    const doctor = clinicDoctors.find(d => d.id === id);
+                    if (doctor) doctor.name = value;
+                }
+            } catch (error) {
+                console.error('Lỗi cập nhật tên:', error);
+            }
+        };
+        
+        window.deleteDoctor = async function(id) {
+            if (confirm('Bạn có chắc muốn xóa bác sĩ này?')) {
+                try {
+                    const response = await fetch(`/api/clinic-doctors/${id}`, { method: 'DELETE' });
+                    if (response.ok) {
+                        clinicDoctors = clinicDoctors.filter(d => d.id !== id);
+                        renderDoctorList();
+                    } else {
+                        alert('Không thể xóa bác sĩ này');
+                    }
+                } catch (error) {
+                    console.error('Lỗi xóa bác sĩ:', error);
+                    alert('Lỗi khi xóa bác sĩ');
+                }
+            }
+        };
+        document.getElementById('show-doctor-list-btn').onclick = async function() {
+            document.getElementById('doctor-list-modal').classList.remove('hidden');
+            await loadClinicDoctors();
+            renderDoctorList();
+            document.getElementById('doctor-schedule-main').style.display = '';
+            window.scrollTo({top: document.getElementById('doctor-schedule-main').offsetTop, behavior: 'smooth'});
+        };
+        document.getElementById('close-doctor-list-modal').onclick = function() {
+            document.getElementById('doctor-list-modal').classList.add('hidden');
+        };
+        document.getElementById('add-doctor-btn').onclick = async function() {
+            try {
+                const response = await fetch('/api/clinic-doctors', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ degree: '', name: 'Bác sĩ mới' })
+                });
+                if (response.ok) {
+                    const result = await response.json();
+                    clinicDoctors.push(result.doctor);
+                    renderDoctorList();
+                } else {
+                    const errorData = await response.json().catch(() => ({ message: 'Lỗi không xác định' }));
+                    alert('Không thể thêm bác sĩ mới: ' + errorData.message);
+                }
+            } catch (error) {
+                console.error('Lỗi thêm bác sĩ:', error);
+                alert('Lỗi khi thêm bác sĩ: ' + error.message);
+            }
+        };
+
+        // Xử lý nút ẩn/hiện đăng ký khám
+        document.getElementById('toggle-register-btn').onclick = function() {
+            const currentState = localStorage.getItem('hideRegisterButtons') === 'true';
+            const newState = !currentState;
+            
+            // Lưu trạng thái vào localStorage
+            localStorage.setItem('hideRegisterButtons', newState.toString());
+            
+            // Cập nhật giao diện nút
+            const btn = this;
+            const icon = btn.querySelector('i');
+            if (newState) {
+                // Đang ẩn nút đăng ký
+                btn.style.background = '#4caf50';
+                icon.className = 'fas fa-eye-slash';
+                btn.innerHTML = '<i class="fas fa-eye-slash"></i> Hiện nút đăng ký';
+                btn.title = 'Hiện nút đăng ký khám';
+            } else {
+                // Đang hiện nút đăng ký
+                btn.style.background = '#e53935';
+                icon.className = 'fas fa-eye';
+                btn.innerHTML = '<i class="fas fa-eye"></i> Ẩn nút đăng ký';
+                btn.title = 'Ẩn nút đăng ký khám';
+            }
+            
+            // Thông báo cho người dùng
+            alert(newState ? 'Đã ẩn tất cả nút đăng ký khám trên trang booking.html' : 'Đã hiện tất cả nút đăng ký khám trên trang booking.html');
+        };
+
+        // Khởi tạo trạng thái nút khi tải trang
+        function initToggleButton() {
+            const isHidden = localStorage.getItem('hideRegisterButtons') === 'true';
+            const btn = document.getElementById('toggle-register-btn');
+            const icon = btn.querySelector('i');
+            
+            if (isHidden) {
+                btn.style.background = '#4caf50';
+                icon.className = 'fas fa-eye-slash';
+                btn.innerHTML = '<i class="fas fa-eye-slash"></i> Hiện nút đăng ký';
+                btn.title = 'Hiện nút đăng ký khám';
+            } else {
+                btn.style.background = '#e53935';
+                icon.className = 'fas fa-eye';
+                btn.innerHTML = '<i class="fas fa-eye"></i> Ẩn nút đăng ký';
+                btn.title = 'Ẩn nút đăng ký khám';
+            }
+        }
+
+        // Shift Templates Management
+        let shiftTemplates = [];
+
+        // Helper function to check time conflicts
+        function checkTimeConflict(startTime, endTime, existingShifts, excludeRow = null) {
+            for (let existingRow of existingShifts) {
+                if (existingRow === excludeRow) continue;
+                
+                const existingStart = existingRow.querySelector('.start-time').value;
+                const existingEnd = existingRow.querySelector('.end-time').value;
+                
+                if (!existingStart || !existingEnd) continue;
+                
+                // Check for time overlap
+                if ((startTime < existingEnd && endTime > existingStart)) {
+                    return {
+                        conflict: true,
+                        existingStart: existingStart,
+                        existingEnd: existingEnd
+                    };
+                }
+            }
+            return { conflict: false };
+        }
+
+        async function createDefaultTemplates() {
+            try {
+                console.log('Creating default templates...');
+                const response = await fetch('/api/shift-templates/init-defaults', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    console.log('Default templates created successfully');
+                    await loadShiftTemplates();
+                    // Wait a bit for DOM to update
+                    setTimeout(() => {
+                        updateTemplateSelects();
+                    }, 200);
+                } else {
+                    const result = await response.json();
+                    console.error('Error creating default templates:', result.message);
+                }
+            } catch (error) {
+                console.error('Error creating default templates:', error);
+            }
+        }
+
+        async function loadShiftTemplates() {
+            try {
+                console.log('Loading shift templates...');
+                const response = await fetch('/api/shift-templates');
+                console.log('Response status:', response.status);
+                
+                if (response.ok) {
+                    shiftTemplates = await response.json();
+                    console.log('Loaded shift templates:', shiftTemplates);
+                    updateTemplateSelects();
+                    console.log('Updated template selects');
+                } else {
+                    console.error('Lỗi tải danh sách ca khám mẫu:', response.status);
+                    const errorText = await response.text();
+                    console.error('Error response:', errorText);
+                }
+            } catch (error) {
+                console.error('Lỗi tải danh sách ca khám mẫu:', error);
+            }
+        }
+
+        function updateTemplateSelects() {
+            console.log('Updating template selects, found selects:', document.querySelectorAll('.template-select').length);
+            console.log('Current shiftTemplates:', shiftTemplates);
+            
+            const selects = document.querySelectorAll('.template-select');
+            console.log('Found selects:', selects.length);
+            
+            selects.forEach((select, index) => {
+                console.log(`Updating select ${index}:`, select);
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">Chọn ca khám mẫu...</option>';
+                
+                if (shiftTemplates && shiftTemplates.length > 0) {
+                    console.log(`Adding ${shiftTemplates.length} templates to select ${index}`);
+                    shiftTemplates.forEach(template => {
+                        const option = document.createElement('option');
+                        option.value = template.id;
+                        option.textContent = template.name;
+                        select.appendChild(option);
+                    });
+                } else {
+                    console.log(`No templates available for select ${index}`);
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'Chưa có ca khám mẫu';
+                    option.disabled = true;
+                    select.appendChild(option);
+                }
+                
+                select.value = currentValue;
+            });
+            
+            // Check if we need to update again
+            if (shiftTemplates && shiftTemplates.length > 0) {
+                setTimeout(() => {
+                    const selects = document.querySelectorAll('.template-select');
+                    const firstSelect = selects[0];
+                    if (firstSelect && firstSelect.children.length <= 2) {
+                        console.log('Templates not loaded properly, retrying...');
+                        updateTemplateSelects();
+                    }
+                }, 1000);
+            }
+        }
+
+        function renderShiftTemplates() {
+            const container = document.getElementById('shift-templates-container');
+            if (!shiftTemplates.length) {
+                container.innerHTML = '<p>Chưa có ca khám mẫu nào.</p>';
+                return;
+            }
+            container.innerHTML = shiftTemplates.map(template => `
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px;border:1px solid #ddd;border-radius:4px;">
+                    <div style="flex:1;">
+                        <strong>${template.name}</strong><br>
+                        <small>${template.start_time} - ${template.end_time} | ${template.doctor_name} | ${template.slot_minutes} phút/slot</small>
+                    </div>
+                    <button class="btn small-btn" style="background:#2196f3;color:white;" onclick="editShiftTemplate(${template.id})">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn small-btn" style="background:#f44336;color:white;" onclick="deleteShiftTemplate(${template.id})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        window.editShiftTemplate = async function(id) {
+            const template = shiftTemplates.find(t => t.id === id);
+            if (!template) return;
+            
+            const name = prompt('Tên ca khám mẫu:', template.name);
+            if (name === null) return;
+            
+            const startTime = prompt('Giờ bắt đầu (HH:MM):', template.start_time);
+            if (startTime === null) return;
+            
+            const endTime = prompt('Giờ kết thúc (HH:MM):', template.end_time);
+            if (endTime === null) return;
+            
+            const doctorName = prompt('Tên bác sĩ:', template.doctor_name);
+            if (doctorName === null) return;
+            
+            const slotMinutes = prompt('Số phút/slot:', template.slot_minutes);
+            if (slotMinutes === null) return;
+            
+            try {
+                const response = await fetch(`/api/shift-templates/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name.trim(),
+                        start_time: startTime.trim(),
+                        end_time: endTime.trim(),
+                        doctor_name: doctorName.trim(),
+                        slot_minutes: parseInt(slotMinutes) || 10
+                    })
+                });
+                if (response.ok) {
+                    await loadShiftTemplates();
+                    renderShiftTemplates();
+                    updateTemplateSelects();
+                    alert('Đã cập nhật ca khám mẫu!');
+                } else {
+                    alert('Lỗi cập nhật ca khám mẫu!');
+                }
+            } catch (error) {
+                console.error('Lỗi cập nhật ca khám mẫu:', error);
+                alert('Lỗi cập nhật ca khám mẫu!');
+            }
+        };
+
+        window.deleteShiftTemplate = async function(id) {
+            if (!confirm('Bạn có chắc muốn xóa ca khám mẫu này?')) return;
+            
+            try {
+                const response = await fetch(`/api/shift-templates/${id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    await loadShiftTemplates();
+                    renderShiftTemplates();
+                    updateTemplateSelects();
+                    alert('Đã xóa ca khám mẫu!');
+                } else {
+                    alert('Lỗi xóa ca khám mẫu!');
+                }
+            } catch (error) {
+                console.error('Lỗi xóa ca khám mẫu:', error);
+                alert('Lỗi xóa ca khám mẫu!');
+            }
+        };
+
+        // Template modal handlers
+        document.getElementById('manage-templates-btn').onclick = async function() {
+            console.log('Manage templates button clicked');
+            const modal = document.getElementById('shift-templates-modal');
+            console.log('Modal element:', modal);
+            modal.style.display = 'flex';
+            modal.classList.remove('hidden');
+            console.log('Modal classes after remove hidden:', modal.className);
+            await loadShiftTemplates();
+            renderShiftTemplates();
+        };
+
+        document.getElementById('close-shift-templates-modal').onclick = function() {
+            const modal = document.getElementById('shift-templates-modal');
+            modal.style.display = 'none';
+            modal.classList.add('hidden');
+        };
+
+        document.getElementById('add-shift-template-btn').onclick = function() {
+            const name = prompt('Tên ca khám mẫu:');
+            if (!name || !name.trim()) return;
+            
+            const startTime = prompt('Giờ bắt đầu (HH:MM):');
+            if (!startTime || !startTime.trim()) return;
+            
+            const endTime = prompt('Giờ kết thúc (HH:MM):');
+            if (!endTime || !endTime.trim()) return;
+            
+            const doctorName = prompt('Tên bác sĩ:');
+            if (!doctorName || !doctorName.trim()) return;
+            
+            const slotMinutes = prompt('Số phút/slot (mặc định 10):', '10');
+            
+            createShiftTemplate({
+                name: name.trim(),
+                start_time: startTime.trim(),
+                end_time: endTime.trim(),
+                doctor_name: doctorName.trim(),
+                slot_minutes: parseInt(slotMinutes) || 10
+            });
+        };
+
+        document.getElementById('init-default-templates-btn').onclick = async function() {
+            if (!confirm('Bạn có chắc muốn tạo ca khám mẫu mặc định? Điều này sẽ tạo 4 ca khám mẫu có sẵn.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/shift-templates/init-defaults', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    await loadShiftTemplates();
+                    renderShiftTemplates();
+                    updateTemplateSelects();
+                    alert('Đã tạo ca khám mẫu mặc định thành công!');
+                } else {
+                    const result = await response.json();
+                    alert(result.message || 'Lỗi tạo ca khám mẫu mặc định!');
+                }
+            } catch (error) {
+                console.error('Lỗi tạo ca khám mẫu mặc định:', error);
+                alert('Lỗi tạo ca khám mẫu mặc định!');
+            }
+        };
+
+        async function createShiftTemplate(data) {
+            try {
+                const response = await fetch('/api/shift-templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (response.ok) {
+                    await loadShiftTemplates();
+                    renderShiftTemplates();
+                    updateTemplateSelects();
+                    alert('Đã tạo ca khám mẫu!');
+                } else {
+                    alert('Lỗi tạo ca khám mẫu!');
+                }
+            } catch (error) {
+                console.error('Lỗi tạo ca khám mẫu:', error);
+                alert('Lỗi tạo ca khám mẫu!');
+            }
+        }
+
+        async function applyDefaultSlotMinutes(defaultMinutes) {
+            try {
+                defaultMinutes = await saveDefaultSlotMinutesToServer(defaultMinutes);
+            } catch (error) {
+                alert(`Không thể lưu phút mặc định: ${error.message || error}`);
+                return;
+            }
+            const dayContainers = Array.from(document.querySelectorAll('.day-schedule'));
+            if (!dayContainers.length) {
+                alert('Chưa có ngày nào để áp dụng.');
+                return;
+            }
+
+            let updated = 0;
+            let skippedLocked = 0;
+            let skippedClosed = 0;
+            let failures = 0;
+
+            for (const dayContainer of dayContainers) {
+                const dateStr = dayContainer.dataset.date;
+                if (!dateStr) continue;
+
+                const isClosed = dayContainer.dataset.isClosed === 'true';
+                if (isClosed) {
+                    skippedClosed++;
+                    continue;
+                }
+
+                const shiftsContainer = dayContainer.querySelector('.shifts-container');
+                if (!shiftsContainer) continue;
+
+                const shiftRows = Array.from(shiftsContainer.querySelectorAll('.shift-row'));
+                if (!shiftRows.length) continue;
+
+                for (const row of shiftRows) {
+                    const shiftId = row.dataset.shiftId;
+                    const isLocked = row.dataset.isLocked === 'true';
+                    const slotSelect = row.querySelector('.slot-minutes');
+                    if (!shiftId) {
+                        if (slotSelect) slotSelect.value = String(defaultMinutes);
+                        continue;
+                    }
+                    if (isLocked) {
+                        skippedLocked++;
+                        continue;
+                    }
+
+                    try {
+                        const response = await fetch(`/api/admin/work-schedule/${shiftId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ slot_minutes: defaultMinutes })
+                        });
+                        if (!response.ok) {
+                            throw new Error('update-slot-failed');
+                        }
+                        updated++;
+                        if (slotSelect) {
+                            slotSelect.value = String(defaultMinutes);
+                        }
+                    } catch (error) {
+                        console.error('Failed to update slot minutes:', error);
+                        failures++;
+                    }
+                }
+            }
+
+            let message = `Đã áp dụng ${defaultMinutes} phút cho ${updated} ca khám.`;
+            if (skippedLocked) message += ` Bỏ qua ${skippedLocked} ca đã khóa.`;
+            if (skippedClosed) message += ` Bỏ qua ${skippedClosed} ngày đang nghỉ.`;
+            if (failures) message += ` Có ${failures} ca gặp lỗi.`;
+            alert(message);
+        }
+
+        const defaultSlotBtn = document.getElementById('set-default-slot-btn');
+        if (defaultSlotBtn) {
+            defaultSlotBtn.onclick = async () => {
+                const input = prompt('Nhập số phút mỗi ca khám mặc định (ví dụ: 10, 15, 20):', String(defaultSlotMinutes || 15));
+                if (input === null) return;
+
+                const minutes = parseInt(input.trim(), 10);
+                if (Number.isNaN(minutes) || minutes <= 0) {
+                    alert('Giá trị phút không hợp lệ. Vui lòng nhập số dương.');
+                    return;
+                }
+
+                if (!confirm(`Áp dụng ${minutes} phút cho tất cả ca khám chưa khóa và chưa nghỉ?`)) {
+                    return;
+                }
+
+                await applyDefaultSlotMinutes(minutes);
+            };
+        }
+
+        // Apply template functionality
+        function setupTemplateApplication(dayContainer, date) {
+            const templateSelect = dayContainer.querySelector('.template-select');
+            const applyBtn = dayContainer.querySelector('.apply-template-btn');
+            // Ensure templates are loaded when the user clicks/focuses the select
+            if (templateSelect) {
+                const ensureTemplatesOnOpen = async (e) => {
+                    try {
+                        if (!shiftTemplates || shiftTemplates.length === 0 || templateSelect.children.length <= 1) {
+                            await loadShiftTemplates();
+                            // slight delay so options are populated before the native dropdown opens
+                            setTimeout(() => { try { templateSelect.focus(); } catch (e) {} }, 50);
+                        }
+                    } catch (err) {
+                        console.error('Error ensuring templates on open:', err);
+                    }
+                };
+
+                // Use mousedown so we can populate before the browser opens the select UI
+                templateSelect.addEventListener('mousedown', ensureTemplatesOnOpen);
+                templateSelect.addEventListener('focus', ensureTemplatesOnOpen);
+            }
+
+            if (applyBtn) {
+                applyBtn.onclick = () => {
+                    const templateId = templateSelect.value;
+                    if (!templateId) {
+                        alert('Vui lòng chọn ca khám mẫu!');
+                        return;
+                    }
+                    
+                    if (!shiftTemplates || shiftTemplates.length === 0) {
+                        alert('Chưa có ca khám mẫu nào. Vui lòng tạo ca khám mẫu trước!');
+                        return;
+                    }
+                    
+                    const template = shiftTemplates.find(t => t.id == templateId);
+                    if (!template) {
+                        alert('Không tìm thấy ca khám mẫu!');
+                        return;
+                    }
+                    
+                    // Check for time conflicts before creating shift
+                    const shiftsContainer = dayContainer.querySelector('.shifts-container');
+                    const existingShifts = shiftsContainer.querySelectorAll('.shift-row');
+                    
+                    const conflictCheck = checkTimeConflict(template.start_time, template.end_time, existingShifts);
+                    if (conflictCheck.conflict) {
+                        alert(`Thời gian mẫu này trùng với ca khám khác (${conflictCheck.existingStart} - ${conflictCheck.existingEnd})!`);
+                        return;
+                    }
+                    
+                    // Create shift row with template data
+                    const shiftRow = createShiftRow(date, {
+                        start_time: template.start_time,
+                        end_time: template.end_time,
+                        doctor_name: template.doctor_name,
+                        slot_minutes: template.slot_minutes
+                    });
+                    
+                    shiftsContainer.appendChild(shiftRow);
+                    
+                    // Reset template select
+                    templateSelect.value = '';
+                };
+            }
+        }
+
+        async function initializeDoctorSchedulePage() {
+            console.log('Initializing page...');
+            try {
+                await loadDefaultSlotMinutesFromServer();
+            } catch (error) {
+                console.warn('Không thể tải số phút mặc định từ máy chủ:', error);
+            }
+
+            renderSchedule();
+            
+            // Load doctor templates from database
+            await loadDoctorTemplates();
+            // If no templates exist, initialize defaults
+            if (doctorTemplates.length === 0) {
+                try {
+                    const response = await fetch('/api/doctor-templates/init-defaults', {
+                        method: 'POST'
+                    });
+                    if (response.ok) {
+                        await loadDoctorTemplates();
+                    }
+                } catch (error) {
+                    console.error('Lỗi khởi tạo mẫu bác sĩ mặc định:', error);
+                }
+            }
+            
+            initToggleButton();
+            
+            loadShiftTemplates().then(() => {
+                console.log('Shift templates loaded, updating selects...');
+                if (!shiftTemplates || shiftTemplates.length === 0) {
+                    console.log('No templates found, creating default templates...');
+                    createDefaultTemplates();
+                }
+                setTimeout(() => {
+                    updateTemplateSelects();
+                }, 100);
+            });
+        }
+
+        initializeDoctorSchedulePage();
+
+        // 'Tạo mẫu mặc định' button in schedule-controls was removed; default templates can still be created via the Shift Templates modal.
+
+        // Test button removed
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
+        <div class="container">
+            <p>&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html> 
