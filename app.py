@@ -1049,6 +1049,12 @@ def work_schedule_default_slot_minutes():
 def index():
     return render_template('index.html')
 
+@app.route('/api/health')
+@app.route('/ping')
+def health_check():
+    """Endpoint nhẹ cho cron-job.org giữ Render không ngủ (free tier)"""
+    return jsonify({'status': 'ok', 'timestamp': datetime.utcnow().isoformat()}), 200
+
 @app.route('/schedule.html')
 def schedule_page():
     return send_from_directory('templates', 'schedule.html')

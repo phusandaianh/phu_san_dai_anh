@@ -832,10 +832,10 @@ function fixLogoPathForPrint(content) {
     'src="' + window.location.origin + '/logo_phu_san_dai_anh.PNG"'
   );
   
-  // Pattern 2: logo_phu_san_dai_anh.png (chữ thường)
+  // Pattern 2: logo_phu_san_dai_anh.PNG (chữ thường)
   fixedContent = fixedContent.replace(
-    'src="logo_phu_san_dai_anh.png"',
-    'src="' + window.location.origin + '/logo_phu_san_dai_anh.png"'
+    'src="logo_phu_san_dai_anh.PNG"',
+    'src="' + window.location.origin + '/logo_phu_san_dai_anh.PNG"'
   );
   
   // Pattern 3: logo_phu_san_dai_anh.PNG (không có dấu ngoặc kép)
@@ -898,9 +898,9 @@ async function fixLogoPathForPrintWithBase64(content) {
       'src="' + base64Logo + '"'
     );
     
-    // Pattern 2: logo_phu_san_dai_anh.png (chữ thường)
+    // Pattern 2: logo_phu_san_dai_anh.PNG (chữ thường)
     fixedContent = fixedContent.replace(
-      'src="logo_phu_san_dai_anh.png"',
+      'src="logo_phu_san_dai_anh.PNG"',
       'src="' + base64Logo + '"'
     );
     
