@@ -1,6 +1,6 @@
 from flask import Flask, render_template, send_from_directory, request, jsonify, send_file, Response
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import or_, inspect, func, text
+from sqlalchemy import or_, inspect, func
 from datetime import datetime, timedelta
 import os
 from reportlab.pdfgen import canvas
@@ -98,7 +98,7 @@ def require_permission(permission_key):
 def api_list_permissions():
     try:
         ensure_role_permission_table()
-        rows = db.session.execute(text("SELECT DISTINCT permission_key FROM role_permission ORDER BY permission_key")).fetchall()
+        rows = db.session.execute("SELECT DISTINCT permission_key FROM role_permission ORDER BY permission_key").fetchall()
         perms = [r[0] for r in rows]
         # Nếu chưa có gì, trả về các quyền mặc định
         if not perms:
@@ -223,11 +223,14 @@ def has_permission(user_id, permission_key):
         return True
     if not roles:
         return False
-    from sqlalchemy.sql import bindparam
-    stmt = text(
-        "SELECT 1 FROM role_permission WHERE role_name IN :roles AND permission_key = :perm LIMIT 1"
-    ).bindparams(bindparam("roles", expanding=True))
-    rows = db.session.execute(stmt, {'roles': list(roles), 'perm': permission_key}).fetchone()
+    rows = db.session.execute(
+        """
+        SELECT 1 FROM role_permission
+        WHERE role_name IN :roles AND permission_key = :perm
+        LIMIT 1
+        """,
+        {'roles': tuple(roles), 'perm': permission_key}
+    ).fetchone()
     return bool(rows)
 
 def require_permission(permission_key):
@@ -5641,7 +5644,7 @@ def create_lab_result_group():
         group_id = data.get('id') or data['name'].lower().replace(' ', '-').replace('+', '-plus')
         
         # Kiểm tra ID trùng lặp
-        if db.session.get(LabResultGroup, group_id):
+        if LabResultGroup.query.get(group_id):
             return jsonify({'message': 'ID nhóm đã tồn tại'}), 400
         
         group = LabResultGroup(
@@ -5729,7 +5732,7 @@ def initialize_default_groups():
         ]
         
         for group_data in default_groups:
-            existing_group = db.session.get(LabResultGroup, group_data['id'])
+            existing_group = LabResultGroup.query.get(group_data['id'])
             if not existing_group:
                 group = LabResultGroup(**group_data)
                 db.session.add(group)
@@ -8518,7 +8521,7 @@ def initialize_default_role_permissions():
     try:
         ensure_role_permission_table()
         # If role_permission already has rows, do nothing
-        existing = db.session.execute(text("SELECT 1 FROM role_permission LIMIT 1")).fetchone()
+        existing = db.session.execute("SELECT 1 FROM role_permission LIMIT 1").fetchone()
         if existing:
             return
         defaults = {
@@ -8578,7 +8581,9 @@ if __name__ == '__main__':
 def api_get_role_permissions():
     try:
         ensure_role_permission_table()
-        rows = db.session.execute(text("SELECT role_name, permission_key FROM role_permission")).fetchall()
+        rows = db.session.execute(
+            "SELECT role_name, permission_key FROM role_permission"
+        ).fetchall()
         mapping = {}
         for role_name, perm in rows:
             mapping.setdefault(role_name, []).append(perm)
@@ -8592,7 +8597,7 @@ def api_put_role_permissions():
         ensure_role_permission_table()
         data = request.json or {}
         # Replace all
-        db.session.execute(text('DELETE FROM role_permission'))
+        db.session.execute('DELETE FROM role_permission')
         for role_name, perms in data.items():
             if not isinstance(perms, list):
                 continue
