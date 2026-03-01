@@ -186,12 +186,15 @@
 
         <!-- Phần quản lý người dùng (ẩn ban đầu) -->
         <div id="userManagementSection" style="display: none;">
-			<div class="actions" style="margin: 20px 0; display: flex; justify-content: space-between; align-items: center;">
-				<div style="display:flex; gap:8px; align-items:center;">
+			<div class="actions" style="margin: 20px 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+				<div style="display:flex; gap:8px; align-items:center; flex-wrap: wrap;">
+					<a href="/admin.html" class="btn primary-btn" style="text-decoration: none;">
+						<i class="fas fa-home"></i> Trang Quản trị
+					</a>
 					<button id="tabUsers" onclick="setActiveTab('users')" class="btn secondary-btn">
 						<i class="fas fa-list"></i> Danh sách người dùng
 					</button>
-					<button id="tabAddUser" onclick="handleAddUserTab()" class="btn primary-btn">
+					<button id="tabAddUser" onclick="handleAddUserTab()" class="btn secondary-btn">
 						<i class="fas fa-plus"></i> Thêm người dùng mới
 					</button>
 					<button id="tabPermissions" onclick="setActiveTab('permissions')" class="btn secondary-btn">
@@ -285,7 +288,7 @@
 
             <!-- Tab liên hệ thủ công -->
             <div id="manualResetTab" style="display: none;">
-                <p>Nếu không thể reset tự động, vui lòng liên hệ với quản trị viên:</p>
+                <p>Nếu không thể reset tự động, vui lòng gửi email đến <strong>phusandaianh@gmail.com</strong> để được cấp lại mật khẩu (admin):</p>
                 <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
                     <p><strong>📧 Email hỗ trợ:</strong> <a href="mailto:hangocdai.kq3@gmail.com" style="color: #007bff;">hangocdai.kq3@gmail.com</a></p>
                     <p><strong>📞 Liên hệ:</strong> Vui lòng gửi email với tiêu đề "Quên mật khẩu - Phòng khám Đại Anh"</p>
@@ -418,28 +421,29 @@
                     
                     alert('Đăng nhập thành công!');
                 } else {
-                    alert('Tên đăng nhập hoặc mật khẩu không đúng!');
+                    let msg = (data && data.error) ? data.error : (response.status === 429 ? 'Quá nhiều lần thử. Đợi 1 phút rồi thử lại.' : 'Tên đăng nhập hoặc mật khẩu không đúng!');
+                    if (data && data.detail) msg += '\n\nChi tiết: ' + data.detail;
+                    alert(msg);
                 }
             } catch (error) {
                 console.error('Lỗi đăng nhập:', error);
-                alert('Có lỗi xảy ra khi đăng nhập. Vui lòng thử lại.');
+                alert('Lỗi kết nối: ' + (error.message || 'Vui lòng kiểm tra mạng và thử lại.'));
             }
         }
 
         // Hàm đăng xuất
-        function logout() {
+        async function logout() {
             state.currentUser = null;
             state.isLoggedIn = false;
             
-            // Xóa token khỏi localStorage
             localStorage.removeItem('authToken');
             localStorage.removeItem('currentUser');
             
-            // Ẩn phần quản lý, hiện form đăng nhập
+            // Xóa cookie auth trên server
+            try { await fetch('/api/logout', { method: 'POST' }); } catch (e) {}
+            
             document.getElementById('userManagementSection').style.display = 'none';
             document.getElementById('loginSection').style.display = 'block';
-            
-            // Reset form đăng nhập
             document.getElementById('loginForm').reset();
             
             alert('Đã đăng xuất thành công!');
@@ -529,7 +533,10 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    alert(`✅ ${data.message}\n\nMật khẩu mới: ${data.new_password}\n\nVui lòng đăng nhập và thay đổi mật khẩu ngay!`);
+                    const msg = data.new_password
+                        ? `✅ ${data.message}\n\nMật khẩu mới: ${data.new_password}\n\nVui lòng đăng nhập và thay đổi mật khẩu ngay!`
+                        : `✅ ${data.message}\n\nVui lòng kiểm tra email phusandaianh@gmail.com (hoặc hộp thư đăng ký) để nhận mật khẩu mới.`;
+                    alert(msg);
                     closeForgotPasswordModal();
                 } else {
                     alert(`❌ ${data.error}`);
@@ -554,7 +561,7 @@
 
         // Hàm gửi email reset mật khẩu
         function sendResetEmail() {
-            const email = 'hangocdai.kq3@gmail.com';
+            const email = 'phusandaianh@gmail.com';
             const subject = 'Quên mật khẩu - Phòng khám Đại Anh';
             const body = `Xin chào quản trị viên,
 

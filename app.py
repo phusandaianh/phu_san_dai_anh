@@ -23,7 +23,34 @@ from voluson_sync_service import get_voluson_sync_service
 import mwl_store
 
 app = Flask(__name__, static_folder='.', template_folder='')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///clinic.db'
+
+# Cấu hình: ưu tiên từ config.py và biến môi trường (theo khuyến nghị bảo mật)
+try:
+    from config import config_by_name
+    env_name = os.environ.get('FLASK_ENV', 'default')
+    app.config.from_object(config_by_name[env_name])
+except Exception as e:
+    print("Config from config.py failed, using defaults:", e)
+if not app.config.get('SQLALCHEMY_DATABASE_URI'):
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL') or 'sqlite:///clinic.db'
+if not app.config.get('SECRET_KEY') or app.config.get('SECRET_KEY', '').startswith('phong-kham-dai-anh-secret'):
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or app.config.get('SECRET_KEY', 'phong-kham-dai-anh-secret-key-change-in-production')
+    if not os.environ.get('SECRET_KEY') and os.environ.get('FLASK_ENV') == 'production':
+        print("WARNING: Set SECRET_KEY in environment for production.")
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
+if not app.config.get('TWILIO_ACCOUNT_SID'):
+    app.config['TWILIO_ACCOUNT_SID'] = os.environ.get('TWILIO_ACCOUNT_SID') or 'YOUR_TWILIO_ACCOUNT_SID'
+if not app.config.get('TWILIO_AUTH_TOKEN'):
+    app.config['TWILIO_AUTH_TOKEN'] = os.environ.get('TWILIO_AUTH_TOKEN') or 'YOUR_TWILIO_AUTH_TOKEN'
+if not app.config.get('TWILIO_PHONE_NUMBER'):
+    app.config['TWILIO_PHONE_NUMBER'] = os.environ.get('TWILIO_PHONE_NUMBER') or 'YOUR_TWILIO_PHONE_NUMBER'
+
+# CORS: danh sách origin được phép (production nên set ALLOWED_ORIGINS)
+app.config['CORS_ALLOWED_ORIGINS'] = os.environ.get('ALLOWED_ORIGINS', '').split(',') if os.environ.get('ALLOWED_ORIGINS') else []
+
+# SQLAlchemy - phải tạo TRƯỚC khi đăng ký blueprint để tránh lỗi "app not registered"
+db = SQLAlchemy(app)
 
 # Đăng ký REST API (Blueprint) - dễ mở rộng, nâng cấp
 try:
@@ -31,14 +58,6 @@ try:
     register_blueprints(app)
 except ImportError as e:
     print("API package not loaded:", e)
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
-app.config['TWILIO_ACCOUNT_SID'] = 'YOUR_TWILIO_ACCOUNT_SID'
-app.config['TWILIO_AUTH_TOKEN'] = 'YOUR_TWILIO_AUTH_TOKEN'
-app.config['TWILIO_PHONE_NUMBER'] = 'YOUR_TWILIO_PHONE_NUMBER'
-
-
-db = SQLAlchemy(app)
 
 def _get_or_404(model, pk):
     """Lấy bản ghi theo PK, abort(404) nếu không tồn tại (tương thích SQLAlchemy 2.0)."""
@@ -51,6 +70,30 @@ try:
     twilio_client = Client(app.config['TWILIO_ACCOUNT_SID'], app.config['TWILIO_AUTH_TOKEN'])
 except Exception:
     twilio_client = None
+
+# Rate limiting đơn giản (theo IP) cho login / forgot-password
+from collections import defaultdict
+from time import time
+_RATE_LIMIT_STORE = defaultdict(list)
+RATE_LIMIT_WINDOW = 60  # giây
+RATE_LIMIT_MAX = 5      # số lần tối đa trong 1 cửa sổ
+
+def rate_limit(key_prefix=''):
+    """Decorator giới hạn số lần gọi theo IP."""
+    def decorator(fn):
+        def wrapper(*args, **kwargs):
+            ip = request.remote_addr or 'unknown'
+            key = f"{key_prefix}:{ip}"
+            now = time()
+            # Xóa các lần gọi cũ ngoài cửa sổ
+            _RATE_LIMIT_STORE[key] = [t for t in _RATE_LIMIT_STORE[key] if now - t < RATE_LIMIT_WINDOW]
+            if len(_RATE_LIMIT_STORE[key]) >= RATE_LIMIT_MAX:
+                return jsonify({'error': 'Quá nhiều yêu cầu. Vui lòng thử lại sau vài phút.'}), 429
+            _RATE_LIMIT_STORE[key].append(now)
+            return fn(*args, **kwargs)
+        wrapper.__name__ = fn.__name__
+        return wrapper
+    return decorator
 
 # Simple in-memory token store for auth (non-persistent)
 TOKENS = {}
@@ -104,6 +147,74 @@ def require_permission(permission_key):
         wrapped.__name__ = fn.__name__
         return wrapped
     return decorator
+
+# Security headers cho mọi response (giảm clickjacking, MIME sniffing)
+@app.after_request
+def add_security_headers(response):
+    if not getattr(response, '_security_headers_added', False):
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        # CSP cơ bản (có thể nới lỏng nếu trang cần inline script/style)
+        if not response.headers.get('Content-Security-Policy'):
+            response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'"
+        response._security_headers_added = True
+    return response
+
+# Route đăng nhập (fallback - đảm bảo luôn hoạt động)
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    """POST /api/login - Đăng nhập, trả về token"""
+    from flask import make_response
+    data = request.get_json(silent=True) or request.form or {}
+    username = (data.get('username') or '').strip()
+    password = data.get('password')
+    if not username or not password:
+        return jsonify({'error': 'Username and password required'}), 400
+    try:
+        result = db.session.execute(
+            text("SELECT id, username, password_hash, full_name, email, status FROM user WHERE username = :username"),
+            {"username": username}
+        ).fetchone()
+        if not result:
+            return jsonify({'error': 'Tên đăng nhập hoặc mật khẩu không đúng'}), 401
+        user_id, username_db, password_hash, full_name, email, status = result
+        if not werkzeug.security.check_password_hash(password_hash, password):
+            return jsonify({'error': 'Tên đăng nhập hoặc mật khẩu không đúng'}), 401
+        if status != 'active':
+            return jsonify({'error': 'Tài khoản đã bị vô hiệu hóa'}), 401
+        now_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        db.session.execute(
+            text("UPDATE user SET last_login = :now WHERE id = :user_id"),
+            {"now": now_str, "user_id": user_id}
+        )
+        db.session.commit()
+        roles_result = db.session.execute(
+            text("SELECT r.name FROM role r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = :user_id"),
+            {"user_id": user_id}
+        ).fetchall()
+        roles = [row[0] for row in roles_result]
+        token = __import__('secrets').token_urlsafe(32)
+        register_token(token, user_id)
+        resp = make_response(jsonify({
+            'token': token,
+            'user': {'id': user_id, 'username': username_db, 'full_name': full_name or '', 'email': email or '', 'roles': roles}
+        }))
+        resp.set_cookie('auth_token', token, httponly=True, samesite='Lax', max_age=3600)
+        return resp
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        err_detail = str(e) if app.config.get('DEBUG') else None
+        return jsonify({'error': 'Lỗi hệ thống', 'detail': err_detail}), 500
+
+@app.route('/api/logout', methods=['POST'])
+def api_logout():
+    """POST /api/logout - Xóa cookie auth"""
+    resp = jsonify({'message': 'Đã đăng xuất'})
+    resp.set_cookie('auth_token', '', max_age=0, expires=0)
+    return resp
 
 # API: Trả về danh sách tất cả các permission key từng được gán cho role nào đó
 @app.route('/api/permissions', methods=['GET'])
@@ -184,7 +295,26 @@ ROLE_ALLOWED_PAGES = {
     ]
 }
 
-PUBLIC_PAGES = set(['index.html','links.html','clinic-maps.html','pregnancy-utilities.html'])
+# Trang bệnh nhân truy cập: booking.html, schedule.html (đặt lịch); index.html (trang chủ); pregnancy-utilities (tiện ích)
+# users.html: trang đăng nhập nhân viên (admin, bác sĩ, điều dưỡng)
+PUBLIC_PAGES = set([
+    'index.html', 'booking.html', 'schedule.html', 'users.html', 'pregnancy-utilities.html', 'links.html'
+])
+
+# Trang yêu cầu đăng nhập (admin, bác sĩ, điều dưỡng)
+STAFF_ONLY_PAGES = set([
+    'admin.html', 'examination-list.html', 'patient-records.html',
+    'consultation-results.html', 'lab-tests.html', 'lab-tests-dai-anh.html',
+    'clinical-form-templates.html', 'medical-charts.html', 'treatment-plans.html',
+    'doctor-schedule.html', 'checkin-admin.html', 'qr-checkin.html',
+    'home-content.html', 'clinical-services-admin.html', 'booking-content-admin.html',
+    'voluson-sync-admin.html', 'ai-assistant-admin.html', 'prescription-management.html',
+    'disease-tests.html', 'test-meanings.html', 'ultrasound-analysis.html',
+    'ultrasound-general.html', 'ctg-analysis.html', 'cervical-examination-analysis.html',
+    'mom-apps.html', 'appointment-details.html', 'lab-pricelist.html',
+    'staff-training.html', 'improved-lab-result-template.html', 'improved-lab-request-template.html',
+    'links.html', 'clinic-maps.html', 'pregnancy-utilities.html',
+])
 
 DEFAULT_CLINICAL_SERVICE_GROUPS = [
     'Siêu âm thai',
@@ -400,7 +530,7 @@ class ContactInfo(db.Model):
 
 class FooterContent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    text = db.Column(db.Text, nullable=False, default='&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.')
+    text = db.Column(db.Text, nullable=False, default='&copy; 2026 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.')
     bg_color = db.Column(db.String(20), nullable=False, default='#333333')
     text_color = db.Column(db.String(20), nullable=False, default='#ffffff')
     padding = db.Column(db.Integer, nullable=False, default=32)
@@ -570,6 +700,8 @@ def ensure_lab_settings_columns():
             db.session.execute(text("ALTER TABLE lab_settings ADD COLUMN provider_unit_list TEXT DEFAULT '[]'"))
         if 'service_group_list' not in columns:
             db.session.execute(text("ALTER TABLE lab_settings ADD COLUMN service_group_list TEXT DEFAULT '[]'"))
+        if 'reset_password_hash' not in columns:
+            db.session.execute(text("ALTER TABLE lab_settings ADD COLUMN reset_password_hash VARCHAR(255) DEFAULT ''"))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -752,8 +884,9 @@ class LabSettings(db.Model):
     # JSON text for custom statuses/actions; keep simple as string
     statuses = db.Column(db.Text, default='["chờ kết quả","đã có kết quả"]')
     actions = db.Column(db.Text, default='[]')
-    # password to allow destructive reset of month (store hashed would be better; keep plain for now)
+    # Mật khẩu reset tháng (plain, legacy); ưu tiên dùng reset_password_hash
     reset_password = db.Column(db.String(64), default='010190')
+    reset_password_hash = db.Column(db.String(255), default='')  # hash bằng werkzeug
     # whether to clear status column when syncing (frontend setting)
     clear_status_on_sync = db.Column(db.Boolean, default=False)
     # JSON list of selected provider units for filter
@@ -817,7 +950,7 @@ def api_lab_settings_top():
             provider_unit_list = []
         return jsonify({
             'status_options': statuses,
-            'reset_password': s.reset_password,
+            'reset_password': '********' if (getattr(s, 'reset_password_hash', None) or s.reset_password) else '',
             'clear_status_on_sync': bool(getattr(s, 'clear_status_on_sync', False)),
             'selected_providers': selected_providers,
             'provider_unit_list': provider_unit_list
@@ -836,7 +969,9 @@ def api_lab_settings_top():
             db.session.add(s)
         try:
             s.statuses = json.dumps(statuses, ensure_ascii=False)
-            s.reset_password = reset_password
+            if reset_password and reset_password != '********':
+                s.reset_password_hash = werkzeug.security.generate_password_hash(reset_password)
+                s.reset_password = ''  # không lưu plain text nữa
             s.clear_status_on_sync = bool(clear_flag)
             s.selected_providers = json.dumps(selected_providers, ensure_ascii=False)
             s.provider_unit_list = json.dumps(provider_unit_list, ensure_ascii=False)
@@ -1686,11 +1821,11 @@ def check_upcoming_appointments():
         db.session.commit()
 
 def run_scheduler():
+    import time as _time
     schedule.every().day.at("08:00").do(check_upcoming_appointments)
-    
     while True:
         schedule.run_pending()
-        time.sleep(60)
+        _time.sleep(60)
 
 # Start scheduler in a separate thread
 scheduler_thread = threading.Thread(target=run_scheduler)
@@ -1700,6 +1835,12 @@ scheduler_thread.start()
 # Route for serving static files
 @app.route('/<path:filename>')
 def static_files(filename):
+    # Trang HTML không trong PUBLIC_PAGES → yêu cầu đăng nhập (dành cho nhân viên)
+    if filename.endswith('.html') and filename not in PUBLIC_PAGES:
+        token = request.cookies.get('auth_token') or request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token or not get_user_from_token(token):
+            from flask import redirect
+            return redirect('/users.html?msg=Đăng nhập để truy cập trang này')
     return send_from_directory('.', filename)
 
 # appointments/today, by-date, patients, diagnosis, notes -> đã chuyển sang api/v1/
@@ -2240,7 +2381,8 @@ def sync_lab_orders_range():
 
 
 @app.route('/api/lab-orders/reset-month', methods=['POST'])
-def reset_lab_orders_month():
+@require_auth
+def reset_lab_orders_month(**kwargs):
     """Reset (delete) all lab orders for a month. Request JSON: {month: 'yyyy-mm', password: '...'}"""
     data = request.json or {}
     month = data.get('month')
@@ -2254,7 +2396,12 @@ def reset_lab_orders_month():
         db.session.add(settings)
         db.session.commit()
 
-    if password != (settings.reset_password or '010190'):
+    # Ưu tiên kiểm tra hash; tương thích legacy (plain)
+    hash_val = getattr(settings, 'reset_password_hash', None)
+    if hash_val:
+        if not werkzeug.security.check_password_hash(hash_val, password):
+            return jsonify({'message': 'Mật khẩu không đúng'}), 403
+    elif password != (settings.reset_password or '010190'):
         return jsonify({'message': 'Mật khẩu không đúng'}), 403
 
     try:
@@ -2351,7 +2498,8 @@ def get_home_content():
     })
 
 @app.route('/api/home-content', methods=['POST'])
-def update_home_content():
+@require_permission('manage_content')
+def update_home_content(**kwargs):
     try:
         data = request.json
         
@@ -2398,7 +2546,8 @@ def update_home_content():
         return jsonify({'error': 'Lỗi khi cập nhật nội dung'}), 500
 
 @app.route('/api/clinic-summary', methods=['POST'])
-def update_clinic_summary():
+@require_auth
+def update_clinic_summary(**kwargs):
     try:
         data = request.json
         clinic_summary = data.get('clinicSummary', '')
@@ -2425,13 +2574,17 @@ def get_footer_content():
     if not footer_content:
         # Create default footer content if not exists
         footer_content = FooterContent(
-            text='&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.',
+            text='&copy; 2026 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.',
             bg_color='#333333',
             text_color='#ffffff',
             padding=32,
             text_align='center'
         )
         db.session.add(footer_content)
+        db.session.commit()
+    elif '2025' in (footer_content.text or ''):
+        # Cập nhật bản quyền 2025 -> 2026 cho bản ghi cũ
+        footer_content.text = (footer_content.text or '').replace('2025', '2026')
         db.session.commit()
 
     return jsonify({
@@ -2443,7 +2596,8 @@ def get_footer_content():
     })
 
 @app.route('/api/footer-content', methods=['POST'])
-def update_footer_content():
+@require_auth
+def update_footer_content(**kwargs):
     try:
         data = request.json
         
@@ -2491,7 +2645,8 @@ def get_examination_settings():
     })
 
 @app.route('/api/examination-settings', methods=['POST'])
-def update_examination_settings():
+@require_auth
+def update_examination_settings(**kwargs):
     data = request.json
     # Update examination settings
     settings = ExaminationSettings.query.first()
@@ -2594,7 +2749,8 @@ def get_booking_content():
     })
 
 @app.route('/api/booking-content', methods=['POST'])
-def update_booking_content():
+@require_auth
+def update_booking_content(**kwargs):
     # Ensure column exists for older databases
     ensure_booking_reasons_column()
     data = request.json
@@ -8480,25 +8636,26 @@ def ensure_user_status_column():
         print("Error adding status column:", e)
 
 def initialize_default_admin():
-    """Initialize default admin user if no users exist"""
+    """Initialize default admin if no users exist. Email phusandaianh@gmail.com cho forgot-password."""
     try:
         if not User.query.first():
             admin_role = Role.query.filter_by(name='admin').first()
             if admin_role:
                 admin = User(
-                    username='daihn',
-                    password_hash=werkzeug.security.generate_password_hash('190514@Da'),
-                    full_name='Phòng khám Đại Anh - Admin',
-                    email='admin@phongkhamdaianh.com',
+                    username='admin',
+                    password_hash=werkzeug.security.generate_password_hash('Admin@PhuSan2026'),
+                    full_name='Quản trị viên - Phòng khám Đại Anh',
+                    email='phusandaianh@gmail.com',
                     status='active'
                 )
                 admin.roles.append(admin_role)
                 db.session.add(admin)
                 db.session.commit()
-                print("Created default admin account: daihn")
+                print("Created default admin: admin / phusandaianh@gmail.com")
+                print("Chạy: python create_staff_accounts.py để tạo admin, doctor, nurse")
     except Exception as e:
         db.session.rollback()
-        print("Error creating default admin account:", e)
+        print("Error creating default admin:", e)
 
 
 def initialize_default_role_permissions():
@@ -8512,7 +8669,7 @@ def initialize_default_role_permissions():
         if existing:
             return
         defaults = {
-            'admin': ['manage_users', 'manage_worklist', 'manage_voluson_sync'],
+            'admin': ['manage_users', 'manage_worklist', 'manage_voluson_sync', 'manage_content', 'manage_lab', 'manage_work_schedule'],
             'doctor': [],
             'nurse': [],
             'receptionist': []
@@ -8598,6 +8755,7 @@ def api_put_role_permissions():
 
 # API endpoint để reset mật khẩu (tùy chọn)
 @app.route('/api/forgot-password', methods=['POST'])
+@rate_limit('forgot')
 def forgot_password():
     """API để gửi email reset mật khẩu"""
     try:
@@ -8644,10 +8802,11 @@ def forgot_password():
         print(f"Vui lòng đăng nhập và thay đổi mật khẩu ngay.")
         print(f"==========================")
         
-        return jsonify({
-            'message': 'Mật khẩu đã được reset. Vui lòng kiểm tra email để nhận mật khẩu mới.',
-            'new_password': new_password  # Chỉ trả về trong môi trường test
-        })
+        out = {'message': 'Mật khẩu đã được reset. Vui lòng đăng nhập và đổi mật khẩu ngay.'}
+        # Trả mật khẩu mới khi: DEBUG hoặc email recovery chính thức (admin)
+        if app.config.get('DEBUG') or (user_email and user_email.strip().lower() == 'phusandaianh@gmail.com'):
+            out['new_password'] = new_password
+        return jsonify(out)
         
     except Exception as e:
         print(f"Forgot password error: {e}")

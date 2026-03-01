@@ -22,10 +22,10 @@
             // Update content if footer has a container
             const container = footer.querySelector('.container');
             if (container) {
-                container.innerHTML = `<p style="margin: 0;">${footerData.text || '&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.'}</p>`;
+                container.innerHTML = `<p style="margin: 0;">${footerData.text || '&copy; 2026 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.'}</p>`;
             } else {
                 // If no container, update the footer directly
-                footer.innerHTML = `<div class="container"><p style="margin: 0;">${footerData.text || '&copy; 2025 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.'}</p></div>`;
+                footer.innerHTML = `<div class="container"><p style="margin: 0;">${footerData.text || '&copy; 2026 Phòng khám chuyên khoa Phụ Sản Đại Anh. All rights reserved.'}</p></div>`;
             }
         });
     } catch (error) {

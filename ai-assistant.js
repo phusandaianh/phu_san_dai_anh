@@ -12,8 +12,13 @@ class AIAssistant {
         this.isWakeWordListening = false;
         this.wakeWordEnabled = this.getWakeWordSetting();
         this.messages = [];
-        this.setupRecognition();
-        this.setupWakeWordRecognition();
+        // Tắt micro trên trang đặt lịch (booking) và lịch làm việc (schedule)
+        const path = (window.location.pathname || '').toLowerCase();
+        this.disableMic = /booking/i.test(path) || /schedule/i.test(path);
+        if (!this.disableMic) {
+            this.setupRecognition();
+            this.setupWakeWordRecognition();
+        }
         this.createWidget();
         this.loadHistory();
     }
@@ -129,10 +134,15 @@ class AIAssistant {
         this.messagesContainer = document.getElementById('aiAssistantMessages');
         this.voiceBtn = document.getElementById('aiAssistantVoiceBtn');
         
-        // Cập nhật UI wake word ban đầu
-        setTimeout(() => {
-            this.updateWakeWordUI();
-        }, 100);
+        // Ẩn chức năng micro trên trang booking và schedule
+        if (this.disableMic) {
+            const wakeToggle = document.getElementById('aiWakeWordToggle');
+            if (wakeToggle) wakeToggle.style.display = 'none';
+            if (this.voiceBtn) this.voiceBtn.style.display = 'none';
+            if (this.input) this.input.placeholder = 'Nhập câu hỏi...';
+        } else {
+            setTimeout(() => this.updateWakeWordUI(), 100);
+        }
         
         // Đóng khi click outside
         document.addEventListener('click', (e) => {
@@ -364,6 +374,7 @@ class AIAssistant {
     
     // Đánh thức AI (mở cửa sổ và bắt đầu nghe)
     wakeUp() {
+        if (this.disableMic) return;
         console.log('AI awakened!');
         
         // Mở cửa sổ
@@ -387,6 +398,7 @@ class AIAssistant {
     
     // Toggle wake word
     toggleWakeWord() {
+        if (this.disableMic) return;
         this.wakeWordEnabled = !this.wakeWordEnabled;
         this.saveWakeWordSetting(this.wakeWordEnabled);
         
@@ -482,6 +494,7 @@ class AIAssistant {
 
     // Toggle voice recognition
     toggleVoiceRecognition() {
+        if (this.disableMic) return;
         if (!this.recognition) {
             this.addMessage('error', 'Trình duyệt của bạn không hỗ trợ nhận diện giọng nói.');
             return;
