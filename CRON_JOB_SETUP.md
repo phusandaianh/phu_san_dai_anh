@@ -1,8 +1,24 @@
-# Giữ Render không ngủ bằng cron-job.org
+# Giữ Render không ngủ
 
-Render Free tier sẽ **sleep** sau ~15 phút không có truy cập. Dùng cron-job.org gọi định kỳ để giữ service luôn sẵn sàng.
+Render Free tier sẽ **sleep** sau ~15 phút không có truy cập. Dùng dịch vụ ping định kỳ để giữ service luôn sẵn sàng.
 
-## Bước 1: Đăng ký cron-job.org
+**Nếu vẫn bị ngủ:** Xem [RENDER_SLEEP_FIX.md](RENDER_SLEEP_FIX.md) để kiểm tra và khắc phục.
+
+---
+
+## Cách 1: UptimeRobot (Khuyến nghị – ping 5 phút)
+
+1. Đăng ký miễn phí: [uptimerobot.com](https://uptimerobot.com)
+2. Add New Monitor → HTTP(s)
+3. URL: `https://phong-kham-dai-anh.onrender.com/api/health`
+4. Interval: **5 phút**
+5. Create Monitor
+
+---
+
+## Cách 2: cron-job.org (ping 10 phút)
+
+### Bước 1: Đăng ký cron-job.org
 
 1. Vào [cron-job.org](https://cron-job.org)
 2. Đăng ký tài khoản miễn phí
@@ -43,6 +59,7 @@ Render Free tier sẽ **sleep** sau ~15 phút không có truy cập. Dùng cron-
 ```
 GET https://<your-app>.onrender.com/api/health
 GET https://<your-app>.onrender.com/ping
+GET https://<your-app>.onrender.com/healthz
 ```
 
 Response: `{"status": "ok", "timestamp": "..."}`

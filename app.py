@@ -1031,8 +1031,10 @@ def index():
 
 @app.route('/api/health')
 @app.route('/ping')
+@app.route('/healthz')
 def health_check():
-    """Endpoint nhẹ cho cron-job.org giữ Render không ngủ (free tier)"""
+    """Endpoint nhẹ cho cron-job.org / UptimeRobot giữ Render không ngủ (free tier).
+    Gọi mỗi 5-10 phút để tránh sleep sau 15 phút không hoạt động."""
     return jsonify({'status': 'ok', 'timestamp': datetime.utcnow().isoformat()}), 200
 
 @app.route('/schedule.html')
