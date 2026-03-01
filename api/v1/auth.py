@@ -4,6 +4,7 @@ API Auth - Đăng nhập, token
 """
 from flask import Blueprint, request, jsonify
 from datetime import datetime
+from sqlalchemy import text
 import werkzeug
 import secrets
 
@@ -24,7 +25,7 @@ def login():
     
     try:
         result = db.session.execute(
-            "SELECT id, username, password_hash, full_name, email, status FROM user WHERE username = :username",
+            text("SELECT id, username, password_hash, full_name, email, status FROM user WHERE username = :username"),
             {"username": username}
         ).fetchone()
         
@@ -40,16 +41,15 @@ def login():
             return jsonify({'error': 'Tài khoản đã bị vô hiệu hóa'}), 401
         
         db.session.execute(
-            "UPDATE user SET last_login = :now WHERE id = :user_id",
+            text("UPDATE user SET last_login = :now WHERE id = :user_id"),
             {"now": datetime.utcnow(), "user_id": user_id}
         )
         db.session.commit()
         
-        roles_result = db.session.execute("""
-            SELECT r.name FROM role r 
-            JOIN user_roles ur ON r.id = ur.role_id 
-            WHERE ur.user_id = :user_id
-        """, {"user_id": user_id}).fetchall()
+        roles_result = db.session.execute(
+            text("SELECT r.name FROM role r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = :user_id"),
+            {"user_id": user_id}
+        ).fetchall()
         roles = [row[0] for row in roles_result]
         
         token = secrets.token_urlsafe(32)

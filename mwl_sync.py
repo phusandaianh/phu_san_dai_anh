@@ -51,7 +51,7 @@ def build_worklist_entries():
         appts = db.session.query(Appointment).filter(Appointment.status.in_(['pending','scheduled'])).all()
         for a in appts:
             if is_ultrasound(a.service_type):
-                patient = db.session.query(Patient).get(a.patient_id)
+                patient = db.session.get(Patient, a.patient_id)
                 entry = {
                     'PatientName': patient.name if patient else None,
                     'PatientID': patient.patient_id if patient else None,

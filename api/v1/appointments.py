@@ -101,9 +101,9 @@ def get_by_date():
 @appointments_bp.route('/<int:appointment_id>', methods=['GET'])
 def get_one(appointment_id):
     """GET /api/appointments/<id>"""
-    from app import Appointment
+    from app import Appointment, _get_or_404
     
-    a = Appointment.query.get_or_404(appointment_id)
+    a = _get_or_404(Appointment, appointment_id)
     return jsonify(_appointment_to_json(a))
 
 
@@ -119,16 +119,16 @@ def get_diagnosis(appointment_id):
 @appointments_bp.route('/<int:appointment_id>/diagnosis', methods=['PUT'])
 def update_diagnosis(appointment_id):
     """PUT /api/appointments/<id>/diagnosis"""
-    from app import db, Appointment, MedicalRecord
+    from app import db, Appointment, MedicalRecord, _get_or_404
     
     data = request.json or {}
-    text = (data.get('diagnosis') or '').strip()
-    appt = Appointment.query.get_or_404(appointment_id)
+    diag_text = (data.get('diagnosis') or '').strip()
+    appt = _get_or_404(Appointment, appointment_id)
     rec = MedicalRecord.query.filter_by(appointment_id=appointment_id).first()
     if not rec:
         rec = MedicalRecord(patient_id=appt.patient_id, appointment_id=appointment_id)
         db.session.add(rec)
-    rec.diagnosis = text
+    rec.diagnosis = diag_text
     db.session.commit()
     return jsonify({'diagnosis': rec.diagnosis})
 
@@ -154,6 +154,6 @@ def update_notes(appointment_id):
     if not rec:
         rec = MedicalRecord(patient_id=appt.patient_id, appointment_id=appointment_id)
         db.session.add(rec)
-    rec.notes = text
+    rec.notes = notes_text
     db.session.commit()
     return jsonify({'notes': rec.notes})

@@ -1,7 +1,7 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Phòng khám chuyên khoa Phụ Sản Đại Anh - Đăng ký khám bệnh online</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="utilities.css">
@@ -12,11 +12,16 @@
     <link rel="stylesheet" href="ai-assistant.css">
 </head>
 <body>
-    <header class="header">
+    <header class="header has-mobile-nav">
         <div class="container">
             <div class="logo-container">
                 <img src="logo_phu_san_dai_anh.PNG" alt="Logo Phòng khám Đại Anh" class="clinic-logo animate__animated animate__fadeIn">
             </div>
+            <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
+            <label for="nav-toggle" class="nav-toggle-label" aria-label="Mở menu">
+                <span></span><span></span><span></span>
+            </label>
+            <label for="nav-toggle" class="nav-overlay" aria-label="Đóng menu"></label>
             <nav class="main-nav">
                 <ul>
                     <li><a href="/examination-list.html" class="nav-link">Danh sách khám</a></li>
@@ -93,10 +98,10 @@
                 </div>
                 <div class="form-group">
                     <label for="dob">Ngày tháng năm sinh:</label>
-                    <div style="display: flex; gap: 8px;">
-                        <select id="dob-day" name="dob-day" required style="width: 70px;"></select>
-                        <select id="dob-month" name="dob-month" required style="width: 70px;"></select>
-                        <select id="dob-year" name="dob-year" required style="width: 90px;"></select>
+                    <div class="dob-selects">
+                        <select id="dob-day" name="dob-day" required></select>
+                        <select id="dob-month" name="dob-month" required></select>
+                        <select id="dob-year" name="dob-year" required></select>
                     </div>
                 </div>
                 <div class="form-group">

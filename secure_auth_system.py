@@ -214,7 +214,7 @@ def require_auth(f):
     @jwt_required()
     def decorated_function(*args, **kwargs):
         current_user_id = get_jwt_identity()
-        current_user = User.query.get(current_user_id)
+        current_user = db.session.get(User, current_user_id)
         
         if not current_user or not current_user.is_active:
             return jsonify({'error': 'Tài khoản không hợp lệ'}), 401

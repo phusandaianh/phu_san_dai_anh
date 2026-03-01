@@ -12,9 +12,9 @@ patients_bp = Blueprint('patients', __name__)
 @patients_bp.route('/<int:patient_id>', methods=['GET'])
 def get_patient(patient_id):
     """GET /api/patients/<id> - Chi tiết bệnh nhân"""
-    from app import Patient
+    from app import Patient, _get_or_404
     
-    p = Patient.query.get_or_404(patient_id)
+    p = _get_or_404(Patient, patient_id)
     return jsonify({
         'id': p.id,
         'name': p.name,
@@ -27,10 +27,10 @@ def get_patient(patient_id):
 @patients_bp.route('/<int:patient_id>', methods=['PUT'])
 def update_patient(patient_id):
     """PUT /api/patients/<id> - Cập nhật bệnh nhân"""
-    from app import db, Patient
+    from app import db, Patient, _get_or_404
     
     data = request.json or {}
-    p = Patient.query.get_or_404(patient_id)
+    p = _get_or_404(Patient, patient_id)
     name = (data.get('name') or '').strip()
     phone = (data.get('phone') or '').strip()
     address = (data.get('address') or '').strip()

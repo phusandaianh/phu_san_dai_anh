@@ -1,6 +1,6 @@
-from flask import Flask, render_template, send_from_directory, request, jsonify, send_file, Response
+from flask import Flask, render_template, send_from_directory, request, jsonify, send_file, Response, abort
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import or_, inspect, func
+from sqlalchemy import or_, inspect, func, text, bindparam
 from datetime import datetime, timedelta
 import os
 from reportlab.pdfgen import canvas
@@ -39,7 +39,18 @@ app.config['TWILIO_PHONE_NUMBER'] = 'YOUR_TWILIO_PHONE_NUMBER'
 
 
 db = SQLAlchemy(app)
-twilio_client = Client(app.config['TWILIO_ACCOUNT_SID'], app.config['TWILIO_AUTH_TOKEN'])
+
+def _get_or_404(model, pk):
+    """Lấy bản ghi theo PK, abort(404) nếu không tồn tại (tương thích SQLAlchemy 2.0)."""
+    obj = db.session.get(model, pk)
+    if obj is None:
+        abort(404)
+    return obj
+
+try:
+    twilio_client = Client(app.config['TWILIO_ACCOUNT_SID'], app.config['TWILIO_AUTH_TOKEN'])
+except Exception:
+    twilio_client = None
 
 # Simple in-memory token store for auth (non-persistent)
 TOKENS = {}
@@ -79,6 +90,7 @@ def require_auth(fn):
     return wrapper
 
 def require_permission(permission_key):
+    """Decorator yêu cầu quyền cụ thể cho API."""
     def decorator(fn):
         def wrapped(*args, **kwargs):
             auth_header = request.headers.get('Authorization', '')
@@ -98,7 +110,7 @@ def require_permission(permission_key):
 def api_list_permissions():
     try:
         ensure_role_permission_table()
-        rows = db.session.execute("SELECT DISTINCT permission_key FROM role_permission ORDER BY permission_key").fetchall()
+        rows = db.session.execute(text("SELECT DISTINCT permission_key FROM role_permission ORDER BY permission_key")).fetchall()
         perms = [r[0] for r in rows]
         # Nếu chưa có gì, trả về các quyền mặc định
         if not perms:
@@ -189,11 +201,7 @@ def is_page_allowed_for_user(user_id, page):
         return True
     # Admin wildcard
     roles_rows = db.session.execute(
-        """
-        SELECT r.name FROM role r
-        JOIN user_roles ur ON r.id = ur.role_id
-        WHERE ur.user_id = :uid
-        """,
+        text("SELECT r.name FROM role r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = :uid"),
         {'uid': user_id}
     ).fetchall()
     roles = [r[0] for r in roles_rows]
@@ -208,11 +216,7 @@ def is_page_allowed_for_user(user_id, page):
 
 def get_user_roles(user_id):
     rows = db.session.execute(
-        """
-        SELECT r.name FROM role r
-        JOIN user_roles ur ON r.id = ur.role_id
-        WHERE ur.user_id = :uid
-        """,
+        text("SELECT r.name FROM role r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = :uid"),
         {'uid': user_id}
     ).fetchall()
     return [r[0].lower() for r in rows]
@@ -223,30 +227,9 @@ def has_permission(user_id, permission_key):
         return True
     if not roles:
         return False
-    rows = db.session.execute(
-        """
-        SELECT 1 FROM role_permission
-        WHERE role_name IN :roles AND permission_key = :perm
-        LIMIT 1
-        """,
-        {'roles': tuple(roles), 'perm': permission_key}
-    ).fetchone()
+    stmt = text("SELECT 1 FROM role_permission WHERE role_name IN :roles AND permission_key = :perm LIMIT 1").bindparams(bindparam("roles", expanding=True))
+    rows = db.session.execute(stmt, {'roles': list(roles), 'perm': permission_key}).fetchone()
     return bool(rows)
-
-def require_permission(permission_key):
-    def decorator(fn):
-        def wrapped(*args, **kwargs):
-            auth_header = request.headers.get('Authorization', '')
-            token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
-            user_id = get_user_from_token(token)
-            if not user_id:
-                return jsonify({'error': 'Unauthorized'}), 401
-            if not has_permission(user_id, permission_key):
-                return jsonify({'error': 'Forbidden'}), 403
-            return fn(*args, **kwargs)
-        wrapped.__name__ = fn.__name__
-        return wrapped
-    return decorator
 
 # Database Models
 class Role(db.Model):
@@ -502,10 +485,10 @@ class BookingPageContent(db.Model):
 # --- Utilities: Safe migration helpers ---
 def ensure_booking_reasons_column():
     try:
-        result = db.session.execute('PRAGMA table_info(booking_page_content)')
+        result = db.session.execute(text('PRAGMA table_info(booking_page_content)'))
         columns = [row[1] for row in result.fetchall()]
         if 'reasons' not in columns:
-            db.session.execute('ALTER TABLE booking_page_content ADD COLUMN reasons TEXT')
+            db.session.execute(text('ALTER TABLE booking_page_content ADD COLUMN reasons TEXT'))
             db.session.commit()
     except Exception:
         db.session.rollback()
@@ -515,15 +498,14 @@ def ensure_booking_reasons_column():
 def ensure_clinical_service_setting_columns():
     """Ensure backward compatibility by adding missing columns to clinical_service_setting table."""
     try:
-        result = db.session.execute('PRAGMA table_info(clinical_service_setting)')
+        result = db.session.execute(text('PRAGMA table_info(clinical_service_setting)'))
         columns = [row[1] for row in result.fetchall()]
         if 'description' not in columns:
-            # Thêm cột description với DEFAULT '' để không vi phạm NOT NULL
-            db.session.execute("ALTER TABLE clinical_service_setting ADD COLUMN description TEXT DEFAULT '' NOT NULL")
+            db.session.execute(text("ALTER TABLE clinical_service_setting ADD COLUMN description TEXT DEFAULT '' NOT NULL"))
         if 'service_group' not in columns:
-            db.session.execute('ALTER TABLE clinical_service_setting ADD COLUMN service_group VARCHAR(50)')
+            db.session.execute(text('ALTER TABLE clinical_service_setting ADD COLUMN service_group VARCHAR(50)'))
         if 'provider_unit' not in columns:
-            db.session.execute('ALTER TABLE clinical_service_setting ADD COLUMN provider_unit VARCHAR(100)')
+            db.session.execute(text('ALTER TABLE clinical_service_setting ADD COLUMN provider_unit VARCHAR(100)'))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -532,14 +514,14 @@ def ensure_clinical_service_setting_columns():
 def ensure_work_schedule_columns():
     """Ensure new columns exist on work_schedule: is_locked (bool), slot_minutes (int)."""
     try:
-        result = db.session.execute('PRAGMA table_info(work_schedule)')
+        result = db.session.execute(text('PRAGMA table_info(work_schedule)'))
         columns = [row[1] for row in result.fetchall()]
         if 'is_locked' not in columns:
-            db.session.execute('ALTER TABLE work_schedule ADD COLUMN is_locked BOOLEAN DEFAULT 0')
+            db.session.execute(text('ALTER TABLE work_schedule ADD COLUMN is_locked BOOLEAN DEFAULT 0'))
         if 'slot_minutes' not in columns:
-            db.session.execute('ALTER TABLE work_schedule ADD COLUMN slot_minutes INTEGER DEFAULT 10')
+            db.session.execute(text('ALTER TABLE work_schedule ADD COLUMN slot_minutes INTEGER DEFAULT 10'))
         if 'is_closed' not in columns:
-            db.session.execute('ALTER TABLE work_schedule ADD COLUMN is_closed BOOLEAN DEFAULT 0')
+            db.session.execute(text('ALTER TABLE work_schedule ADD COLUMN is_closed BOOLEAN DEFAULT 0'))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -548,10 +530,10 @@ def ensure_work_schedule_columns():
 def ensure_appointment_doctor_column():
     """Ensure Appointment table has doctor_name column."""
     try:
-        result = db.session.execute('PRAGMA table_info(appointment)')
+        result = db.session.execute(text('PRAGMA table_info(appointment)'))
         columns = [row[1] for row in result.fetchall()]
         if 'doctor_name' not in columns:
-            db.session.execute("ALTER TABLE appointment ADD COLUMN doctor_name VARCHAR(100) DEFAULT 'PK Đại Anh'")
+            db.session.execute(text("ALTER TABLE appointment ADD COLUMN doctor_name VARCHAR(100) DEFAULT 'PK Đại Anh'"))
             db.session.commit()
     except Exception:
         db.session.rollback()
@@ -559,12 +541,12 @@ def ensure_appointment_doctor_column():
 def ensure_lab_order_columns():
     """Ensure lab_order table has appointment_id and clinical_service_id columns for backward compatibility."""
     try:
-        result = db.session.execute('PRAGMA table_info(lab_order)')
+        result = db.session.execute(text('PRAGMA table_info(lab_order)'))
         columns = [row[1] for row in result.fetchall()]
         if 'appointment_id' not in columns:
-            db.session.execute('ALTER TABLE lab_order ADD COLUMN appointment_id INTEGER')
+            db.session.execute(text('ALTER TABLE lab_order ADD COLUMN appointment_id INTEGER'))
         if 'clinical_service_id' not in columns:
-            db.session.execute('ALTER TABLE lab_order ADD COLUMN clinical_service_id INTEGER')
+            db.session.execute(text('ALTER TABLE lab_order ADD COLUMN clinical_service_id INTEGER'))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -578,18 +560,16 @@ def ensure_lab_settings_columns():
             db.create_all()
         except Exception:
             pass
-        result = db.session.execute('PRAGMA table_info(lab_settings)')
+        result = db.session.execute(text('PRAGMA table_info(lab_settings)'))
         columns = [row[1] for row in result.fetchall()]
         if 'clear_status_on_sync' not in columns:
-            db.session.execute('ALTER TABLE lab_settings ADD COLUMN clear_status_on_sync BOOLEAN DEFAULT 0')
+            db.session.execute(text('ALTER TABLE lab_settings ADD COLUMN clear_status_on_sync BOOLEAN DEFAULT 0'))
         if 'selected_providers' not in columns:
-            # JSON list of selected provider units for filter
-            db.session.execute("ALTER TABLE lab_settings ADD COLUMN selected_providers TEXT DEFAULT '[]'")
+            db.session.execute(text("ALTER TABLE lab_settings ADD COLUMN selected_providers TEXT DEFAULT '[]'"))
         if 'provider_unit_list' not in columns:
-            # store JSON text of known provider units for admin management
-            db.session.execute("ALTER TABLE lab_settings ADD COLUMN provider_unit_list TEXT DEFAULT '[]'")
+            db.session.execute(text("ALTER TABLE lab_settings ADD COLUMN provider_unit_list TEXT DEFAULT '[]'"))
         if 'service_group_list' not in columns:
-            db.session.execute("ALTER TABLE lab_settings ADD COLUMN service_group_list TEXT DEFAULT '[]'")
+            db.session.execute(text("ALTER TABLE lab_settings ADD COLUMN service_group_list TEXT DEFAULT '[]'"))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -707,14 +687,14 @@ def ensure_patient_record_columns():
             db.create_all()
         except Exception:
             pass
-        result = db.session.execute('PRAGMA table_info(patient_record)')
+        result = db.session.execute(text('PRAGMA table_info(patient_record)'))
         columns = [row[1] for row in result.fetchall()]
         altered = False
         if 'appointment_id' not in columns:
-            db.session.execute('ALTER TABLE patient_record ADD COLUMN appointment_id INTEGER')
+            db.session.execute(text('ALTER TABLE patient_record ADD COLUMN appointment_id INTEGER'))
             altered = True
         if 'lab_order_id' not in columns:
-            db.session.execute('ALTER TABLE patient_record ADD COLUMN lab_order_id INTEGER')
+            db.session.execute(text('ALTER TABLE patient_record ADD COLUMN lab_order_id INTEGER'))
             altered = True
         if altered:
             db.session.commit()
@@ -1229,7 +1209,7 @@ def update_appointment(appointment_id: int):
         data = request.json or {}
         changed = False
         try:
-            appt = Appointment.query.get_or_404(appointment_id)
+            appt = _get_or_404(Appointment, appointment_id)
             reason = (data.get('service_type') or '').strip()
             doctor = (data.get('doctor_name') or '').strip()
             if reason:
@@ -1267,7 +1247,7 @@ def update_appointment(appointment_id: int):
         return jsonify({'message': 'Thời gian không hợp lệ.'}), 400
 
     try:
-        appt = Appointment.query.get_or_404(appointment_id)
+        appt = _get_or_404(Appointment, appointment_id)
         # Kiểm tra slot đã có người khác đặt chưa (loại trừ chính bản ghi này)
         conflict = Appointment.query.filter(
             Appointment.id != appointment_id,
@@ -1301,7 +1281,7 @@ def update_appointment_reason(appointment_id: int):
         reason = (data.get('service_type') or '').strip()
         if not reason:
             return jsonify({'message': 'Thiếu lý do khám (service_type).'}), 400
-        appt = Appointment.query.get_or_404(appointment_id)
+        appt = _get_or_404(Appointment, appointment_id)
         appt.service_type = reason
         db.session.commit()
         return jsonify({'message': 'Đã cập nhật lý do khám', 'service_type': appt.service_type})
@@ -1375,7 +1355,7 @@ def create_clinic_doctor():
 def update_clinic_doctor(doctor_id):
     """Update clinic doctor."""
     try:
-        doctor = ClinicDoctor.query.get_or_404(doctor_id)
+        doctor = _get_or_404(ClinicDoctor, doctor_id)
         data = request.json or {}
         
         if 'degree' in data:
@@ -1396,7 +1376,7 @@ def update_clinic_doctor(doctor_id):
 def delete_clinic_doctor(doctor_id):
     """Delete clinic doctor."""
     try:
-        doctor = ClinicDoctor.query.get_or_404(doctor_id)
+        doctor = _get_or_404(ClinicDoctor, doctor_id)
         db.session.delete(doctor)
         db.session.commit()
         return jsonify({'message': 'Đã xóa bác sĩ thành công'})
@@ -1408,7 +1388,7 @@ def delete_clinic_doctor(doctor_id):
 def delete_appointment(appointment_id: int):
     try:
         # Tìm appointment cần xóa
-        appointment = Appointment.query.get_or_404(appointment_id)
+        appointment = _get_or_404(Appointment, appointment_id)
         
         # Lưu thông tin để trả về
         patient_name = appointment.patient.name
@@ -1440,7 +1420,7 @@ def get_services():
 
 @app.route('/api/print_prescription/<int:appointment_id>', methods=['GET'])
 def print_prescription(appointment_id):
-    appointment = Appointment.query.get_or_404(appointment_id)
+    appointment = _get_or_404(Appointment, appointment_id)
     medical_record = MedicalRecord.query.filter_by(appointment_id=appointment_id).first()
     
     # Create PDF
@@ -1470,14 +1450,14 @@ def print_ultrasound(appointment_id):
     from reportlab.lib import colors
     import io
     
-    appointment = Appointment.query.get_or_404(appointment_id)
+    appointment = _get_or_404(Appointment, appointment_id)
     patient = appointment.patient
     
     # Get ultrasound result
     result_id = request.args.get('result_id', type=int)
     ultrasound_result = None
     if result_id:
-        ultrasound_result = UltrasoundResult.query.get(result_id)
+        ultrasound_result = db.session.get(UltrasoundResult, result_id)
     else:
         # Get latest result for this appointment
         try:
@@ -1797,7 +1777,7 @@ def update_clinical_service(id):
     ensure_clinical_service_setting_columns()
     ensure_lab_settings_columns()
     data = request.json
-    service = ClinicalServiceSetting.query.get_or_404(id)
+    service = _get_or_404(ClinicalServiceSetting, id)
     name = data.get('name')
     price = data.get('price')
     description = (data.get('description') or '').strip()
@@ -1850,7 +1830,7 @@ def update_clinical_service(id):
 
 @app.route('/api/clinical-services/<int:id>', methods=['DELETE'])
 def delete_clinical_service(id):
-    service = ClinicalServiceSetting.query.get_or_404(id)
+    service = _get_or_404(ClinicalServiceSetting, id)
     provider_unit = service.provider_unit
     try:
         db.session.delete(service)
@@ -2022,10 +2002,9 @@ def list_provider_units():
                 s = LabSettings.query.first()
                 if s:
                     units_json = json.dumps(units, ensure_ascii=False)
-                    # Escape single quotes for SQL
-                    units_json_escaped = units_json.replace("'", "''")
                     db.session.execute(
-                        f"UPDATE lab_settings SET provider_unit_list = '{units_json_escaped}' WHERE id = {s.id}"
+                        text("UPDATE lab_settings SET provider_unit_list = :units WHERE id = :sid"),
+                        {'units': units_json, 'sid': s.id}
                     )
                     db.session.commit()
                     return jsonify({'units': units})
@@ -2130,7 +2109,7 @@ def create_lab_order():
 
 @app.route('/api/lab-orders/<int:id>', methods=['PUT'])
 def update_lab_order(id):
-    order = LabOrder.query.get_or_404(id)
+    order = _get_or_404(LabOrder, id)
     data = request.json
     if 'test_date' in data and data['test_date']:
         order.test_date = datetime.strptime(data['test_date'], '%Y-%m-%d').date()
@@ -2152,7 +2131,7 @@ def update_lab_order(id):
 
 @app.route('/api/lab-orders/<int:id>', methods=['DELETE'])
 def delete_lab_order(id):
-    order = LabOrder.query.get_or_404(id)
+    order = _get_or_404(LabOrder, id)
     db.session.delete(order)
     db.session.commit()
     return jsonify({'message': 'Đã xóa'})
@@ -2185,8 +2164,8 @@ def sync_lab_orders():
         if exists:
             skipped += 1
             continue
-        svc = ClinicalServiceSetting.query.get(cs.service_id)
-        appt = Appointment.query.get(cs.appointment_id)
+        svc = db.session.get(ClinicalServiceSetting, cs.service_id)
+        appt = db.session.get(Appointment, cs.appointment_id)
         order = LabOrder(
             test_date=appt.appointment_date.date(),
             patient_name=appt.patient.name,
@@ -2233,8 +2212,8 @@ def sync_lab_orders_range():
         if exists:
             skipped += 1
             continue
-        svc = ClinicalServiceSetting.query.get(cs.service_id)
-        appt = Appointment.query.get(cs.appointment_id)
+        svc = db.session.get(ClinicalServiceSetting, cs.service_id)
+        appt = db.session.get(Appointment, cs.appointment_id)
         order = LabOrder(
             test_date=appt.appointment_date.date(),
             patient_name=appt.patient.name,
@@ -2294,7 +2273,7 @@ def reset_lab_orders_month():
 
 @app.route('/api/print-clinical-service/<int:appointment_id>', methods=['GET'])
 def print_clinical_service(appointment_id):
-    appointment = Appointment.query.get_or_404(appointment_id)
+    appointment = _get_or_404(Appointment, appointment_id)
     clinical_services = ClinicalService.query.filter_by(appointment_id=appointment_id).all()
     
     # Create PDF
@@ -2312,7 +2291,7 @@ def print_clinical_service(appointment_id):
     data = [['STT', 'Dịch vụ', 'Giá']]
     total = 0
     for i, cs in enumerate(clinical_services, 1):
-        service = ClinicalServiceSetting.query.get(cs.service_id)
+        service = db.session.get(ClinicalServiceSetting, cs.service_id)
         data.append([str(i), service.name, f"{service.price:,.0f} VNĐ"])
         total += service.price
     
@@ -2560,7 +2539,7 @@ def add_test_result(appointment_id):
 # API: Cập nhật kết quả
 @app.route('/api/test-results/<int:id>', methods=['PUT'])
 def update_test_result(id):
-    test_result = TestResult.query.get_or_404(id)
+    test_result = _get_or_404(TestResult, id)
     data = request.json
     test_result.type = data.get('type', test_result.type)
     test_result.result_text = data.get('result_text', test_result.result_text)
@@ -2571,7 +2550,7 @@ def update_test_result(id):
 @app.route('/api/test-results/<int:id>', methods=['DELETE'])
 def delete_test_result(id):
     try:
-        result = TestResult.query.get_or_404(id)
+        result = _get_or_404(TestResult, id)
         db.session.delete(result)
         db.session.commit()
         return jsonify({'message': 'Đã xóa kết quả xét nghiệm thành công'})
@@ -2709,7 +2688,7 @@ def admin_add_work_schedule():
 @app.route('/api/admin/work-schedule/<int:id>', methods=['PUT'])
 def admin_update_work_schedule(id):
     ensure_work_schedule_columns()
-    ws = WorkSchedule.query.get_or_404(id)
+    ws = _get_or_404(WorkSchedule, id)
     data = request.json
     ws.date = data.get('date', ws.date)
     ws.start_time = data.get('start_time', ws.start_time)
@@ -2729,7 +2708,7 @@ def admin_update_work_schedule(id):
 
 @app.route('/api/admin/work-schedule/<int:id>', methods=['DELETE'])
 def admin_delete_work_schedule(id):
-    ws = WorkSchedule.query.get_or_404(id)
+    ws = _get_or_404(WorkSchedule, id)
     db.session.delete(ws)
     db.session.commit()
     return jsonify({'message': 'Đã xóa ca khám!'})
@@ -2838,7 +2817,7 @@ def create_doctor_template():
 def update_doctor_template(id):
     """Cập nhật mẫu bác sĩ"""
     try:
-        template = DoctorTemplate.query.get_or_404(id)
+        template = _get_or_404(DoctorTemplate, id)
         data = request.json
         name = data.get('name', '').strip()
         
@@ -2866,7 +2845,7 @@ def update_doctor_template(id):
 def delete_doctor_template(id):
     """Xóa mẫu bác sĩ"""
     try:
-        template = DoctorTemplate.query.get_or_404(id)
+        template = _get_or_404(DoctorTemplate, id)
         db.session.delete(template)
         db.session.commit()
         
@@ -2949,7 +2928,7 @@ def create_shift_template():
 def update_shift_template(id):
     """Update a shift template."""
     try:
-        template = ShiftTemplate.query.get_or_404(id)
+        template = _get_or_404(ShiftTemplate, id)
         data = request.json
         
         if 'name' in data:
@@ -3031,7 +3010,7 @@ def create_medical_chart():
 def update_medical_chart(id):
     """Update a medical chart."""
     try:
-        chart = MedicalChart.query.get_or_404(id)
+        chart = _get_or_404(MedicalChart, id)
         data = request.json
         
         if 'name' in data:
@@ -3055,7 +3034,7 @@ def update_medical_chart(id):
 def delete_medical_chart(id):
     """Delete a medical chart."""
     try:
-        chart = MedicalChart.query.get_or_404(id)
+        chart = _get_or_404(MedicalChart, id)
         
         # Không cho phép xóa bảng biểu có sẵn
         if chart.is_predefined:
@@ -3073,7 +3052,7 @@ def delete_medical_chart(id):
 def get_medical_chart(id):
     """Get a specific medical chart."""
     try:
-        chart = MedicalChart.query.get_or_404(id)
+        chart = _get_or_404(MedicalChart, id)
         return jsonify({
             'id': chart.id,
             'name': chart.name,
@@ -3091,7 +3070,7 @@ def get_medical_chart(id):
 def delete_shift_template(id):
     """Delete a shift template."""
     try:
-        template = ShiftTemplate.query.get_or_404(id)
+        template = _get_or_404(ShiftTemplate, id)
         db.session.delete(template)
         db.session.commit()
         return jsonify({'message': 'Đã xóa ca khám mẫu thành công!'})
@@ -3242,7 +3221,7 @@ def create_pregnancy_utility():
 def update_pregnancy_utility(id):
     """Update a pregnancy utility."""
     try:
-        utility = PregnancyUtility.query.get_or_404(id)
+        utility = _get_or_404(PregnancyUtility, id)
         data = request.json
         
         if not data:
@@ -3304,7 +3283,7 @@ def update_pregnancy_utility(id):
 def delete_pregnancy_utility(id):
     """Delete a pregnancy utility."""
     try:
-        utility = PregnancyUtility.query.get_or_404(id)
+        utility = _get_or_404(PregnancyUtility, id)
         db.session.delete(utility)
         db.session.commit()
         return jsonify({'message': 'Đã xóa tiện ích thành công!'})
@@ -3412,7 +3391,7 @@ def create_clinical_service_package():
 
         # Add selected services to the package
         for service_id in service_ids:
-            service = ClinicalServiceSetting.query.get(service_id)
+            service = db.session.get(ClinicalServiceSetting, service_id)
             if service:
                 new_package.services.append(service)
             
@@ -3449,7 +3428,7 @@ def get_clinical_service_packages():
 
 @app.route('/api/clinical-service-packages/<int:id>', methods=['DELETE'])
 def delete_clinical_service_package(id):
-    package = ClinicalServicePackage.query.get_or_404(id)
+    package = _get_or_404(ClinicalServicePackage, id)
     try:
         db.session.delete(package)
         db.session.commit()
@@ -3461,7 +3440,7 @@ def delete_clinical_service_package(id):
 
 @app.route('/api/clinical-service-packages/<int:package_id>', methods=['PUT'])
 def update_clinical_service_package(package_id):
-    package = ClinicalServicePackage.query.get_or_404(package_id)
+    package = _get_or_404(ClinicalServicePackage, package_id)
     data = request.json
     name = data.get('name')
     price = data.get('price')
@@ -3488,7 +3467,7 @@ def update_clinical_service_package(package_id):
             package.services.clear()
             # Add new associations
             for service_id in service_ids:
-                service = ClinicalServiceSetting.query.get(service_id)
+                service = db.session.get(ClinicalServiceSetting, service_id)
                 if service:
                     package.services.append(service)
             
@@ -3513,7 +3492,7 @@ def get_patients():
 
 @app.route('/api/appointments/<int:appointment_id>/clinical-services', methods=['GET'])
 def get_appointment_clinical_services(appointment_id):
-    appointment = Appointment.query.get_or_404(appointment_id)
+    appointment = _get_or_404(Appointment, appointment_id)
     services = appointment.clinical_services
     return jsonify([{
         'id': s.id,  # id của bản ghi ClinicalService (liên kết)
@@ -3529,7 +3508,7 @@ def add_appointment_clinical_service(appointment_id):
     # Ensure backward-compatible columns exist on older databases before selecting service
     ensure_clinical_service_setting_columns()
     try:
-        appointment = Appointment.query.get_or_404(appointment_id)
+        appointment = _get_or_404(Appointment, appointment_id)
         data = request.json or {}
         raw_service_id = data.get('service_id')
         if raw_service_id is None:
@@ -3540,7 +3519,7 @@ def add_appointment_clinical_service(appointment_id):
             return jsonify({'message': 'service_id must be an integer'}), 400
 
         # Kiểm tra service tồn tại
-        service = ClinicalServiceSetting.query.get_or_404(service_id)
+        service = _get_or_404(ClinicalServiceSetting, service_id)
 
         # Thêm mới bản ghi ClinicalService (không dùng relationship append)
         clinical_service = ClinicalService(appointment_id=appointment_id, service_id=service_id)
@@ -3801,7 +3780,7 @@ def update_checkin_status(checkin_id):
         if new_status not in ['waiting', 'serving', 'completed']:
             return jsonify({'error': 'Trạng thái không hợp lệ'}), 400
         
-        checkin = CheckIn.query.get_or_404(checkin_id)
+        checkin = _get_or_404(CheckIn, checkin_id)
         checkin.status = new_status
         
         db.session.commit()
@@ -3891,7 +3870,7 @@ def add_quick_link():
 def delete_quick_link(link_id):
     """Xóa website."""
     try:
-        link = QuickLink.query.get_or_404(link_id)
+        link = _get_or_404(QuickLink, link_id)
         db.session.delete(link)
         db.session.commit()
         return jsonify({'success': True, 'message': 'Đã xóa'})
@@ -4239,7 +4218,8 @@ def ensure_logo_position_column():
         
         if 'logo_position' not in columns:
             # Thêm cột mới
-            db.engine.execute('ALTER TABLE clinical_form_template ADD COLUMN logo_position VARCHAR(20) DEFAULT "left"')
+            db.session.execute(text('ALTER TABLE clinical_form_template ADD COLUMN logo_position VARCHAR(20) DEFAULT "left"'))
+            db.session.commit()
             print("Added logo_position column to clinical_form_template table")
         else:
             print("logo_position column already exists")
@@ -4325,7 +4305,7 @@ def create_lab_price():
 def update_lab_price(price_id):
     """Cập nhật giá xét nghiệm"""
     try:
-        price = LabPrice.query.get_or_404(price_id)
+        price = _get_or_404(LabPrice, price_id)
         data = request.json
         
         if 'name' in data:
@@ -4357,7 +4337,7 @@ def update_lab_price(price_id):
 def delete_lab_price(price_id):
     """Xóa giá xét nghiệm"""
     try:
-        price = LabPrice.query.get_or_404(price_id)
+        price = _get_or_404(LabPrice, price_id)
         db.session.delete(price)
         db.session.commit()
         return jsonify({'message': 'Đã xóa giá xét nghiệm thành công'})
@@ -4470,14 +4450,14 @@ def update_clinical_form_header():
 def get_appointment_full_info(appointment_id):
     """Lấy đầy đủ thông tin cuộc hẹn bao gồm chẩn đoán và dịch vụ cận lâm sàng"""
     try:
-        appointment = Appointment.query.get_or_404(appointment_id)
+        appointment = _get_or_404(Appointment, appointment_id)
         medical_record = MedicalRecord.query.filter_by(appointment_id=appointment_id).first()
         
         # Lấy danh sách dịch vụ cận lâm sàng
         clinical_services = ClinicalService.query.filter_by(appointment_id=appointment_id).all()
         services_list = []
         for service in clinical_services:
-            service_setting = ClinicalServiceSetting.query.get(service.service_id)
+            service_setting = db.session.get(ClinicalServiceSetting, service.service_id)
             if service_setting:
                 services_list.append({
                     'id': service.id,
@@ -4639,7 +4619,7 @@ def create_special_template():
 @app.route('/api/special-templates/<int:template_id>', methods=['PUT'])
 def update_special_template(template_id):
     try:
-        template = SpecialTemplate.query.get_or_404(template_id)
+        template = _get_or_404(SpecialTemplate, template_id)
         data = request.json
         
         if data.get('name'):
@@ -4667,7 +4647,7 @@ def update_special_template(template_id):
 @app.route('/api/special-templates/<int:template_id>', methods=['DELETE'])
 def delete_special_template(template_id):
     try:
-        template = SpecialTemplate.query.get_or_404(template_id)
+        template = _get_or_404(SpecialTemplate, template_id)
         db.session.delete(template)
         db.session.commit()
         return jsonify({'message': 'Đã xóa mẫu đặc biệt thành công'})
@@ -5006,7 +4986,7 @@ def delete_all_prescription_templates():
 @app.route('/api/prescription-templates/<int:template_id>', methods=['PUT'])
 def update_prescription_template(template_id):
     try:
-        template = PrescriptionTemplate.query.get_or_404(template_id)
+        template = _get_or_404(PrescriptionTemplate, template_id)
         data = request.json
         
         if data.get('name'):
@@ -5032,7 +5012,7 @@ def update_prescription_template(template_id):
 @app.route('/api/prescription-templates/<int:template_id>', methods=['DELETE'])
 def delete_prescription_template(template_id):
     try:
-        template = PrescriptionTemplate.query.get_or_404(template_id)
+        template = _get_or_404(PrescriptionTemplate, template_id)
         db.session.delete(template)
         db.session.commit()
         return jsonify({'message': 'Đã xóa đơn thuốc mẫu thành công'})
@@ -5091,7 +5071,7 @@ def create_medication():
 @app.route('/api/medications/<int:medication_id>', methods=['PUT'])
 def update_medication(medication_id):
     try:
-        medication = Medication.query.get_or_404(medication_id)
+        medication = _get_or_404(Medication, medication_id)
         data = request.json
         
         if data.get('name'):
@@ -5123,7 +5103,7 @@ def update_medication(medication_id):
 @app.route('/api/medications/<int:medication_id>', methods=['DELETE'])
 def delete_medication(medication_id):
     try:
-        medication = Medication.query.get_or_404(medication_id)
+        medication = _get_or_404(Medication, medication_id)
         db.session.delete(medication)
         db.session.commit()
         return jsonify({'message': 'Đã xóa thuốc thành công'})
@@ -5182,7 +5162,7 @@ def create_prescription():
 @app.route('/api/prescriptions/<int:prescription_id>', methods=['PUT'])
 def update_prescription(prescription_id):
     try:
-        prescription = Prescription.query.get_or_404(prescription_id)
+        prescription = _get_or_404(Prescription, prescription_id)
         data = request.json
         
         if data.get('patient_name'):
@@ -5214,7 +5194,7 @@ def update_prescription(prescription_id):
 @app.route('/api/prescriptions/<int:prescription_id>', methods=['DELETE'])
 def delete_prescription(prescription_id):
     try:
-        prescription = Prescription.query.get_or_404(prescription_id)
+        prescription = _get_or_404(Prescription, prescription_id)
         db.session.delete(prescription)
         db.session.commit()
         return jsonify({'message': 'Đã xóa đơn thuốc thành công'})
@@ -5286,7 +5266,7 @@ def create_test_meaning():
 @app.route('/api/test-meanings/<int:test_id>', methods=['PUT'])
 def update_test_meaning(test_id):
     try:
-        test = TestMeaning.query.get_or_404(test_id)
+        test = _get_or_404(TestMeaning, test_id)
         data = request.json
         
         if data.get('name'):
@@ -5318,7 +5298,7 @@ def update_test_meaning(test_id):
 @app.route('/api/test-meanings/<int:test_id>', methods=['DELETE'])
 def delete_test_meaning(test_id):
     try:
-        test = TestMeaning.query.get_or_404(test_id)
+        test = _get_or_404(TestMeaning, test_id)
         db.session.delete(test)
         db.session.commit()
         return jsonify({'message': 'Đã xóa xét nghiệm thành công'})
@@ -5384,7 +5364,7 @@ def create_disease_test():
 @app.route('/api/disease-tests/<int:disease_id>', methods=['PUT'])
 def update_disease_test(disease_id):
     try:
-        disease = DiseaseTest.query.get_or_404(disease_id)
+        disease = _get_or_404(DiseaseTest, disease_id)
         data = request.json
         
         if data.get('name'):
@@ -5412,7 +5392,7 @@ def update_disease_test(disease_id):
 @app.route('/api/disease-tests/<int:disease_id>', methods=['DELETE'])
 def delete_disease_test(disease_id):
     try:
-        disease = DiseaseTest.query.get_or_404(disease_id)
+        disease = _get_or_404(DiseaseTest, disease_id)
         db.session.delete(disease)
         db.session.commit()
         return jsonify({'message': 'Đã xóa bệnh lý thành công'})
@@ -5486,7 +5466,7 @@ def create_patient_record():
 def update_patient_record(record_id):
     try:
         ensure_patient_record_columns()
-        record = PatientRecord.query.get_or_404(record_id)
+        record = _get_or_404(PatientRecord, record_id)
         data = request.json
         
         if data.get('patient_name'):
@@ -5519,7 +5499,7 @@ def update_patient_record(record_id):
 def delete_patient_record(record_id):
     try:
         ensure_patient_record_columns()
-        record = PatientRecord.query.get_or_404(record_id)
+        record = _get_or_404(PatientRecord, record_id)
         db.session.delete(record)
         db.session.commit()
         return jsonify({'message': 'Đã xóa hồ sơ thành công'})
@@ -5533,7 +5513,7 @@ def get_patient_record_clinical_results(record_id):
     try:
         ensure_patient_record_columns()
         ensure_clinical_result_columns()
-        record = PatientRecord.query.get_or_404(record_id)
+        record = _get_or_404(PatientRecord, record_id)
 
         results = []
         try:
@@ -5650,7 +5630,7 @@ def create_lab_result_group():
         group_id = data.get('id') or data['name'].lower().replace(' ', '-').replace('+', '-plus')
         
         # Kiểm tra ID trùng lặp
-        if LabResultGroup.query.get(group_id):
+        if db.session.get(LabResultGroup, group_id):
             return jsonify({'message': 'ID nhóm đã tồn tại'}), 400
         
         group = LabResultGroup(
@@ -5677,7 +5657,7 @@ def create_lab_result_group():
         return jsonify({'message': f'Lỗi khi tạo nhóm: {str(e)}'}), 500
 def update_lab_result_group(group_id):
     try:
-        group = LabResultGroup.query.get_or_404(group_id)
+        group = _get_or_404(LabResultGroup, group_id)
         data = request.json
         
         if data.get('name'):
@@ -5706,7 +5686,7 @@ def update_lab_result_group(group_id):
 @app.route('/api/lab-result-groups/<string:group_id>', methods=['DELETE'])
 def delete_lab_result_group(group_id):
     try:
-        group = LabResultGroup.query.get_or_404(group_id)
+        group = _get_or_404(LabResultGroup, group_id)
         
         # Không cho phép xóa nhóm mặc định
         if group.is_default:
@@ -5738,7 +5718,7 @@ def initialize_default_groups():
         ]
         
         for group_data in default_groups:
-            existing_group = LabResultGroup.query.get(group_data['id'])
+            existing_group = db.session.get(LabResultGroup, group_data['id'])
             if not existing_group:
                 group = LabResultGroup(**group_data)
                 db.session.add(group)
@@ -5753,17 +5733,17 @@ def ensure_lab_result_template_columns():
     """Đảm bảo các cột cần thiết tồn tại trong bảng lab_result_template"""
     try:
         # Kiểm tra xem các cột đã tồn tại chưa
-        result = db.engine.execute(db.text("PRAGMA table_info(lab_result_template)"))
+        result = db.session.execute(text("PRAGMA table_info(lab_result_template)"))
         columns = [row[1] for row in result]
         
         if 'updated_at' not in columns:
-            # Thêm cột updated_at nếu chưa có
-            db.engine.execute(db.text("ALTER TABLE lab_result_template ADD COLUMN updated_at DATETIME"))
+            db.session.execute(text("ALTER TABLE lab_result_template ADD COLUMN updated_at DATETIME"))
+            db.session.commit()
             print("Added updated_at column to lab_result_template table")
             
         if 'category' not in columns:
-            # Thêm cột category nếu chưa có
-            db.engine.execute(db.text("ALTER TABLE lab_result_template ADD COLUMN category VARCHAR(50) DEFAULT 'other-test'"))
+            db.session.execute(text("ALTER TABLE lab_result_template ADD COLUMN category VARCHAR(50) DEFAULT 'other-test'"))
+            db.session.commit()
             print("Added category column to lab_result_template table")
     except Exception as e:
         print(f"Error ensuring lab_result_template columns: {e}")
@@ -5862,7 +5842,7 @@ def get_lab_result_template_by_name():
 def update_lab_result_template(template_id):
     ensure_lab_result_template_columns()
     try:
-        template = LabResultTemplate.query.get_or_404(template_id)
+        template = _get_or_404(LabResultTemplate, template_id)
         data = request.json
         
         if data.get('name'):
@@ -5894,7 +5874,7 @@ def update_lab_result_template(template_id):
 def delete_lab_result_template(template_id):
     ensure_lab_result_template_columns()
     try:
-        template = LabResultTemplate.query.get_or_404(template_id)
+        template = _get_or_404(LabResultTemplate, template_id)
         db.session.delete(template)
         db.session.commit()
         return jsonify({'message': 'Đã xóa mẫu kết quả thành công'})
@@ -6122,7 +6102,7 @@ def create_clinical_result_with_pdf():
 def get_clinical_result_pdf(result_id):
     """Lấy file PDF của kết quả cận lâm sàng để xem"""
     try:
-        result = ClinicalResult.query.get_or_404(result_id)
+        result = _get_or_404(ClinicalResult, result_id)
         if not result.pdf_file_path or not os.path.exists(result.pdf_file_path):
             return jsonify({'message': 'File PDF không tồn tại'}), 404
         
@@ -6134,7 +6114,7 @@ def get_clinical_result_pdf(result_id):
 def delete_clinical_result_pdf(result_id):
     """Xóa file PDF của kết quả cận lâm sàng"""
     try:
-        result = ClinicalResult.query.get_or_404(result_id)
+        result = _get_or_404(ClinicalResult, result_id)
         if result.pdf_file_path and os.path.exists(result.pdf_file_path):
             os.remove(result.pdf_file_path)
         
@@ -6151,7 +6131,7 @@ def update_clinical_result(result_id):
     """Cập nhật kết quả cận lâm sàng"""
     ensure_clinical_result_columns()
     try:
-        result = ClinicalResult.query.get_or_404(result_id)
+        result = _get_or_404(ClinicalResult, result_id)
         data = request.json or {}
 
         if 'exam_date' in data and data['exam_date']:
@@ -6307,7 +6287,7 @@ def create_treatment_plan():
 @app.route('/api/treatment-plans/<int:plan_id>', methods=['PUT'])
 def update_treatment_plan(plan_id):
     try:
-        plan = TreatmentPlan.query.get_or_404(plan_id)
+        plan = _get_or_404(TreatmentPlan, plan_id)
         data = request.json
         
         if data.get('name'):
@@ -6344,7 +6324,7 @@ def update_treatment_plan(plan_id):
 def delete_treatment_plan(plan_id):
     """Xóa phác đồ từ bảng TreatmentPlan"""
     try:
-        plan = TreatmentPlan.query.get_or_404(plan_id)
+        plan = _get_or_404(TreatmentPlan, plan_id)
         file_path = plan.file_path
         if file_path and not os.path.isabs(file_path):
             file_path = os.path.join(app.root_path, file_path)
@@ -6368,7 +6348,7 @@ def delete_treatment_plan_unified(plan_id):
         if plan_id.startswith('tp-'):
             # TreatmentPlan
             pid = int(plan_id[3:])
-            plan = TreatmentPlan.query.get_or_404(pid)
+            plan = _get_or_404(TreatmentPlan, pid)
             file_path = plan.file_path
             if file_path and not os.path.isabs(file_path):
                 file_path = os.path.join(app.root_path, file_path)
@@ -6383,7 +6363,7 @@ def delete_treatment_plan_unified(plan_id):
         elif plan_id.startswith('pf-'):
             # PricingFile
             pid = int(plan_id[3:])
-            pf = PricingFile.query.get_or_404(pid)
+            pf = _get_or_404(PricingFile, pid)
             file_path = pf.file_path
             if file_path and not os.path.isabs(file_path):
                 file_path = os.path.join(app.root_path, file_path)
@@ -6490,14 +6470,14 @@ def _resolve_treatment_plan_file(plan_id):
         plan_id = f'tp-{plan_id}'
     if plan_id.startswith('tp-'):
         pid = int(plan_id[3:])
-        plan = TreatmentPlan.query.get(pid)
+        plan = db.session.get(TreatmentPlan, pid)
         if not plan or not plan.file_path:
             return None, 'Không tìm thấy phác đồ'
         file_path = plan.file_path
         file_name = plan.file_name
     elif plan_id.startswith('pf-'):
         pid = int(plan_id[3:])
-        pf = PricingFile.query.get(pid)
+        pf = db.session.get(PricingFile, pid)
         if not pf or not pf.file_path:
             return None, 'Không tìm thấy file'
         file_path = pf.file_path
@@ -6747,7 +6727,7 @@ def create_ctg_result():
 def get_ctg_result(ctg_id):
     """Lấy chi tiết kết quả CTG"""
     try:
-        ctg_result = CTGResult.query.get_or_404(ctg_id)
+        ctg_result = _get_or_404(CTGResult, ctg_id)
         return jsonify(ctg_result.to_dict())
     except Exception as e:
         return jsonify({'message': f'Lỗi khi lấy kết quả CTG: {str(e)}'}), 500
@@ -6756,7 +6736,7 @@ def get_ctg_result(ctg_id):
 def update_ctg_result(ctg_id):
     """Cập nhật kết quả CTG"""
     try:
-        ctg_result = CTGResult.query.get_or_404(ctg_id)
+        ctg_result = _get_or_404(CTGResult, ctg_id)
         data = request.json
         
         if data.get('exam_date'):
@@ -6786,7 +6766,7 @@ def update_ctg_result(ctg_id):
 def delete_ctg_result(ctg_id):
     """Xóa kết quả CTG"""
     try:
-        ctg_result = CTGResult.query.get_or_404(ctg_id)
+        ctg_result = _get_or_404(CTGResult, ctg_id)
         db.session.delete(ctg_result)
         db.session.commit()
         
@@ -7548,7 +7528,7 @@ def get_ultrasound_results():
                 query = query.filter_by(appointment_id=appointment_id)
             except Exception:
                 # Fallback: Get patient_id from appointment
-                appointment = Appointment.query.get(appointment_id)
+                appointment = db.session.get(Appointment, appointment_id)
                 if appointment:
                     query = query.filter_by(patient_id=appointment.patient_id)
         
@@ -7562,7 +7542,7 @@ def get_ultrasound_result(result_id):
     """Lấy chi tiết kết quả siêu âm"""
     ensure_ultrasound_result_columns()  # Ensure column exists
     try:
-        result = UltrasoundResult.query.get_or_404(result_id)
+        result = _get_or_404(UltrasoundResult, result_id)
         return jsonify(result.to_dict())
     except Exception as e:
         return jsonify({'message': f'Lỗi khi lấy kết quả siêu âm: {str(e)}'}), 500
@@ -7572,7 +7552,7 @@ def update_ultrasound_result(result_id):
     """Cập nhật kết quả siêu âm"""
     ensure_ultrasound_result_columns()  # Ensure column exists
     try:
-        result = UltrasoundResult.query.get_or_404(result_id)
+        result = _get_or_404(UltrasoundResult, result_id)
         data = request.json
         
         if data.get('exam_date'):
@@ -8070,7 +8050,7 @@ def update_artificial_cycle(cycle_id):
     """Cập nhật vòng kinh nhân tạo"""
     try:
         data = request.json or {}
-        cycle = ArtificialCycle.query.get(cycle_id)
+        cycle = db.session.get(ArtificialCycle, cycle_id)
         if not cycle:
             return jsonify({'success': False, 'message': 'Không tìm thấy phác đồ'}), 404
 
@@ -8243,7 +8223,7 @@ def save_patient_vital():
         if patient_pid:
             patient = Patient.query.filter_by(patient_id=patient_pid).first()
         elif patient_db_id:
-            patient = Patient.query.get(int(patient_db_id))
+            patient = db.session.get(Patient, int(patient_db_id))
 
         if not patient:
             return jsonify({'success': False, 'message': 'Không tìm thấy bệnh nhân. Vui lòng cung cấp patient_pid hợp lệ.'}), 404
@@ -8276,20 +8256,11 @@ def get_users():
             return jsonify({'error': 'Forbidden'}), 403
         # Lấy danh sách users bằng SQL thuần để tránh lỗi relationship
         user_rows = db.session.execute(
-            """
-            SELECT id, username, full_name, email, status, created_at, last_login
-            FROM user
-            ORDER BY id DESC
-            """
+            text("SELECT id, username, full_name, email, status, created_at, last_login FROM user ORDER BY id DESC")
         ).fetchall()
 
-        # Lấy tất cả roles cho các user và gộp theo user_id
         role_rows = db.session.execute(
-            """
-            SELECT ur.user_id, r.name
-            FROM user_roles ur
-            JOIN role r ON r.id = ur.role_id
-            """
+            text("SELECT ur.user_id, r.name FROM user_roles ur JOIN role r ON r.id = ur.role_id")
         ).fetchall()
 
         user_id_to_roles = {}
@@ -8373,22 +8344,15 @@ def get_user(user_id):
         if not me_id or not has_permission(me_id, 'manage_users'):
             return jsonify({'error': 'Forbidden'}), 403
         row = db.session.execute(
-            """
-            SELECT id, username, full_name, email, status, created_at, last_login
-            FROM user WHERE id = :user_id
-            """,
-            { 'user_id': user_id }
+            text("SELECT id, username, full_name, email, status, created_at, last_login FROM user WHERE id = :user_id"),
+            {'user_id': user_id}
         ).fetchone()
         if not row:
             return jsonify({'error': 'User not found'}), 404
 
         roles_rows = db.session.execute(
-            """
-            SELECT r.name FROM role r
-            JOIN user_roles ur ON r.id = ur.role_id
-            WHERE ur.user_id = :user_id
-            """,
-            { 'user_id': user_id }
+            text("SELECT r.name FROM role r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = :user_id"),
+            {'user_id': user_id}
         ).fetchall()
 
         roles = [r[0].lower() for r in roles_rows]
@@ -8417,7 +8381,7 @@ def update_user(user_id):
         me_id = get_user_from_token(token)
         if not me_id or not has_permission(me_id, 'manage_users'):
             return jsonify({'error': 'Forbidden'}), 403
-        user = User.query.get_or_404(user_id)
+        user = _get_or_404(User, user_id)
         data = request.json
         
         # Kiểm tra username và email có bị trùng không (trừ user hiện tại)
@@ -8464,15 +8428,15 @@ def delete_user(user_id):
         # Xóa liên kết role trước để tránh lỗi ràng buộc
         try:
             db.session.execute(
-                'DELETE FROM user_roles WHERE user_id = :uid',
-                { 'uid': user_id }
+                text('DELETE FROM user_roles WHERE user_id = :uid'),
+                {'uid': user_id}
             )
         except Exception:
             # Bỏ qua nếu bảng không tồn tại
             pass
 
         # Xóa user
-        user = User.query.get_or_404(user_id)
+        user = _get_or_404(User, user_id)
         db.session.delete(user)
         db.session.commit()
         return '', 204
@@ -8507,7 +8471,8 @@ def ensure_user_status_column():
         inspector = inspect(db.engine)
         columns = [col['name'] for col in inspector.get_columns('user')]
         if 'status' not in columns:
-            db.engine.execute('ALTER TABLE user ADD COLUMN status VARCHAR(20) DEFAULT "active"')
+            db.session.execute(text('ALTER TABLE user ADD COLUMN status VARCHAR(20) DEFAULT "active"'))
+            db.session.commit()
             print("Added status column to user table")
     except Exception as e:
         print("Error adding status column:", e)
@@ -8541,7 +8506,7 @@ def initialize_default_role_permissions():
     try:
         ensure_role_permission_table()
         # If role_permission already has rows, do nothing
-        existing = db.session.execute("SELECT 1 FROM role_permission LIMIT 1").fetchone()
+        existing = db.session.execute(text("SELECT 1 FROM role_permission LIMIT 1")).fetchone()
         if existing:
             return
         defaults = {
@@ -8602,7 +8567,7 @@ def api_get_role_permissions():
     try:
         ensure_role_permission_table()
         rows = db.session.execute(
-            "SELECT role_name, permission_key FROM role_permission"
+            text("SELECT role_name, permission_key FROM role_permission")
         ).fetchall()
         mapping = {}
         for role_name, perm in rows:
@@ -8617,7 +8582,7 @@ def api_put_role_permissions():
         ensure_role_permission_table()
         data = request.json or {}
         # Replace all
-        db.session.execute('DELETE FROM role_permission')
+        db.session.execute(text('DELETE FROM role_permission'))
         for role_name, perms in data.items():
             if not isinstance(perms, list):
                 continue
@@ -8643,7 +8608,7 @@ def forgot_password():
         
         # Kiểm tra user có tồn tại không
         result = db.session.execute(
-            "SELECT id, username, full_name, email FROM user WHERE username = :username AND email = :email",
+            text("SELECT id, username, full_name, email FROM user WHERE username = :username AND email = :email"),
             {"username": username, "email": email}
         ).fetchone()
         
@@ -8660,7 +8625,7 @@ def forgot_password():
         # Cập nhật mật khẩu mới
         password_hash = werkzeug.security.generate_password_hash(new_password)
         db.session.execute(
-            "UPDATE user SET password_hash = :password_hash WHERE id = :user_id",
+            text("UPDATE user SET password_hash = :password_hash WHERE id = :user_id"),
             {"password_hash": password_hash, "user_id": user_id}
         )
         db.session.commit()
@@ -9729,7 +9694,7 @@ def ai_assistant_feedback():
             return jsonify({'success': False, 'error': 'Missing interaction_id'}), 400
         
         # Cập nhật feedback cho interaction
-        interaction = AIInteraction.query.get(interaction_id)
+        interaction = db.session.get(AIInteraction, interaction_id)
         if interaction:
             interaction.user_feedback = feedback
             
@@ -9994,7 +9959,7 @@ def create_ai_knowledge():
 def get_ai_knowledge(kb_id):
     """Lấy thông tin một knowledge base"""
     try:
-        knowledge = AIKnowledgeBase.query.get(kb_id)
+        knowledge = db.session.get(AIKnowledgeBase, kb_id)
         if not knowledge:
             return jsonify({'success': False, 'error': 'Không tìm thấy knowledge base'}), 404
         
@@ -10016,7 +9981,7 @@ def get_ai_knowledge(kb_id):
 def update_ai_knowledge(kb_id):
     """Cập nhật knowledge base"""
     try:
-        knowledge = AIKnowledgeBase.query.get(kb_id)
+        knowledge = db.session.get(AIKnowledgeBase, kb_id)
         if not knowledge:
             return jsonify({'success': False, 'error': 'Không tìm thấy knowledge base'}), 404
         
@@ -10043,7 +10008,7 @@ def update_ai_knowledge(kb_id):
 def delete_ai_knowledge(kb_id):
     """Xóa knowledge base"""
     try:
-        knowledge = AIKnowledgeBase.query.get(kb_id)
+        knowledge = db.session.get(AIKnowledgeBase, kb_id)
         if not knowledge:
             return jsonify({'success': False, 'error': 'Không tìm thấy knowledge base'}), 404
         

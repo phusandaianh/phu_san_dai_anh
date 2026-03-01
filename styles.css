@@ -23,11 +23,17 @@
     box-sizing: border-box;
 }
 
+html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+
 body {
     font-family: 'Roboto', sans-serif;
     color: var(--text-color);
     line-height: 1.6;
     background-color: var(--background-color);
+    overflow-x: hidden;
 }
 
 .container {
@@ -316,6 +322,21 @@ ul {
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 2px rgba(30, 136, 229, 0.2);
+}
+
+.dob-selects {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.dob-selects select {
+    flex: 1;
+    min-width: 70px;
+}
+
+.dob-selects select:last-child {
+    min-width: 90px;
 }
 
 .submit-btn {
@@ -778,15 +799,28 @@ ul {
     animation-delay: 0.6s;
 }
 
-/* Responsive Styles */
-@media (max-width: 992px) {
+/* ========== RESPONSIVE - TABLET & SMARTPHONE ========== */
+/* Breakpoints: Tablet 768-1024px | Smartphone < 768px | Small phone < 480px */
+
+/* Tablet (768px - 1024px) */
+@media (max-width: 1024px) {
+    .container {
+        padding: 0 16px;
+    }
+    
     .appointment-container,
     .contact-container {
         grid-template-columns: 1fr;
+        gap: 30px;
     }
     
     .logo {
         font-size: 1.5rem;
+    }
+    
+    .clinic-logo {
+        width: 60px;
+        height: 60px;
     }
     
     .main-nav ul {
@@ -794,55 +828,376 @@ ul {
     }
     
     .nav-link {
-        padding: 6px 10px;
+        padding: 8px 12px;
         font-size: 0.9rem;
     }
-}
-
-@media (max-width: 768px) {
-    .header .container {
-        flex-direction: column;
-        gap: 15px;
-    }
     
-    .main-nav ul {
-        flex-wrap: wrap;
-        justify-content: center;
+    .hero-section {
+        padding: 120px 0 80px;
     }
     
     .hero-content h2 {
         font-size: 2.2rem;
     }
     
+    .services-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+    }
+    
+    .contact-map iframe {
+        min-height: 350px;
+    }
+}
+
+/* Smartphone (480px - 768px) */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 12px;
+    }
+    
+    /* Header - chuẩn bị cho hamburger */
+    .header {
+        padding: 12px 0;
+    }
+    
+    .header .container {
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        align-items: center;
+        position: relative;
+    }
+    
+    /* Hamburger button - ẩn trên desktop */
+    .nav-toggle {
+        display: none;
+    }
+    
+    .nav-toggle-label {
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        gap: 5px;
+        width: 44px;
+        height: 44px;
+        padding: 10px;
+        cursor: pointer;
+        background: var(--primary-color);
+        color: white;
+        border-radius: var(--border-radius);
+        z-index: 1001;
+        transition: var(--transition);
+    }
+    
+    .nav-toggle-label span {
+        display: block;
+        width: 22px;
+        height: 2px;
+        background: currentColor;
+        border-radius: 1px;
+        transition: var(--transition);
+    }
+    
+    .nav-toggle:checked ~ .nav-toggle-label span:nth-child(1) {
+        transform: rotate(45deg) translate(5px, 5px);
+    }
+    
+    .nav-toggle:checked ~ .nav-toggle-label span:nth-child(2) {
+        opacity: 0;
+    }
+    
+    .nav-toggle:checked ~ .nav-toggle-label span:nth-child(3) {
+        transform: rotate(-45deg) translate(5px, -5px);
+    }
+    
+    /* Mobile nav - dropdown khi có hamburger */
+    .header.has-mobile-nav .nav-toggle-label {
+        display: flex;
+    }
+    
+    .header.has-mobile-nav .main-nav {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: min(85vw, 320px);
+        background: var(--white);
+        box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+        padding: 80px 20px 20px;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+        z-index: 1000;
+        overflow-y: auto;
+    }
+    
+    .nav-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 999;
+        cursor: pointer;
+    }
+    
+    .nav-toggle:checked ~ .nav-overlay {
+        display: block;
+    }
+    
+    .header.has-mobile-nav .nav-toggle:checked ~ .main-nav {
+        transform: translateX(0);
+    }
+    
+    .header.has-mobile-nav .main-nav ul {
+        flex-direction: column;
+        gap: 0;
+        align-items: stretch;
+    }
+    
+    .header.has-mobile-nav .nav-link {
+        display: block;
+        padding: 14px 16px;
+        min-height: 44px;
+        border-radius: var(--border-radius);
+        margin-bottom: 4px;
+    }
+    
+    /* Fallback khi không có hamburger - nav wrap */
+    .main-nav ul {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+    }
+    
+    .logo-container {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .logo {
+        font-size: 1.3rem;
+    }
+    
+    .slogan {
+        font-size: 0.8rem;
+    }
+    
+    /* Hero - giảm padding cho mobile */
+    .hero-section {
+        padding: 100px 0 60px;
+        padding-top: max(100px, env(safe-area-inset-top));
+    }
+    
+    .hero-content h2 {
+        font-size: 1.75rem;
+        line-height: 1.3;
+        margin-bottom: 16px;
+    }
+    
     .service-highlight {
-        font-size: 1.2rem;
+        font-size: 1.1rem;
+    }
+    
+    .service-highlight-sub {
+        font-size: 1rem;
+        margin-bottom: 24px;
     }
     
     .cta-buttons {
         flex-direction: column;
-        gap: 15px;
+        gap: 12px;
+        margin-top: 24px;
+    }
+    
+    .cta-buttons .btn {
+        width: 100%;
+        min-height: 44px;
+        padding: 14px 20px;
     }
     
     .section-title {
-        font-size: 2rem;
+        font-size: 1.75rem;
+        margin-bottom: 28px;
     }
-}
-
-@media (max-width: 576px) {
+    
+    .services-section,
+    .appointment-section,
+    .contact-section,
+    .schedule-section {
+        padding: 50px 0;
+    }
+    
+    .services-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    .service-card {
+        padding: 24px 20px;
+    }
+    
     .appointment-form {
-        padding: 20px;
+        padding: 24px 20px;
+    }
+    
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        min-height: 44px;
+        font-size: 16px; /* Tránh zoom trên iOS */
+    }
+    
+    /* Date picker responsive */
+    .form-group div[style*="display: flex"] {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .form-group div[style*="display: flex"] select {
+        flex: 1;
+        min-width: 70px;
     }
     
     .info-card {
-        padding: 20px;
+        padding: 24px 20px;
+    }
+    
+    .contact-map iframe {
+        min-height: 280px;
     }
     
     .schedule-container {
-        padding: 20px;
+        padding: 20px 12px;
+        margin: 0 -12px;
+        border-radius: 0;
+    }
+    
+    .schedule-table th,
+    .schedule-table td {
+        padding: 10px 8px;
+        font-size: 0.9rem;
+    }
+    
+    /* Floating Zalo - tránh notch */
+    .floating-zalo {
+        bottom: max(20px, env(safe-area-inset-bottom));
+        right: max(16px, env(safe-area-inset-right));
+    }
+    
+    .floating-zalo a {
+        width: 52px;
+        height: 52px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+    
+    .floating-zalo img {
+        width: 32px;
+        height: 32px;
+    }
+    
+    .modal-content {
+        width: 95%;
+        max-height: 85vh;
+        padding: 1.25rem;
+        margin: 1rem;
+    }
+    
+    .appointments-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .services-list {
+        grid-template-columns: 1fr;
+    }
+    
+    .service-categories {
+        grid-template-columns: 1fr;
+    }
+    
+    .service-item,
+    .contact-item {
+        grid-template-columns: 1fr;
+    }
+    
+    .delete-btn {
+        width: 100%;
+        margin-top: 0.5rem;
+    }
+    
+    .admin-tabs {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .tab-btn {
+        padding: 0.6rem 1rem;
+        font-size: 0.9rem;
+    }
+}
+
+/* Smartphone nhỏ (< 480px) */
+@media (max-width: 480px) {
+    .container {
+        padding: 0 10px;
+    }
+    
+    .clinic-logo {
+        width: 50px;
+        height: 50px;
+    }
+    
+    .logo {
+        font-size: 1.1rem;
+    }
+    
+    .hero-content h2 {
+        font-size: 1.5rem;
+    }
+    
+    .service-highlight {
+        font-size: 1rem;
+    }
+    
+    .section-title {
+        font-size: 1.5rem;
+    }
+    
+    .appointment-form,
+    .info-card {
+        padding: 20px 16px;
+    }
+    
+    .btn {
+        padding: 12px 20px;
+        min-height: 44px;
     }
     
     .footer-content {
-        gap: 30px;
+        gap: 24px;
+        margin-bottom: 30px;
+    }
+    
+    .footer-links h4,
+    .footer-contact h4 {
+        font-size: 1.1rem;
+    }
+}
+
+/* Landscape smartphone - tối ưu chiều cao */
+@media (max-height: 500px) and (orientation: landscape) {
+    .hero-section {
+        padding: 80px 0 40px;
+    }
+    
+    .hero-content h2 {
+        font-size: 1.5rem;
+    }
+    
+    .cta-buttons {
+        margin-top: 16px;
     }
 }
 

@@ -218,11 +218,16 @@
     </style>
 </head>
 <body>
-    <header class="header">
+    <header class="header has-mobile-nav">
         <div class="container">
             <div class="logo-container">
                 <img src="logo_phu_san_dai_anh.PNG" alt="Logo" class="clinic-logo">
             </div>
+            <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
+            <label for="nav-toggle" class="nav-toggle-label" aria-label="Mở menu">
+                <span></span><span></span><span></span>
+            </label>
+            <label for="nav-toggle" class="nav-overlay" aria-label="Đóng menu"></label>
             <nav class="main-nav">
                 <ul>
                     <li><a href="/examination-list.html" class="nav-link">Danh sách khám</a></li>
