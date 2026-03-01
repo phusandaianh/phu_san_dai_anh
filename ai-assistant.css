@@ -1,9 +1,10 @@
 /* AI Assistant Widget - Always Visible */
+/* AI assistant - tránh overlap với nội dung */
 .ai-assistant-container {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 10000;
+    bottom: max(20px, env(safe-area-inset-bottom));
+    right: max(16px, env(safe-area-inset-right));
+    z-index: 9999;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 

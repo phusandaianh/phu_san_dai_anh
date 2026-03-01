@@ -195,6 +195,19 @@ ul {
     box-shadow: var(--shadow);
 }
 
+/* Ẩn ô checkbox nav-toggle cạnh logo (trang chủ, links) - vẫn giữ chức năng mở/đóng menu */
+.nav-toggle {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
 
 /* Hero Section */
 .hero-section {

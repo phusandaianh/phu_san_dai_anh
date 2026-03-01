@@ -7,101 +7,124 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        /* Màu chuẩn header admin - đồng bộ với nút Danh sách khám */
+        :root {
+            --admin-btn-bg: #0369a1;
+            --admin-btn-hover: #0284c7;
+            --admin-btn-active: #0c4a6e;
+        }
+
         .admin-header {
-            background-color: #2196F3; /* Nền xanh */
-            color: white; /* Chữ trắng */
-            padding: 1rem 20px; /* Tăng padding để header to lên */
+            background: linear-gradient(135deg, #0c4a6e 0%, #0369a1 50%, #0ea5e9 100%);
+            color: white;
+            padding: 1rem 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
 
         .admin-header .logo img {
-             height: 50px; /* Điều chỉnh kích thước logo nếu cần */
-             margin-right: 10px;
+            height: 50px;
+            margin-right: 10px;
         }
 
-         .admin-header .logo {
-             display: flex;
-             align-items: center;
-             gap: 15px;
-         }
-         
-         .admin-header .logo-text {
-             display: flex;
-             flex-direction: column;
-             align-items: flex-start;
-         }
+        .admin-header .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .admin-header .logo-text {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
 
         .admin-header nav {
             display: flex;
             flex-direction: column;
-            align-items: center;
-            gap: 8px; /* Khoảng cách giữa 2 hàng */
+            align-items: flex-end;
+            gap: 10px;
         }
+
         .admin-header .nav-row {
             display: flex;
             align-items: center;
-            gap: 8px; /* Khoảng cách giữa các nút trong hàng */
+            gap: 8px;
             flex-wrap: wrap;
-            justify-content: center;
+            justify-content: flex-end;
         }
 
+        /* Nút quay lại + tất cả nút nav: cùng màu nút Danh sách khám */
         .admin-header .back-link {
-            color: white; /* Đảm bảo chữ trắng cho nút quay lại */
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-        }
-         
-        .admin-header .back-link.btn.secondary-btn {
-            /* Override default secondary button styles for white text on blue */
-            background-color: transparent;
-            border: 1px solid white;
             color: white;
-            padding: 6px 10px;
-            font-size: 0.85rem;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .admin-header .back-link.btn.secondary-btn {
+            background-color: var(--admin-btn-bg);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 8px 14px;
+            font-size: 0.9rem;
             white-space: nowrap;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .admin-header .back-link.btn.secondary-btn:hover {
+            background-color: var(--admin-btn-hover);
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(14, 165, 233, 0.4);
         }
 
         .header-nav-btn {
-            background-color: white; /* Nền trắng cho nút */
-            color: #333; /* Chữ màu tối */
-            border: 1px solid #ccc;
-            padding: 6px 10px;
+            background-color: var(--admin-btn-bg);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.25);
+            padding: 8px 14px;
             cursor: pointer;
-            border-radius: 4px;
-            transition: background-color 0.3s ease;
-            font-size: 0.85rem;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            font-size: 0.9rem;
             white-space: nowrap;
-            min-width: fit-content;
+            min-height: 38px;
             display: inline-flex;
             align-items: center;
-            gap: 4px;
+            gap: 6px;
+            text-decoration: none;
         }
 
         .header-nav-btn:hover {
-            background-color: #f0f0f0;
+            background-color: var(--admin-btn-hover);
+            color: white;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(14, 165, 233, 0.4);
         }
 
         .header-nav-btn.active {
-            background-color: #0d47a1; /* Nền xanh đậm khi active */
-            color: white; /* Chữ trắng khi active */
-            border-color: #0d47a1;
+            background-color: var(--admin-btn-active);
+            color: white;
+            border-color: rgba(255,255,255,0.4);
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
         }
 
         .header-nav-btn.checkin-btn {
-            background-color: #4caf50 !important;
+            background-color: var(--admin-btn-bg) !important;
             color: white !important;
-            border-color: #4caf50 !important;
-            font-weight: 600;
+            border-color: rgba(255,255,255,0.25) !important;
         }
 
         .header-nav-btn.checkin-btn:hover {
-            background-color: #43a047 !important;
-            border-color: #43a047 !important;
-            transform: translateY(-1px);
-            box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+            background-color: var(--admin-btn-hover) !important;
+            color: white !important;
         }
 
         .modal.hidden {
@@ -303,23 +326,23 @@
                     <i class="fas fa-qrcode"></i> Check-in QR
                 </a>
                 <a href="home-content.html" class="header-nav-btn">Nội dung trang chủ</a>
-                <a href="http://localhost:5000/dicom_viewer.html" class="header-nav-btn" style="background-color:#0ea5e9;color:white;" title="Xem/đo ảnh DICOM">
+                <a href="/templates/dicom_viewer.html" class="header-nav-btn" title="Xem/đo ảnh DICOM">
                     <i class="fas fa-x-ray"></i> DICOM Viewer
                 </a>
                 <button class="header-nav-btn" data-tab="examination-settings">Danh sách khám</button>
                 <a href="clinical-services-admin.html" class="header-nav-btn">Quản lý dịch vụ cận lâm sàng</a>
                 <a href="lab-tests.html" class="header-nav-btn">Tổng hợp danh sách xét nghiệm</a>
-                <a href="lab-tests-dai-anh.html" class="header-nav-btn" style="background-color:#1976d2;color:white;">
+                <a href="lab-tests-dai-anh.html" class="header-nav-btn">
                     <i class="fas fa-vial"></i> Danh Sách Thủ Thuật - Đại Anh
                 </a>
                 <a href="clinical-form-templates.html" class="header-nav-btn">Mẫu phiếu cận lâm sàng</a>
-                <a href="voluson-sync-admin.html" class="header-nav-btn" style="background-color: #ff9800; color: white;">
+                <a href="voluson-sync-admin.html" class="header-nav-btn">
                     <i class="fas fa-sync"></i> Đồng bộ Voluson E10
                 </a>
-                <a id="mwlAdminLink" href="mwl-admin.html" class="header-nav-btn" style="background-color: #3f51b5; color: white; display: none;">
+                <a id="mwlAdminLink" href="mwl-admin.html" class="header-nav-btn" style="display: none;">
                     <i class="fas fa-list"></i> Quản lý Worklist (MWL)
                 </a>
-                <button id="syncWorklistHeaderBtn" class="header-nav-btn" style="background-color: #00bcd4; color: white; display: none; border: none; cursor: pointer;">
+                <button id="syncWorklistHeaderBtn" class="header-nav-btn" style="display: none; border: none; cursor: pointer;">
                     <i class="fas fa-sync"></i> Đồng bộ Worklist
                 </button>
                 <a href="ctg-analysis.html" class="header-nav-btn"><i class="fas fa-heartbeat"></i> Phân tích CTG Tim Thai</a>
@@ -337,11 +360,11 @@
                 <a href="ultrasound-general.html" class="header-nav-btn"><i class="fas fa-stethoscope"></i> Siêu âm tổng quát</a>
                 <a href="staff-training.html" class="header-nav-btn"><i class="fas fa-graduation-cap"></i> Đào tạo nhân viên</a>
                 <a href="treatment-plans.html" class="header-nav-btn"><i class="fas fa-file-medical"></i> Phác đồ điều trị</a>
-                <a href="medical-charts.html" class="header-nav-btn" style="background-color: #607d8b; color: white;"><i class="fas fa-chart-line"></i> Bảng biểu</a>
-                <a href="consultation-results.html" class="header-nav-btn" style="background-color: #e91e63; color: white;"><i class="fas fa-comments"></i> Tư vấn kết quả, HTSS</a>
-                <a href="clinic-maps.html" class="header-nav-btn" style="background-color: #4caf50; color: white;"><i class="fas fa-map-marker-alt"></i> Địa chỉ Maps</a>
-                <a href="users.html" class="header-nav-btn" style="background-color: #9c27b0; color: white;"><i class="fas fa-users"></i> Quản lý người dùng</a>
-                <a href="ai-assistant-admin.html" class="header-nav-btn" style="background-color: #667eea; color: white;"><i class="fas fa-robot"></i> Quản lý trợ lý AI</a>
+                <a href="medical-charts.html" class="header-nav-btn"><i class="fas fa-chart-line"></i> Bảng biểu</a>
+                <a href="consultation-results.html" class="header-nav-btn"><i class="fas fa-comments"></i> Tư vấn kết quả, HTSS</a>
+                <a href="clinic-maps.html" class="header-nav-btn"><i class="fas fa-map-marker-alt"></i> Địa chỉ Maps</a>
+                <a href="users.html" class="header-nav-btn"><i class="fas fa-users"></i> Quản lý người dùng</a>
+                <a href="ai-assistant-admin.html" class="header-nav-btn"><i class="fas fa-robot"></i> Quản lý trợ lý AI</a>
             </div>
         </nav>
     </header>
