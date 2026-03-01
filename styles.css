@@ -1604,3 +1604,335 @@ ul {
         padding: 1rem;
     }
 }
+
+/* ========== RESPONSIVE CHO CÁC TRANG KHÁC (Admin, Booking, Lab, v.v.) ========== */
+
+/* Admin header - examination-list, admin.html */
+@media (max-width: 768px) {
+    .admin-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding: 12px 16px !important;
+    }
+    
+    .admin-header .logo {
+        flex-wrap: wrap;
+    }
+    
+    .admin-header .logo h1 {
+        font-size: 1.2rem !important;
+    }
+    
+    .admin-header nav {
+        align-items: stretch !important;
+    }
+    
+    .admin-header .nav-row {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .admin-header .nav-row a,
+    .admin-header .header-nav-btn {
+        width: 100%;
+        justify-content: center;
+        min-height: 44px;
+        padding: 12px 16px !important;
+    }
+}
+
+/* Bảng - scroll ngang trên mobile */
+.appointments-table,
+.appointments-table table,
+#appointments-body,
+table.data-table,
+.examination-list table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+    .appointments-table,
+    #appointments-body {
+        display: block;
+        overflow-x: auto;
+    }
+    
+    .appointments-table th,
+    .appointments-table td,
+    #appointments-body th,
+    #appointments-body td {
+        padding: 10px 8px;
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+    
+    .appointment-row .actions {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    
+    .appointment-row .actions button {
+        min-height: 36px;
+        padding: 6px 10px;
+    }
+}
+
+/* Work schedule - booking.html, schedule.html */
+@media (max-width: 768px) {
+    .work-schedule-section {
+        margin: 1rem 12px;
+        padding: 1rem 12px !important;
+        border-radius: 12px;
+    }
+    
+    .schedule-card {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+        padding: 1rem !important;
+    }
+    
+    .schedule-register {
+        min-width: unset !important;
+        flex-direction: row !important;
+        justify-content: flex-start !important;
+        gap: 8px;
+    }
+    
+    .register-btn {
+        flex: 1;
+        min-height: 44px;
+    }
+    
+    .header .container[style*="flex"] {
+        flex-direction: column !important;
+        align-items: center !important;
+        padding: 1rem 12px !important;
+    }
+    
+    .logo {
+        font-size: 1.2rem !important;
+        text-align: center !important;
+    }
+    
+    .clinic-subtitle,
+    .slogan {
+        font-size: 0.85rem !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .work-schedule-section {
+        margin: 0.5rem 8px;
+        padding: 0.75rem 8px !important;
+    }
+    
+    .schedule-date,
+    .schedule-time,
+    .schedule-doctor {
+        font-size: 0.95rem !important;
+    }
+}
+
+/* Links page */
+@media (max-width: 768px) {
+    .links-page {
+        padding: 80px 12px 20px !important;
+    }
+    
+    .links-header {
+        flex-direction: column;
+        align-items: stretch !important;
+    }
+    
+    .links-header h1 {
+        font-size: 1.25rem !important;
+    }
+    
+    .links-header-actions {
+        flex-wrap: wrap;
+    }
+    
+    .links-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* Lab tests header */
+@media (max-width: 768px) {
+    .header[style*="sticky"] div,
+    .header div[style*="flex"] {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 10px !important;
+    }
+    
+    .header h2 {
+        font-size: 1.1rem !important;
+    }
+    
+    .provider-badge {
+        display: block;
+        margin-top: 4px;
+    }
+}
+
+/* Examination list - filter & actions */
+@media (max-width: 768px) {
+    .examination-list > div[style*="flex"] {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+    
+    .examination-list .btn {
+        width: 100%;
+        min-height: 44px;
+    }
+    
+    .admin-main {
+        padding: 1rem 12px !important;
+    }
+}
+
+/* Search filters - patient-records, examination-list */
+@media (max-width: 768px) {
+    .search-filters {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        padding: 1rem !important;
+    }
+    
+    .search-filters input[type="text"],
+    .search-filters input[type="date"],
+    .search-filters select {
+        min-width: unset !important;
+        width: 100% !important;
+    }
+}
+
+/* Doctor schedule */
+@media (max-width: 768px) {
+    .header .container[style*="display:flex"] {
+        flex-direction: column !important;
+        text-align: center !important;
+    }
+    
+    .header .logo-text {
+        align-items: center !important;
+    }
+}
+
+/* Patient records, forms */
+@media (max-width: 768px) {
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        font-size: 16px !important; /* Tránh zoom iOS */
+    }
+    
+    input[type="text"],
+    input[type="tel"],
+    input[type="date"],
+    input[type="email"],
+    select {
+        min-height: 44px;
+        font-size: 16px !important;
+    }
+    
+    button,
+    .btn {
+        min-height: 44px;
+    }
+}
+
+/* Modal đăng ký - booking */
+@media (max-width: 480px) {
+    #register-modal .modal-content,
+    .modal-content {
+        width: 95vw !important;
+        max-width: none !important;
+        padding: 1rem !important;
+        margin: 1rem !important;
+    }
+    
+    #register-type-first,
+    #register-type-repeat {
+        font-size: 1.1rem !important;
+        padding: 14px 0 !important;
+    }
+}
+
+/* Settings modal, clinical form modal */
+@media (max-width: 768px) {
+    .settings-card {
+        width: 95% !important;
+        padding: 1rem !important;
+    }
+    
+    .settings-row {
+        grid-template-columns: 1fr !important;
+    }
+    
+    #clinical-form-modal .modal-content {
+        width: 98% !important;
+        max-height: 90vh !important;
+    }
+}
+
+/* Pregnancy utilities, tabs */
+@media (max-width: 768px) {
+    .utilities-tabs,
+    .tab-list {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .tab-btn,
+    .utility-tab {
+        flex: 1 1 auto;
+        min-width: 120px;
+    }
+}
+
+/* VR PACS, general pages */
+@media (max-width: 768px) {
+    .header-actions {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .header-actions .btn {
+        width: 100%;
+    }
+}
+
+/* Booking - lịch slot grid */
+@media (max-width: 768px) {
+    .schedule-slots,
+    .day-slots,
+    [class*="slot-grid"] {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px !important;
+    }
+    
+    .slot-btn,
+    .time-slot {
+        min-height: 44px;
+        font-size: 0.9rem;
+    }
+}
+
+/* Treatment plans, prescription, disease-tests */
+@media (max-width: 768px) {
+    .details-card,
+    .info-group,
+    .info-card {
+        padding: 1rem !important;
+    }
+    
+    .utility-card {
+        padding: 1rem !important;
+    }
+}
