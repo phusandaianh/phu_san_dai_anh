@@ -1,0 +1,11 @@
+# Đồng bộ line endings - dùng LF trong repo, tránh diff CRLF/LF
+* text=auto eol=lf
+
+# Binary files - không chuyển đổi
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.db binary
+*.pyc binary
