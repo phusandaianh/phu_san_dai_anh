@@ -19,6 +19,8 @@ from twilio.rest import Client
 import re
 import werkzeug
 import json
+import smtplib
+from email.mime.text import MIMEText
 from voluson_sync_service import get_voluson_sync_service
 import mwl_store
 
@@ -99,23 +101,139 @@ def rate_limit(key_prefix=''):
 TOKENS = {}
 TOKEN_TTL_SECONDS = 3600
 
-def register_token(token, user_id):
+# Lưu danh sách IP đã từng đăng nhập theo user để phát hiện "máy lạ"
+USER_KNOWN_IPS = defaultdict(set)
+
+def register_token(token, user_id, ip_address=None, user_agent=None, is_new_device=False):
+    """Đăng ký token đăng nhập (lưu thêm thông tin IP, user-agent)."""
+    session_id = __import__('secrets').token_hex(8)
+    now = datetime.utcnow()
     TOKENS[token] = {
         'user_id': user_id,
-        'expires_at': datetime.utcnow() + timedelta(seconds=TOKEN_TTL_SECONDS)
+        'expires_at': now + timedelta(seconds=TOKEN_TTL_SECONDS),
+        'created_at': now,
+        'last_seen': now,
+        'ip_address': ip_address or '',
+        'user_agent': user_agent or '',
+        'session_id': session_id,
+        'revoked': False,
+        'is_new_device': bool(is_new_device),
     }
+    return session_id
 
 def get_user_from_token(token):
     if not token or token not in TOKENS:
         return None
     entry = TOKENS[token]
+    if entry.get('revoked'):
+        try:
+            del TOKENS[token]
+        except Exception:
+            pass
+        return None
     if entry['expires_at'] < datetime.utcnow():
         try:
             del TOKENS[token]
         except Exception:
             pass
         return None
+    entry['last_seen'] = datetime.utcnow()
     return entry['user_id']
+
+def _find_token_by_session_id(session_id):
+    for token, info in list(TOKENS.items()):
+        if info.get('session_id') == session_id:
+            return token, info
+    return None, None
+
+def revoke_session(session_id):
+    token, info = _find_token_by_session_id(session_id)
+    if not token:
+        return False
+    info['revoked'] = True
+    try:
+        del TOKENS[token]
+    except Exception:
+        pass
+    return True
+
+PASSWORD_MIN_LENGTH = 8
+
+def validate_password_strength(password):
+    """Kiểm tra độ mạnh mật khẩu theo chính sách."""
+    if not password or len(password) < PASSWORD_MIN_LENGTH:
+        return False, "Mật khẩu phải có ít nhất 8 ký tự"
+    if not re.search(r'[A-Z]', password):
+        return False, "Mật khẩu phải có ít nhất 1 chữ hoa"
+    if not re.search(r'[a-z]', password):
+        return False, "Mật khẩu phải có ít nhất 1 chữ thường"
+    if not re.search(r'\d', password):
+        return False, "Mật khẩu phải có ít nhất 1 số"
+    if not re.search(r'[^\w\s]', password):
+        return False, "Mật khẩu phải có ít nhất 1 ký tự đặc biệt"
+    return True, ""
+
+def send_security_email(subject, body, to_email=None):
+    """Gửi email cảnh báo bảo mật, fallback sang in-console nếu chưa cấu hình SMTP."""
+    to_email = to_email or app.config.get('ADMIN_EMAIL', 'phusandaianh@gmail.com')
+    smtp_server = app.config.get('SMTP_SERVER')
+    smtp_port = int(app.config.get('SMTP_PORT', 587))
+    smtp_user = app.config.get('SMTP_USERNAME')
+    smtp_password = app.config.get('SMTP_PASSWORD')
+
+    if not smtp_server or not smtp_user or not smtp_password:
+        print("=== SECURITY EMAIL ===")
+        print("To:", to_email)
+        print("Subject:", subject)
+        print(body)
+        print("=====================")
+        return False
+
+    msg = MIMEText(body, _charset='utf-8')
+    msg['Subject'] = subject
+    msg['From'] = smtp_user
+    msg['To'] = to_email
+
+    try:
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+        return True
+    except Exception as e:
+        print("Failed to send security email:", e)
+        print("=== SECURITY EMAIL (FALLBACK) ===")
+        print("To:", to_email)
+        print("Subject:", subject)
+        print(body)
+        print("===============================")
+        return False
+
+def _get_external_base_url():
+    """Lấy base URL ngoài internet để gen link duyệt trong email."""
+    return (
+        app.config.get('EXTERNAL_BASE_URL')
+        or os.environ.get('EXTERNAL_BASE_URL')
+        or 'http://127.0.0.1:5000'
+    )
+
+def send_login_approval_request_email(username, user_id, ip_address, user_agent, approval_token):
+    """Gửi email yêu cầu admin phê duyệt đăng nhập từ máy mới."""
+    base_url = _get_external_base_url().rstrip('/')
+    approve_link = f"{base_url}/api/login-approvals/approve?token={approval_token}"
+    deny_link = f"{base_url}/api/login-approvals/deny?token={approval_token}"
+    subject = f"YÊU CẦU PHÊ DUYỆT: Đăng nhập từ máy mới cho tài khoản {username}"
+    body = (
+        f"Tài khoản: {username} (ID: {user_id})\n"
+        f"Địa chỉ IP: {ip_address}\n"
+        f"User-Agent: {user_agent}\n"
+        f"Thời gian yêu cầu: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n\n"
+        "Máy này CHƯA được phép đăng nhập. Vui lòng chọn một trong các hành động sau:\n"
+        f"- Đồng ý cho phép đăng nhập từ máy này: {approve_link}\n"
+        f"- Từ chối và chặn máy này: {deny_link}\n\n"
+        "Lưu ý: Nếu bạn không thực hiện yêu cầu này, có thể đang có truy cập trái phép."
+    )
+    send_security_email(subject, body)
 
 def require_auth(fn):
     def wrapper(*args, **kwargs):
@@ -126,7 +244,14 @@ def require_auth(fn):
         user_id = get_user_from_token(token)
         if not user_id:
             return jsonify({'error': 'Unauthorized'}), 401
-        # Attach current user id to request context via kwargs
+        user = db.session.get(User, user_id)
+        if not user:
+            return jsonify({'error': 'Unauthorized'}), 401
+        if getattr(user, 'must_change_password', False) and request.path not in ('/api/change-password', '/api/logout'):
+            return jsonify({
+                'error': 'Vui lòng đổi mật khẩu trước khi tiếp tục',
+                'code': 'PASSWORD_CHANGE_REQUIRED'
+            }), 403
         kwargs['current_user_id'] = user_id
         return fn(*args, **kwargs)
     wrapper.__name__ = fn.__name__
@@ -141,6 +266,14 @@ def require_permission(permission_key):
             user_id = get_user_from_token(token)
             if not user_id:
                 return jsonify({'error': 'Unauthorized'}), 401
+            user = db.session.get(User, user_id)
+            if not user:
+                return jsonify({'error': 'Unauthorized'}), 401
+            if getattr(user, 'must_change_password', False) and request.path not in ('/api/change-password', '/api/logout'):
+                return jsonify({
+                    'error': 'Vui lòng đổi mật khẩu trước khi tiếp tục',
+                    'code': 'PASSWORD_CHANGE_REQUIRED'
+                }), 403
             if not has_permission(user_id, permission_key):
                 return jsonify({'error': 'Forbidden'}), 403
             return fn(*args, **kwargs)
@@ -174,16 +307,45 @@ def api_login():
         return jsonify({'error': 'Username and password required'}), 400
     try:
         result = db.session.execute(
-            text("SELECT id, username, password_hash, full_name, email, status FROM user WHERE username = :username"),
+            text("SELECT id, username, password_hash, full_name, email, status, must_change_password FROM user WHERE username = :username"),
             {"username": username}
         ).fetchone()
         if not result:
             return jsonify({'error': 'Tên đăng nhập hoặc mật khẩu không đúng'}), 401
-        user_id, username_db, password_hash, full_name, email, status = result
+        user_id, username_db, password_hash, full_name, email, status, must_change_password = result
         if not werkzeug.security.check_password_hash(password_hash, password):
             return jsonify({'error': 'Tên đăng nhập hoặc mật khẩu không đúng'}), 401
         if status != 'active':
             return jsonify({'error': 'Tài khoản đã bị vô hiệu hóa'}), 401
+        ip_address = request.remote_addr or ''
+        user_agent = request.headers.get('User-Agent', '')
+
+        # Kiểm tra IP/máy đã được admin phê duyệt chưa
+        trusted = TrustedLoginIP.query.filter_by(user_id=user_id, ip_address=ip_address).first()
+        if trusted is None:
+            # Tạo yêu cầu mới và gửi email cho admin
+            approval_token = __import__('secrets').token_urlsafe(32)
+            trusted = TrustedLoginIP(
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                created_at=datetime.utcnow(),
+                is_approved=False,
+                approval_token=approval_token
+            )
+            db.session.add(trusted)
+            db.session.commit()
+            send_login_approval_request_email(username_db, user_id, ip_address, user_agent, approval_token)
+            return jsonify({
+                'error': 'Máy/địa chỉ IP này chưa được admin phê duyệt. Đã gửi yêu cầu tới admin, vui lòng chờ được chấp nhận qua email.',
+                'code': 'LOGIN_DEVICE_PENDING_APPROVAL'
+            }), 403
+        if not trusted.is_approved:
+            return jsonify({
+                'error': 'Máy/địa chỉ IP này đang chờ admin phê duyệt. Vui lòng thử lại sau khi được chấp nhận.',
+                'code': 'LOGIN_DEVICE_NOT_APPROVED'
+            }), 403
+
         now_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         db.session.execute(
             text("UPDATE user SET last_login = :now WHERE id = :user_id"),
@@ -196,10 +358,20 @@ def api_login():
         ).fetchall()
         roles = [row[0] for row in roles_result]
         token = __import__('secrets').token_urlsafe(32)
-        register_token(token, user_id)
+        # IP này đã được phê duyệt, coi như thiết bị tin cậy
+        session_id = register_token(token, user_id, ip_address=ip_address, user_agent=user_agent, is_new_device=False)
         resp = make_response(jsonify({
             'token': token,
-            'user': {'id': user_id, 'username': username_db, 'full_name': full_name or '', 'email': email or '', 'roles': roles}
+            'user': {
+                'id': user_id,
+                'username': username_db,
+                'full_name': full_name or '',
+                'email': email or '',
+                'roles': roles,
+                'must_change_password': bool(must_change_password),
+            },
+            'session_id': session_id,
+            'is_new_device': False,
         }))
         resp.set_cookie('auth_token', token, httponly=True, samesite='Lax', max_age=3600)
         return resp
@@ -215,6 +387,122 @@ def api_logout():
     resp = jsonify({'message': 'Đã đăng xuất'})
     resp.set_cookie('auth_token', '', max_age=0, expires=0)
     return resp
+
+@app.route('/api/change-password', methods=['POST'])
+@require_auth
+def api_change_password(current_user_id):
+    """Cho phép người dùng đã đăng nhập đổi mật khẩu của chính mình."""
+    data = request.get_json(silent=True) or {}
+    current_password = (data.get('current_password') or '').strip()
+    new_password = (data.get('new_password') or '').strip()
+    if not current_password or not new_password:
+        return jsonify({'error': 'Vui lòng nhập đầy đủ mật khẩu hiện tại và mật khẩu mới'}), 400
+    user = db.session.get(User, current_user_id)
+    if not user:
+        return jsonify({'error': 'Tài khoản không tồn tại'}), 404
+    if not werkzeug.security.check_password_hash(user.password_hash, current_password):
+        return jsonify({'error': 'Mật khẩu hiện tại không đúng'}), 400
+    ok, msg = validate_password_strength(new_password)
+    if not ok:
+        return jsonify({'error': msg}), 400
+    user.password_hash = werkzeug.security.generate_password_hash(new_password)
+    user.must_change_password = False
+    user.password_changed_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'message': 'Đã đổi mật khẩu thành công'})
+
+@app.route('/api/login-approvals/approve', methods=['GET'])
+def api_approve_login_device():
+    """Endpoint cho admin phê duyệt đăng nhập từ máy mới thông qua link trong email."""
+    token = request.args.get('token', '').strip()
+    if not token:
+        return Response("Thiếu token phê duyệt.", mimetype='text/plain; charset=utf-8'), 400
+    rec = TrustedLoginIP.query.filter_by(approval_token=token).first()
+    if not rec:
+        return Response("Yêu cầu phê duyệt không tồn tại hoặc đã bị xóa.", mimetype='text/plain; charset=utf-8'), 404
+    if rec.is_approved:
+        return Response("Máy/địa chỉ IP này đã được phê duyệt trước đó.", mimetype='text/plain; charset=utf-8')
+    rec.is_approved = True
+    rec.approved_at = datetime.utcnow()
+    db.session.commit()
+    return Response(
+        f"ĐÃ PHÊ DUYỆT: Tài khoản ID {rec.user_id} được phép đăng nhập từ IP {rec.ip_address}. "
+        f"Người dùng có thể đăng nhập lại từ máy này.",
+        mimetype='text/plain; charset=utf-8'
+    )
+
+@app.route('/api/login-approvals/deny', methods=['GET'])
+def api_deny_login_device():
+    """Endpoint cho admin từ chối đăng nhập từ máy mới thông qua link trong email."""
+    token = request.args.get('token', '').strip()
+    if not token:
+        return Response("Thiếu token từ chối.", mimetype='text/plain; charset=utf-8'), 400
+    rec = TrustedLoginIP.query.filter_by(approval_token=token).first()
+    if not rec:
+        return Response("Yêu cầu phê duyệt không tồn tại hoặc đã bị xóa.", mimetype='text/plain; charset=utf-8'), 404
+    # Giữ bản ghi nhưng đảm bảo không được phê duyệt
+    rec.is_approved = False
+    rec.approved_at = datetime.utcnow()
+    db.session.commit()
+    return Response(
+        "ĐÃ TỪ CHỐI: Máy/địa chỉ IP này sẽ không được phép đăng nhập với tài khoản này. "
+        "Nếu sau này muốn cho phép, cần tạo lại yêu cầu bằng cách thử đăng nhập và phê duyệt lại.",
+        mimetype='text/plain; charset=utf-8'
+    )
+
+@app.route('/api/active-sessions', methods=['GET'])
+def api_active_sessions():
+    """Liệt kê các phiên đăng nhập đang hoạt động (chỉ admin / manage_users)."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    sessions = []
+    now = datetime.utcnow()
+    for tkn, info in list(TOKENS.items()):
+        if info.get('revoked'):
+            continue
+        if info.get('expires_at') and info['expires_at'] < now:
+            continue
+        uid = info['user_id']
+        row = db.session.execute(
+            text("SELECT username, full_name FROM user WHERE id = :uid"),
+            {'uid': uid}
+        ).fetchone()
+        if not row:
+            continue
+        username, full_name = row
+        roles = get_user_roles(uid)
+        sessions.append({
+            'sessionId': info.get('session_id'),
+            'userId': uid,
+            'username': username,
+            'fullName': full_name or '',
+            'roles': roles,
+            'ipAddress': info.get('ip_address') or '',
+            'userAgent': info.get('user_agent') or '',
+            'createdAt': info.get('created_at').isoformat() if info.get('created_at') else None,
+            'lastSeen': info.get('last_seen').isoformat() if info.get('last_seen') else None,
+            'isNewDevice': bool(info.get('is_new_device')),
+        })
+    return jsonify(sessions)
+
+@app.route('/api/active-sessions/<string:session_id>', methods=['DELETE'])
+def api_revoke_session(session_id):
+    """Ngắt kết nối một phiên đăng nhập cụ thể (chỉ admin / manage_users)."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+    if not session_id:
+        return jsonify({'error': 'session_id không hợp lệ'}), 400
+    ok = revoke_session(session_id)
+    if not ok:
+        return jsonify({'error': 'Không tìm thấy phiên hoặc đã hết hạn'}), 404
+    return jsonify({'message': 'Đã ngắt kết nối phiên đăng nhập'})
 
 # API: Trả về danh sách tất cả các permission key từng được gán cho role nào đó
 @app.route('/api/permissions', methods=['GET'])
@@ -382,6 +670,8 @@ class User(db.Model):
     status = db.Column(db.String(20), default='active')  # active/inactive
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
+    must_change_password = db.Column(db.Boolean, default=True)
+    password_changed_at = db.Column(db.DateTime)
     
     # Relationship with roles
     roles = db.relationship('Role', secondary=user_roles, lazy='subquery',
@@ -395,9 +685,21 @@ class User(db.Model):
             'email': self.email,
             'status': self.status,
             'roles': [role.name.lower() for role in self.roles],
+            'must_change_password': bool(self.must_change_password),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'last_login': self.last_login.isoformat() if self.last_login else None
         }
+
+class TrustedLoginIP(db.Model):
+    """Các IP/máy được admin phê duyệt cho từng tài khoản."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    ip_address = db.Column(db.String(45), nullable=False)
+    user_agent = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    approved_at = db.Column(db.DateTime)
+    is_approved = db.Column(db.Boolean, default=False)
+    approval_token = db.Column(db.String(64), unique=True, nullable=False)
 
 class Patient(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -8469,6 +8771,10 @@ def create_user():
             return jsonify({'error': 'Username đã tồn tại'}), 400
         if User.query.filter_by(email=data['email']).first():
             return jsonify({'error': 'Email đã tồn tại'}), 400
+
+        ok, msg = validate_password_strength(data.get('password') or '')
+        if not ok:
+            return jsonify({'error': msg}), 400
         
         # Tạo user mới
         new_user = User(
@@ -8476,7 +8782,9 @@ def create_user():
             password_hash=werkzeug.security.generate_password_hash(data['password']),
             full_name=data['fullName'],
             email=data['email'],
-            status=data['status']
+            status=data['status'],
+            must_change_password=True,
+            password_changed_at=None
         )
         
         # Thêm roles
@@ -8559,7 +8867,12 @@ def update_user(user_id):
         
         # Cập nhật mật khẩu nếu có
         if data.get('password'):
+            ok, msg = validate_password_strength(data.get('password') or '')
+            if not ok:
+                return jsonify({'error': msg}), 400
             user.password_hash = werkzeug.security.generate_password_hash(data['password'])
+            user.must_change_password = False
+            user.password_changed_at = datetime.utcnow()
         
         # Cập nhật roles
         user.roles = []
@@ -8635,6 +8948,25 @@ def ensure_user_status_column():
     except Exception as e:
         print("Error adding status column:", e)
 
+def ensure_user_security_columns():
+    """Ensure user table has security-related columns for password policies."""
+    try:
+        inspector = inspect(db.engine)
+        columns = [col['name'] for col in inspector.get_columns('user')]
+        altered = False
+        if 'must_change_password' not in columns:
+            db.session.execute(text('ALTER TABLE user ADD COLUMN must_change_password INTEGER DEFAULT 1'))
+            altered = True
+        if 'password_changed_at' not in columns:
+            db.session.execute(text('ALTER TABLE user ADD COLUMN password_changed_at DATETIME'))
+            altered = True
+        if altered:
+            db.session.commit()
+            print("Ensured user security columns (must_change_password, password_changed_at)")
+    except Exception as e:
+        db.session.rollback()
+        print("Error ensuring user security columns:", e)
+
 def initialize_default_admin():
     """Initialize default admin if no users exist. Email phusandaianh@gmail.com cho forgot-password."""
     try:
@@ -8689,6 +9021,7 @@ def initialize_user_management():
         with app.app_context():
             db.create_all()
             ensure_user_status_column()
+            ensure_user_security_columns()
             initialize_default_roles()
             initialize_default_admin()
             # Ensure default role -> permission mapping exists
@@ -8708,6 +9041,7 @@ if __name__ == '__main__':
         ensure_clinic_summary_column()
         ensure_logo_position_column()
         ensure_user_status_column()
+        ensure_user_security_columns()
         ensure_clinical_result_columns()
         initialize_default_doctors()
         initialize_default_medical_charts()
@@ -8777,15 +9111,30 @@ def forgot_password():
         
         user_id, username_db, full_name, user_email = result
         
-        # Tạo mật khẩu mới ngẫu nhiên
+        # Tạo mật khẩu mới ngẫu nhiên, tuân thủ chính sách mạnh
         import secrets
         import string
-        new_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
+        charset_upper = string.ascii_uppercase
+        charset_lower = string.ascii_lowercase
+        charset_digits = string.digits
+        charset_special = '!@#$%^&*()-_=+[]{};:,.?'
+        # Đảm bảo có đủ các loại ký tự
+        base = [
+            secrets.choice(charset_upper),
+            secrets.choice(charset_lower),
+            secrets.choice(charset_digits),
+            secrets.choice(charset_special),
+        ]
+        remaining_len = max(PASSWORD_MIN_LENGTH, 8) - len(base)
+        all_chars = charset_upper + charset_lower + charset_digits + charset_special
+        base.extend(secrets.choice(all_chars) for _ in range(remaining_len))
+        secrets.SystemRandom().shuffle(base)
+        new_password = ''.join(base)
         
         # Cập nhật mật khẩu mới
         password_hash = werkzeug.security.generate_password_hash(new_password)
         db.session.execute(
-            text("UPDATE user SET password_hash = :password_hash WHERE id = :user_id"),
+            text("UPDATE user SET password_hash = :password_hash, must_change_password = 1, password_changed_at = NULL WHERE id = :user_id"),
             {"password_hash": password_hash, "user_id": user_id}
         )
         db.session.commit()

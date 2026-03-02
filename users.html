@@ -228,7 +228,7 @@
 					<a href="/booking.html" class="btn secondary-btn" style="text-decoration: none;" id="btnBooking">
 						<i class="fas fa-calendar-plus"></i> Đặt lịch khám
 					</a>
-					<!-- Chỉ admin mới thấy các nút sau -->
+                <!-- Chỉ admin mới thấy các nút sau -->
 					<span id="adminOnlyActions" style="display:flex; gap:8px; align-items:center; flex-wrap: wrap;">
 						<button id="tabUsers" onclick="setActiveTab('users')" class="btn secondary-btn">
 							<i class="fas fa-list"></i> Danh sách người dùng
@@ -239,6 +239,9 @@
 						<button id="tabPermissions" onclick="setActiveTab('permissions')" class="btn secondary-btn">
 							<i class="fas fa-user-shield"></i> Phân quyền
 						</button>
+                    <button id="tabSessions" onclick="setActiveTab('sessions')" class="btn secondary-btn">
+                        <i class="fas fa-network-wired"></i> Phiên đăng nhập / IP
+                    </button>
 					</span>
 				</div>
 				<button onclick="logout()" class="btn secondary-btn">
@@ -264,7 +267,7 @@
             </table>
         </div>
 
-		<!-- Phân quyền theo vai trò -->
+        <!-- Phân quyền theo vai trò -->
 		<div id="permissionsSection" style="display: none; margin-top: 20px;">
 			<div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 12px;">
 				<h2 style="margin:0; font-size: 1.2rem;">Phân quyền theo vai trò</h2>
@@ -293,8 +296,40 @@
 					</tbody>
 				</table>
 			</div>
-			<small style="display:block; margin-top:8px; color:#666;">Lưu ý: Phân quyền được lưu cục bộ và có thể tích hợp backend sau.</small>
-		</div>
+            <small style="display:block; margin-top:8px; color:#666;">Lưu ý: Phân quyền được lưu cục bộ và có thể tích hợp backend sau.</small>
+        </div>
+
+        <!-- Quản lý phiên đăng nhập và IP -->
+        <div id="sessionsSection" style="display: none; margin-top: 20px;">
+            <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 12px;">
+                <h2 style="margin:0; font-size: 1.2rem;">Phiên đăng nhập hiện tại</h2>
+                <button type="button" class="btn secondary-btn" onclick="loadSessions()">
+                    <i class="fas fa-sync-alt"></i> Làm mới
+                </button>
+            </div>
+            <div class="table-container">
+                <table class="user-table">
+                    <thead>
+                        <tr>
+                            <th>Tài khoản</th>
+                            <th>Họ tên</th>
+                            <th>Vai trò</th>
+                            <th>Địa chỉ IP</th>
+                            <th>Thiết bị</th>
+                            <th>Bắt đầu</th>
+                            <th>Hoạt động gần nhất</th>
+                            <th>Máy lạ?</th>
+                            <th>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sessionsTableBody">
+                    </tbody>
+                </table>
+            </div>
+            <small style="display:block; margin-top:8px; color:#666;">
+                Admin có thể ngắt kết nối ngay các phiên đăng nhập đáng ngờ từ đây.
+            </small>
+        </div>
         </div>
     </div>
 
@@ -417,6 +452,33 @@
         </div>
     </div>
 
+    <!-- Modal đổi mật khẩu sau khi đăng nhập -->
+    <div id="changePasswordModal" class="modal">
+        <div class="modal-content">
+            <h2>Đổi mật khẩu</h2>
+            <p>Vì lý do bảo mật, bạn cần đổi mật khẩu trước khi tiếp tục sử dụng hệ thống.</p>
+            <form id="changePasswordForm" onsubmit="handleChangePassword(event)">
+                <div class="form-group">
+                    <label for="currentPassword">Mật khẩu hiện tại:</label>
+                    <input type="password" id="currentPassword" required class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">Mật khẩu mới:</label>
+                    <input type="password" id="newPassword" required class="form-control">
+                    <small>Mật khẩu phải có ít nhất 8 ký tự, gồm chữ thường, chữ hoa, số và ký tự đặc biệt.</small>
+                </div>
+                <div class="form-group">
+                    <label for="confirmNewPassword">Xác nhận mật khẩu mới:</label>
+                    <input type="password" id="confirmNewPassword" required class="form-control">
+                </div>
+                <div class="btn-group">
+                    <button type="submit" class="btn primary-btn">Đổi mật khẩu</button>
+                    <button type="button" class="btn secondary-btn" onclick="closeChangePasswordModal()">Đóng</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         // Khởi tạo state
         const state = {
@@ -458,6 +520,9 @@
                     updateUIForRole();
                     updateUserInfoHeader();
                     setActiveTab('users');
+                    if (data.user && data.user.must_change_password) {
+                        openChangePasswordModal(true);
+                    }
                     // Load danh sách người dùng (chỉ admin mới cần)
                     if (isAdmin()) await loadUsers();
                 } else {
@@ -520,15 +585,18 @@
             const adminActions = document.getElementById('adminOnlyActions');
             const userTable = document.getElementById('userManagementTable');
             const permSection = document.getElementById('permissionsSection');
+            const sessionsSection = document.getElementById('sessionsSection');
             if (!adminActions) return;
             if (isAdmin()) {
                 adminActions.style.display = 'flex';
                 if (userTable) userTable.style.display = 'block';
                 if (permSection) permSection.style.display = 'none';
+                if (sessionsSection) sessionsSection.style.display = 'none';
             } else {
                 adminActions.style.display = 'none';
                 if (userTable) userTable.style.display = 'none';
                 if (permSection) permSection.style.display = 'none';
+                if (sessionsSection) sessionsSection.style.display = 'none';
             }
         }
 
@@ -806,16 +874,29 @@ Trân trọng,
             const tabUsers = document.getElementById('tabUsers');
             const tabAdd = document.getElementById('tabAddUser');
             const tabPerm = document.getElementById('tabPermissions');
-            [tabUsers, tabAdd, tabPerm].forEach(btn => btn && btn.classList.remove('primary-btn'));
-            [tabUsers, tabAdd, tabPerm].forEach(btn => btn && btn.classList.add('secondary-btn'));
+            const tabSessions = document.getElementById('tabSessions');
+            [tabUsers, tabAdd, tabPerm, tabSessions].forEach(btn => btn && btn.classList.remove('primary-btn'));
+            [tabUsers, tabAdd, tabPerm, tabSessions].forEach(btn => btn && btn.classList.add('secondary-btn'));
+            const userTable = document.getElementById('userManagementTable');
+            const permSection = document.getElementById('permissionsSection');
+            const sessionsSection = document.getElementById('sessionsSection');
             if (tab === 'users') {
-                showUsersTab();
-                tabUsers.classList.remove('secondary-btn');
-                tabUsers.classList.add('primary-btn');
+                if (userTable) userTable.style.display = 'block';
+                if (permSection) permSection.style.display = 'none';
+                if (sessionsSection) sessionsSection.style.display = 'none';
+                tabUsers && tabUsers.classList.remove('secondary-btn');
+                tabUsers && tabUsers.classList.add('primary-btn');
             } else if (tab === 'permissions') {
                 showPermissionsTab();
-                tabPerm.classList.remove('secondary-btn');
-                tabPerm.classList.add('primary-btn');
+                tabPerm && tabPerm.classList.remove('secondary-btn');
+                tabPerm && tabPerm.classList.add('primary-btn');
+            } else if (tab === 'sessions') {
+                if (userTable) userTable.style.display = 'none';
+                if (permSection) permSection.style.display = 'none';
+                if (sessionsSection) sessionsSection.style.display = 'block';
+                tabSessions && tabSessions.classList.remove('secondary-btn');
+                tabSessions && tabSessions.classList.add('primary-btn');
+                loadSessions();
             }
         }
 
@@ -851,6 +932,73 @@ Trân trọng,
                     </td>
                 </tr>
             `).join('');
+        }
+
+        // Quản lý phiên đăng nhập / IP
+        async function loadSessions() {
+            try {
+                const response = await fetch('/api/active-sessions', { headers: { ...getAuthHeaders() } });
+                if (!response.ok) throw new Error('Failed to load sessions');
+                const sessions = await response.json();
+                renderSessions(sessions);
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+                alert('Không thể tải danh sách phiên đăng nhập. Vui lòng thử lại sau.');
+            }
+        }
+
+        function renderSessions(sessions) {
+            const tbody = document.getElementById('sessionsTableBody');
+            if (!tbody) return;
+            if (!Array.isArray(sessions) || sessions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9">Không có phiên đăng nhập nào đang hoạt động.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = sessions.map(sess => `
+                <tr>
+                    <td>${sess.username}</td>
+                    <td>${sess.fullName || ''}</td>
+                    <td>${(sess.roles || []).join(', ')}</td>
+                    <td>${sess.ipAddress || ''}</td>
+                    <td style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${sess.userAgent || ''}">
+                        ${sess.userAgent || ''}
+                    </td>
+                    <td>${sess.createdAt ? new Date(sess.createdAt).toLocaleString('vi-VN') : ''}</td>
+                    <td>${sess.lastSeen ? new Date(sess.lastSeen).toLocaleString('vi-VN') : ''}</td>
+                    <td>${sess.isNewDevice ? '<span style="color:#dc3545;font-weight:bold;">Máy lạ</span>' : ''}</td>
+                    <td>
+                        <button class="btn danger-btn" onclick="revokeSession('${sess.sessionId}')">
+                            <i class="fas fa-unlink"></i> Ngắt kết nối
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function revokeSession(sessionId) {
+            if (!sessionId) {
+                alert('Phiên không hợp lệ');
+                return;
+            }
+            if (!confirm('Bạn có chắc chắn muốn ngắt kết nối phiên đăng nhập này?')) return;
+            try {
+                const response = await fetch(`/api/active-sessions/${sessionId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        ...getAuthHeaders()
+                    }
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    alert(data.error || 'Không thể ngắt kết nối phiên.');
+                    return;
+                }
+                alert(data.message || 'Đã ngắt kết nối phiên đăng nhập.');
+                loadSessions();
+            } catch (error) {
+                console.error('Error revoking session:', error);
+                alert('Không thể ngắt kết nối phiên. Vui lòng thử lại.');
+            }
         }
 
         // Hàm render badges cho vai trò
@@ -997,6 +1145,7 @@ Trân trọng,
         window.onclick = function(event) {
             const userModal = document.getElementById('userModal');
             const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+            const changePasswordModal = document.getElementById('changePasswordModal');
             
             if (event.target === userModal) {
                 closeUserModal();
@@ -1004,7 +1153,70 @@ Trân trọng,
             if (event.target === forgotPasswordModal) {
                 closeForgotPasswordModal();
             }
+            if (event.target === changePasswordModal) {
+                closeChangePasswordModal();
+            }
         };
+
+        function openChangePasswordModal(force = false) {
+            const modal = document.getElementById('changePasswordModal');
+            if (!modal) return;
+            modal.dataset.force = force ? '1' : '0';
+            modal.style.display = 'block';
+        }
+
+        function closeChangePasswordModal() {
+            const modal = document.getElementById('changePasswordModal');
+            if (!modal) return;
+            if (modal.dataset.force === '1') {
+                alert('Bạn cần đổi mật khẩu trước khi tiếp tục sử dụng hệ thống.');
+                return;
+            }
+            modal.style.display = 'none';
+        }
+
+        async function handleChangePassword(event) {
+            event.preventDefault();
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+            if (newPassword !== confirmNewPassword) {
+                alert('Mật khẩu mới và xác nhận mật khẩu không khớp.');
+                return;
+            }
+            try {
+                const response = await fetch('/api/change-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...getAuthHeaders()
+                    },
+                    body: JSON.stringify({
+                        current_password: currentPassword,
+                        new_password: newPassword
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    alert(data.error || 'Không thể đổi mật khẩu.');
+                    return;
+                }
+                alert(data.message || 'Đã đổi mật khẩu thành công.');
+                const modal = document.getElementById('changePasswordModal');
+                if (modal) {
+                    modal.dataset.force = '0';
+                    modal.style.display = 'none';
+                }
+                if (state.currentUser) {
+                    state.currentUser.must_change_password = false;
+                    localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
+                }
+                document.getElementById('changePasswordForm').reset();
+            } catch (error) {
+                console.error('Error changing password:', error);
+                alert('Không thể đổi mật khẩu. Vui lòng thử lại.');
+            }
+        }
     </script>
     
     <!-- Footer -->
