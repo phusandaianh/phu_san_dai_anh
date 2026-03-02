@@ -313,8 +313,19 @@ def api_login():
         if not result:
             return jsonify({'error': 'Tên đăng nhập hoặc mật khẩu không đúng'}), 401
         user_id, username_db, password_hash, full_name, email, status, must_change_password = result
-        if not werkzeug.security.check_password_hash(password_hash, password):
-            return jsonify({'error': 'Tên đăng nhập hoặc mật khẩu không đúng'}), 401
+
+        # Một số tài khoản rất cũ có thể dùng chuẩn hash không được hỗ trợ trên môi trường hiện tại.
+        # Khi đó, hướng dẫn người dùng dùng chức năng "Quên mật khẩu" để phát sinh hash mới.
+        try:
+            if not werkzeug.security.check_password_hash(password_hash, password):
+                return jsonify({'error': 'Tên đăng nhập hoặc mật khẩu không đúng'}), 401
+        except ValueError as e:
+            if 'unsupported hash type' in str(e):
+                return jsonify({
+                    'error': 'Tài khoản này đang dùng chuẩn mật khẩu cũ, vui lòng dùng chức năng \"Quên mật khẩu\" để đặt lại mật khẩu mới hoặc liên hệ admin.',
+                    'code': 'UNSUPPORTED_PASSWORD_HASH'
+                }), 400
+            raise
         if status != 'active':
             return jsonify({'error': 'Tài khoản đã bị vô hiệu hóa'}), 401
         ip_address = request.remote_addr or ''
