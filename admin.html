@@ -127,6 +127,24 @@
             color: white !important;
         }
 
+        .admin-header .user-info-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 12px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+        .admin-header .user-info-bar .user-role-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            background: rgba(255,255,255,0.25);
+        }
+
         .modal.hidden {
             display: none !important;
         }
@@ -367,6 +385,11 @@
                 <a href="ai-assistant-admin.html" class="header-nav-btn"><i class="fas fa-robot"></i> Quản lý trợ lý AI</a>
             </div>
         </nav>
+        <div class="user-info-bar" id="adminUserInfoBar" style="display: none;">
+            <i class="fas fa-user-circle"></i>
+            <span><strong id="adminUserDisplayName"></strong> (<span id="adminUserDisplayUsername"></span>)</span>
+            <span id="adminUserRoleBadges"></span>
+        </div>
     </header>
 
     <main class="admin-main">
@@ -1525,6 +1548,28 @@
         }
     </script>
     
+    <!-- Hiển thị thông tin người đăng nhập trên header -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const bar = document.getElementById('adminUserInfoBar');
+            const currentUserRaw = localStorage.getItem('currentUser');
+            if (!bar || !currentUserRaw) return;
+            try {
+                const u = JSON.parse(currentUserRaw);
+                const fullName = u.full_name || u.fullName || u.username || '';
+                const username = u.username || '';
+                const roles = u.roles || [];
+                const roleLabels = { admin: 'Admin', doctor: 'Bác sĩ', nurse: 'Điều dưỡng', receptionist: 'Lễ tân' };
+                document.getElementById('adminUserDisplayName').textContent = fullName || username;
+                document.getElementById('adminUserDisplayUsername').textContent = username;
+                const badgesEl = document.getElementById('adminUserRoleBadges');
+                badgesEl.innerHTML = roles.map(r => `<span class="user-role-badge">${roleLabels[r] || r}</span>`).join(' ');
+                bar.style.display = 'flex';
+            } catch (e) {
+                bar.style.display = 'none';
+            }
+        });
+    </script>
     <!-- Hiển thị/ẩn liên kết MWL dựa trên quyền của user (manage_worklist) -->
     <script>
         document.addEventListener('DOMContentLoaded', async () => {

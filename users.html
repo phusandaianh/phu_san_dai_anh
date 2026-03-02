@@ -67,15 +67,19 @@
             width: 100%;
             height: 100%;
             background-color: rgba(0,0,0,0.5);
+            overflow-y: auto;
+            padding: 20px 0;
         }
 
         .modal-content {
             background-color: #fff;
-            margin: 10% auto;
+            margin: 20px auto;
             padding: 20px;
             border-radius: 8px;
-            width: 80%;
+            width: 90%;
             max-width: 500px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
         }
 
         .role-checkbox-group {
@@ -150,9 +154,39 @@
         #toggleUserPassword:hover #userPasswordIcon {
             transform: scale(1.1);
         }
+        .users-page-header {
+            background: linear-gradient(135deg, #0c4a6e 0%, #0369a1 50%, #0ea5e9 100%);
+            color: white;
+            padding: 10px 20px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        .users-page-header .user-info-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .users-page-header .user-info-bar i {
+            font-size: 1.2em;
+        }
+        .users-page-header .user-role-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            background: rgba(255,255,255,0.25);
+        }
     </style>
 </head>
 <body>
+    <header class="users-page-header" id="usersPageHeader" style="display: none;">
+        <div class="container">
+            <div class="user-info-bar">
+                <span><i class="fas fa-user-circle"></i> Xin chào, <strong id="userDisplayName"></strong> (<span id="userDisplayUsername"></span>)</span>
+                <span id="userRoleBadges"></span>
+            </div>
+        </div>
+    </header>
     <div class="container">
         <h1>Quản lý người dùng và phân quyền</h1>
         
@@ -191,15 +225,21 @@
 					<a href="/admin.html" class="btn primary-btn" style="text-decoration: none;">
 						<i class="fas fa-home"></i> Trang Quản trị
 					</a>
-					<button id="tabUsers" onclick="setActiveTab('users')" class="btn secondary-btn">
-						<i class="fas fa-list"></i> Danh sách người dùng
-					</button>
-					<button id="tabAddUser" onclick="handleAddUserTab()" class="btn secondary-btn">
-						<i class="fas fa-plus"></i> Thêm người dùng mới
-					</button>
-					<button id="tabPermissions" onclick="setActiveTab('permissions')" class="btn secondary-btn">
-						<i class="fas fa-user-shield"></i> Phân quyền
-					</button>
+					<a href="/booking.html" class="btn secondary-btn" style="text-decoration: none;" id="btnBooking">
+						<i class="fas fa-calendar-plus"></i> Đặt lịch khám
+					</a>
+					<!-- Chỉ admin mới thấy các nút sau -->
+					<span id="adminOnlyActions" style="display:flex; gap:8px; align-items:center; flex-wrap: wrap;">
+						<button id="tabUsers" onclick="setActiveTab('users')" class="btn secondary-btn">
+							<i class="fas fa-list"></i> Danh sách người dùng
+						</button>
+						<button id="tabAddUser" onclick="handleAddUserTab()" class="btn secondary-btn">
+							<i class="fas fa-plus"></i> Thêm người dùng mới
+						</button>
+						<button id="tabPermissions" onclick="setActiveTab('permissions')" class="btn secondary-btn">
+							<i class="fas fa-user-shield"></i> Phân quyền
+						</button>
+					</span>
 				</div>
 				<button onclick="logout()" class="btn secondary-btn">
 					<i class="fas fa-sign-out-alt"></i> Đăng xuất
@@ -415,11 +455,11 @@
                     // Ẩn form đăng nhập, hiện phần quản lý
                     document.getElementById('loginSection').style.display = 'none';
                     document.getElementById('userManagementSection').style.display = 'block';
+                    updateUIForRole();
+                    updateUserInfoHeader();
                     setActiveTab('users');
-                    // Load danh sách người dùng
-                    await loadUsers();
-                    
-                    alert('Đăng nhập thành công!');
+                    // Load danh sách người dùng (chỉ admin mới cần)
+                    if (isAdmin()) await loadUsers();
                 } else {
                     let msg = (data && data.error) ? data.error : (response.status === 429 ? 'Quá nhiều lần thử. Đợi 1 phút rồi thử lại.' : 'Tên đăng nhập hoặc mật khẩu không đúng!');
                     if (data && data.detail) msg += '\n\nChi tiết: ' + data.detail;
@@ -445,8 +485,51 @@
             document.getElementById('userManagementSection').style.display = 'none';
             document.getElementById('loginSection').style.display = 'block';
             document.getElementById('loginForm').reset();
+            updateUserInfoHeader();
             
             alert('Đã đăng xuất thành công!');
+        }
+
+        // Kiểm tra tài khoản có phải admin không
+        function isAdmin() {
+            return state.currentUser && (state.currentUser.roles || []).includes('admin');
+        }
+
+        // Cập nhật thông tin người dùng trên header
+        function updateUserInfoHeader() {
+            const header = document.getElementById('usersPageHeader');
+            if (!header) return;
+            if (!state.currentUser) {
+                header.style.display = 'none';
+                return;
+            }
+            const u = state.currentUser;
+            const fullName = u.full_name || u.fullName || u.username || '';
+            const username = u.username || '';
+            const roles = u.roles || [];
+            const roleLabels = { admin: 'Admin', doctor: 'Bác sĩ', nurse: 'Điều dưỡng', receptionist: 'Lễ tân' };
+            document.getElementById('userDisplayName').textContent = fullName || username;
+            document.getElementById('userDisplayUsername').textContent = username;
+            const badgesEl = document.getElementById('userRoleBadges');
+            badgesEl.innerHTML = roles.map(r => `<span class="user-role-badge">${roleLabels[r] || r}</span>`).join(' ');
+            header.style.display = 'block';
+        }
+
+        // Cập nhật giao diện theo vai trò: chỉ admin thấy đầy đủ, tài khoản khác chỉ thấy Trang Quản trị + Đặt lịch khám
+        function updateUIForRole() {
+            const adminActions = document.getElementById('adminOnlyActions');
+            const userTable = document.getElementById('userManagementTable');
+            const permSection = document.getElementById('permissionsSection');
+            if (!adminActions) return;
+            if (isAdmin()) {
+                adminActions.style.display = 'flex';
+                if (userTable) userTable.style.display = 'block';
+                if (permSection) permSection.style.display = 'none';
+            } else {
+                adminActions.style.display = 'none';
+                if (userTable) userTable.style.display = 'none';
+                if (permSection) permSection.style.display = 'none';
+            }
         }
 
         // Kiểm tra đăng nhập khi tải trang
@@ -462,9 +545,11 @@
                     // Ẩn form đăng nhập, hiện phần quản lý
                     document.getElementById('loginSection').style.display = 'none';
                     document.getElementById('userManagementSection').style.display = 'block';
+                    updateUIForRole();
+                    updateUserInfoHeader();
                     
-                    // Load danh sách người dùng
-                    loadUsers();
+                    // Load danh sách người dùng (chỉ admin)
+                    if (isAdmin()) loadUsers();
                 } catch (error) {
                     console.error('Lỗi khi kiểm tra đăng nhập:', error);
                     logout();
@@ -902,8 +987,8 @@ Trân trọng,
             // Kiểm tra trạng thái đăng nhập
             checkLoginStatus();
 
-            // Mặc định tab danh sách sáng khi đã vào khu vực quản lý
-            if (document.getElementById('userManagementSection').style.display === 'block') {
+            // Mặc định tab danh sách sáng khi đã vào khu vực quản lý (chỉ admin)
+            if (document.getElementById('userManagementSection').style.display === 'block' && isAdmin()) {
                 setActiveTab('users');
             }
         });
