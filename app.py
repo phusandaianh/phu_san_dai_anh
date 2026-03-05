@@ -1,4 +1,4 @@
-from flask import Flask, render_template, send_from_directory, request, jsonify, send_file, Response, abort
+from flask import Flask, render_template, send_from_directory, request, jsonify, send_file, Response, abort, after_this_request
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import or_, inspect, func, text, bindparam
 from datetime import datetime, timedelta
@@ -21,6 +21,13 @@ import werkzeug
 import json
 import smtplib
 from email.mime.text import MIMEText
+import zipfile
+import tempfile
+import shutil
+from urllib.parse import unquote
+import sqlite3
+import hashlib
+import hmac
 from voluson_sync_service import get_voluson_sync_service
 import mwl_store
 
@@ -180,6 +187,210 @@ def hash_password(password: str) -> str:
     """
     return werkzeug.security.generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
 
+def verify_password_hash(stored_hash: str, password: str) -> bool:
+    """
+    Verify mật khẩu không phụ thuộc vào phiên bản werkzeug.
+    Hỗ trợ các định dạng hay gặp:
+    - scrypt:N:r:p$salt$hex
+    - pbkdf2:sha256:iter$salt$hex
+    Fallback sang werkzeug.check_password_hash nếu parse không khớp.
+    """
+    if not stored_hash or password is None:
+        return False
+    try:
+        # scrypt:32768:8:1$salt$hex
+        if stored_hash.startswith('scrypt:'):
+            try:
+                meta, salt, hex_digest = stored_hash.split('$', 2)
+                _, n_str, r_str, p_str = meta.split(':', 3)
+                n = int(n_str)
+                r = int(r_str)
+                p = int(p_str)
+                dk_len = len(hex_digest) // 2
+                derived = hashlib.scrypt(
+                    password.encode('utf-8'),
+                    salt=salt.encode('utf-8'),
+                    n=n,
+                    r=r,
+                    p=p,
+                    dklen=dk_len
+                ).hex()
+                return hmac.compare_digest(derived, hex_digest)
+            except Exception:
+                return False
+
+        # pbkdf2:sha256:600000$salt$hex
+        if stored_hash.startswith('pbkdf2:sha256:'):
+            try:
+                meta, salt, hex_digest = stored_hash.split('$', 2)
+                _, _, iter_str = meta.split(':', 2)
+                iterations = int(iter_str)
+                dk_len = len(hex_digest) // 2
+                derived = hashlib.pbkdf2_hmac(
+                    'sha256',
+                    password.encode('utf-8'),
+                    salt.encode('utf-8'),
+                    iterations,
+                    dklen=dk_len
+                ).hex()
+                return hmac.compare_digest(derived, hex_digest)
+            except Exception:
+                return False
+
+        # Fallback
+        try:
+            return bool(werkzeug.security.check_password_hash(stored_hash, password))
+        except Exception:
+            return False
+    except Exception:
+        return False
+
+def _sqlite_path_from_uri(uri: str):
+    """Trích xuất path file từ sqlite URI. Trả về None nếu không phải sqlite file."""
+    if not uri:
+        return None
+    if not uri.startswith('sqlite:'):
+        return None
+    # sqlite:///relative/path.db  hoặc sqlite:////abs/path.db
+    if uri.startswith('sqlite:///'):
+        rel = uri[len('sqlite:///'):]
+        rel = unquote(rel)
+        return os.path.abspath(rel)
+    if uri.startswith('sqlite:////'):
+        abs_path = uri[len('sqlite:'):]  # giữ 3-4 dấu / theo chuẩn
+        abs_path = unquote(abs_path)
+        return abs_path
+    return None
+
+def _is_sqlite_file(path: str) -> bool:
+    try:
+        with open(path, 'rb') as f:
+            header = f.read(16)
+        return header.startswith(b'SQLite format 3\x00')
+    except Exception:
+        return False
+
+def _backup_sqlite_safely(src_path: str, dest_path: str) -> None:
+    """Sao chép SQLite an toàn khi DB đang được mở."""
+    src_path = os.path.abspath(src_path)
+    dest_path = os.path.abspath(dest_path)
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+    # Dùng sqlite backup API để tránh file bị inconsistent
+    con = sqlite3.connect(src_path)
+    try:
+        bck = sqlite3.connect(dest_path)
+        try:
+            con.backup(bck)
+            bck.commit()
+        finally:
+            bck.close()
+    finally:
+        con.close()
+
+def _create_backup_zip_bytes():
+    """Tạo zip backup (clinic.db + mwl.db nếu có) và trả về BytesIO."""
+    db_path = _sqlite_path_from_uri(app.config.get('SQLALCHEMY_DATABASE_URI', ''))
+    if not db_path or not os.path.exists(db_path):
+        raise RuntimeError('Không tìm thấy file CSDL clinic.db để sao lưu')
+    if not _is_sqlite_file(db_path):
+        raise RuntimeError('clinic.db không phải SQLite hợp lệ')
+
+    tmpdir = tempfile.mkdtemp(prefix='backup_')
+    try:
+        clinic_copy = os.path.join(tmpdir, os.path.basename(db_path) or 'clinic.db')
+        _backup_sqlite_safely(db_path, clinic_copy)
+
+        mwl_copy = None
+        mwl_path = os.path.abspath('mwl.db')
+        if os.path.exists(mwl_path) and _is_sqlite_file(mwl_path):
+            mwl_copy = os.path.join(tmpdir, 'mwl.db')
+            _backup_sqlite_safely(mwl_path, mwl_copy)
+
+        buf = BytesIO()
+        with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.write(clinic_copy, arcname=os.path.basename(clinic_copy))
+            if mwl_copy and os.path.exists(mwl_copy):
+                zf.write(mwl_copy, arcname='mwl.db')
+        buf.seek(0)
+        return buf
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+def _gdrive_client():
+    """
+    Tạo Google Drive client bằng Service Account.
+    Hỗ trợ:
+    - GOOGLE_SERVICE_ACCOUNT_JSON: JSON string của service account
+    - GOOGLE_SERVICE_ACCOUNT_FILE: đường dẫn file JSON (nếu chạy local)
+    """
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+    except Exception as e:
+        raise RuntimeError(f"Thiếu thư viện Google Drive: {e}")
+
+    sa_json = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON') or app.config.get('GOOGLE_SERVICE_ACCOUNT_JSON')
+    sa_file = os.environ.get('GOOGLE_SERVICE_ACCOUNT_FILE') or app.config.get('GOOGLE_SERVICE_ACCOUNT_FILE')
+
+    scopes = ['https://www.googleapis.com/auth/drive']
+    creds = None
+    if sa_json:
+        try:
+            info = json.loads(sa_json)
+        except Exception:
+            # nếu JSON được escape/quote sai, báo lỗi rõ ràng
+            raise RuntimeError('GOOGLE_SERVICE_ACCOUNT_JSON không phải JSON hợp lệ')
+        creds = service_account.Credentials.from_service_account_info(info, scopes=scopes)
+    elif sa_file:
+        creds = service_account.Credentials.from_service_account_file(sa_file, scopes=scopes)
+    else:
+        raise RuntimeError('Chưa cấu hình GOOGLE_SERVICE_ACCOUNT_JSON (hoặc GOOGLE_SERVICE_ACCOUNT_FILE)')
+
+    return build('drive', 'v3', credentials=creds, cache_discovery=False)
+
+def upload_backup_to_gdrive():
+    """Upload bản sao lưu zip lên Google Drive (Folder ID cấu hình)."""
+    folder_id = os.environ.get('GDRIVE_FOLDER_ID') or app.config.get('GDRIVE_FOLDER_ID')
+    if not folder_id:
+        raise RuntimeError('Thiếu GDRIVE_FOLDER_ID')
+
+    drive = _gdrive_client()
+
+    buf = _create_backup_zip_bytes()
+    filename = f"backup-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.zip"
+
+    from googleapiclient.http import MediaIoBaseUpload
+    media = MediaIoBaseUpload(buf, mimetype='application/zip', resumable=False)
+    file_metadata = {'name': filename, 'parents': [folder_id]}
+    created = drive.files().create(body=file_metadata, media_body=media, fields='id,name,createdTime').execute()
+
+    # Retention: giữ N bản gần nhất
+    keep_n = int(os.environ.get('GDRIVE_BACKUP_KEEP') or app.config.get('GDRIVE_BACKUP_KEEP') or 30)
+    try:
+        q = f"'{folder_id}' in parents and trashed=false and name contains 'backup-' and mimeType='application/zip'"
+        items = drive.files().list(q=q, orderBy='createdTime desc', fields='files(id,name,createdTime)', pageSize=200).execute().get('files', [])
+        for item in items[keep_n:]:
+            try:
+                drive.files().delete(fileId=item['id']).execute()
+            except Exception:
+                pass
+    except Exception:
+        # không làm fail backup nếu cleanup lỗi
+        pass
+
+    return created
+
+def scheduled_daily_backup():
+    """Job chạy theo lịch: sao lưu và upload lên Google Drive."""
+    enabled = (os.environ.get('GDRIVE_BACKUP_ENABLED') or app.config.get('GDRIVE_BACKUP_ENABLED') or '1').strip()
+    if enabled not in ('1', 'true', 'True', 'yes', 'YES'):
+        return
+    try:
+        created = upload_backup_to_gdrive()
+        print(f"[BACKUP] Uploaded to Google Drive: {created.get('name')} ({created.get('id')})")
+    except Exception as e:
+        print(f"[BACKUP] Failed: {e}")
+
 def send_security_email(subject, body, to_email=None):
     """Gửi email cảnh báo bảo mật, fallback sang in-console nếu chưa cấu hình SMTP."""
     to_email = to_email or app.config.get('ADMIN_EMAIL', 'phusandaianh@gmail.com')
@@ -321,18 +532,31 @@ def api_login():
             return jsonify({'error': 'Tên đăng nhập hoặc mật khẩu không đúng'}), 401
         user_id, username_db, password_hash, full_name, email, status, must_change_password = result
 
-        # Một số tài khoản rất cũ có thể dùng chuẩn hash không được hỗ trợ trên môi trường hiện tại.
-        # Khi đó, hướng dẫn người dùng dùng chức năng "Quên mật khẩu" để phát sinh hash mới.
-        try:
-            if not werkzeug.security.check_password_hash(password_hash, password):
-                return jsonify({'error': 'Tên đăng nhập hoặc mật khẩu không đúng'}), 401
-        except ValueError as e:
-            if 'unsupported hash type' in str(e):
+        # Verify password tương thích mọi môi trường (kể cả khi werkzeug không hỗ trợ scrypt).
+        if not verify_password_hash(password_hash, password):
+            # Nếu hash type không được hỗ trợ, trả message rõ ràng (để user reset)
+            if isinstance(password_hash, str) and password_hash.startswith('scrypt:'):
                 return jsonify({
-                    'error': 'Tài khoản này đang dùng chuẩn mật khẩu cũ, vui lòng dùng chức năng \"Quên mật khẩu\" để đặt lại mật khẩu mới hoặc liên hệ admin.',
+                    'error': 'Tài khoản này đang dùng chuẩn mật khẩu cũ trên môi trường web. Vui lòng dùng chức năng "Quên mật khẩu" để đặt lại mật khẩu mới.',
                     'code': 'UNSUPPORTED_PASSWORD_HASH'
                 }), 400
-            raise
+            return jsonify({'error': 'Tên đăng nhập hoặc mật khẩu không đúng'}), 401
+
+        # Nếu đăng nhập đúng bằng hash scrypt thì tự động nâng cấp sang pbkdf2 để đồng bộ web/local
+        try:
+            if isinstance(password_hash, str) and password_hash.startswith('scrypt:'):
+                new_hash = hash_password(password)
+                db.session.execute(
+                    text("UPDATE user SET password_hash = :ph WHERE id = :uid"),
+                    {"ph": new_hash, "uid": user_id}
+                )
+                db.session.commit()
+        except Exception:
+            # Không làm fail login nếu migrate hash lỗi
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
         if status != 'active':
             return jsonify({'error': 'Tài khoản đã bị vô hiệu hóa'}), 401
         ip_address = request.remote_addr or ''
@@ -418,7 +642,7 @@ def api_change_password(current_user_id):
     user = db.session.get(User, current_user_id)
     if not user:
         return jsonify({'error': 'Tài khoản không tồn tại'}), 404
-    if not werkzeug.security.check_password_hash(user.password_hash, current_password):
+    if not verify_password_hash(user.password_hash, current_password):
         return jsonify({'error': 'Mật khẩu hiện tại không đúng'}), 400
     ok, msg = validate_password_strength(new_password)
     if not ok:
@@ -521,6 +745,136 @@ def api_revoke_session(session_id):
     if not ok:
         return jsonify({'error': 'Không tìm thấy phiên hoặc đã hết hạn'}), 404
     return jsonify({'message': 'Đã ngắt kết nối phiên đăng nhập'})
+
+@app.route('/api/backup', methods=['GET'])
+def api_backup():
+    """Tải file sao lưu dữ liệu (zip). Chỉ admin / manage_users."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    db_path = _sqlite_path_from_uri(app.config.get('SQLALCHEMY_DATABASE_URI', ''))
+    if not db_path or not os.path.exists(db_path):
+        return jsonify({'error': 'Không tìm thấy file CSDL để sao lưu'}), 500
+
+    try:
+        buf = _create_backup_zip_bytes()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    filename = f"backup-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.zip"
+    return send_file(buf, mimetype='application/zip', as_attachment=True, download_name=filename)
+
+@app.route('/api/restore', methods=['POST'])
+def api_restore():
+    """Khôi phục dữ liệu từ file .db hoặc .zip. Chỉ admin / manage_users.
+    Lưu ý: Hệ thống sẽ tự khởi động lại sau khi khôi phục.
+    """
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'Thiếu file khôi phục'}), 400
+    f = request.files['file']
+    if not f or not f.filename:
+        return jsonify({'error': 'File không hợp lệ'}), 400
+
+    db_path = _sqlite_path_from_uri(app.config.get('SQLALCHEMY_DATABASE_URI', ''))
+    if not db_path:
+        return jsonify({'error': 'CSDL hiện tại không phải SQLite file, không hỗ trợ khôi phục tự động'}), 500
+
+    ext = os.path.splitext(f.filename.lower())[1]
+    ts = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+    tmpdir = tempfile.mkdtemp(prefix='restore_')
+
+    def _cleanup_tmp():
+        try:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        except Exception:
+            pass
+
+    try:
+        clinic_new = None
+        mwl_new = None
+
+        if ext == '.zip':
+            zip_path = os.path.join(tmpdir, 'restore.zip')
+            f.save(zip_path)
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                zf.extractall(tmpdir)
+            # Ưu tiên file đúng tên
+            cand_clinic = os.path.join(tmpdir, os.path.basename(db_path) or 'clinic.db')
+            if not os.path.exists(cand_clinic):
+                cand_clinic = os.path.join(tmpdir, 'clinic.db')
+            if os.path.exists(cand_clinic):
+                clinic_new = cand_clinic
+            cand_mwl = os.path.join(tmpdir, 'mwl.db')
+            if os.path.exists(cand_mwl):
+                mwl_new = cand_mwl
+        elif ext == '.db':
+            clinic_new = os.path.join(tmpdir, 'clinic.db')
+            f.save(clinic_new)
+        else:
+            return jsonify({'error': 'Chỉ hỗ trợ file .db hoặc .zip'}), 400
+
+        if not clinic_new or not os.path.exists(clinic_new):
+            return jsonify({'error': 'Không tìm thấy file clinic.db trong gói khôi phục'}), 400
+        if not _is_sqlite_file(clinic_new):
+            return jsonify({'error': 'File khôi phục không phải SQLite hợp lệ'}), 400
+
+        # Backup file hiện tại trước khi thay
+        try:
+            if os.path.exists(db_path):
+                shutil.copy2(db_path, f"{db_path}.bak.{ts}")
+        except Exception:
+            pass
+
+        # Đóng kết nối DB trước khi replace
+        try:
+            db.session.remove()
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+        try:
+            db.engine.dispose()
+        except Exception:
+            pass
+
+        os.replace(clinic_new, db_path)
+
+        # Nếu có mwl.db trong gói khôi phục thì thay luôn
+        if mwl_new and os.path.exists(mwl_new):
+            mwl_path = os.path.abspath('mwl.db')
+            try:
+                if os.path.exists(mwl_path):
+                    shutil.copy2(mwl_path, f"{mwl_path}.bak.{ts}")
+            except Exception:
+                pass
+            os.replace(mwl_new, mwl_path)
+
+        # Dọn tmp sau response
+        @after_this_request
+        def _after(resp):
+            _cleanup_tmp()
+            return resp
+
+        # Tự khởi động lại process để app load DB mới (Render/WSGI thường tự restart)
+        try:
+            threading.Timer(1.0, lambda: os._exit(0)).start()
+        except Exception:
+            pass
+
+        return jsonify({'message': 'Đã khôi phục dữ liệu. Hệ thống sẽ tự khởi động lại trong vài giây.'})
+    except Exception as e:
+        _cleanup_tmp()
+        return jsonify({'error': f'Lỗi khôi phục dữ liệu: {str(e)}'}), 500
 
 # API: Trả về danh sách tất cả các permission key từng được gán cho role nào đó
 @app.route('/api/permissions', methods=['GET'])
@@ -2143,6 +2497,12 @@ def check_upcoming_appointments():
 def run_scheduler():
     import time as _time
     schedule.every().day.at("08:00").do(check_upcoming_appointments)
+    backup_time = (os.environ.get('GDRIVE_BACKUP_DAILY_AT') or app.config.get('GDRIVE_BACKUP_DAILY_AT') or "02:00").strip()
+    try:
+        schedule.every().day.at(backup_time).do(scheduled_daily_backup)
+        print(f"[BACKUP] Daily backup scheduled at {backup_time}")
+    except Exception as e:
+        print(f"[BACKUP] Cannot schedule daily backup: {e}")
     while True:
         schedule.run_pending()
         _time.sleep(60)
@@ -2719,7 +3079,7 @@ def reset_lab_orders_month(**kwargs):
     # Ưu tiên kiểm tra hash; tương thích legacy (plain)
     hash_val = getattr(settings, 'reset_password_hash', None)
     if hash_val:
-        if not werkzeug.security.check_password_hash(hash_val, password):
+        if not verify_password_hash(hash_val, password):
             return jsonify({'message': 'Mật khẩu không đúng'}), 403
     elif password != (settings.reset_password or '010190'):
         return jsonify({'message': 'Mật khẩu không đúng'}), 403

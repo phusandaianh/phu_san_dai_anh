@@ -242,6 +242,9 @@
                     <button id="tabSessions" onclick="setActiveTab('sessions')" class="btn secondary-btn">
                         <i class="fas fa-network-wired"></i> Phiên đăng nhập / IP
                     </button>
+                    <button id="tabBackup" onclick="setActiveTab('backup')" class="btn secondary-btn">
+                        <i class="fas fa-database"></i> Sao lưu &amp; Khôi phục
+                    </button>
 					</span>
 				</div>
 				<button onclick="logout()" class="btn secondary-btn">
@@ -329,6 +332,34 @@
             <small style="display:block; margin-top:8px; color:#666;">
                 Admin có thể ngắt kết nối ngay các phiên đăng nhập đáng ngờ từ đây.
             </small>
+        </div>
+
+        <!-- Sao lưu & Khôi phục dữ liệu -->
+        <div id="backupSection" style="display: none; margin-top: 20px;">
+            <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
+                <h2 style="margin:0; font-size: 1.2rem;">Sao lưu &amp; Khôi phục dữ liệu</h2>
+                <button type="button" class="btn primary-btn" onclick="downloadBackup()">
+                    <i class="fas fa-download"></i> Tải file sao lưu
+                </button>
+            </div>
+            <div style="background:#fff3cd; border:1px solid #ffeeba; padding:12px; border-radius:8px; margin-bottom: 12px;">
+                <strong>Lưu ý quan trọng:</strong> Khôi phục dữ liệu sẽ thay thế toàn bộ CSDL hiện tại và hệ thống sẽ tự khởi động lại.
+                Hãy sao lưu trước khi khôi phục.
+            </div>
+            <div class="table-container" style="padding: 12px;">
+                <div class="form-group">
+                    <label for="restoreFile"><strong>Chọn file khôi phục (.zip hoặc .db):</strong></label>
+                    <input type="file" id="restoreFile" class="form-control" accept=".zip,.db">
+                </div>
+                <div class="btn-group" style="margin-top: 10px;">
+                    <button type="button" class="btn danger-btn" onclick="restoreBackup()">
+                        <i class="fas fa-upload"></i> Khôi phục dữ liệu
+                    </button>
+                </div>
+                <small style="display:block; margin-top:8px; color:#666;">
+                    File sao lưu tải về là <code>.zip</code> (gồm <code>clinic.db</code> và có thể có <code>mwl.db</code> nếu tồn tại).
+                </small>
+            </div>
         </div>
         </div>
     </div>
@@ -586,17 +617,20 @@
             const userTable = document.getElementById('userManagementTable');
             const permSection = document.getElementById('permissionsSection');
             const sessionsSection = document.getElementById('sessionsSection');
+            const backupSection = document.getElementById('backupSection');
             if (!adminActions) return;
             if (isAdmin()) {
                 adminActions.style.display = 'flex';
                 if (userTable) userTable.style.display = 'block';
                 if (permSection) permSection.style.display = 'none';
                 if (sessionsSection) sessionsSection.style.display = 'none';
+                if (backupSection) backupSection.style.display = 'none';
             } else {
                 adminActions.style.display = 'none';
                 if (userTable) userTable.style.display = 'none';
                 if (permSection) permSection.style.display = 'none';
                 if (sessionsSection) sessionsSection.style.display = 'none';
+                if (backupSection) backupSection.style.display = 'none';
             }
         }
 
@@ -875,15 +909,18 @@ Trân trọng,
             const tabAdd = document.getElementById('tabAddUser');
             const tabPerm = document.getElementById('tabPermissions');
             const tabSessions = document.getElementById('tabSessions');
-            [tabUsers, tabAdd, tabPerm, tabSessions].forEach(btn => btn && btn.classList.remove('primary-btn'));
-            [tabUsers, tabAdd, tabPerm, tabSessions].forEach(btn => btn && btn.classList.add('secondary-btn'));
+            const tabBackup = document.getElementById('tabBackup');
+            [tabUsers, tabAdd, tabPerm, tabSessions, tabBackup].forEach(btn => btn && btn.classList.remove('primary-btn'));
+            [tabUsers, tabAdd, tabPerm, tabSessions, tabBackup].forEach(btn => btn && btn.classList.add('secondary-btn'));
             const userTable = document.getElementById('userManagementTable');
             const permSection = document.getElementById('permissionsSection');
             const sessionsSection = document.getElementById('sessionsSection');
+            const backupSection = document.getElementById('backupSection');
             if (tab === 'users') {
                 if (userTable) userTable.style.display = 'block';
                 if (permSection) permSection.style.display = 'none';
                 if (sessionsSection) sessionsSection.style.display = 'none';
+                if (backupSection) backupSection.style.display = 'none';
                 tabUsers && tabUsers.classList.remove('secondary-btn');
                 tabUsers && tabUsers.classList.add('primary-btn');
             } else if (tab === 'permissions') {
@@ -894,9 +931,70 @@ Trân trọng,
                 if (userTable) userTable.style.display = 'none';
                 if (permSection) permSection.style.display = 'none';
                 if (sessionsSection) sessionsSection.style.display = 'block';
+                if (backupSection) backupSection.style.display = 'none';
                 tabSessions && tabSessions.classList.remove('secondary-btn');
                 tabSessions && tabSessions.classList.add('primary-btn');
                 loadSessions();
+            } else if (tab === 'backup') {
+                if (userTable) userTable.style.display = 'none';
+                if (permSection) permSection.style.display = 'none';
+                if (sessionsSection) sessionsSection.style.display = 'none';
+                if (backupSection) backupSection.style.display = 'block';
+                tabBackup && tabBackup.classList.remove('secondary-btn');
+                tabBackup && tabBackup.classList.add('primary-btn');
+            }
+        }
+
+        async function downloadBackup() {
+            try {
+                const res = await fetch('/api/backup', { headers: { ...getAuthHeaders() } });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    alert(data.error || 'Không thể tạo file sao lưu.');
+                    return;
+                }
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `backup-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error(e);
+                alert('Không thể tải file sao lưu. Vui lòng thử lại.');
+            }
+        }
+
+        async function restoreBackup() {
+            const input = document.getElementById('restoreFile');
+            if (!input || !input.files || input.files.length === 0) {
+                alert('Vui lòng chọn file khôi phục (.zip hoặc .db).');
+                return;
+            }
+            const file = input.files[0];
+            if (!confirm('Bạn chắc chắn muốn KHÔI PHỤC dữ liệu? Dữ liệu hiện tại sẽ bị thay thế và hệ thống sẽ tự khởi động lại.')) return;
+            try {
+                const form = new FormData();
+                form.append('file', file);
+                const res = await fetch('/api/restore', {
+                    method: 'POST',
+                    headers: { ...getAuthHeaders() },
+                    body: form
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    alert(data.error || 'Khôi phục thất bại.');
+                    return;
+                }
+                alert(data.message || 'Đã gửi yêu cầu khôi phục. Hệ thống sẽ khởi động lại.');
+                // Sau khi restore, token cũ có thể không còn hợp lệ
+                setTimeout(() => logout(), 1500);
+            } catch (e) {
+                console.error(e);
+                alert('Không thể khôi phục. Vui lòng thử lại.');
             }
         }
 
