@@ -38,7 +38,7 @@ def create_user_if_not_exists(username, password, full_name, email, role_name):
         print(f"   Tai khoan {username} hoac email da ton tai, bo qua")
         return False
 
-    password_hash = werkzeug.security.generate_password_hash(password)
+    password_hash = werkzeug.security.generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
     db.session.execute(
         text("""
             INSERT INTO user (username, password_hash, full_name, email, status, created_at)

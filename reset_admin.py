@@ -14,7 +14,7 @@ DEFAULT_PASSWORD = '190514@Da'
 def reset_admin():
     with app.app_context():
         try:
-            password_hash = werkzeug.security.generate_password_hash(DEFAULT_PASSWORD)
+            password_hash = werkzeug.security.generate_password_hash(DEFAULT_PASSWORD, method='pbkdf2:sha256', salt_length=16)
             updated = []
 
             # Reset admin

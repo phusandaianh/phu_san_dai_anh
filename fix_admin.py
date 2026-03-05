@@ -26,7 +26,7 @@ def fix_admin():
             db.session.commit()
             print("Đã tạo các roles")
             
-            password_hash = werkzeug.security.generate_password_hash('190514@Da')
+            password_hash = werkzeug.security.generate_password_hash('190514@Da', method='pbkdf2:sha256', salt_length=16)
             db.session.execute(
                 text("INSERT INTO user (username, password_hash, full_name, email, status, created_at) VALUES ('daihn', :password_hash, 'Phòng khám Đại Anh - Admin', 'admin@phongkhamdaianh.com', 'active', datetime('now'))"),
                 {"password_hash": password_hash}

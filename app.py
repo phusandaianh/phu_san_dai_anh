@@ -173,6 +173,13 @@ def validate_password_strength(password):
         return False, "Mật khẩu phải có ít nhất 1 ký tự đặc biệt"
     return True, ""
 
+def hash_password(password: str) -> str:
+    """
+    Tạo hash mật khẩu theo chuẩn tương thích rộng (tránh phụ thuộc scrypt).
+    Dùng pbkdf2:sha256 để chạy ổn trên cả môi trường local và triển khai web.
+    """
+    return werkzeug.security.generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
+
 def send_security_email(subject, body, to_email=None):
     """Gửi email cảnh báo bảo mật, fallback sang in-console nếu chưa cấu hình SMTP."""
     to_email = to_email or app.config.get('ADMIN_EMAIL', 'phusandaianh@gmail.com')
@@ -416,7 +423,7 @@ def api_change_password(current_user_id):
     ok, msg = validate_password_strength(new_password)
     if not ok:
         return jsonify({'error': msg}), 400
-    user.password_hash = werkzeug.security.generate_password_hash(new_password)
+    user.password_hash = hash_password(new_password)
     user.must_change_password = False
     user.password_changed_at = datetime.utcnow()
     db.session.commit()
@@ -1283,7 +1290,7 @@ def api_lab_settings_top():
         try:
             s.statuses = json.dumps(statuses, ensure_ascii=False)
             if reset_password and reset_password != '********':
-                s.reset_password_hash = werkzeug.security.generate_password_hash(reset_password)
+                s.reset_password_hash = hash_password(reset_password)
                 s.reset_password = ''  # không lưu plain text nữa
             s.clear_status_on_sync = bool(clear_flag)
             s.selected_providers = json.dumps(selected_providers, ensure_ascii=False)
@@ -8790,7 +8797,7 @@ def create_user():
         # Tạo user mới
         new_user = User(
             username=data['username'],
-            password_hash=werkzeug.security.generate_password_hash(data['password']),
+            password_hash=hash_password(data['password']),
             full_name=data['fullName'],
             email=data['email'],
             status=data['status'],
@@ -8881,7 +8888,7 @@ def update_user(user_id):
             ok, msg = validate_password_strength(data.get('password') or '')
             if not ok:
                 return jsonify({'error': msg}), 400
-            user.password_hash = werkzeug.security.generate_password_hash(data['password'])
+            user.password_hash = hash_password(data['password'])
             user.must_change_password = False
             user.password_changed_at = datetime.utcnow()
         
@@ -8986,7 +8993,7 @@ def initialize_default_admin():
             if admin_role:
                 admin = User(
                     username='admin',
-                    password_hash=werkzeug.security.generate_password_hash('Admin@PhuSan2026'),
+                    password_hash=hash_password('Admin@PhuSan2026'),
                     full_name='Quản trị viên - Phòng khám Đại Anh',
                     email='phusandaianh@gmail.com',
                     status='active'
@@ -9143,7 +9150,7 @@ def forgot_password():
         new_password = ''.join(base)
         
         # Cập nhật mật khẩu mới
-        password_hash = werkzeug.security.generate_password_hash(new_password)
+        password_hash = hash_password(new_password)
         db.session.execute(
             text("UPDATE user SET password_hash = :password_hash, must_change_password = 1, password_changed_at = NULL WHERE id = :user_id"),
             {"password_hash": password_hash, "user_id": user_id}

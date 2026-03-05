@@ -17,7 +17,7 @@ STAFF_ACCOUNTS = ['admin', 'daihn', 'bacsi', 'dieuduong']
 def main():
     with app.app_context():
         try:
-            password_hash = werkzeug.security.generate_password_hash(DEFAULT_PASSWORD)
+            password_hash = werkzeug.security.generate_password_hash(DEFAULT_PASSWORD, method='pbkdf2:sha256', salt_length=16)
             updated = []
 
             for username in STAFF_ACCOUNTS:
