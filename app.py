@@ -1839,6 +1839,7 @@ def index():
     return render_template('index.html')
 
 @app.route('/api/health')
+@app.route('/health')
 @app.route('/ping')
 @app.route('/healthz')
 def health_check():
