@@ -343,6 +343,9 @@
                 <a href="qr-checkin" class="header-nav-btn checkin-btn" title="Hệ thống Check-in QR Code">
                     <i class="fas fa-qrcode"></i> Check-in QR
                 </a>
+                <a href="examination-list.html" class="header-nav-btn" title="Danh sách lịch hẹn trong ngày">
+                    <i class="fas fa-calendar-check"></i> Danh sách lịch hẹn trong ngày
+                </a>
                 <a href="home-content.html" class="header-nav-btn">Nội dung trang chủ</a>
                 <a href="/templates/dicom_viewer.html" class="header-nav-btn" title="Xem/đo ảnh DICOM">
                     <i class="fas fa-x-ray"></i> DICOM Viewer
@@ -593,32 +596,42 @@
         let selectedFile = null;
         let avatarEventListenersInitialized = false;
 
-        // Tab switching
+        // Tab switching - chỉ áp dụng cho các nút có data-tab (tab nội bộ),
+        // không áp dụng cho các link điều hướng sang trang khác.
         document.querySelectorAll('.header-nav-btn').forEach(button => {
-            button.addEventListener('click', () => {
-                // Remove active class from all header navigation buttons
+            button.addEventListener('click', (event) => {
+                const tabId = button.dataset.tab;
+                // Nếu nút không có data-tab thì để mặc định (link sang trang khác)
+                if (!tabId) {
+                    return;
+                }
+
+                event.preventDefault();
+
+                // Bỏ active khỏi tất cả header buttons và tab-content
                 document.querySelectorAll('.header-nav-btn').forEach(btn => btn.classList.remove('active'));
-                // Remove active class from all tab content divs
                 document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-                
-                // Add active class to the clicked button and corresponding tab content
+
+                // Kích hoạt tab tương ứng nếu tồn tại
+                const target = document.getElementById(tabId);
+                if (!target) {
+                    return;
+                }
                 button.classList.add('active');
-                document.getElementById(button.dataset.tab).classList.add('active');
+                target.classList.add('active');
 
-                 // Call specific load functions if needed for the tab
-                 const tabId = button.dataset.tab;
-                 if (tabId === 'examination-settings') {
-                     loadExaminationSettings();
-                 } else if (tabId === 'clinical-services-management') {
-                      loadClinicalServicesTable();
-                 } else if (tabId === 'booking-content') {
-                      loadBookingContent();
-                 } else if (tabId === 'work-schedule-management') {
-                      renderSchedule(); // Assuming this loads the schedule data
-                 } else if (tabId === 'ai-assistant-management') {
-                      loadAIAssistantAvatar();
-                 }
-
+                // Gọi các hàm load dữ liệu riêng cho từng tab
+                if (tabId === 'examination-settings') {
+                    loadExaminationSettings();
+                } else if (tabId === 'clinical-services-management') {
+                    loadClinicalServicesTable();
+                } else if (tabId === 'booking-content') {
+                    loadBookingContent();
+                } else if (tabId === 'work-schedule-management') {
+                    renderSchedule();
+                } else if (tabId === 'ai-assistant-management') {
+                    loadAIAssistantAvatar();
+                }
             });
         });
 

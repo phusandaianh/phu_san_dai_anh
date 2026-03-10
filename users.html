@@ -545,17 +545,19 @@
                     localStorage.setItem('authToken', data.token);
                     localStorage.setItem('currentUser', JSON.stringify(data.user));
                     
-                    // Ẩn form đăng nhập, hiện phần quản lý
-                    document.getElementById('loginSection').style.display = 'none';
-                    document.getElementById('userManagementSection').style.display = 'block';
-                    updateUIForRole();
-                    updateUserInfoHeader();
-                    setActiveTab('users');
                     if (data.user && data.user.must_change_password) {
+                        // Bắt buộc đổi mật khẩu trước
+                        document.getElementById('loginSection').style.display = 'none';
+                        document.getElementById('userManagementSection').style.display = 'block';
+                        updateUIForRole();
+                        updateUserInfoHeader();
+                        setActiveTab('users');
                         openChangePasswordModal(true);
+                        if (isAdmin()) await loadUsers();
+                    } else {
+                        // Đăng nhập thành công: chuyển tới trang danh sách lịch hẹn
+                        window.location.href = '/examination-list.html';
                     }
-                    // Load danh sách người dùng (chỉ admin mới cần)
-                    if (isAdmin()) await loadUsers();
                 } else {
                     let msg = (data && data.error) ? data.error : (response.status === 429 ? 'Quá nhiều lần thử. Đợi 1 phút rồi thử lại.' : 'Tên đăng nhập hoặc mật khẩu không đúng!');
                     if (data && data.detail) msg += '\n\nChi tiết: ' + data.detail;
@@ -789,7 +791,12 @@ Trân trọng,
                 renderUsers();
             } catch (error) {
                 console.error('Error loading users:', error);
-                alert('Vui lòng đăng nhập lại.');
+                // Phiên đăng nhập có thể đã hết hạn hoặc token không hợp lệ.
+                // Xóa thông tin đăng nhập phía client và chuyển thẳng về màn hình đăng nhập,
+                // không hiện thêm thông báo gây khó chịu.
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('currentUser');
+                window.location.href = '/';
             }
         }
 
