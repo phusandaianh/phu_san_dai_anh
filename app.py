@@ -562,32 +562,6 @@ def api_login():
         ip_address = request.remote_addr or ''
         user_agent = request.headers.get('User-Agent', '')
 
-        # Kiểm tra IP/máy đã được admin phê duyệt chưa
-        trusted = TrustedLoginIP.query.filter_by(user_id=user_id, ip_address=ip_address).first()
-        if trusted is None:
-            # Tạo yêu cầu mới và gửi email cho admin
-            approval_token = __import__('secrets').token_urlsafe(32)
-            trusted = TrustedLoginIP(
-                user_id=user_id,
-                ip_address=ip_address,
-                user_agent=user_agent,
-                created_at=datetime.utcnow(),
-                is_approved=False,
-                approval_token=approval_token
-            )
-            db.session.add(trusted)
-            db.session.commit()
-            send_login_approval_request_email(username_db, user_id, ip_address, user_agent, approval_token)
-            return jsonify({
-                'error': 'Máy/địa chỉ IP này chưa được admin phê duyệt. Đã gửi yêu cầu tới admin, vui lòng chờ được chấp nhận qua email.',
-                'code': 'LOGIN_DEVICE_PENDING_APPROVAL'
-            }), 403
-        if not trusted.is_approved:
-            return jsonify({
-                'error': 'Máy/địa chỉ IP này đang chờ admin phê duyệt. Vui lòng thử lại sau khi được chấp nhận.',
-                'code': 'LOGIN_DEVICE_NOT_APPROVED'
-            }), 403
-
         now_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         db.session.execute(
             text("UPDATE user SET last_login = :now WHERE id = :user_id"),
@@ -600,7 +574,6 @@ def api_login():
         ).fetchall()
         roles = [row[0] for row in roles_result]
         token = __import__('secrets').token_urlsafe(32)
-        # IP này đã được phê duyệt, coi như thiết bị tin cậy
         session_id = register_token(token, user_id, ip_address=ip_address, user_agent=user_agent, is_new_device=False)
         resp = make_response(jsonify({
             'token': token,
