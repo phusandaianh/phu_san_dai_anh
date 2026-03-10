@@ -562,6 +562,37 @@ def api_login():
         ip_address = request.remote_addr or ''
         user_agent = request.headers.get('User-Agent', '')
 
+        # Chỉ bắt buộc phê duyệt thiết bị ở môi trường production (cách B: per-device allowlist)
+        is_production_env = (
+            os.environ.get('FLASK_ENV') == 'production'
+            or app.config.get('ENV') == 'production'
+        )
+        if is_production_env:
+            trusted = TrustedLoginIP.query.filter_by(user_id=user_id, ip_address=ip_address).first()
+            if trusted is None:
+                # Tạo yêu cầu mới và gửi email cảnh báo/phê duyệt tới admin
+                approval_token = __import__('secrets').token_urlsafe(32)
+                trusted = TrustedLoginIP(
+                    user_id=user_id,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    created_at=datetime.utcnow(),
+                    is_approved=False,
+                    approval_token=approval_token
+                )
+                db.session.add(trusted)
+                db.session.commit()
+                send_login_approval_request_email(username_db, user_id, ip_address, user_agent, approval_token)
+                return jsonify({
+                    'error': 'Máy/địa chỉ IP này chưa được admin phê duyệt. Đã gửi email cảnh báo tới quản trị viên. Vui lòng đăng nhập lại sau khi được chấp thuận.',
+                    'code': 'LOGIN_DEVICE_PENDING_APPROVAL'
+                }), 403
+            if not trusted.is_approved:
+                return jsonify({
+                    'error': 'Máy/địa chỉ IP này chưa được admin phê duyệt. Vui lòng đăng nhập lại sau khi quản trị viên chấp thuận.',
+                    'code': 'LOGIN_DEVICE_NOT_APPROVED'
+                }), 403
+
         now_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         db.session.execute(
             text("UPDATE user SET last_login = :now WHERE id = :user_id"),
@@ -940,7 +971,7 @@ STAFF_ONLY_PAGES = set([
     'consultation-results.html', 'lab-tests.html', 'lab-tests-dai-anh.html',
     'clinical-form-templates.html', 'medical-charts.html', 'treatment-plans.html',
     'doctor-schedule.html', 'checkin-admin.html', 'qr-checkin.html',
-    'home-content.html', 'clinical-services-admin.html', 'booking-content-admin.html',
+    'home-content.html', 'clinical-services-admin.html',
     'voluson-sync-admin.html', 'ai-assistant-admin.html', 'prescription-management.html',
     'disease-tests.html', 'test-meanings.html', 'ultrasound-analysis.html',
     'ultrasound-general.html', 'ctg-analysis.html', 'cervical-examination-analysis.html',
