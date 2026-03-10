@@ -435,6 +435,22 @@ def _get_external_base_url():
         or 'http://127.0.0.1:5000'
     )
 
+# OTP cho đăng nhập máy lạ: temp_token -> {user_id, username, ip, otp, expires_at, last_sent_at}
+LOGIN_OTP_STORE = {}
+OTP_VALID_SECONDS = 300  # 5 phút
+OTP_RESEND_COOLDOWN_SECONDS = 30  # 30 giây mới được gửi mã mới
+
+def send_login_otp_email(user_email, otp):
+    """Gửi mã OTP tới email người dùng khi đăng nhập từ máy lạ."""
+    subject = "Mã OTP đăng nhập - Phòng khám Phụ Sản Đại Anh"
+    body = (
+        f"Mã OTP của bạn: {otp}\n\n"
+        f"Mã có hiệu lực {OTP_VALID_SECONDS // 60} phút.\n"
+        "Nếu bạn không yêu cầu đăng nhập, vui lòng bỏ qua email này và đổi mật khẩu ngay.\n\n"
+        "— Phòng khám Phụ Sản Đại Anh"
+    )
+    return send_security_email(subject, body, to_email=user_email)
+
 def send_login_approval_request_email(username, user_id, ip_address, user_agent, approval_token):
     """Gửi email yêu cầu admin phê duyệt đăng nhập từ máy mới."""
     base_url = _get_external_base_url().rstrip('/')
@@ -569,29 +585,53 @@ def api_login():
         )
         if is_production_env:
             trusted = TrustedLoginIP.query.filter_by(user_id=user_id, ip_address=ip_address).first()
-            if trusted is None:
-                # Tạo yêu cầu mới và gửi email cảnh báo/phê duyệt tới admin
-                approval_token = __import__('secrets').token_urlsafe(32)
-                trusted = TrustedLoginIP(
-                    user_id=user_id,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
-                    created_at=datetime.utcnow(),
-                    is_approved=False,
-                    approval_token=approval_token
-                )
-                db.session.add(trusted)
-                db.session.commit()
-                send_login_approval_request_email(username_db, user_id, ip_address, user_agent, approval_token)
+            if trusted is None or not trusted.is_approved:
+                # Máy lạ: yêu cầu OTP gửi tới email người dùng
+                user_email = (email or '').strip()
+                if not user_email:
+                    # Không có email: fallback flow admin phê duyệt
+                    approval_token = __import__('secrets').token_urlsafe(32)
+                    trusted = TrustedLoginIP.query.filter_by(user_id=user_id, ip_address=ip_address).first()
+                    if trusted is None:
+                        trusted = TrustedLoginIP(
+                            user_id=user_id,
+                            ip_address=ip_address,
+                            user_agent=user_agent,
+                            created_at=datetime.utcnow(),
+                            is_approved=False,
+                            approval_token=approval_token
+                        )
+                        db.session.add(trusted)
+                        db.session.commit()
+                    else:
+                        trusted.approval_token = approval_token
+                        db.session.commit()
+                    send_login_approval_request_email(username_db, user_id, ip_address, user_agent, approval_token)
+                    return jsonify({
+                        'error': 'Máy/địa chỉ IP này chưa được phê duyệt. Tài khoản chưa có email, đã gửi yêu cầu tới quản trị viên.',
+                        'code': 'LOGIN_DEVICE_PENDING_APPROVAL'
+                    }), 403
+                # Có email: gửi OTP
+                import random
+                temp_token = __import__('secrets').token_urlsafe(32)
+                otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+                now = datetime.utcnow()
+                LOGIN_OTP_STORE[temp_token] = {
+                    'user_id': user_id,
+                    'username': username_db,
+                    'ip_address': ip_address,
+                    'user_agent': user_agent,
+                    'otp': otp,
+                    'expires_at': now + timedelta(seconds=OTP_VALID_SECONDS),
+                    'last_sent_at': now,
+                }
+                send_login_otp_email(user_email, otp)
                 return jsonify({
-                    'error': 'Máy/địa chỉ IP này chưa được admin phê duyệt. Đã gửi email cảnh báo tới quản trị viên. Vui lòng đăng nhập lại sau khi được chấp thuận.',
-                    'code': 'LOGIN_DEVICE_PENDING_APPROVAL'
-                }), 403
-            if not trusted.is_approved:
-                return jsonify({
-                    'error': 'Máy/địa chỉ IP này chưa được admin phê duyệt. Vui lòng đăng nhập lại sau khi quản trị viên chấp thuận.',
-                    'code': 'LOGIN_DEVICE_NOT_APPROVED'
-                }), 403
+                    'requires_otp': True,
+                    'temp_token': temp_token,
+                    'message': f'Mã OTP đã gửi đến email {user_email[:3]}***{user_email[-10:] if len(user_email) > 10 else "***"}. Mã có hiệu lực 5 phút.',
+                    'resend_after_seconds': OTP_RESEND_COOLDOWN_SECONDS
+                }), 200
 
         now_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         db.session.execute(
@@ -633,6 +673,131 @@ def api_logout():
     resp = jsonify({'message': 'Đã đăng xuất'})
     resp.set_cookie('auth_token', '', max_age=0, expires=0)
     return resp
+
+@app.route('/api/login-verify-otp', methods=['POST'])
+def api_login_verify_otp():
+    """Xác minh OTP khi đăng nhập từ máy lạ."""
+    data = request.get_json(silent=True) or {}
+    temp_token = (data.get('temp_token') or '').strip()
+    otp = (data.get('otp') or '').strip().replace(' ', '')
+    if not temp_token or not otp:
+        return jsonify({'error': 'Vui lòng nhập mã OTP'}), 400
+    entry = LOGIN_OTP_STORE.get(temp_token)
+    if not entry:
+        return jsonify({'error': 'Phiên OTP đã hết hạn. Vui lòng đăng nhập lại.'}), 400
+    if entry['expires_at'] < datetime.utcnow():
+        try:
+            del LOGIN_OTP_STORE[temp_token]
+        except Exception:
+            pass
+        return jsonify({'error': 'Mã OTP đã hết hạn. Vui lòng đăng nhập lại và gửi mã mới.'}), 400
+    if entry['otp'] != otp:
+        return jsonify({'error': 'Mã OTP không đúng. Vui lòng thử lại.'}), 400
+    # Xác minh IP trùng với lúc gửi OTP
+    ip_address = request.remote_addr or ''
+    if entry['ip_address'] != ip_address:
+        return jsonify({'error': 'Địa chỉ IP không khớp. Vui lòng đăng nhập lại.'}), 400
+    user_id = entry['user_id']
+    username_db = entry['username']
+    ip_address = entry['ip_address']
+    user_agent = entry.get('user_agent', '')
+    try:
+        del LOGIN_OTP_STORE[temp_token]
+    except Exception:
+        pass
+    # Thêm IP vào danh sách tin cậy
+    trusted = TrustedLoginIP.query.filter_by(user_id=user_id, ip_address=ip_address).first()
+    if trusted is None:
+        trusted = TrustedLoginIP(
+            user_id=user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            created_at=datetime.utcnow(),
+            is_approved=True,
+            approval_token=__import__('secrets').token_urlsafe(32),
+            approved_at=datetime.utcnow()
+        )
+        db.session.add(trusted)
+    else:
+        trusted.is_approved = True
+        trusted.approved_at = datetime.utcnow()
+    db.session.commit()
+    now_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    db.session.execute(
+        text("UPDATE user SET last_login = :now WHERE id = :user_id"),
+        {"now": now_str, "user_id": user_id}
+    )
+    db.session.commit()
+    result = db.session.execute(
+        text("SELECT full_name, email, must_change_password FROM user WHERE id = :uid"),
+        {"uid": user_id}
+    ).fetchone()
+    full_name, email, must_change_password = result or ('', '', False)
+    roles_result = db.session.execute(
+        text("SELECT r.name FROM role r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = :user_id"),
+        {"user_id": user_id}
+    ).fetchall()
+    roles = [row[0] for row in roles_result]
+    token = __import__('secrets').token_urlsafe(32)
+    session_id = register_token(token, user_id, ip_address=ip_address, user_agent=user_agent, is_new_device=False)
+    resp = make_response(jsonify({
+        'token': token,
+        'user': {
+            'id': user_id,
+            'username': username_db,
+            'full_name': full_name or '',
+            'email': email or '',
+            'roles': roles,
+            'must_change_password': bool(must_change_password),
+        },
+        'session_id': session_id,
+        'is_new_device': False,
+    }))
+    resp.set_cookie('auth_token', token, httponly=True, samesite='Lax', max_age=3600)
+    return resp
+
+@app.route('/api/login-resend-otp', methods=['POST'])
+def api_login_resend_otp():
+    """Gửi lại mã OTP khi đăng nhập từ máy lạ. Chỉ được gọi sau 30 giây."""
+    data = request.get_json(silent=True) or {}
+    temp_token = (data.get('temp_token') or '').strip()
+    if not temp_token:
+        return jsonify({'error': 'Thiếu temp_token'}), 400
+    entry = LOGIN_OTP_STORE.get(temp_token)
+    if not entry:
+        return jsonify({'error': 'Phiên OTP đã hết hạn. Vui lòng đăng nhập lại.'}), 400
+    if entry['expires_at'] < datetime.utcnow():
+        try:
+            del LOGIN_OTP_STORE[temp_token]
+        except Exception:
+            pass
+        return jsonify({'error': 'Phiên đã hết hạn. Vui lòng đăng nhập lại.'}), 400
+    now = datetime.utcnow()
+    elapsed = (now - entry['last_sent_at']).total_seconds()
+    if elapsed < OTP_RESEND_COOLDOWN_SECONDS:
+        return jsonify({
+            'error': f'Vui lòng đợi {int(OTP_RESEND_COOLDOWN_SECONDS - elapsed)} giây nữa để gửi mã mới.',
+            'next_available_seconds': int(OTP_RESEND_COOLDOWN_SECONDS - elapsed)
+        }), 429
+    ip_address = request.remote_addr or ''
+    if entry['ip_address'] != ip_address:
+        return jsonify({'error': 'Địa chỉ IP không khớp.'}), 400
+    import random
+    otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+    entry['otp'] = otp
+    entry['last_sent_at'] = now
+    entry['expires_at'] = now + timedelta(seconds=OTP_VALID_SECONDS)
+    user_email = db.session.execute(
+        text("SELECT email FROM user WHERE id = :uid"),
+        {"uid": entry['user_id']}
+    ).scalar() or ''
+    if not user_email:
+        return jsonify({'error': 'Không lấy được email người dùng.'}), 500
+    send_login_otp_email(user_email.strip(), otp)
+    return jsonify({
+        'message': 'Mã OTP mới đã gửi đến email của bạn.',
+        'next_available_seconds': OTP_RESEND_COOLDOWN_SECONDS
+    })
 
 @app.route('/api/change-password', methods=['POST'])
 @require_auth
@@ -734,6 +899,41 @@ def api_active_sessions():
             'isNewDevice': bool(info.get('is_new_device')),
         })
     return jsonify(sessions)
+
+@app.route('/api/login-device-history', methods=['GET'])
+def api_login_device_history():
+    """Liệt kê các thiết bị/IP đã từng đăng nhập (TrustedLoginIP) - chỉ admin / manage_users."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    devices = []
+    rows = db.session.execute(
+        text("""
+            SELECT t.id, t.user_id, t.ip_address, t.user_agent, t.created_at, t.approved_at, t.is_approved,
+                   u.username, u.full_name
+            FROM trusted_login_ip t
+            JOIN user u ON u.id = t.user_id
+            ORDER BY t.approved_at DESC NULLS LAST, t.created_at DESC
+        """),
+        {}
+    ).fetchall()
+    for row in rows:
+        rid, uid, ip, ua, created, approved, is_appr, username, full_name = row
+        devices.append({
+            'id': rid,
+            'userId': uid,
+            'username': username or '',
+            'fullName': full_name or '',
+            'ipAddress': ip or '',
+            'userAgent': (ua or '')[:200],
+            'createdAt': created.isoformat() if created else None,
+            'approvedAt': approved.isoformat() if approved else None,
+            'isApproved': bool(is_appr),
+        })
+    return jsonify(devices)
 
 @app.route('/api/active-sessions/<string:session_id>', methods=['DELETE'])
 def api_revoke_session(session_id):

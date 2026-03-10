@@ -193,28 +193,51 @@
         <!-- Phần đăng nhập -->
         <div id="loginSection" class="login-section" style="max-width: 400px; margin: 20px auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;">
             <h3 style="text-align: center; margin-bottom: 20px;">Đăng nhập để tiếp tục</h3>
-            <form id="loginForm">
-                <div class="form-group">
-                    <label for="loginUsername">Tên đăng nhập:</label>
-                    <input type="text" id="loginUsername" required class="form-control" placeholder="Nhập tên đăng nhập">
-                </div>
-                <div class="form-group">
-                    <label for="loginPassword">Mật khẩu:</label>
-                    <div style="position: relative;">
-                        <input type="password" id="loginPassword" required class="form-control" placeholder="Nhập mật khẩu" style="padding-right: 45px;">
-                        <button type="button" id="togglePassword" onclick="togglePasswordVisibility()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #666; font-size: 16px;">
-                            <i class="fas fa-eye" id="passwordIcon"></i>
-                        </button>
+            <div id="loginFormWrap">
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="loginUsername">Tên đăng nhập:</label>
+                        <input type="text" id="loginUsername" required class="form-control" placeholder="Nhập tên đăng nhập">
                     </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Mật khẩu:</label>
+                        <div style="position: relative;">
+                            <input type="password" id="loginPassword" required class="form-control" placeholder="Nhập mật khẩu" style="padding-right: 45px;">
+                            <button type="button" id="togglePassword" onclick="togglePasswordVisibility()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #666; font-size: 16px;">
+                                <i class="fas fa-eye" id="passwordIcon"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn primary-btn" style="width: 100%;">
+                        <i class="fas fa-sign-in-alt"></i> Đăng nhập
+                    </button>
+                </form>
+                <div style="text-align: center; margin-top: 15px;">
+                    <button onclick="forgotPassword()" class="btn secondary-btn" style="font-size: 0.9em;">
+                        <i class="fas fa-key"></i> Quên mật khẩu?
+                    </button>
                 </div>
-                <button type="submit" class="btn primary-btn" style="width: 100%;">
-                    <i class="fas fa-sign-in-alt"></i> Đăng nhập
-                </button>
-            </form>
-            <div style="text-align: center; margin-top: 15px;">
-                <button onclick="forgotPassword()" class="btn secondary-btn" style="font-size: 0.9em;">
-                    <i class="fas fa-key"></i> Quên mật khẩu?
-            </button>
+            </div>
+            <!-- Form nhập OTP khi đăng nhập máy lạ -->
+            <div id="otpFormWrap" style="display: none;">
+                <p id="otpMessage" style="color: #333; margin-bottom: 15px; font-size: 14px;"></p>
+                <form id="otpForm">
+                    <div class="form-group">
+                        <label for="otpInput">Mã OTP:</label>
+                        <input type="text" id="otpInput" class="form-control" placeholder="Nhập 6 chữ số" maxlength="6" pattern="[0-9]*" inputmode="numeric" autocomplete="one-time-code" style="letter-spacing: 4px; font-size: 18px; text-align: center;" oninput="this.value=this.value.replace(/\D/g,'')">
+                    </div>
+                    <button type="submit" class="btn primary-btn" style="width: 100%;">
+                        <i class="fas fa-check"></i> Xác nhận
+                    </button>
+                </form>
+                <div style="text-align: center; margin-top: 15px;">
+                    <button id="btnResendOtp" type="button" class="btn secondary-btn" disabled style="font-size: 0.9em;">
+                        <i class="fas fa-redo"></i> <span id="resendOtpLabel">Gửi mã mới (30s)</span>
+                    </button>
+                    <button type="button" onclick="backToLoginForm()" class="btn secondary-btn" style="font-size: 0.9em; margin-left: 8px;">
+                        <i class="fas fa-arrow-left"></i> Quay lại
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -304,12 +327,14 @@
 
         <!-- Quản lý phiên đăng nhập và IP -->
         <div id="sessionsSection" style="display: none; margin-top: 20px;">
-            <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 12px;">
-                <h2 style="margin:0; font-size: 1.2rem;">Phiên đăng nhập hiện tại</h2>
+            <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                <h2 style="margin:0; font-size: 1.2rem;">Phiên đăng nhập / IP</h2>
                 <button type="button" class="btn secondary-btn" onclick="loadSessions()">
                     <i class="fas fa-sync-alt"></i> Làm mới
                 </button>
             </div>
+
+            <h3 style="margin: 16px 0 8px; font-size: 1rem; color: #333;">Phiên đăng nhập hiện tại</h3>
             <div class="table-container">
                 <table class="user-table">
                     <thead>
@@ -329,9 +354,27 @@
                     </tbody>
                 </table>
             </div>
-            <small style="display:block; margin-top:8px; color:#666;">
-                Admin có thể ngắt kết nối ngay các phiên đăng nhập đáng ngờ từ đây.
-            </small>
+            <small style="display:block; margin-top:8px; color:#666;">Admin có thể ngắt kết nối các phiên đang hoạt động.</small>
+
+            <h3 style="margin: 24px 0 8px; font-size: 1rem; color: #333;">Thiết bị / IP đã từng đăng nhập</h3>
+            <div class="table-container">
+                <table class="user-table">
+                    <thead>
+                        <tr>
+                            <th>Tài khoản</th>
+                            <th>Họ tên</th>
+                            <th>Địa chỉ IP</th>
+                            <th>Thiết bị</th>
+                            <th>Ngày tạo</th>
+                            <th>Ngày phê duyệt</th>
+                            <th>Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody id="deviceHistoryTableBody">
+                    </tbody>
+                </table>
+            </div>
+            <small style="display:block; margin-top:8px; color:#666;">Danh sách máy / IP đã đăng nhập hoặc chờ phê duyệt.</small>
         </div>
 
         <!-- Sao lưu & Khôi phục dữ liệu -->
@@ -516,7 +559,9 @@
             users: [],
             currentUser: null,
             isLoggedIn: false,
-            rolePermissions: {}
+            rolePermissions: {},
+            loginTempToken: null,
+            resendCooldown: 30
         };
 
         // Hàm đăng nhập
@@ -538,25 +583,32 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    state.currentUser = data.user;
-                    state.isLoggedIn = true;
-                    
-                    // Lưu token vào localStorage
-                    localStorage.setItem('authToken', data.token);
-                    localStorage.setItem('currentUser', JSON.stringify(data.user));
-                    
-                    if (data.user && data.user.must_change_password) {
-                        // Bắt buộc đổi mật khẩu trước
-                        document.getElementById('loginSection').style.display = 'none';
-                        document.getElementById('userManagementSection').style.display = 'block';
-                        updateUIForRole();
-                        updateUserInfoHeader();
-                        setActiveTab('users');
-                        openChangePasswordModal(true);
-                        if (isAdmin()) await loadUsers();
+                    if (data.requires_otp) {
+                        // Máy lạ: cần nhập OTP
+                        state.loginTempToken = data.temp_token;
+                        state.resendCooldown = data.resend_after_seconds || 30;
+                        document.getElementById('loginFormWrap').style.display = 'none';
+                        document.getElementById('otpFormWrap').style.display = 'block';
+                        document.getElementById('otpMessage').textContent = data.message || 'Mã OTP đã gửi đến email của bạn.';
+                        document.getElementById('otpInput').value = '';
+                        document.getElementById('otpInput').focus();
+                        startResendOtpCountdown();
                     } else {
-                        // Đăng nhập thành công: chuyển tới trang danh sách lịch hẹn
-                        window.location.href = '/examination-list.html';
+                        state.currentUser = data.user;
+                        state.isLoggedIn = true;
+                        localStorage.setItem('authToken', data.token);
+                        localStorage.setItem('currentUser', JSON.stringify(data.user));
+                        if (data.user && data.user.must_change_password) {
+                            document.getElementById('loginSection').style.display = 'none';
+                            document.getElementById('userManagementSection').style.display = 'block';
+                            updateUIForRole();
+                            updateUserInfoHeader();
+                            setActiveTab('users');
+                            openChangePasswordModal(true);
+                            if (isAdmin()) await loadUsers();
+                        } else {
+                            window.location.href = '/examination-list.html';
+                        }
                     }
                 } else {
                     let msg = (data && data.error) ? data.error : (response.status === 429 ? 'Quá nhiều lần thử. Đợi 1 phút rồi thử lại.' : 'Tên đăng nhập hoặc mật khẩu không đúng!');
@@ -566,6 +618,109 @@
             } catch (error) {
                 console.error('Lỗi đăng nhập:', error);
                 alert('Lỗi kết nối: ' + (error.message || 'Vui lòng kiểm tra mạng và thử lại.'));
+            }
+        }
+
+        let resendOtpTimer = null;
+        function startResendOtpCountdown() {
+            if (resendOtpTimer) clearInterval(resendOtpTimer);
+            const btn = document.getElementById('btnResendOtp');
+            const label = document.getElementById('resendOtpLabel');
+            let sec = state.resendCooldown || 30;
+            btn.disabled = true;
+            label.textContent = `Gửi mã mới (${sec}s)`;
+            resendOtpTimer = setInterval(() => {
+                sec--;
+                if (sec <= 0) {
+                    clearInterval(resendOtpTimer);
+                    resendOtpTimer = null;
+                    btn.disabled = false;
+                    label.textContent = 'Gửi mã mới';
+                } else {
+                    label.textContent = `Gửi mã mới (${sec}s)`;
+                }
+            }, 1000);
+        }
+
+        function backToLoginForm() {
+            if (resendOtpTimer) clearInterval(resendOtpTimer);
+            state.loginTempToken = null;
+            document.getElementById('otpFormWrap').style.display = 'none';
+            document.getElementById('loginFormWrap').style.display = 'block';
+            document.getElementById('otpInput').value = '';
+        }
+
+        async function verifyOtp(event) {
+            event.preventDefault();
+            const otp = document.getElementById('otpInput').value.trim().replace(/\s/g, '');
+            if (!otp || otp.length !== 6) {
+                alert('Vui lòng nhập đúng 6 chữ số mã OTP.');
+                return;
+            }
+            const temp_token = state.loginTempToken;
+            if (!temp_token) {
+                alert('Phiên đã hết hạn. Vui lòng đăng nhập lại.');
+                backToLoginForm();
+                return;
+            }
+            try {
+                const response = await fetch('/api/login-verify-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ temp_token, otp })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    state.currentUser = data.user;
+                    state.isLoggedIn = true;
+                    state.loginTempToken = null;
+                    localStorage.setItem('authToken', data.token);
+                    localStorage.setItem('currentUser', JSON.stringify(data.user));
+                    document.getElementById('otpFormWrap').style.display = 'none';
+                    document.getElementById('loginFormWrap').style.display = 'block';
+                    if (data.user && data.user.must_change_password) {
+                        document.getElementById('loginSection').style.display = 'none';
+                        document.getElementById('userManagementSection').style.display = 'block';
+                        updateUIForRole();
+                        updateUserInfoHeader();
+                        setActiveTab('users');
+                        openChangePasswordModal(true);
+                        if (isAdmin()) await loadUsers();
+                    } else {
+                        window.location.href = '/examination-list.html';
+                    }
+                } else {
+                    alert(data.error || 'Mã OTP không đúng.');
+                }
+            } catch (error) {
+                console.error('Lỗi xác minh OTP:', error);
+                alert('Lỗi kết nối. Vui lòng thử lại.');
+            }
+        }
+
+        async function resendOtp() {
+            const temp_token = state.loginTempToken;
+            if (!temp_token) return;
+            try {
+                const response = await fetch('/api/login-resend-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ temp_token })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    document.getElementById('otpMessage').textContent = data.message || 'Mã OTP mới đã gửi đến email của bạn.';
+                    state.resendCooldown = data.next_available_seconds || 30;
+                    startResendOtpCountdown();
+                } else {
+                    alert(data.error || 'Không thể gửi mã. Vui lòng thử lại.');
+                    if (data.next_available_seconds) {
+                        state.resendCooldown = data.next_available_seconds;
+                        startResendOtpCountdown();
+                    }
+                }
+            } catch (error) {
+                alert('Lỗi kết nối. Vui lòng thử lại.');
             }
         }
 
@@ -1042,14 +1197,41 @@ Trân trọng,
         // Quản lý phiên đăng nhập / IP
         async function loadSessions() {
             try {
-                const response = await fetch('/api/active-sessions', { headers: { ...getAuthHeaders() } });
-                if (!response.ok) throw new Error('Failed to load sessions');
-                const sessions = await response.json();
+                const headers = getAuthHeaders();
+                const [sessRes, devRes] = await Promise.all([
+                    fetch('/api/active-sessions', { headers }),
+                    fetch('/api/login-device-history', { headers })
+                ]);
+                if (!sessRes.ok) throw new Error('Failed to load active sessions');
+                if (!devRes.ok) throw new Error('Failed to load device history');
+                const sessions = await sessRes.json();
+                const devices = await devRes.json();
                 renderSessions(sessions);
+                renderDeviceHistory(devices);
             } catch (error) {
                 console.error('Error loading sessions:', error);
                 alert('Không thể tải danh sách phiên đăng nhập. Vui lòng thử lại sau.');
             }
+        }
+
+        function renderDeviceHistory(devices) {
+            const tbody = document.getElementById('deviceHistoryTableBody');
+            if (!tbody) return;
+            if (!Array.isArray(devices) || devices.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7">Chưa có thiết bị nào đăng nhập.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = devices.map(d => `
+                <tr>
+                    <td>${d.username || ''}</td>
+                    <td>${d.fullName || ''}</td>
+                    <td>${d.ipAddress || ''}</td>
+                    <td style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${d.userAgent || ''}">${d.userAgent || ''}</td>
+                    <td>${d.createdAt ? new Date(d.createdAt).toLocaleString('vi-VN') : ''}</td>
+                    <td>${d.approvedAt ? new Date(d.approvedAt).toLocaleString('vi-VN') : '–'}</td>
+                    <td>${d.isApproved ? '<span style="color:#28a745;">Đã phê duyệt</span>' : '<span style="color:#ffc107;">Chờ phê duyệt</span>'}</td>
+                </tr>
+            `).join('');
         }
 
         function renderSessions(sessions) {
@@ -1234,10 +1416,10 @@ Trân trọng,
 
         // Load danh sách người dùng khi trang được tải
         document.addEventListener('DOMContentLoaded', function() {
-            // Thêm event listener cho form đăng nhập
             document.getElementById('loginForm').addEventListener('submit', login);
-            
-            // Kiểm tra trạng thái đăng nhập
+            document.getElementById('otpForm').addEventListener('submit', verifyOtp);
+            document.getElementById('btnResendOtp').addEventListener('click', resendOtp);
+
             checkLoginStatus();
 
             // Mặc định tab danh sách sáng khi đã vào khu vực quản lý (chỉ admin)

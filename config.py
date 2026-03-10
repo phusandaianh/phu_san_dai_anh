@@ -20,7 +20,15 @@ class Config:
     TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID') or 'YOUR_TWILIO_ACCOUNT_SID'
     TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN') or 'YOUR_TWILIO_AUTH_TOKEN'
     TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER') or 'YOUR_TWILIO_PHONE_NUMBER'
-    
+
+    # SMTP - Gửi email (OTP đăng nhập máy lạ, quên mật khẩu, v.v.)
+    # Đặt biến môi trường: SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, ADMIN_EMAIL
+    SMTP_SERVER = os.environ.get('SMTP_SERVER', '')
+    SMTP_PORT = int(os.environ.get('SMTP_PORT', 587))
+    SMTP_USERNAME = os.environ.get('SMTP_USERNAME', '')
+    SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')
+    ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'phusandaianh@gmail.com')
+
     # API
     API_VERSION = 'v1'
     API_PREFIX = f'/api/{API_VERSION}'
