@@ -252,7 +252,7 @@
 
     if (isToday) {
       html += `<div style="font-size:1.1rem;background:#ffe0e0;color:#1565c0;padding:6px 10px;border-radius:8px;font-weight:bold;margin-bottom:6px;">
-        📅 Hôm nay, ${getVietnameseDay(day.date)}, ngày ${formatDate(day.date)}
+        <i class="fas fa-calendar-alt" style="margin-right:6px;"></i>Hôm nay, ${getVietnameseDay(day.date)}, ngày ${formatDate(day.date)}
       </div>`;
     } else {
       html += `<div class='schedule-date' style="color:#1565c0;">

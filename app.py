@@ -910,13 +910,14 @@ def api_login_device_history():
         return jsonify({'error': 'Forbidden'}), 403
 
     devices = []
+    # SQLite không hỗ trợ "NULLS LAST". Dùng biểu thức (approved_at IS NULL) để tương thích đa DB.
     rows = db.session.execute(
         text("""
             SELECT t.id, t.user_id, t.ip_address, t.user_agent, t.created_at, t.approved_at, t.is_approved,
                    u.username, u.full_name
             FROM trusted_login_ip t
             JOIN user u ON u.id = t.user_id
-            ORDER BY t.approved_at DESC NULLS LAST, t.created_at DESC
+            ORDER BY (t.approved_at IS NULL) ASC, t.approved_at DESC, t.created_at DESC
         """),
         {}
     ).fetchall()

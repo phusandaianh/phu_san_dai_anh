@@ -1202,15 +1202,22 @@ Trân trọng,
                     fetch('/api/active-sessions', { headers }),
                     fetch('/api/login-device-history', { headers })
                 ]);
-                if (!sessRes.ok) throw new Error('Failed to load active sessions');
-                if (!devRes.ok) throw new Error('Failed to load device history');
+                if (!sessRes.ok || !devRes.ok) {
+                    const code = sessRes.status || devRes.status || 0;
+                    if (code === 401 || code === 403) {
+                        throw new Error('AUTH');
+                    }
+                    const sessText = await sessRes.text().catch(() => '');
+                    const devText = await devRes.text().catch(() => '');
+                    throw new Error(`HTTP_${code}::${sessText.slice(0, 200)}::${devText.slice(0, 200)}`);
+                }
                 const sessions = await sessRes.json();
                 const devices = await devRes.json();
                 renderSessions(sessions);
                 renderDeviceHistory(devices);
             } catch (error) {
                 console.error('Error loading sessions:', error);
-                alert('Không thể tải danh sách phiên đăng nhập. Vui lòng thử lại sau.');
+                alert(error && error.message === 'AUTH' ? 'Vui lòng đăng nhập lại.' : 'Không thể tải danh sách phiên đăng nhập. Vui lòng thử lại sau.');
             }
         }
 
