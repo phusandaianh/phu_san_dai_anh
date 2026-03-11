@@ -287,6 +287,23 @@
         .print-ticket:hover {
             background: #0d47a1;
         }
+
+        .maps-btn {
+            background: #34a853;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 10px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-top: 0.7rem;
+            width: 100%;
+            font-weight: 700;
+        }
+
+        .maps-btn:hover {
+            background: #2e8f49;
+        }
         
         @media (max-width: 768px) {
             .main-content {
@@ -485,7 +502,14 @@
                 <label for="voice-select" style="font-weight:600; color:#1565c0;">Giọng đọc</label>
                 <div>
                     <select id="voice-select" style="width:100%; padding:0.5rem; border-radius:8px; border:1px solid #ddd;"></select>
-                    <div style="font-size:0.9rem; color:#666; margin-top:0.3rem;">Ưu tiên giọng nữ tiếng Việt (vi-VN).</div>
+                    <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                        <button class="btn" type="button" onclick="applyVoicePreset('female_north')">Nữ - Miền Bắc</button>
+                        <button class="btn" type="button" onclick="applyVoicePreset('female_south')">Nữ - Miền Nam</button>
+                        <button class="btn warn" type="button" onclick="applyVoicePreset('auto')">Tự chọn</button>
+                    </div>
+                    <div style="font-size:0.9rem; color:#666; margin-top:0.4rem;">
+                        Gợi ý theo giọng có sẵn trên máy (thường: Microsoft Hoài My = Bắc, Microsoft My = Nam). Nếu không có, hệ thống sẽ chọn giọng nữ tiếng Việt tốt nhất.
+                    </div>
                 </div>
             </div>
 
@@ -537,6 +561,10 @@
             <button class="print-ticket" onclick="printTicket()">
                 <i class="fas fa-print"></i> In phiếu
             </button>
+
+            <button class="maps-btn" onclick="openClinicMaps()">
+                <i class="fas fa-map-marker-alt"></i> Mở Google Maps (chỉ đường)
+            </button>
         </div>
     </div>
 
@@ -548,8 +576,13 @@
         function generateQRCode() {
             const qrContainer = document.getElementById('qr-code');
             const checkInUrl = `${window.location.origin}/qr-checkin?action=checkin`;
-            
-            QRCode.toCanvas(qrContainer, checkInUrl, {
+
+            // qrcode.toCanvas cần phần tử <canvas>, không phải <div>
+            qrContainer.innerHTML = '';
+            const canvas = document.createElement('canvas');
+            qrContainer.appendChild(canvas);
+
+            QRCode.toCanvas(canvas, checkInUrl, {
                 width: 200,
                 height: 200,
                 colorDark: '#1565c0',
@@ -653,6 +686,12 @@
             printWindow.print();
         }
 
+        function openClinicMaps() {
+            const q = encodeURIComponent('Phòng khám Phụ Sản Đại Anh');
+            const url = `https://www.google.com/maps?q=${q}`;
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+
         // Xử lý check-in từ QR code
         async function handleCheckin() {
             try {
@@ -719,6 +758,7 @@
         const VOICE_KEY = 'qr_announce_voice_v1';
         const RATE_KEY = 'qr_announce_rate_v1';
         const PITCH_KEY = 'qr_announce_pitch_v1';
+        const VOICE_PRESET_KEY = 'qr_announce_voice_preset_v1';
 
         function getDefaultTemplate() {
             return 'Mời khách hàng {name}, phiếu khám số {queue}, vào phòng khám.';
@@ -770,6 +810,12 @@
             }
             // Fallback retry in case onvoiceschanged doesn't fire
             tryEnsureVoicesLoaded();
+
+            // Áp preset đã lưu (nếu có)
+            const preset = localStorage.getItem(VOICE_PRESET_KEY) || '';
+            if (preset) {
+                setTimeout(() => applyVoicePreset(preset), 200);
+            }
         }
 
         function populateVoices() {
@@ -861,6 +907,66 @@
                 opt.value = '';
                 opt.textContent = 'Không tìm thấy giọng đọc. Vui lòng dùng Chrome/Edge và bật gói ngôn ngữ.';
                 voiceSelect.appendChild(opt);
+            }
+        }
+
+        function _findVoiceByPatterns(voices, patterns) {
+            for (const pattern of patterns) {
+                const v = voices.find(vv => pattern.test(vv.name));
+                if (v) return v;
+            }
+            return null;
+        }
+
+        // Preset giọng đọc theo vùng miền (phụ thuộc voice có sẵn trên OS/browser)
+        function applyVoicePreset(preset) {
+            try {
+                // Ensure voices loaded
+                const v0 = window.speechSynthesis.getVoices();
+                if (!v0 || !v0.length) {
+                    populateVoices();
+                }
+                const voices = window.speechSynthesis.getVoices();
+
+                const isVi = v => (v.lang || '').toLowerCase().startsWith('vi') || /vietnamese|vi[\s\-]?vn/i.test(v.name);
+                const isFemale = v => /female|nu|nữ|my|hoaimy|woman|girl/i.test(v.name);
+
+                let chosen = null;
+                if (preset === 'female_north') {
+                    // Thường là giọng nữ miền Bắc trên Windows/Edge
+                    chosen = _findVoiceByPatterns(voices, [/Microsoft\s+HoaiMy/i, /HoaiMy/i]);
+                } else if (preset === 'female_south') {
+                    // Thường là giọng nữ miền Nam trên Windows/Edge
+                    chosen = _findVoiceByPatterns(voices, [/Microsoft\s+My/i, /(^|\s)My(\s|$)/i]);
+                } else if (preset === 'auto') {
+                    chosen = null;
+                }
+
+                // Fallback: giọng nữ tiếng Việt tốt nhất có thể
+                if (!chosen) {
+                    const viVoices = voices.filter(isVi);
+                    chosen = viVoices.find(v => isFemale(v)) || viVoices[0] || voices.find(v => isFemale(v)) || voices[0] || null;
+                }
+
+                const voiceSelect = document.getElementById('voice-select');
+                if (preset === 'auto') {
+                    localStorage.removeItem(VOICE_KEY);
+                    localStorage.setItem(VOICE_PRESET_KEY, 'auto');
+                    populateVoices();
+                } else if (voiceSelect && chosen) {
+                    voiceSelect.value = chosen.name;
+                    localStorage.setItem(VOICE_KEY, chosen.name);
+                    localStorage.setItem(VOICE_PRESET_KEY, preset);
+                }
+
+                // Tinh chỉnh nhẹ pitch cho cảm giác khác nhau (tùy chọn)
+                const pitchEl = document.getElementById('pitch-input');
+                if (pitchEl) {
+                    if (preset === 'female_north') pitchEl.value = 1.05;
+                    if (preset === 'female_south') pitchEl.value = 0.95;
+                }
+            } catch (e) {
+                console.error('applyVoicePreset failed:', e);
             }
         }
 

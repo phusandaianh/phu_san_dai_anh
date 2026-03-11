@@ -206,6 +206,11 @@
             background: #f3e5f5;
             color: #9c27b0;
         }
+
+        .status-cancelled {
+            background: #ffebee;
+            color: #c62828;
+        }
         
         .action-buttons {
             display: flex;
@@ -340,7 +345,7 @@
         // Load danh sách check-in
         async function loadCheckinList() {
             try {
-                const response = await fetch('/api/checkin/waiting-list');
+                const response = await fetch('/api/checkin/waiting-list?include_cancelled=1');
                 const checkinList = await response.json();
                 
                 const tbody = document.getElementById('checkin-list-body');
@@ -372,6 +377,9 @@
                     } else if (checkin.status === 'completed') {
                         statusClass = 'status-completed';
                         statusText = 'Hoàn thành';
+                    } else if (checkin.status === 'cancelled') {
+                        statusClass = 'status-cancelled';
+                        statusText = 'Đã hủy';
                     }
                     
                     row.innerHTML = `
@@ -390,15 +398,26 @@
                                     <button class="btn btn-success btn-small" onclick="updateStatus(${checkin.id}, 'serving')">
                                         <i class="fas fa-play"></i> Bắt đầu khám
                                     </button>
+                                    <button class="btn btn-danger btn-small" onclick="cancelCheckin(${checkin.id})">
+                                        <i class="fas fa-times"></i> Hủy
+                                    </button>
                                 ` : ''}
                                 ${checkin.status === 'serving' ? `
                                     <button class="btn btn-primary btn-small" onclick="updateStatus(${checkin.id}, 'completed')">
                                         <i class="fas fa-check"></i> Hoàn thành
                                     </button>
+                                    <button class="btn btn-danger btn-small" onclick="cancelCheckin(${checkin.id})">
+                                        <i class="fas fa-times"></i> Hủy
+                                    </button>
                                 ` : ''}
                                 ${checkin.status === 'completed' ? `
                                     <button class="btn btn-warning btn-small" onclick="updateStatus(${checkin.id}, 'waiting')">
                                         <i class="fas fa-undo"></i> Đưa về chờ
+                                    </button>
+                                ` : ''}
+                                ${checkin.status === 'cancelled' ? `
+                                    <button class="btn btn-warning btn-small" onclick="updateStatus(${checkin.id}, 'waiting')">
+                                        <i class="fas fa-undo"></i> Khôi phục
                                     </button>
                                 ` : ''}
                             </div>
@@ -437,6 +456,11 @@
                 console.error('Lỗi cập nhật trạng thái:', error);
                 alert('Không thể kết nối đến server');
             }
+        }
+
+        async function cancelCheckin(checkinId) {
+            if (!confirm('Xác nhận hủy check-in của khách này?')) return;
+            await updateStatus(checkinId, 'cancelled');
         }
 
         // Gọi bệnh nhân tiếp theo

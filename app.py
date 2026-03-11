@@ -1051,7 +1051,8 @@ def api_restore():
         except Exception:
             pass
 
-        os.replace(clinic_new, db_path)
+        # Dùng shutil.copy2 thay os.replace để hỗ trợ copy giữa các ổ đĩa (Windows C: <-> D:)
+        shutil.copy2(clinic_new, db_path)
 
         # Nếu có mwl.db trong gói khôi phục thì thay luôn
         if mwl_new and os.path.exists(mwl_new):
@@ -1061,7 +1062,7 @@ def api_restore():
                     shutil.copy2(mwl_path, f"{mwl_path}.bak.{ts}")
             except Exception:
                 pass
-            os.replace(mwl_new, mwl_path)
+            shutil.copy2(mwl_new, mwl_path)
 
         # Dọn tmp sau response
         @after_this_request
@@ -4795,8 +4796,12 @@ def checkin_stats():
 def waiting_list():
     try:
         today = datetime.utcnow().date()
-        
-        checkins = CheckIn.query.filter_by(checkin_date=today).order_by(CheckIn.queue_number.asc()).all()
+
+        include_cancelled = request.args.get('include_cancelled') == '1'
+        q = CheckIn.query.filter_by(checkin_date=today)
+        if not include_cancelled:
+            q = q.filter(CheckIn.status != 'cancelled')
+        checkins = q.order_by(CheckIn.queue_number.asc()).all()
         
         waiting_list = []
         for checkin in checkins:
@@ -4820,7 +4825,7 @@ def update_checkin_status(checkin_id):
         data = request.get_json()
         new_status = data.get('status')
         
-        if new_status not in ['waiting', 'serving', 'completed']:
+        if new_status not in ['waiting', 'serving', 'completed', 'cancelled']:
             return jsonify({'error': 'Trạng thái không hợp lệ'}), 400
         
         checkin = _get_or_404(CheckIn, checkin_id)
