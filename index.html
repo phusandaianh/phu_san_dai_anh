@@ -101,7 +101,70 @@
 
 <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
 <script src="ai-assistant.js"></script>
+
+<!-- Đồng bộ nội dung hero với trang Quản lý nội dung (home-content.html) -->
 <script>
+    async function loadHomeHeroContent() {
+        try {
+            const res = await fetch('/api/home-content');
+            if (!res.ok) throw new Error('Failed to load home content');
+            const data = await res.json();
+
+            const heroSection = document.querySelector('.hero-section');
+            const titleEl = document.querySelector('.hero-content h2');
+            const summaryEl = document.querySelector('.hero-content .service-highlight');
+            const descEl = document.querySelector('.hero-content .service-highlight-sub');
+
+            if (titleEl && data.heroTitle) {
+                titleEl.textContent = data.heroTitle;
+            }
+            if (summaryEl && data.clinicSummary) {
+                summaryEl.textContent = data.clinicSummary;
+            }
+            if (descEl && data.heroDescription) {
+                descEl.textContent = data.heroDescription;
+            }
+
+            // Áp dụng style nếu được cấu hình từ trang quản lý nội dung
+            if (titleEl && data.heroTitleColor) {
+                titleEl.style.color = data.heroTitleColor;
+            }
+            if (titleEl && data.heroTitleFontSize) {
+                titleEl.style.fontSize = data.heroTitleFontSize + 'px';
+            }
+            if (titleEl && data.heroTitleFontFamily) {
+                titleEl.style.fontFamily = data.heroTitleFontFamily;
+            }
+            if (summaryEl && data.clinicSummaryColor) {
+                summaryEl.style.color = data.clinicSummaryColor;
+            }
+            if (summaryEl && data.clinicSummaryFontSize) {
+                summaryEl.style.fontSize = data.clinicSummaryFontSize + 'px';
+            }
+            if (summaryEl && data.clinicSummaryFontFamily) {
+                summaryEl.style.fontFamily = data.clinicSummaryFontFamily;
+            }
+            if (descEl && data.heroDescriptionColor) {
+                descEl.style.color = data.heroDescriptionColor;
+            }
+            if (descEl && data.heroDescriptionFontSize) {
+                descEl.style.fontSize = data.heroDescriptionFontSize + 'px';
+            }
+            if (descEl && data.heroDescriptionFontFamily) {
+                descEl.style.fontFamily = data.heroDescriptionFontFamily;
+            }
+
+            // Màu nền thân trang chủ (hero)
+            if (heroSection && data.heroBgColor) {
+                heroSection.style.background = data.heroBgColor;
+            }
+        } catch (e) {
+            console.debug('Không tải được nội dung trang chủ động, dùng nội dung mặc định.', e);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadHomeHeroContent);
+
     function showContactModal(e) {
         if (e) e.preventDefault();
         document.getElementById('contactModal').style.display = 'flex';

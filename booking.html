@@ -533,14 +533,23 @@
             if (data.phone) phoneEl.value = data.phone;
             if (data.address) addrEl.value = data.address;
             setReadonlyPersonal(true);
-            // Reveal fields for user to complete reason/time and submit
+            // Reveal fields cho bệnh nhân cũ để chọn lý do khám / giờ khám
             setFieldsVisible(true);
           } else {
-            // Keep other fields hidden until we have a match
+            // Không tìm thấy số ĐT: cho phép đăng ký như lần đầu với SĐT đã nhập
+            alert('Không tìm thấy bệnh nhân với số điện thoại này. Bạn có thể nhập thông tin để đăng ký lần đầu.');
+            nameEl.value = '';
+            dobEl.value = '';
+            addrEl.value = '';
             setReadonlyPersonal(false);
-            setFieldsVisible(false);
+            setFieldsVisible(true);
           }
-        } catch (e) { console.warn('lookup phone failed', e); }
+        } catch (e) {
+          console.warn('lookup phone failed', e);
+          // Lỗi khi tra cứu: vẫn cho phép người dùng nhập như đăng ký mới
+          setReadonlyPersonal(false);
+          setFieldsVisible(true);
+        }
       }
       function activateRepeat() {
         btnRepeat.style.filter = 'brightness(1)';
@@ -932,5 +941,7 @@
 
     <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
     <script src="ai-assistant.js"></script>
+    <!-- Đồng bộ footer theo cài đặt trung tâm -->
+    <script src="footer-loader.js"></script>
 </body>
 </html>

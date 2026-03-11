@@ -578,12 +578,18 @@ def api_login():
         ip_address = request.remote_addr or ''
         user_agent = request.headers.get('User-Agent', '')
 
-        # Chỉ bắt buộc phê duyệt thiết bị ở môi trường production (cách B: per-device allowlist)
+        # Chỉ bắt buộc phê duyệt thiết bị ở môi trường production
+        # VÀ đã cấu hình SMTP để có thể gửi email/OTP.
         is_production_env = (
             os.environ.get('FLASK_ENV') == 'production'
             or app.config.get('ENV') == 'production'
         )
-        if is_production_env:
+        smtp_ok = bool(
+            app.config.get('SMTP_SERVER')
+            and app.config.get('SMTP_USERNAME')
+            and app.config.get('SMTP_PASSWORD')
+        )
+        if is_production_env and smtp_ok:
             trusted = TrustedLoginIP.query.filter_by(user_id=user_id, ip_address=ip_address).first()
             if trusted is None or not trusted.is_approved:
                 # Máy lạ: yêu cầu OTP gửi tới email người dùng
@@ -1400,6 +1406,17 @@ class HomeContent(db.Model):
     hero_title = db.Column(db.String(200), nullable=False)
     hero_description = db.Column(db.Text, nullable=False)
     clinic_summary = db.Column(db.String(500), default='Siêu âm 5D, sàng lọc dị tật, khám phụ khoa, vô sinh')
+    hero_bg_color = db.Column(db.String(20))  # màu nền thân trang chủ (hero-section)
+    # Tuỳ chọn style cho hero trên trang chủ (có thể null nếu dùng mặc định CSS)
+    hero_title_color = db.Column(db.String(20))
+    hero_title_font_size = db.Column(db.Integer)
+    hero_title_font_family = db.Column(db.String(100))
+    clinic_summary_color = db.Column(db.String(20))
+    clinic_summary_font_size = db.Column(db.Integer)
+    clinic_summary_font_family = db.Column(db.String(100))
+    hero_description_color = db.Column(db.String(20))
+    hero_description_font_size = db.Column(db.Integer)
+    hero_description_font_family = db.Column(db.String(100))
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class ContactInfo(db.Model):
@@ -1536,6 +1553,40 @@ def ensure_work_schedule_columns():
     except Exception:
         db.session.rollback()
         # ignore if cannot migrate automatically
+
+def ensure_home_content_style_columns():
+    """Đảm bảo các cột style cho hero (màu chữ, cỡ chữ) tồn tại trên bảng home_content."""
+    try:
+        result = db.session.execute(text('PRAGMA table_info(home_content)'))
+        columns = [row[1] for row in result.fetchall()]
+        alter_sql = []
+        if 'hero_title_color' not in columns:
+            alter_sql.append("ALTER TABLE home_content ADD COLUMN hero_title_color VARCHAR(20)")
+        if 'hero_title_font_size' not in columns:
+            alter_sql.append("ALTER TABLE home_content ADD COLUMN hero_title_font_size INTEGER")
+        if 'hero_title_font_family' not in columns:
+            alter_sql.append("ALTER TABLE home_content ADD COLUMN hero_title_font_family VARCHAR(100)")
+        if 'clinic_summary_color' not in columns:
+            alter_sql.append("ALTER TABLE home_content ADD COLUMN clinic_summary_color VARCHAR(20)")
+        if 'clinic_summary_font_size' not in columns:
+            alter_sql.append("ALTER TABLE home_content ADD COLUMN clinic_summary_font_size INTEGER")
+        if 'clinic_summary_font_family' not in columns:
+            alter_sql.append("ALTER TABLE home_content ADD COLUMN clinic_summary_font_family VARCHAR(100)")
+        if 'hero_description_color' not in columns:
+            alter_sql.append("ALTER TABLE home_content ADD COLUMN hero_description_color VARCHAR(20)")
+        if 'hero_description_font_size' not in columns:
+            alter_sql.append("ALTER TABLE home_content ADD COLUMN hero_description_font_size INTEGER")
+        if 'hero_description_font_family' not in columns:
+            alter_sql.append("ALTER TABLE home_content ADD COLUMN hero_description_font_family VARCHAR(100)")
+        if 'hero_bg_color' not in columns:
+            alter_sql.append("ALTER TABLE home_content ADD COLUMN hero_bg_color VARCHAR(20)")
+        for sql in alter_sql:
+            db.session.execute(text(sql))
+        if alter_sql:
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+        # Nếu migrate lỗi (ví dụ bảng đã có cột), bỏ qua để tránh làm hỏng app
 
 def ensure_appointment_doctor_column():
     """Ensure Appointment table has doctor_name column."""
@@ -3358,6 +3409,8 @@ def print_clinical_service(appointment_id):
 # Admin API Endpoints
 @app.route('/api/home-content', methods=['GET'])
 def get_home_content():
+    # Đảm bảo các cột style tồn tại cho các DB cũ
+    ensure_home_content_style_columns()
     home_content = HomeContent.query.first()
     if not home_content:
         # Create default content if not exists
@@ -3375,6 +3428,16 @@ def get_home_content():
         'heroTitle': home_content.hero_title,
         'heroDescription': home_content.hero_description,
         'clinicSummary': home_content.clinic_summary,
+        'heroBgColor': getattr(home_content, 'hero_bg_color', None),
+        'heroTitleColor': getattr(home_content, 'hero_title_color', None),
+        'heroTitleFontSize': getattr(home_content, 'hero_title_font_size', None),
+        'heroTitleFontFamily': getattr(home_content, 'hero_title_font_family', None),
+        'clinicSummaryColor': getattr(home_content, 'clinic_summary_color', None),
+        'clinicSummaryFontSize': getattr(home_content, 'clinic_summary_font_size', None),
+        'clinicSummaryFontFamily': getattr(home_content, 'clinic_summary_font_family', None),
+        'heroDescriptionColor': getattr(home_content, 'hero_description_color', None),
+        'heroDescriptionFontSize': getattr(home_content, 'hero_description_font_size', None),
+        'heroDescriptionFontFamily': getattr(home_content, 'hero_description_font_family', None),
         'services': [{
             'name': s.name,
         } for s in services],
@@ -3391,6 +3454,7 @@ def update_home_content(**kwargs):
         data = request.json
         
         # Update home content
+        ensure_home_content_style_columns()
         home_content = HomeContent.query.first()
         if not home_content:
             home_content = HomeContent()
@@ -3404,6 +3468,29 @@ def update_home_content(**kwargs):
             home_content.clinic_summary = data['clinicSummary']
         elif not hasattr(home_content, 'clinic_summary') or home_content.clinic_summary is None:
             home_content.clinic_summary = 'Siêu âm 5D, sàng lọc dị tật, khám phụ khoa, vô sinh'
+
+        if 'heroBgColor' in data:
+            home_content.hero_bg_color = data['heroBgColor'] or None
+
+        # Style cho các đoạn text hero (nếu gửi kèm)
+        if 'heroTitleColor' in data:
+            home_content.hero_title_color = data['heroTitleColor'] or None
+        if 'heroTitleFontSize' in data:
+            home_content.hero_title_font_size = data['heroTitleFontSize'] or None
+        if 'heroTitleFontFamily' in data:
+            home_content.hero_title_font_family = data['heroTitleFontFamily'] or None
+        if 'clinicSummaryColor' in data:
+            home_content.clinic_summary_color = data['clinicSummaryColor'] or None
+        if 'clinicSummaryFontSize' in data:
+            home_content.clinic_summary_font_size = data['clinicSummaryFontSize'] or None
+        if 'clinicSummaryFontFamily' in data:
+            home_content.clinic_summary_font_family = data['clinicSummaryFontFamily'] or None
+        if 'heroDescriptionColor' in data:
+            home_content.hero_description_color = data['heroDescriptionColor'] or None
+        if 'heroDescriptionFontSize' in data:
+            home_content.hero_description_font_size = data['heroDescriptionFontSize'] or None
+        if 'heroDescriptionFontFamily' in data:
+            home_content.hero_description_font_family = data['heroDescriptionFontFamily'] or None
         
         # Update services (if provided)
         if 'services' in data:

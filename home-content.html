@@ -83,6 +83,12 @@
             font-size: 1rem;
             transition: border-color 0.3s;
         }
+        /* Cho phép thu nhỏ/mở rộng ô textarea (ví dụ nội dung Footer) theo chiều dọc */
+        .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
+            max-height: 220px;
+        }
         .form-group input:focus,
         .form-group textarea:focus {
             outline: none;
@@ -203,11 +209,55 @@
                 <div class="form-group">
                     <label for="heroTitle">Tiêu đề chính</label>
                     <input type="text" id="heroTitle" name="heroTitle" required>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:6px; font-size:0.85rem;">
+                        <span>Kiểu chữ:</span>
+                        <label>Font
+                            <select id="heroTitleFontFamily" style="margin-left:4px;">
+                                <option value="">Mặc định</option>
+                                <option value="Roboto, sans-serif">Roboto</option>
+                                <option value="Arial, Helvetica, sans-serif">Arial</option>
+                                <option value="'Times New Roman', Times, serif">Times New Roman</option>
+                                <option value="'Segoe UI', Tahoma, sans-serif">Segoe UI</option>
+                                <option value="'Courier New', Courier, monospace">Courier New</option>
+                            </select>
+                        </label>
+                        <label>Size (px)
+                            <input type="number" id="heroTitleFontSize" min="14" max="64" step="2" value="36" style="width:70px; margin-left:4px;">
+                        </label>
+                        <label>Màu
+                            <input type="color" id="heroTitleColor" value="#ffffff" style="margin-left:4px;">
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="heroBgColor">Màu nền thân trang chủ</label>
+                    <input type="color" id="heroBgColor" name="heroBgColor" value="#2196F3">
+                    <small style="color: #666; font-size: 0.85rem;">Áp dụng cho nền khối xanh của trang chủ (hero-section)</small>
                 </div>
                 
                 <div class="form-group">
                     <label for="clinicSummary">Tóm tắt dịch vụ phòng khám</label>
-                    <input type="text" id="clinicSummary" name="clinicSummary" value="Siêu âm 5D, sàng lọc dị tật, khám phụ khoa, vô sinh" style="text-align:center;color:#0000FF;font-size:0.9rem;">
+                    <input type="text" id="clinicSummary" name="clinicSummary" value="Siêu âm 5D, sàng lọc dị tật, khám phụ khoa, vô sinh" style="text-align:center;">
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:6px; font-size:0.85rem;">
+                        <span>Kiểu chữ:</span>
+                        <label>Font
+                            <select id="clinicSummaryFontFamily" style="margin-left:4px;">
+                                <option value="">Mặc định</option>
+                                <option value="Roboto, sans-serif">Roboto</option>
+                                <option value="Arial, Helvetica, sans-serif">Arial</option>
+                                <option value="'Times New Roman', Times, serif">Times New Roman</option>
+                                <option value="'Segoe UI', Tahoma, sans-serif">Segoe UI</option>
+                                <option value="'Courier New', Courier, monospace">Courier New</option>
+                            </select>
+                        </label>
+                        <label>Size (px)
+                            <input type="number" id="clinicSummaryFontSize" min="12" max="32" step="1" value="16" style="width:70px; margin-left:4px;">
+                        </label>
+                        <label>Màu
+                            <input type="color" id="clinicSummaryColor" value="#ffffff" style="margin-left:4px;">
+                        </label>
+                    </div>
                     <small style="color: #666; font-size: 0.85rem;">Dòng này sẽ hiển thị dưới tiêu đề chính, trên slogan ở các trang chính</small>
                     <div id="clinic-summary-status" style="font-size: 0.8rem; margin-top: 5px; color: #666;"></div>
                 </div>
@@ -215,6 +265,25 @@
                 <div class="form-group">
                     <label for="slogan">Slogan phòng khám</label>
                     <input type="text" id="slogan" name="slogan" placeholder="Ví dụ: Uy Tín - Chất Lượng" required>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:6px; font-size:0.85rem;">
+                        <span>Kiểu chữ:</span>
+                        <label>Font
+                            <select id="sloganFontFamily" style="margin-left:4px;">
+                                <option value="">Mặc định</option>
+                                <option value="Roboto, sans-serif">Roboto</option>
+                                <option value="Arial, Helvetica, sans-serif">Arial</option>
+                                <option value="'Times New Roman', Times, serif">Times New Roman</option>
+                                <option value="'Segoe UI', Tahoma, sans-serif">Segoe UI</option>
+                                <option value="'Courier New', Courier, monospace">Courier New</option>
+                            </select>
+                        </label>
+                        <label>Size (px)
+                            <input type="number" id="sloganFontSize" min="12" max="28" step="1" value="14" style="width:70px; margin-left:4px;">
+                        </label>
+                        <label>Màu
+                            <input type="color" id="sloganColor" value="#ffffff" style="margin-left:4px;">
+                        </label>
+                    </div>
                     <small style="color: #666; font-size: 0.85rem;">Slogan này sẽ hiển thị trên tất cả các trang</small>
                 </div>
 
@@ -294,6 +363,19 @@
     </div>
 
     <script>
+        // Helper: thêm Authorization header từ localStorage (nếu có)
+        function getAuthHeaders(withJson = false) {
+            const token = localStorage.getItem('authToken') || '';
+            const headers = {};
+            if (withJson) {
+                headers['Content-Type'] = 'application/json';
+            }
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            return headers;
+        }
+
         // Load existing content
         async function loadContent() {
             try {
@@ -305,6 +387,18 @@
                 document.getElementById('heroTitle').value = homeData.heroTitle || 'Phòng khám chuyên khoa Phụ Sản Đại Anh';
                 document.getElementById('clinicSummary').value = homeData.clinicSummary || 'Siêu âm 5D, sàng lọc dị tật, khám phụ khoa, vô sinh';
                 document.getElementById('slogan').value = homeData.heroDescription || 'Uy Tín - Chất Lượng';
+
+                // Load hero text styles (nếu có)
+                document.getElementById('heroTitleColor').value = homeData.heroTitleColor || '#ffffff';
+                document.getElementById('heroTitleFontSize').value = homeData.heroTitleFontSize || 36;
+                document.getElementById('heroTitleFontFamily').value = homeData.heroTitleFontFamily || '';
+                document.getElementById('clinicSummaryColor').value = homeData.clinicSummaryColor || '#ffffff';
+                document.getElementById('clinicSummaryFontSize').value = homeData.clinicSummaryFontSize || 16;
+                document.getElementById('clinicSummaryFontFamily').value = homeData.clinicSummaryFontFamily || '';
+                document.getElementById('sloganColor').value = homeData.heroDescriptionColor || '#ffffff';
+                document.getElementById('sloganFontSize').value = homeData.heroDescriptionFontSize || 14;
+                document.getElementById('sloganFontFamily').value = homeData.heroDescriptionFontFamily || '';
+                document.getElementById('heroBgColor').value = homeData.heroBgColor || '#2196F3';
                 
                 // Load contact info
                 const contactInfoList = document.getElementById('contactInfoList');
@@ -481,6 +575,16 @@
                 heroTitle: document.getElementById('heroTitle').value,
                 slogan: document.getElementById('slogan').value,
                 clinicSummary: document.getElementById('clinicSummary').value,
+                heroBgColor: document.getElementById('heroBgColor').value,
+                heroTitleColor: document.getElementById('heroTitleColor').value,
+                heroTitleFontSize: parseInt(document.getElementById('heroTitleFontSize').value, 10) || null,
+                heroTitleFontFamily: document.getElementById('heroTitleFontFamily').value,
+                clinicSummaryColor: document.getElementById('clinicSummaryColor').value,
+                clinicSummaryFontSize: parseInt(document.getElementById('clinicSummaryFontSize').value, 10) || null,
+                clinicSummaryFontFamily: document.getElementById('clinicSummaryFontFamily').value,
+                heroDescriptionColor: document.getElementById('sloganColor').value,
+                heroDescriptionFontSize: parseInt(document.getElementById('sloganFontSize').value, 10) || null,
+                heroDescriptionFontFamily: document.getElementById('sloganFontFamily').value,
                 contactInfo: Array.from(document.querySelectorAll('.contact-item')).map(item => ({
                     type: item.querySelector('input[name="contactType"]').value,
                     value: item.querySelector('input[name="contactValue"]').value
@@ -490,9 +594,7 @@
             try {
                 const response = await fetch('/api/home-content', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: getAuthHeaders(true),
                     body: JSON.stringify(formData)
                 });
 
@@ -522,9 +624,7 @@
             try {
                 const response = await fetch('/api/footer-content', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: getAuthHeaders(true),
                     body: JSON.stringify(formData)
                 });
 
@@ -564,9 +664,7 @@
                         try {
                             const response = await fetch('/api/clinic-summary', {
                                 method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
+                                headers: getAuthHeaders(true),
                                 body: JSON.stringify({
                                     clinicSummary: clinicSummaryInput.value
                                 })
@@ -601,5 +699,6 @@
 
     <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
     <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
 </body>
 </html>
