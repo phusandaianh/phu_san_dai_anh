@@ -133,6 +133,19 @@
         }
         .toggle-active { filter: brightness(1); opacity: 1 !important; box-shadow: 0 0 0 2px rgba(0,0,0,0.08) inset; }
         .toggle-inactive { opacity: 0.5; }
+        /* Nút Lưu: chưa lưu = vàng nhạt nổi, đã lưu = xanh chìm */
+        .save-btn.save-unsaved {
+            background: #fff9c4 !important;
+            color: #333 !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            font-weight: 600;
+        }
+        .save-btn.save-saved {
+            background: #4caf50 !important;
+            color: white !important;
+            box-shadow: none;
+            opacity: 0.9;
+        }
         /* Prevent fixed header from overlapping page content */
         #doctor-schedule-main {
             padding-top: 120px; /* space for fixed header (logo + padding) */
@@ -478,6 +491,50 @@
             setupTemplateApplication(dayContainer, date);
         }
 
+        async function doSaveShiftRow(row, showAlert = false) {
+            const dayContainer = row.closest('.day-schedule');
+            const dateStr = dayContainer ? dayContainer.dataset.date : '';
+            if (!dateStr) return false;
+            const startTime = row.querySelector('.start-time').value;
+            const endTime = row.querySelector('.end-time').value;
+            const doctorName = row.querySelector('.doctor-select').value;
+            const slotMinutes = parseInt(row.querySelector('.slot-minutes').value, 10) || 10;
+            if (!startTime || !endTime || !doctorName) {
+                if (showAlert) alert('Vui lòng điền đầy đủ thông tin!');
+                return false;
+            }
+            if (startTime >= endTime) {
+                if (showAlert) alert('Giờ kết thúc phải lớn hơn giờ bắt đầu!');
+                return false;
+            }
+            const existingShifts = dayContainer.querySelectorAll('.shift-row');
+            const conflictCheck = checkTimeConflict(startTime, endTime, existingShifts, row);
+            if (conflictCheck.conflict) {
+                if (showAlert) alert(`Thời gian này trùng với ca khám khác (${conflictCheck.existingStart} - ${conflictCheck.existingEnd})!`);
+                return false;
+            }
+            try {
+                const shiftId = row.dataset.shiftId;
+                const method = (shiftId && shiftId !== 'undefined' && shiftId !== '') ? 'PUT' : 'POST';
+                const url = (shiftId && shiftId !== 'undefined' && shiftId !== '') ?
+                    `/api/admin/work-schedule/${shiftId}` : '/api/admin/work-schedule';
+                const response = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ date: dateStr, start_time: startTime, end_time: endTime, doctor_name: doctorName, slot_minutes: slotMinutes })
+                });
+                if (!response.ok) throw new Error('Lỗi khi lưu ca khám');
+                const result = await response.json();
+                if (result.id) row.dataset.shiftId = result.id;
+                if (showAlert) alert('Đã lưu ca khám!');
+                return true;
+            } catch (error) {
+                console.error('Error:', error);
+                if (showAlert) alert('Có lỗi xảy ra khi lưu ca khám!');
+                return false;
+            }
+        }
+
         function createShiftRow(date, shift = null) {
             const row = document.createElement('div');
             row.className = 'shift-row';
@@ -506,7 +563,7 @@
                     <option value="30">30 phút</option>
                 </select>
                 <div class="actions">
-                    <button class="save-btn" title="Lưu" ${shift && shift.is_locked ? 'style="display: none;"' : ''}>
+                    <button class="save-btn ${(shift && shift.id) ? 'save-saved' : 'save-unsaved'}" title="Lưu" ${shift && shift.is_locked ? 'style="display: none;"' : ''}>
                         <i class="fas fa-save"></i> Lưu
                     </button>
                     <button class="lock-btn" title="Khóa/Mở khóa" style="background: ${shift && shift.is_locked ? '#ffc107' : '#28a745'}; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer;">
@@ -568,70 +625,10 @@
             
             if (saveBtn) {
                 saveBtn.onclick = async () => {
-                    const startTime = row.querySelector('.start-time').value;
-                    const endTime = row.querySelector('.end-time').value;
-                    const doctorName = row.querySelector('.doctor-select').value;
-                    const slotMinutes = parseInt(row.querySelector('.slot-minutes').value, 10);
-                    
-                    if (!startTime || !endTime || !doctorName) {
-                        alert('Vui lòng điền đầy đủ thông tin!');
-                        return;
-                    }
-                    
-                    // Validate time range
-                    if (startTime >= endTime) {
-                        alert('Giờ kết thúc phải lớn hơn giờ bắt đầu!');
-                        return;
-                    }
-                    
-                    // Check for time conflicts in the same day
-                    const dayContainer = row.closest('.day-schedule');
-                    const existingShifts = dayContainer.querySelectorAll('.shift-row');
-                    
-                    const conflictCheck = checkTimeConflict(startTime, endTime, existingShifts, row);
-                    if (conflictCheck.conflict) {
-                        alert(`Thời gian này trùng với ca khám khác (${conflictCheck.existingStart} - ${conflictCheck.existingEnd})!`);
-                        return;
-                    }
-                    
-                    try {
-                        const shiftId = row.dataset.shiftId;
-                        const method = (shiftId && shiftId !== 'undefined' && shiftId !== '') ? 'PUT' : 'POST';
-                        const url = (shiftId && shiftId !== 'undefined' && shiftId !== '') ? 
-                            `/api/admin/work-schedule/${shiftId}` : 
-                            '/api/admin/work-schedule';
-                        
-                        const requestData = {
-                            date: dateStr,
-                            start_time: startTime,
-                            end_time: endTime,
-                            doctor_name: doctorName,
-                            slot_minutes: slotMinutes
-                        };
-
-                        const response = await fetch(url, {
-                            method,
-                            headers: { 
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json'
-                            },
-                            body: JSON.stringify(requestData)
-                        });
-
-                        if (!response.ok) {
-                            throw new Error('Lỗi khi lưu ca khám');
-                        }
-
-                        const result = await response.json();
-                        if (result.id) {
-                            row.dataset.shiftId = result.id;
-                        }
-                        alert('Đã lưu ca khám!');
-                        
-                        alert('Đã lưu ca khám!');
-                    } catch (error) {
-                        console.error('Error:', error);
-                        alert('Có lỗi xảy ra khi lưu ca khám!');
+                    const ok = await doSaveShiftRow(row, true);
+                    if (ok) {
+                        saveBtn.classList.remove('save-unsaved');
+                        saveBtn.classList.add('save-saved');
                     }
                 };
             }
@@ -1450,7 +1447,7 @@
             }
 
             if (applyBtn) {
-                applyBtn.onclick = () => {
+                applyBtn.onclick = async () => {
                     const templateId = templateSelect.value;
                     if (!templateId) {
                         alert('Vui lòng chọn ca khám mẫu!');
@@ -1485,9 +1482,18 @@
                         doctor_name: template.doctor_name,
                         slot_minutes: template.slot_minutes
                     });
-                    
                     shiftsContainer.appendChild(shiftRow);
-                    
+
+                    // Tự động lưu ca vừa áp dụng; nút Lưu chuyển xanh, chìm
+                    const ok = await doSaveShiftRow(shiftRow, false);
+                    const saveBtn = shiftRow.querySelector('.save-btn');
+                    if (saveBtn) {
+                        if (ok) {
+                            saveBtn.classList.remove('save-unsaved');
+                            saveBtn.classList.add('save-saved');
+                        }
+                    }
+
                     // Reset template select
                     templateSelect.value = '';
                 };

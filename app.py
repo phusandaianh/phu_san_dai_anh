@@ -2261,7 +2261,7 @@ def get_available_slots():
             current_min = now.hour * 60 + now.minute
         else:
             current_min = -1
-        available = [s for s in all_slots if s not in taken and (current_min < 0 or to_minutes(s) > current_min)]
+        available = [s for s in all_slots if s not in taken and (current_min < 0 or to_minutes(s) >= current_min)]
         return jsonify({'slots': available})
     except Exception as e:
         return jsonify({'message': f'Lỗi tính slot: {str(e)}'}), 400
