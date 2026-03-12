@@ -9660,7 +9660,7 @@ def initialize_default_admin():
                 db.session.add(admin)
                 db.session.commit()
                 print("Created default admin: admin / phusandaianh@gmail.com")
-                print("Chạy: python create_staff_accounts.py để tạo admin, doctor, nurse")
+                print("Chạy: python create_admin_daihn.py để tạo daihn. Tạo staff khác qua /users.html")
     except Exception as e:
         db.session.rollback()
         print("Error creating default admin:", e)

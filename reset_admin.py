@@ -42,7 +42,7 @@ def reset_admin():
                 print("Dang nhap tai: /users.html")
             else:
                 print("Khong tim thay tai khoan admin hoac daihn.")
-                print("Chay fix_admin.py de tao tai khoan daihn.")
+                print("Chay create_admin_daihn.py de tao tai khoan daihn.")
 
         except Exception as e:
             db.session.rollback()

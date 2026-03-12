@@ -37,7 +37,7 @@ def main():
                 print("Dang nhap tai: /users.html")
             else:
                 print("Khong tim thay tai khoan nao.")
-                print("Chay create_staff_accounts.py de tao tai khoan.")
+                print("Dang nhap /users.html bang admin hoac daihn, tao staff qua giao dien. Hoac chay create_admin_daihn.py de tao daihn.")
 
         except Exception as e:
             db.session.rollback()
