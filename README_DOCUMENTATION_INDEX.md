@@ -21,7 +21,7 @@
 - **[HUONG_DAN_CHAY_MWL_SERVER.md](HUONG_DAN_CHAY_MWL_SERVER.md)** - Vietnamese MWL guide
 
 ### Network Setup
-- **[HUONG_DAN_DONG_BO_VOLUSON.md](HUONG_DAN_DONG_BO_VOLUSON.md)** - Voluson E10 sync guide (Vietnamese)
+- **worklist-center.html** - Worklist & Máy siêu âm management center
 - **[HUONG_DAN_CHAY_SERVERS.md](HUONG_DAN_CHAY_SERVERS.md)** - Server startup guide (Vietnamese)
 
 ### Admin & Security
@@ -49,7 +49,7 @@
 - **mwl_server.py** - DICOM Modality Worklist SCP ✅ WORKING
 - **mwl_sync.py** - Appointment to worklist sync ✅ FIXED
 - **mwl_store.py** - MWL database management
-- **voluson_sync_service.py** - Voluson synchronization
+- **voluson_sync_service.py** - Ultrasound machine synchronization service (generic)
 
 ### Configuration Files
 - **requirements.txt** - Python dependencies
@@ -60,7 +60,7 @@
 ### HTML Templates
 - **admin.html** - Admin panel with MWL sync button
 - **users.html** - Dynamic permission management
-- **mwl-admin.html** - MWL administration interface
+- **worklist-center.html** - Worklist & Máy siêu âm management center
 - **booking.html** - Appointment booking
 - **examination-list.html** - Examination list
 
@@ -107,7 +107,7 @@
 - **Testing:** Run `python app.py`
 - **Production:** Run `.\run_setup.bat` (as Administrator)
 
-### Step 3: Connect Voluson
+### Step 3: Connect ultrasound machine
 - IP: 10.17.2.2
 - Port: 104
 - AE Title: CLINIC_SYSTEM
@@ -121,7 +121,7 @@
 | Start app | app.py | `python app.py` |
 | Sync now | mwl_sync.py | `python mwl_sync.py` |
 | Setup service | run_setup.bat | `.\run_setup.bat` |
-| MWL admin | mwl-admin.html | http://localhost:5000/mwl-admin.html |
+| Worklist center | worklist-center.html | http://localhost:5000/worklist-center.html |
 | App admin | admin.html | http://localhost:5000/admin.html |
 | Check status | SYSTEM_STATUS_FINAL.md | Read this file |
 
@@ -136,7 +136,7 @@
 | Database | ✅ HEALTHY |
 | API Endpoints | ✅ RESPONDING |
 | DICOM Support | ✅ COMPLETE |
-| Voluson Ready | ✅ YES |
+| Ultrasound machine ready | ✅ YES |
 | **Overall** | **✅ PRODUCTION READY** |
 
 ---
@@ -155,7 +155,7 @@
 - MWL Server auto-starts in Windows Service mode
 - Auto-sync runs every 5 minutes automatically
 - Permissions are role-based and dynamic
-- Voluson E10 integration is complete and tested
+- Ultrasound machine integration is complete and tested
 
 ---
 

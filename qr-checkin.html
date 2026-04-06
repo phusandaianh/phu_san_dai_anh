@@ -180,6 +180,41 @@
         .waiting-table tr:hover {
             background: #f8f9fa;
         }
+
+        /* ===== Waiting list (card mode for mobile) ===== */
+        .waiting-cards {
+            display: none;
+            margin-top: 1rem;
+        }
+        .waiting-card {
+            background: #fff;
+            border-radius: 16px;
+            border: 1px solid #eee;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+            padding: 0.9rem 0.95rem;
+            margin-bottom: 0.8rem;
+            display: grid;
+            gap: 0.55rem;
+        }
+        .waiting-card-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.9rem;
+        }
+        .waiting-card-k {
+            font-size: 0.85rem;
+            color: #666;
+        }
+        .waiting-card-v {
+            font-size: 1rem;
+            font-weight: 650;
+            color: #111;
+            text-align: right;
+        }
+        .waiting-status {
+            font-weight: 750;
+        }
         
         .queue-number {
             background: #1565c0;
@@ -190,6 +225,36 @@
             display: inline-block;
             min-width: 40px;
             text-align: center;
+        }
+
+        .queue-number-clickable {
+            position: relative;
+            cursor: pointer;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        .queue-number-clickable::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ef5350;
+            font-size: 1.2rem;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+        }
+
+        .queue-number-clickable:hover {
+            background: #ffcdd2;
+            color: transparent;
+        }
+
+        .queue-number-clickable:hover::after {
+            content: '×';
+            opacity: 1;
         }
         
         .current-serving {
@@ -207,6 +272,8 @@
             align-items: center;
             justify-content: center;
             z-index: 1000;
+            padding: 1rem;
+            box-sizing: border-box;
         }
         
         .ticket-modal.hidden {
@@ -216,12 +283,14 @@
         .ticket {
             background: white;
             border-radius: 20px;
-            padding: 2rem;
-            max-width: 400px;
-            width: 90%;
+            padding: 1.5rem;
+            max-width: 380px;
+            width: 100%;
             text-align: center;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             position: relative;
+            max-height: 88vh;
+            box-sizing: border-box;
         }
         
         .ticket-header {
@@ -231,7 +300,7 @@
         }
         
         .ticket-number {
-            font-size: 4rem;
+            font-size: 3.4rem;
             font-weight: bold;
             color: #1565c0;
             margin: 1rem 0;
@@ -258,6 +327,13 @@
             color: #1565c0;
             font-weight: 600;
         }
+
+        .ticket-checkin-datetime {
+            margin-top: 1rem;
+            color: #1565c0;
+            font-size: 1rem;
+            font-weight: 600;
+        }
         
         .close-ticket {
             position: absolute;
@@ -277,11 +353,11 @@
             background: #1565c0;
             color: white;
             border: none;
-            padding: 1rem 2rem;
+            padding: 0.8rem 1.6rem;
             border-radius: 10px;
-            font-size: 1rem;
+            font-size: 0.95rem;
             cursor: pointer;
-            margin-top: 1rem;
+            margin-top: 0.8rem;
         }
         
         .print-ticket:hover {
@@ -292,11 +368,11 @@
             background: #34a853;
             color: white;
             border: none;
-            padding: 1rem 2rem;
+            padding: 0.9rem 1.6rem;
             border-radius: 10px;
-            font-size: 1rem;
+            font-size: 0.95rem;
             cursor: pointer;
-            margin-top: 0.7rem;
+            margin-top: 0.6rem;
             width: 100%;
             font-weight: 700;
         }
@@ -304,8 +380,37 @@
         .maps-btn:hover {
             background: #2e8f49;
         }
+
+        /* Thu nhỏ phiếu trên màn hình điện thoại thấp để không cần cuộn dọc */
+        @media (max-height: 700px) {
+            .ticket {
+                padding: 1.2rem;
+                max-width: 340px;
+            }
+            .ticket-number {
+                font-size: 3rem;
+                margin: 0.6rem 0;
+            }
+            .ticket-title {
+                font-size: 1.05rem;
+            }
+            .ticket-message {
+                font-size: 0.95rem;
+                margin-bottom: 0.6rem;
+            }
+            .ticket-footer {
+                padding-top: 1rem;
+                margin-top: 1rem;
+            }
+            .print-ticket,
+            .maps-btn {
+                padding: 0.7rem 1.4rem;
+                font-size: 0.9rem;
+            }
+        }
         
-        @media (max-width: 768px) {
+        /* Tối ưu cho điện thoại và máy tính bảng */
+        @media (max-width: 992px) {
             .main-content {
                 grid-template-columns: 1fr;
             }
@@ -313,10 +418,64 @@
             .clinic-info {
                 flex-direction: column;
                 gap: 1rem;
+                text-align: center;
+            }
+
+            .header-section {
+                padding: 1.5rem 1rem;
             }
             
             .stats-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .qr-section,
+            .stats-section,
+            .waiting-list {
+                padding: 1.5rem 1.25rem;
+            }
+        }
+
+        /* Tối ưu sâu cho tablet/điện thoại: QR to hơn + danh sách chờ cuộn ngang */
+        @media (max-width: 768px) {
+            .container {
+                padding: 1.25rem 0.75rem;
+            }
+            .qr-section,
+            .waiting-list {
+                padding: 1.25rem 0.9rem;
+            }
+
+            .qr-code-container {
+                padding: 1.2rem;
+            }
+
+            #qr-code canvas {
+                width: 240px !important;
+                height: 240px !important;
+                max-width: 100%;
+            }
+
+            .waiting-title {
+                flex-wrap: wrap;
+                gap: 0.75rem;
+            }
+
+            .waiting-table {
+                display: none;
+            }
+            .waiting-cards {
+                display: block;
+            }
+        }
+
+        @media (max-width: 480px) {
+            #qr-code canvas {
+                width: 210px !important;
+                height: 210px !important;
+            }
+            .waiting-title {
+                justify-content: center;
             }
         }
         
@@ -407,7 +566,7 @@
                 </div>
             </div>
             <div style="color: #1565c0; font-size: 1.3rem; font-weight: bold; margin-top: 1rem;">
-                <i class="fas fa-qrcode"></i> Hệ thống Check-in tự động
+                <i class="fas fa-qrcode"></i> Hệ thống Check-in tự động (lấy số khám)
             </div>
         </div>
 
@@ -430,24 +589,7 @@
                 </div>
             </div>
 
-            <!-- Stats Section -->
-            <div class="stats-section">
-                <div class="stats-title">Thống kê hôm nay</div>
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-number" id="total-checkins">0</div>
-                        <div class="stat-label">Tổng check-in</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="current-queue">0</div>
-                        <div class="stat-label">Số thứ tự hiện tại</div>
-                    </div>
-                </div>
-                <div class="stat-card" style="margin: 0;">
-                    <div class="stat-number" id="waiting-count">0</div>
-                    <div class="stat-label">Bệnh nhân đang chờ</div>
-                </div>
-            </div>
+            <!-- (Removed) Stats Section: Thống kê hôm nay -->
         </div>
 
         <!-- Waiting List -->
@@ -477,6 +619,7 @@
                     <!-- Danh sách sẽ được load bằng JavaScript -->
                 </tbody>
             </table>
+            <div id="waiting-list-cards" class="waiting-cards"></div>
         </div>
     </div>
 
@@ -502,6 +645,9 @@
                 <label for="voice-select" style="font-weight:600; color:#1565c0;">Giọng đọc</label>
                 <div>
                     <select id="voice-select" style="width:100%; padding:0.5rem; border-radius:8px; border:1px solid #ddd;"></select>
+                    <div id="voice-warning" style="display:none; margin-top:0.5rem; padding:0.6rem 0.8rem; border-radius:10px; background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; font-size:0.9rem; line-height:1.35;">
+                        Máy này chưa có <strong>giọng Tiếng Việt</strong>. Vui lòng cài thêm giọng đọc tiếng Việt trong Windows/Edge (ví dụ: Microsoft Hoài My / Microsoft My), sau đó tải lại trang.
+                    </div>
                     <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
                         <button class="btn" type="button" onclick="applyVoicePreset('female_north')">Nữ - Miền Bắc</button>
                         <button class="btn" type="button" onclick="applyVoicePreset('female_south')">Nữ - Miền Nam</button>
@@ -557,27 +703,38 @@
             <div class="ticket-footer">
                 Trân trọng cảm ơn
             </div>
-            
-            <button class="print-ticket" onclick="printTicket()">
-                <i class="fas fa-print"></i> In phiếu
-            </button>
 
-            <button class="maps-btn" onclick="openClinicMaps()">
-                <i class="fas fa-map-marker-alt"></i> Mở Google Maps (chỉ đường)
+            <div class="ticket-checkin-datetime" id="ticket-checkin-datetime">
+                <!-- Ngày, giờ check-in hiển thị tại đây, ví dụ: 17/3/2026. 17:00 -->
+            </div>
+            
+            <button type="button" class="print-ticket" id="ticket-action-btn" onclick="ticketAction(event)">
+                <i class="fas fa-save" id="ticket-action-icon"></i>
+                <span id="ticket-action-text">Lưu phiếu</span>
             </button>
         </div>
     </div>
 
     <!-- Include QR Code library -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="/qrcode.min.js"></script>
     
     <script>
-        // Tạo QR Code
+        // Chế độ bệnh nhân (khi quét QR để lấy số, chỉ hiện phiếu số thứ tự)
+        let isPatientView = false;
+
+        // Tạo QR Code (chỉ dùng cho màn hình hiển thị tại phòng khám)
         function generateQRCode() {
             const qrContainer = document.getElementById('qr-code');
             const checkInUrl = `${window.location.origin}/qr-checkin?action=checkin`;
 
-            // qrcode.toCanvas cần phần tử <canvas>, không phải <div>
+            // Nếu thư viện QRCode chưa load (mất mạng, CDN bị chặn, v.v.)
+            if (typeof QRCode === 'undefined' || typeof QRCode.toCanvas !== 'function') {
+                console.error('QR Code library not loaded. Check network or qrcode.min.js.');
+                qrContainer.innerHTML = '<p style="color:red; text-align:center;">Không tải được thư viện QR Code.<br>Kiểm tra kết nối mạng hoặc file qrcode.min.js.</p>';
+                return;
+            }
+
+            // QRCode.toCanvas cần phần tử <canvas>, không phải <div>
             qrContainer.innerHTML = '';
             const canvas = document.createElement('canvas');
             qrContainer.appendChild(canvas);
@@ -601,12 +758,40 @@
             try {
                 const response = await fetch('/api/checkin/stats');
                 const stats = await response.json();
-                
-                document.getElementById('total-checkins').textContent = stats.total_checkins || 0;
-                document.getElementById('current-queue').textContent = stats.current_queue || 0;
-                document.getElementById('waiting-count').textContent = stats.waiting_count || 0;
+
+                // Stats section đã bị xóa khỏi UI (trang sẽ không hiển thị thống kê).
+                // Giữ call API để không phá flow cũ, nhưng chỉ update nếu phần tử còn tồn tại.
+                const elTotal = document.getElementById('total-checkins');
+                const elCurrent = document.getElementById('current-queue');
+                const elWaiting = document.getElementById('waiting-count');
+                if (elTotal) elTotal.textContent = stats.total_checkins || 0;
+                if (elCurrent) elCurrent.textContent = stats.current_queue || 0;
+                if (elWaiting) elWaiting.textContent = stats.waiting_count || 0;
             } catch (error) {
                 console.error('Lỗi load thống kê:', error);
+            }
+        }
+
+        // Hiển thị thời gian check-in đúng múi giờ GMT+7 (Việt Nam)
+        // Server lưu UTC và trả về isoformat() không có 'Z', nên coi là UTC rồi format theo Asia/Ho_Chi_Minh
+        function formatCheckinTimeToLocal(checkinTime) {
+            if (!checkinTime) return '';
+            try {
+                let iso = typeof checkinTime === 'string' ? checkinTime.trim() : '';
+                if (iso && !/Z$/i.test(iso) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(iso)) {
+                    iso = iso.replace(/(\.\d+)?$/, 'Z'); // Coi là UTC
+                }
+                const d = new Date(iso || checkinTime);
+                if (isNaN(d.getTime())) return '';
+                return d.toLocaleTimeString('vi-VN', {
+                    timeZone: 'Asia/Ho_Chi_Minh',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+            } catch (e) {
+                console.error('Lỗi format thời gian check-in:', e);
+                return '';
             }
         }
 
@@ -617,10 +802,15 @@
                 const waitingList = await response.json();
                 
                 const tbody = document.getElementById('waiting-list-body');
+                const cardsEl = document.getElementById('waiting-list-cards');
                 tbody.innerHTML = '';
+                if (cardsEl) cardsEl.innerHTML = '';
                 
                 if (waitingList.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #666;">Chưa có bệnh nhân nào check-in</td></tr>';
+                    if (cardsEl) {
+                        cardsEl.innerHTML = '<div style="text-align:center;color:#666;padding:1rem;">Chưa có bệnh nhân nào check-in</div>';
+                    }
                     return;
                 }
                 
@@ -629,10 +819,10 @@
                     const isCurrentServing = patient.status === 'serving';
                     
                     row.innerHTML = `
-                        <td><span class="queue-number ${isCurrentServing ? 'current-serving' : ''}">${patient.queue_number}</span></td>
+                        <td><span class="queue-number queue-number-clickable ${isCurrentServing ? 'current-serving' : ''}" data-id="${patient.id}" data-queue="${patient.queue_number}" title="Nhấn để xóa phiếu khám">${patient.queue_number}</span></td>
                         <td>${patient.name}</td>
                         <td>${patient.phone}</td>
-                        <td>${new Date(patient.checkin_time).toLocaleTimeString('vi-VN')}</td>
+                        <td>${formatCheckinTimeToLocal(patient.checkin_time)}</td>
                         <td>
                             ${patient.status === 'waiting' ? '<span style="color: #ff9800;">Đang chờ</span>' : 
                               patient.status === 'serving' ? '<span style="color: #4caf50;">Đang khám</span>' : 
@@ -645,16 +835,100 @@
                         </td>
                     `;
                     tbody.appendChild(row);
+
+                    // Render card version (for tablet/mobile)
+                    if (cardsEl) {
+                        const statusHtml =
+                            patient.status === 'waiting'
+                                ? '<span style="color:#ff9800;">Đang chờ</span>'
+                                : patient.status === 'serving'
+                                    ? '<span style="color:#4caf50;">Đang khám</span>'
+                                    : '<span style="color:#666;">Hoàn thành</span>';
+
+                        const card = document.createElement('div');
+                        card.className = 'waiting-card';
+
+                        card.innerHTML = `
+                            <div class="waiting-card-row">
+                                <div style="display:flex; align-items:center; gap:0.7rem;">
+                                    <span class="queue-number queue-number-clickable ${isCurrentServing ? 'current-serving' : ''}"
+                                          data-id="${patient.id}" data-queue="${patient.queue_number}"
+                                          title="Nhấn để xóa phiếu khám">${patient.queue_number}</span>
+                                </div>
+                                <div class="waiting-status">${statusHtml}</div>
+                            </div>
+                            <div class="waiting-card-row">
+                                <div class="waiting-card-k">Họ tên</div>
+                                <div class="waiting-card-v">${patient.name}</div>
+                            </div>
+                            <div class="waiting-card-row">
+                                <div class="waiting-card-k">Số điện thoại</div>
+                                <div class="waiting-card-v">${patient.phone}</div>
+                            </div>
+                            <div class="waiting-card-row">
+                                <div class="waiting-card-k">Thời gian check-in</div>
+                                <div class="waiting-card-v">${formatCheckinTimeToLocal(patient.checkin_time)}</div>
+                            </div>
+                            <div class="waiting-card-row">
+                                <div class="waiting-card-k"></div>
+                                <button class="speak-btn" title="Gọi vào phòng" data-name="${patient.name}" data-queue="${patient.queue_number}">
+                                    <i class="fas fa-volume-up"></i>
+                                </button>
+                            </div>
+                        `;
+
+                        cardsEl.appendChild(card);
+                    }
                 });
             } catch (error) {
                 console.error('Lỗi load danh sách chờ:', error);
             }
         }
 
-        // Hiển thị phiếu số thứ tự
-        function showTicket(queueNumber) {
+        // Format ngày giờ check-in: 17/3/2026. 17:00 (GMT+7)
+        function formatCheckinDisplay(isoOrDate) {
+            try {
+                var d;
+                if (isoOrDate) {
+                    var iso = typeof isoOrDate === 'string' ? isoOrDate.trim() : '';
+                    if (iso && !/Z$/i.test(iso) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(iso))
+                        iso = iso.replace(/(\.\d+)?$/, 'Z');
+                    d = new Date(iso || isoOrDate);
+                } else {
+                    d = new Date();
+                }
+                if (isNaN(d.getTime())) return '';
+                var s = d.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+                return s.replace(/\s*,\s*/, '. ');
+            } catch (e) { return ''; }
+        }
+
+        // Hiển thị phiếu số thứ tự (bệnh nhân quét QR: nút Lưu phiếu; màn hình phòng khám: nút In phiếu)
+        function showTicket(queueNumber, checkinTime) {
             document.getElementById('ticket-number').textContent = queueNumber;
+            var el = document.getElementById('ticket-checkin-datetime');
+            if (el) {
+                var str = formatCheckinDisplay(checkinTime);
+                el.textContent = str || '';
+                el.style.display = str ? 'block' : 'none';
+            }
+            var btn = document.getElementById('ticket-action-btn');
+            var icon = document.getElementById('ticket-action-icon');
+            var text = document.getElementById('ticket-action-text');
+            if (isPatientView) {
+                icon.className = 'fas fa-save';
+                text.textContent = 'Lưu phiếu';
+            } else {
+                icon.className = 'fas fa-print';
+                text.textContent = 'In phiếu';
+            }
             document.getElementById('ticket-modal').classList.remove('hidden');
+        }
+
+        // Gọi Lưu phiếu (bệnh nhân) hoặc In phiếu (màn hình phòng khám)
+        function ticketAction(e) {
+            if (e) e.preventDefault();
+            if (isPatientView) saveTicket(); else printTicket();
         }
 
         // Đóng phiếu
@@ -662,7 +936,7 @@
             document.getElementById('ticket-modal').classList.add('hidden');
         }
 
-        // In phiếu
+        // In phiếu (dùng trên màn hình phòng khám)
         function printTicket() {
             const ticketContent = document.querySelector('.ticket').innerHTML;
             const printWindow = window.open('', '_blank');
@@ -684,6 +958,45 @@
             `);
             printWindow.document.close();
             printWindow.print();
+        }
+
+        // Lưu phiếu xuống máy (khi bệnh nhân quét QR)
+        function saveTicket() {
+            try {
+                var num = document.getElementById('ticket-number').textContent || '0';
+                var dateTimeEl = document.getElementById('ticket-checkin-datetime');
+                var dateTimeStr = dateTimeEl ? (dateTimeEl.textContent || '').trim() : '';
+                var dateTimeBlock = dateTimeStr ? '<p style="color:#1565c0;font-size:1rem;font-weight:600;margin-top:1rem;">' + dateTimeStr + '</p>' : '';
+                var html = '<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+                    '<title>Phiếu số thứ tự khám - ' + num + '</title><style>' +
+                    'body{font-family:Arial,sans-serif;margin:20px;background:#f5f5f5;display:flex;justify-content:center;align-items:center;min-height:100vh;}' +
+                    '.ticket{background:#fff;border-radius:16px;padding:1.5rem;max-width:320px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.1);}' +
+                    '.ticket-header{border-bottom:2px dashed #1565c0;padding-bottom:1rem;margin-bottom:1rem;}' +
+                    '.ticket-title{color:#1565c0;font-size:1.1rem;font-weight:bold;}' +
+                    '.ticket-number{font-size:3rem;font-weight:bold;color:#1565c0;margin:0.8rem 0;}' +
+                    '.ticket-footer{border-top:2px dashed #1565c0;padding-top:1rem;margin-top:1rem;color:#1565c0;font-weight:600;}' +
+                    '</style></head><body><div class="ticket">' +
+                    '<div class="ticket-header">Phòng khám chuyên khoa Phụ Sản Đại Anh<br><span style="color:#e53935;font-weight:600;">Uy Tín - Chất Lượng</span></div>' +
+                    '<div class="ticket-number">' + num + '</div>' +
+                    '<div style="color:#1565c0;font-size:1rem;font-weight:bold;margin-bottom:0.8rem;">SỐ THỨ TỰ KHÁM TRONG NGÀY</div>' +
+                    '<p style="color:#666;margin:0.5rem 0;">Rất hân hạnh được phục vụ quý khách</p>' +
+                    '<div class="ticket-footer">Trân trọng cảm ơn</div>' + dateTimeBlock + '</div></body></html>';
+                var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'Phieu_so_thu_tu_' + num + '.html';
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(function() {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 300);
+            } catch (err) {
+                console.error('Lưu phiếu lỗi:', err);
+                alert('Không thể lưu phiếu. Vui lòng thử lại.');
+            }
         }
 
         function openClinicMaps() {
@@ -709,9 +1022,12 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    showTicket(result.queue_number);
-                    loadStats();
-                    loadWaitingList();
+                    showTicket(result.queue_number, result.checkin_time);
+                    // Chỉ màn hình phòng khám mới cần thống kê & danh sách chờ
+                    if (!isPatientView) {
+                        loadStats();
+                        loadWaitingList();
+                    }
                 } else {
                     alert(result.message || 'Có lỗi xảy ra khi check-in');
                 }
@@ -721,34 +1037,53 @@
             }
         }
 
-        // Kiểm tra URL có chứa tham số check-in không
-        function checkForCheckin() {
+        // Phát hiện xem đây có phải chế độ bệnh nhân (truy cập từ QR) không
+        function detectPatientView() {
             const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('action') === 'checkin') {
-                handleCheckin();
-                // Xóa tham số khỏi URL
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }
+            isPatientView = urlParams.get('action') === 'checkin';
+        }
+
+        // Ẩn các khu vực chỉ dành cho màn hình tại phòng khám
+        function applyPatientViewLayout() {
+            if (!isPatientView) return;
+
+            const header = document.querySelector('.header-section');
+            const main = document.querySelector('.main-content');
+            const waiting = document.querySelector('.waiting-list');
+            const footer = document.querySelector('footer.footer, footer');
+
+            if (header) header.style.display = 'none';
+            if (main) main.style.display = 'none';
+            if (waiting) waiting.style.display = 'none';
+            if (footer) footer.style.display = 'none';
         }
 
         // Khởi tạo trang
         document.addEventListener('DOMContentLoaded', function() {
-            generateQRCode();
-            loadStats();
-            loadWaitingList();
-            checkForCheckin();
-            initializeAnnouncementSettings();
-            
-            // Tự động làm mới mỗi 30 giây
-            setInterval(() => {
+            detectPatientView();
+            applyPatientViewLayout();
+
+            if (isPatientView) {
+                // Bệnh nhân quét QR: chỉ gửi check-in và hiện phiếu số thứ tự
+                handleCheckin();
+            } else {
+                // Màn hình phòng khám: hiển thị QR, thống kê, danh sách chờ
+                generateQRCode();
                 loadStats();
                 loadWaitingList();
-            }, 30000);
+                initializeAnnouncementSettings();
+
+                // Tự động làm mới mỗi 30 giây
+                setInterval(() => {
+                    loadStats();
+                    loadWaitingList();
+                }, 30000);
+            }
         });
 
-        // Xử lý khi click vào QR code (để test)
+        // Xử lý khi click vào QR code (để test trên màn hình phòng khám)
         document.getElementById('qr-code').addEventListener('click', function() {
-            if (confirm('Bạn có muốn test chức năng check-in không?')) {
+            if (!isPatientView && confirm('Đồng ý lấy số thứ tự khám?')) {
                 handleCheckin();
             }
         });
@@ -823,6 +1158,7 @@
             if (!voiceSelect) return;
             const selected = localStorage.getItem(VOICE_KEY) || '';
             const voices = window.speechSynthesis.getVoices();
+            const warn = document.getElementById('voice-warning');
             
             // Ưu tiên giọng nữ tiếng Việt
             const femaleViPatterns = [
@@ -842,6 +1178,11 @@
             
             // Lọc giọng tiếng Việt
             let viVoices = voices.filter(isVi);
+
+            // Hiển thị cảnh báo nếu không có giọng Việt
+            if (warn) {
+                warn.style.display = viVoices.length === 0 ? 'block' : 'none';
+            }
             
             // Nếu không có giọng Việt, lấy tất cả giọng nữ
             if (viVoices.length === 0) {
@@ -1005,10 +1346,13 @@
 
         function buildAnnouncement(name, queue) {
             const tmpl = localStorage.getItem(ANNOUNCE_KEY) || getDefaultTemplate();
+            // Khi check-in QR không có tên (hoặc mặc định "Khách hàng"), {name} để trống, không đọc
+            const nameVal = (name && name.trim() && name.trim() !== 'Khách hàng') ? name.trim() : '';
             return tmpl
-                .replace(/\{name\}/g, name || '')
+                .replace(/\{name\}/g, nameVal)
                 .replace(/\{queue\}/g, String(queue || ''))
                 .replace(/\s+/g, ' ')
+                .replace(/\s+,/g, ',')
                 .trim();
         }
 
@@ -1093,8 +1437,37 @@
                 const name = btn.getAttribute('data-name');
                 const queue = btn.getAttribute('data-queue');
                 speakAnnouncement(name, queue);
+                return;
+            }
+            const queueSpan = e.target.closest('.queue-number-clickable');
+            if (queueSpan) {
+                const id = queueSpan.getAttribute('data-id');
+                const queue = queueSpan.getAttribute('data-queue');
+                if (id && confirm('Xóa phiếu khám số ' + queue + '?')) {
+                    deleteCheckin(id);
+                }
             }
         });
+
+        async function deleteCheckin(checkinId) {
+            try {
+                const res = await fetch('/api/checkin/' + checkinId + '/status', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'cancelled' })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    loadStats();
+                    loadWaitingList();
+                } else {
+                    alert(data.error || 'Không thể xóa phiếu');
+                }
+            } catch (err) {
+                console.error('Lỗi xóa phiếu:', err);
+                alert('Không thể xóa phiếu. Vui lòng thử lại.');
+            }
+        }
     </script>
     
     <!-- Footer -->

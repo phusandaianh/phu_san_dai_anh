@@ -1,36 +1,36 @@
 #!/usr/bin/env python3
 """
-Script cập nhật database để thêm cột đồng bộ Voluson E10
+Script cập nhật database để thêm cột đồng bộ máy siêu âm
 """
 
 import sqlite3
 import os
 
 def update_database():
-    """Cập nhật database để thêm cột voluson_synced"""
-    print("🔧 Cập nhật database cho đồng bộ Voluson E10...")
+    """Cập nhật database cho trạng thái đồng bộ máy siêu âm (giữ cột legacy)."""
+    print("🔧 Cập nhật database cho đồng bộ máy siêu âm...")
     
     try:
         conn = sqlite3.connect('clinic.db')
         cursor = conn.cursor()
         
-        # Kiểm tra cột voluson_synced đã tồn tại chưa
+        # Kiểm tra các cột legacy đã tồn tại chưa
         cursor.execute("PRAGMA table_info(appointment)")
         columns = [row[1] for row in cursor.fetchall()]
         
-        if 'voluson_synced' not in columns:
-            print("➕ Thêm cột voluson_synced...")
-            cursor.execute("ALTER TABLE appointment ADD COLUMN voluson_synced INTEGER DEFAULT 0")
-            print("✅ Đã thêm cột voluson_synced")
+        if 'Maysieuam_synced' not in columns:
+            print("➕ Thêm cột đồng bộ legacy: Maysieuam_synced...")
+            cursor.execute("ALTER TABLE appointment ADD COLUMN Maysieuam_synced INTEGER DEFAULT 0")
+            print("✅ Đã thêm cột đồng bộ legacy: Maysieuam_synced")
         else:
-            print("✅ Cột voluson_synced đã tồn tại")
+            print("✅ Cột đồng bộ legacy Maysieuam_synced đã tồn tại")
             
-        if 'voluson_sync_time' not in columns:
-            print("➕ Thêm cột voluson_sync_time...")
-            cursor.execute("ALTER TABLE appointment ADD COLUMN voluson_sync_time DATETIME")
-            print("✅ Đã thêm cột voluson_sync_time")
+        if 'Maysieuam_sync_time' not in columns:
+            print("➕ Thêm cột thời gian đồng bộ legacy: Maysieuam_sync_time...")
+            cursor.execute("ALTER TABLE appointment ADD COLUMN Maysieuam_sync_time DATETIME")
+            print("✅ Đã thêm cột thời gian đồng bộ legacy: Maysieuam_sync_time")
         else:
-            print("✅ Cột voluson_sync_time đã tồn tại")
+            print("✅ Cột thời gian đồng bộ legacy Maysieuam_sync_time đã tồn tại")
         
         conn.commit()
         conn.close()

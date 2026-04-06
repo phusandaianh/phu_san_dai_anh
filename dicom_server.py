@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 DICOM Server cho he thong phong kham
-Nhan va xu ly worklist requests tu may Voluson
+Nhan va xu ly worklist requests tu may siêu âm
 """
 
 from pynetdicom import AE, evt, VerificationPresentationContexts
@@ -15,7 +15,7 @@ logger = logging.getLogger('dicom_server')
 
 def handle_worklist_request(event):
     """Xử lý Worklist request"""
-    logger.info("Nhận được Worklist request từ Voluson")
+    logger.info("Nhận được Worklist request từ máy siêu âm")
 
     dataset = event.identifier
     logger.info(f"Nội dung Worklist query: {dataset}")
@@ -48,7 +48,7 @@ def start_dicom_server():
     logger.info("============================================================")
     logger.info("Bắt đầu DICOM server trên port 104...")
     logger.info("AE Title: CLINIC_SYSTEM")
-    logger.info("Đang lắng nghe kết nối từ Voluson E10...")
+    logger.info("Đang lắng nghe kết nối từ máy siêu âm...")
     logger.info("============================================================")
 
     ae.start_server(('0.0.0.0', 104), block=True, evt_handlers=handlers)

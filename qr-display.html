@@ -1,0 +1,1951 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bảng gọi khám - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root {
+            --bg-main: #020617;
+            --bg-panel: #0f172a;
+            --accent: #38bdf8;
+            --accent-soft: rgba(56,189,248,0.12);
+            --accent-strong: #22c55e;
+            --text-main: #e5e7eb;
+            --text-muted: #9ca3af;
+            --danger: #f97373;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top, #0f172a 0, #020617 55%, #000 100%);
+            color: var(--text-main);
+            overflow: hidden;
+        }
+
+        /* ===== Idle Ads Overlay (full screen) ===== */
+        .idle-ads-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: none;
+            background: radial-gradient(circle at top, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.98));
+        }
+        .idle-ads-overlay.show {
+            display: grid;
+        }
+        .idle-ads-grid {
+            display: grid;
+            grid-template-columns: 1.6fr 1fr;
+            grid-template-rows: auto 1fr auto;
+            gap: 18px;
+            padding: 22px 26px;
+            height: 100vh;
+        }
+        .idle-ads-top {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .idle-ads-top-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            justify-content: flex-end;
+            min-width: 0;
+            /* Ngang kích thước cột lịch làm việc (cột phải) */
+            width: clamp(420px, 38vw, 720px);
+        }
+        .idle-ads-title {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-width: 0;
+        }
+        .idle-ads-title h2 {
+            margin: 0;
+            font-size: 34px;
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .idle-ads-title p {
+            margin: 3px 0 0;
+            color: var(--accent);
+            letter-spacing: 0.08em;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 14px;
+        }
+        .idle-ads-clock {
+            color: var(--text-muted);
+            font-size: 16px;
+            letter-spacing: 0.05em;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .idle-ads-slide {
+            border-radius: 18px;
+            border: 1px solid rgba(56, 189, 248, 0.22);
+            background: rgba(15, 23, 42, 0.55);
+            overflow: hidden;
+            position: relative;
+            min-height: 380px;
+        }
+        .idle-ads-slide img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .idle-ads-slide video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .idle-ads-slide iframe {
+            width: 100%;
+            height: 100%;
+            display: block;
+            border: 0;
+        }
+        .idle-ads-slide::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to top, rgba(2,6,23,0.86), rgba(2,6,23,0.1) 55%, rgba(2,6,23,0));
+            pointer-events: none;
+        }
+        .idle-ads-services {
+            position: absolute;
+            left: 18px;
+            right: 18px;
+            bottom: 14px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: rgba(2,6,23,0.62);
+            border: 1px solid rgba(56,189,248,0.20);
+            color: var(--text-main);
+            font-size: 18px;
+            line-height: 1.35;
+        }
+        .idle-ads-services .label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            color: var(--accent);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            font-size: 13px;
+        }
+        .idle-ads-right {
+            display: grid;
+            gap: 14px;
+            align-content: start;
+        }
+        .idle-ads-schedule-row {
+            display: flex;
+            gap: 14px;
+            align-items: stretch;
+        }
+        .idle-ads-schedule-row .idle-ads-schedule-card {
+            flex: 1;
+            min-width: 0;
+        }
+        .idle-ads-doctor-photo-card {
+            flex: 0 0 clamp(210px, 24vw, 280px);
+        }
+        .idle-ads-card {
+            border-radius: 18px;
+            border: 1px solid rgba(56, 189, 248, 0.22);
+            background: rgba(15, 23, 42, 0.55);
+            padding: 16px 16px;
+        }
+        .idle-ads-card h3 {
+            margin: 0 0 10px;
+            font-size: 18px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .idle-ads-row {
+            display: flex;
+            gap: 14px;
+            align-items: center;
+        }
+        .idle-ads-info {
+            display: grid;
+            gap: 10px;
+            flex: 1;
+            min-width: 0;
+        }
+        .idle-ads-info .line {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            color: var(--text-main);
+            font-size: 18px;
+            line-height: 1.25;
+        }
+        .idle-ads-info .line i {
+            color: var(--accent);
+            margin-top: 2px;
+            flex: 0 0 auto;
+            width: 20px;
+            text-align: center;
+        }
+        .idle-ads-info .value {
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .idle-ads-footer {
+            grid-column: 1 / -1;
+            border-radius: 999px;
+            border: 1px solid rgba(56,189,248,0.30);
+            background: rgba(15,23,42,0.55);
+            padding: 10px 16px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+        .idle-ads-footer strong {
+            color: var(--text-main);
+        }
+        .idle-ads-footer-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex: 1;
+            min-width: 0;
+        }
+        .idle-ads-footer-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            white-space: nowrap;
+            flex: 0 0 auto;
+        }
+        .idle-ads-footer-text-wrap {
+            flex: 1;
+            overflow: hidden;
+            min-width: 0;
+        }
+        .idle-ads-footer-scroll {
+            display: flex;
+            white-space: nowrap;
+            animation: idle-footer-scroll 30s linear infinite;
+            align-items: center;
+        }
+        .idle-ads-footer-scroll span {
+            display: inline-block;
+            padding-right: 70px; /* tạo khoảng trống để nối vòng mượt */
+        }
+        @keyframes idle-footer-scroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        .tv-layout {
+            display: grid;
+            grid-template-rows: auto auto 1fr auto;
+            height: 100vh;
+            padding: 16px 24px 12px;
+            gap: 10px;
+        }
+
+        .tv-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .tv-header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex: 1;
+            min-width: 0; /* cho phép co lại để không đè lên ô bên phải */
+        }
+
+        .tv-logo {
+            width: 60px;
+            height: 60px;
+            border-radius: 16px;
+            background: radial-gradient(circle at 30% 20%, #f97316, #b91c1c 55%, #7f1d1d 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .tv-logo img {
+            width: 70px;
+            height: auto;
+        }
+
+        .tv-title-block h1 {
+            margin: 0;
+            font-size: 28px;
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tv-title-block p {
+            margin: 2px 0 0;
+            font-size: 15px;
+            color: var(--accent);
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .tv-header-right {
+            /* Bám sát cạnh phải, không che tiêu đề */
+            margin-left: auto;
+            display: flex;
+            justify-content: flex-end;
+            /* Mở rộng để "Dịch vụ mới" ngang với cột lịch làm việc */
+            width: clamp(420px, 46vw, 650px);
+        }
+
+        .tv-new-service {
+            border-radius: 999px;
+            border: 1px solid rgba(56,189,248,0.35);
+            background: radial-gradient(circle at top, rgba(15,23,42,0.95), rgba(15,23,42,0.98));
+            overflow: hidden;
+            width: 100%;
+        }
+
+        .tv-new-service-inner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            min-height: 44px;
+        }
+
+        .tv-new-service-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(56,189,248,0.15);
+            color: var(--accent);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+
+        .tv-new-service-text-wrap {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+        }
+
+        .tv-new-service-scroll {
+            display: flex;
+            white-space: nowrap;
+            animation: new-service-scroll 26s linear infinite;
+            align-items: center;
+        }
+
+        .tv-new-service-text {
+            padding-right: 3em;
+            line-height: 1.35;
+        }
+
+        @keyframes new-service-scroll {
+            0%   { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        .tv-stats-row {
+            display: grid;
+            grid-template-columns: 2fr 1.2fr 1.6fr;
+            gap: 12px;
+        }
+
+        .tv-doctor-card {
+            display: none;
+        }
+
+        .tv-stats-row.doctor-active {
+            /* Col 1 = Col 3 (giống yêu cầu: diện tích ô số đang khám = ô lịch làm việc) */
+            grid-template-columns: 1.6fr 1.2fr 1.6fr 1.2fr;
+        }
+        .tv-stats-row.doctor-active .tv-doctor-card {
+            display: block;
+        }
+
+        .tv-stats-row.doctor-active .tv-current-number-main {
+            /* Khi cột bị thu hẹp thì giảm size để không bị tràn */
+            font-size: 72px;
+        }
+
+        .tv-doctor-photo {
+            width: 100%;
+            height: 100%;
+            min-height: 140px;
+            border-radius: 14px;
+            overflow: hidden;
+            background: rgba(56,189,248,0.10);
+            border: 1px solid rgba(148,163,184,0.30);
+            display: grid;
+            place-items: center;
+            padding: 8px;
+        }
+        .tv-doctor-photo.no-photo {
+            background: transparent;
+            border-color: transparent;
+            padding: 0;
+        }
+        .tv-doctor-photo img {
+            height: 90%;
+            width: auto;
+            max-width: 90%;
+            object-fit: cover;
+            display: block;
+            border-radius: 10px;
+        }
+        /* Màn hình có bệnh nhân: ảnh vừa khít ô, không tràn */
+        #doctorPhotoWrap.tv-doctor-photo {
+            overflow: hidden;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            border: none;
+            background: transparent;
+            padding: 0;
+        }
+        #doctorPhotoWrap.tv-doctor-photo img {
+            width: 90%;
+            height: 90%;
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+            object-position: center;
+            border-radius: 2;
+        }
+        /* Overlay quảng cáo: ảnh bác sĩ vừa khít ô, không tràn */
+        #adsDoctorPhotoCard .tv-doctor-photo {
+            overflow: hidden;
+            border: none;
+            background: transparent;
+            padding: 0;
+            display: flex;
+    align-items: flex-start;
+    justify-content: center;
+        }
+        #adsDoctorPhotoCard .tv-doctor-photo img {
+            height: 90%;
+            width: auto;
+            max-width: 90%;
+            object-fit: contain;
+            border-radius: 0;
+            margin-top: 0px;
+        }
+
+        .tv-schedule-lines {
+            display: grid;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        .tv-schedule-line {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
+            border-top: 1px dashed rgba(148,163,184,0.25);
+            padding-top: 6px;
+        }
+
+        .tv-schedule-k {
+            font-size: 13px;
+            color: var(--text-muted);
+            letter-spacing: 0.02em;
+        }
+
+        .tv-schedule-v {
+            font-size: 15px;
+            font-weight: 650;
+            color: var(--text-main);
+            text-align: right;
+            white-space: pre-line; /* cho phép hiển thị nhiều ca bằng xuống dòng */
+        }
+
+        .tv-card {
+            background: linear-gradient(135deg, rgba(15,23,42,0.92), rgba(15,23,42,0.95));
+            border-radius: 16px;
+            padding: 14px 16px;
+            border: 1px solid rgba(148,163,184,0.3);
+            box-shadow: 0 18px 45px rgba(15,23,42,0.7);
+        }
+
+        .tv-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .tv-card-title {
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+        }
+
+        .tv-card-icon {
+            font-size: 18px;
+            color: var(--accent);
+        }
+
+        .tv-current-number {
+            display: flex;
+            align-items: flex-end;
+            justify-content: flex-start;
+            gap: 16px;
+        }
+
+        .tv-current-number-main {
+            font-size: 82px;
+            font-weight: 800;
+            color: var(--accent-strong);
+            text-shadow: 0 0 30px rgba(34,197,94,0.55);
+            line-height: 1;
+            min-width: 110px;
+        }
+
+        .tv-current-labels {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .tv-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            border: 1px solid rgba(148,163,184,0.6);
+            color: var(--text-muted);
+        }
+
+        .tv-pill i {
+            font-size: 11px;
+        }
+
+        .tv-current-text {
+            font-size: 15px;
+            color: var(--text-main);
+        }
+
+        .tv-stat-value {
+            font-size: 36px;
+            font-weight: 700;
+            margin-top: 2px;
+        }
+
+        .tv-stat-label {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .tv-main {
+            display: grid;
+            grid-template-columns: 1.5fr 2fr;
+            gap: 14px;
+            margin-top: 4px;
+            min-height: 0;
+        }
+
+        .tv-panel {
+            background: linear-gradient(145deg, rgba(15,23,42,0.98), rgba(15,23,42,0.96));
+            border-radius: 18px;
+            border: 1px solid rgba(30,64,175,0.65);
+            padding: 12px 14px 10px;
+            box-shadow: 0 24px 60px rgba(15,23,42,0.9);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .tv-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .tv-panel-title {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .tv-panel-title span {
+            color: var(--accent);
+        }
+
+        .tv-panel-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .tv-refresh-indicator {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tv-refresh-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 999px;
+            background: #22c55e;
+            box-shadow: 0 0 10px rgba(34,197,94,0.7);
+        }
+
+        .tv-list {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .tv-list-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-size: 15px;
+        }
+
+        .tv-list-table thead {
+            background: radial-gradient(circle at top left, rgba(56,189,248,0.35), rgba(15,23,42,0.95));
+        }
+
+        .tv-list-table th,
+        .tv-list-table td {
+            padding: 6px 8px;
+            text-align: left;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tv-list-table th {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 600;
+            color: #e5e7eb;
+            border-bottom: 1px solid rgba(148,163,184,0.5);
+        }
+
+        .tv-list-table tbody {
+            display: block;
+            max-height: calc(100vh - 260px);
+            overflow-y: auto;
+        }
+
+        .tv-list-table thead tr {
+            display: grid;
+            grid-template-columns: 80px 2.1fr 1.4fr 1.2fr;
+        }
+
+        .tv-list-table tbody tr {
+            display: grid;
+            grid-template-columns: 80px 2.1fr 1.4fr 1.2fr;
+        }
+
+        .tv-list-table tbody tr:nth-child(odd) {
+            background: rgba(15,23,42,0.9);
+        }
+
+        .tv-list-table tbody tr:nth-child(even) {
+            background: rgba(15,23,42,0.98);
+        }
+
+        .tv-list-table tbody tr.serving {
+            background: linear-gradient(90deg, rgba(34,197,94,0.38), rgba(15,23,42,0.98));
+        }
+
+        .tv-queue-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 48px;
+            padding: 5px 12px;
+            border-radius: 999px;
+            background: rgba(56,189,248,0.2);
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .tv-queue-badge.serving {
+            background: rgba(34,197,94,0.25);
+            color: #bbf7d0;
+        }
+
+        .tv-status-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.11em;
+        }
+
+        .tv-status-waiting {
+            background: rgba(234,179,8,0.14);
+            color: #facc15;
+        }
+
+        .tv-status-serving {
+            background: rgba(34,197,94,0.16);
+            color: #86efac;
+        }
+
+        .tv-status-completed {
+            background: rgba(148,163,184,0.22);
+            color: #e5e7eb;
+        }
+
+        .tv-empty {
+            text-align: center;
+            padding: 14px 8px;
+            color: var(--text-muted);
+            font-size: 15px;
+        }
+
+        /* Quảng cáo chạy chữ dưới cùng */
+        .tv-ticker {
+            grid-row: 4 / 5;
+            grid-column: 1 / -1;
+            align-self: end;
+            border-radius: 999px;
+            border: 1px solid rgba(56,189,248,0.35);
+            background: radial-gradient(circle at top, rgba(15,23,42,0.95), rgba(15,23,42,0.98));
+            overflow: hidden;
+            position: relative;
+        }
+
+        .tv-ticker-inner {
+            position: relative;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            padding: 10px 14px 10px 16px;
+            min-height: 44px;
+        }
+
+        .tv-ticker-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(56,189,248,0.15);
+            color: var(--accent);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            margin-right: 14px;
+            flex-shrink: 0;
+        }
+
+        .tv-ticker-text-wrap {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+        }
+
+        .tv-ticker-scroll {
+            display: flex;
+            white-space: nowrap;
+            animation: ticker-scroll 30s linear infinite;
+            align-items: center;
+        }
+
+        .tv-ticker-text {
+            padding-right: 3em;
+            line-height: 1.35;
+        }
+
+        @keyframes ticker-scroll {
+            0%   { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        /* TV optimization: Full HD and larger */
+        @media (min-width: 1600px) and (min-height: 900px) {
+            .tv-layout {
+                padding: 18px 30px 14px;
+                gap: 12px;
+            }
+            .tv-title-block h1 {
+                font-size: 32px;
+            }
+            .tv-title-block p {
+                font-size: 16px;
+            }
+            .tv-current-number-main {
+                font-size: 96px;
+            }
+            .tv-stat-value {
+                font-size: 40px;
+            }
+            .tv-panel-title {
+                font-size: 20px;
+            }
+            .tv-panel-subtitle {
+                font-size: 14px;
+            }
+            .tv-list-table {
+                font-size: 16px;
+            }
+            .tv-list-table th,
+            .tv-list-table td {
+                padding: 8px 10px;
+            }
+            .tv-list-table tbody {
+                max-height: calc(100vh - 300px);
+            }
+            .tv-queue-badge {
+                font-size: 20px;
+                min-width: 56px;
+            }
+            .tv-schedule-v {
+                font-size: 17px;
+            }
+            .idle-ads-grid {
+                padding: 26px 32px;
+                gap: 20px;
+            }
+        }
+
+        /* 4K TV readability */
+        @media (min-width: 2560px) and (min-height: 1400px) {
+            .tv-layout {
+                padding: 26px 40px 18px;
+            }
+            .tv-title-block h1 {
+                font-size: 42px;
+            }
+            .tv-current-number-main {
+                font-size: 128px;
+            }
+            .tv-list-table {
+                font-size: 20px;
+            }
+            .tv-list-table th {
+                font-size: 16px;
+            }
+            .tv-panel-title {
+                font-size: 24px;
+            }
+            .tv-schedule-v {
+                font-size: 20px;
+            }
+        }
+
+        /* Responsive tweaks */
+        @media (max-width: 1024px) {
+            .tv-layout {
+                padding: 10px 12px 14px;
+                gap: 8px;
+            }
+            .tv-main {
+                grid-template-columns: 1fr;
+            }
+            .tv-list-table tbody {
+                max-height: calc(100vh - 280px);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .tv-title-block h1 {
+                font-size: 22px;
+            }
+            .tv-current-number-main {
+                font-size: 64px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="idle-ads-overlay" id="idleAdsOverlay" aria-hidden="true">
+        <div class="idle-ads-grid">
+            <div class="idle-ads-top">
+                <div class="idle-ads-title">
+                    <div class="tv-logo" style="width:64px;height:64px;border-radius:18px;">
+                        <img src="logo_phu_san_dai_anh.PNG" alt="Logo Phòng khám Đại Anh" onerror="this.style.display='none';">
+                    </div>
+                    <div style="min-width:0;">
+                        <h2 id="idleAdsClinicName">PHÒNG KHÁM CHUYÊN KHOA PHỤ SẢN ĐẠI ANH</h2>
+                        <p id="idleAdsClinicTagline">UY TÍN - CHẤT LƯỢNG</p>
+                    </div>
+                </div>
+                <div class="idle-ads-top-right">
+                    <div class="tv-new-service" style="width: 100%;">
+                        <div class="tv-new-service-inner">
+                            <div class="tv-new-service-label" id="adsNewServiceLabel">
+                                <i class="fas fa-sparkles"></i>
+                                DỊCH VỤ MỚI
+                            </div>
+                            <div class="tv-new-service-text-wrap">
+                                <div class="tv-new-service-scroll" id="adsNewServiceScroll">
+                                    <span class="tv-new-service-text" id="adsNewServiceText"></span>
+                                    <span class="tv-new-service-text" id="adsNewServiceTextCopy"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="idle-ads-slide" id="idleAdsSlideWrap">
+                <img id="idleAdsSlideImg" alt="Quảng cáo phòng khám" style="display:none;">
+                <video id="idleAdsSlideVideo" style="display:none;" muted autoplay loop playsinline></video>
+                <iframe id="idleAdsSlideYoutube" style="display:none;" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
+            </div>
+
+            <div class="idle-ads-right">
+                <div class="idle-ads-schedule-row">
+                    <div class="idle-ads-card idle-ads-schedule-card">
+                        <h3><i class="fas fa-calendar-day"></i> Lịch làm việc hôm nay</h3>
+                        <div class="tv-schedule-lines" style="margin-top: 10px;">
+                            <div class="tv-schedule-line">
+                                <div class="tv-schedule-k">Ngày</div>
+                                <div class="tv-schedule-v" id="adsSchedDate">--</div>
+                            </div>
+                            <div class="tv-schedule-line">
+                                <div class="tv-schedule-k">Giờ khám</div>
+                                <div class="tv-schedule-v" id="adsSchedTime">--</div>
+                            </div>
+                            <div class="tv-schedule-line">
+                                <div class="tv-schedule-k">Bác sĩ</div>
+                                <div class="tv-schedule-v" id="adsSchedDoctor">--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="idle-ads-card idle-ads-doctor-photo-card" id="adsDoctorPhotoCard">
+                        <h3><i class="fas fa-user-md"></i> Bác sĩ đang khám</h3>
+                        <div class="tv-doctor-photo" style="min-height: 130px;">
+                            <img id="adsDoctorPhotoImg" alt="Ảnh bác sĩ" style="display:none;">
+                            <div id="adsDoctorPhotoName" style="display:none;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="idle-ads-card">
+                    <h3><i class="fas fa-phone-volume"></i> Liên hệ</h3>
+                    <div class="idle-ads-row">
+                        <div class="idle-ads-info">
+                            <div class="line"><i class="fas fa-phone"></i><div class="value"><strong>Hotline:</strong> <span id="idleAdsHotlineValue">--</span></div></div>
+                            <div class="line"><i class="fas fa-map-marker-alt"></i><div class="value"><strong>Địa chỉ:</strong> <span id="idleAdsAddressValue">--</span></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="idle-ads-footer">
+                <div class="idle-ads-footer-left">
+                    <div class="idle-ads-footer-label">
+                        <span id="idleAdsFooterIcon" style="font-weight:900; font-size:18px; line-height:1;">*</span>
+                        <strong id="idleAdsFooterLabelText">DỊCH VỤ NỔI BẬT</strong>:
+                    </div>
+                    <div class="idle-ads-footer-text-wrap">
+                        <div class="idle-ads-footer-scroll" aria-hidden="true">
+                            <span id="idleAdsFooterText1"></span>
+                            <span id="idleAdsFooterText2"></span>
+                        </div>
+                    </div>
+                </div>
+                <!-- removed: chữ cập nhật thời gian -->
+            </div>
+        </div>
+    </div>
+
+    <div class="tv-layout" id="tvLayout">
+        <header class="tv-header">
+            <div class="tv-header-left">
+                <div class="tv-logo">
+                    <img src="logo_phu_san_dai_anh.PNG" alt="Logo Phòng khám Đại Anh" onerror="this.style.display='none';">
+                </div>
+                <div class="tv-title-block">
+                    <h1>PHÒNG KHÁM CHUYÊN KHOA PHỤ SẢN ĐẠI ANH</h1>
+                    <p>UY TÍN - CHẤT LƯỢNG</p>
+                </div>
+            </div>
+            <div class="tv-header-right">
+                <div class="tv-new-service">
+                    <div class="tv-new-service-inner">
+                        <div class="tv-new-service-label" id="tvNewServiceLabel">
+                            <i class="fas fa-sparkles"></i>
+                            DỊCH VỤ MỚI
+                        </div>
+                        <div class="tv-new-service-text-wrap">
+                            <div class="tv-new-service-scroll" id="tvNewServiceScroll">
+                                <span class="tv-new-service-text" id="tvNewServiceText"></span>
+                                <span class="tv-new-service-text" id="tvNewServiceTextCopy"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <section class="tv-stats-row">
+            <div class="tv-card">
+                <div class="tv-card-header">
+                    <div class="tv-card-title">Số đang khám</div>
+                    <div class="tv-card-icon"><i class="fas fa-stethoscope"></i></div>
+                </div>
+                <div class="tv-current-number">
+                    <div class="tv-current-number-main" id="currentQueueDisplay">--</div>
+                    <div class="tv-current-labels">
+                        <span class="tv-pill">
+                            <i class="fas fa-bell"></i> ĐANG GỌI KHÁM
+                        </span>
+                        <div class="tv-current-text" id="currentStatusText">
+                            Vui lòng chú ý theo dõi màn hình
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="tv-card">
+                <div class="tv-card-header">
+                    <div class="tv-card-title">Bệnh nhân đang chờ</div>
+                    <div class="tv-card-icon"><i class="fas fa-user-clock"></i></div>
+                </div>
+                <div class="tv-stat-value" id="waitingCountDisplay">0</div>
+                <div class="tv-stat-label">Vui lòng chuẩn bị giấy tờ để khám</div>
+            </div>
+            <div class="tv-card">
+                <div class="tv-card-header">
+                    <div class="tv-card-title">Lịch làm việc hôm nay</div>
+                    <div class="tv-card-icon"><i class="fas fa-calendar-day"></i></div>
+                </div>
+                <div class="tv-schedule-lines">
+                    <div class="tv-schedule-line">
+                        <div class="tv-schedule-k">Ngày</div>
+                        <div class="tv-schedule-v" id="schedDate">--</div>
+                    </div>
+                    <div class="tv-schedule-line">
+                        <div class="tv-schedule-k">Giờ khám</div>
+                        <div class="tv-schedule-v" id="schedTime">--</div>
+                    </div>
+                    <div class="tv-schedule-line">
+                        <div class="tv-schedule-k">Bác sĩ</div>
+                        <div class="tv-schedule-v" id="schedDoctor">--</div>
+                    </div>
+                </div>
+            </div>
+            <div class="tv-card tv-doctor-card" id="doctorPhotoCard">
+                <div class="tv-card-header">
+                    <div class="tv-card-title">Bác sĩ đang khám</div>
+                    <div class="tv-card-icon"><i class="fas fa-user-md"></i></div>
+                </div>
+                <div class="tv-doctor-photo" id="doctorPhotoWrap">
+                    <img id="doctorPhotoImg" alt="Ảnh bác sĩ" style="display:none;">
+                    <div id="doctorPhotoName" style="display:none;"></div>
+                </div>
+            </div>
+        </section>
+
+        <main class="tv-main">
+            <section class="tv-panel">
+                <div class="tv-panel-header">
+                    <div>
+                        <div class="tv-panel-title">ĐANG <span>KHÁM</span></div>
+                        <div class="tv-panel-subtitle">Số thứ tự hiện đang được phục vụ</div>
+                    </div>
+                    <div class="tv-refresh-indicator">
+                        <span class="tv-refresh-dot"></span>
+                        Tự động cập nhật
+                    </div>
+                </div>
+                <div class="tv-list" id="servingListContainer">
+                    <table class="tv-list-table">
+                        <thead>
+                            <tr>
+                                <th>STT</th>
+                                <th>Họ tên</th>
+                                <th>Số điện thoại</th>
+                                <th>Giờ check-in</th>
+                            </tr>
+                        </thead>
+                        <tbody id="servingListBody">
+                            <tr><td colspan="4" class="tv-empty">Chưa có bệnh nhân nào đang khám</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="tv-panel">
+                <div class="tv-panel-header">
+                    <div>
+                        <div class="tv-panel-title">DANH SÁCH <span>CHỜ KHÁM</span></div>
+                        <div class="tv-panel-subtitle">Các số thứ tự tiếp theo trong ngày hôm nay</div>
+                    </div>
+                    <div class="tv-refresh-indicator">
+                        <i class="fas fa-sync-alt"></i>
+                        <span id="lastUpdatedLabel">Đang tải...</span>
+                    </div>
+                </div>
+                <div class="tv-list" id="waitingListContainer">
+                    <table class="tv-list-table">
+                        <thead>
+                            <tr>
+                                <th>STT</th>
+                                <th>Họ tên</th>
+                                <th>Số điện thoại</th>
+                                <th>Giờ check-in</th>
+                            </tr>
+                        </thead>
+                        <tbody id="waitingListBody">
+                            <tr><td colspan="4" class="tv-empty">Đang tải danh sách chờ...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+        <div class="tv-ticker">
+            <div class="tv-ticker-inner">
+                <div class="tv-ticker-label" id="tvTickerLabel">
+                    <i class="fas fa-star"></i>
+                    DỊCH VỤ NỔI BẬT
+                </div>
+                <div class="tv-ticker-text-wrap">
+                    <div class="tv-ticker-scroll" id="tvTickerScroll">
+                        <span class="tv-ticker-text" id="tvTickerText"></span>
+                        <span class="tv-ticker-text" id="tvTickerTextCopy"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== DOM cache (giảm query lặp) =====
+        const $ = (id) => document.getElementById(id);
+        const els = {};
+        function cacheEls() {
+            [
+                'currentQueueDisplay',
+                'waitingCountDisplay',
+                'currentStatusText',
+                'servingListBody',
+                'waitingListBody',
+                'lastUpdatedLabel',
+                'schedDate',
+                'schedTime',
+                'schedDoctor',
+                'adsSchedDate',
+                'adsSchedTime',
+                'adsSchedDoctor',
+                'tvTickerText',
+                'tvTickerTextCopy',
+                'tvTickerLabel',
+                'tvNewServiceText',
+                'tvNewServiceTextCopy',
+                'tvNewServiceLabel',
+                'adsNewServiceText',
+                'adsNewServiceTextCopy',
+                'adsNewServiceLabel',
+                'doctorPhotoImg',
+                'doctorPhotoName',
+                'adsDoctorPhotoImg',
+                'adsDoctorPhotoName',
+            ].forEach((id) => (els[id] = $(id)));
+        }
+
+        // ===== Helpers =====
+        function toISOWithZ(value) {
+            let iso = typeof value === 'string' ? value.trim() : '';
+            if (iso && !/Z$/i.test(iso) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(iso)) {
+                iso = iso.replace(/(\.\d+)?$/, 'Z');
+            }
+            return iso || value;
+        }
+
+        function formatTimeGMT7(isoString) {
+            if (!isoString) return '';
+            const d = new Date(toISOWithZ(isoString));
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toLocaleTimeString('vi-VN', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        }
+
+        async function fetchJson(url, options) {
+            const res = await fetch(url, options);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+            return data;
+        }
+
+        // ===== Realtime clock for schedule line =====
+        function updateClock() {
+            const now = new Date();
+            const timeNow = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+            const dateNow = now.toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric', year: 'numeric' });
+            if (els.schedDate) els.schedDate.textContent = `${dateNow}. ${timeNow}`;
+            if (els.adsSchedDate) els.adsSchedDate.textContent = `${dateNow}. ${timeNow}`;
+        }
+
+        // ===== Data loaders =====
+        async function loadStatsForTv() {
+            try {
+                const stats = await fetchJson('/api/checkin/stats');
+                if (els.currentQueueDisplay) els.currentQueueDisplay.textContent = stats.current_queue || '--';
+                if (els.waitingCountDisplay) els.waitingCountDisplay.textContent = stats.waiting_count || 0;
+                if (els.currentStatusText) {
+                    els.currentStatusText.textContent = stats.current_queue
+                        ? `Mời bệnh nhân có số ${stats.current_queue} chuẩn bị vào phòng khám.`
+                        : 'Chưa có bệnh nhân nào đang khám.';
+                }
+                cachedStatsActive = !!stats.current_queue;
+                evaluateIdleOverlay();
+                updateDoctorSessionUI();
+            } catch (err) {
+                console.error('Lỗi load stats (TV):', err);
+            }
+        }
+
+        function renderEmpty(tbody, text) {
+            if (!tbody) return;
+            tbody.innerHTML = `<tr><td colspan="4" class="tv-empty">${text}</td></tr>`;
+        }
+
+        function renderRows(tbody, rows, serving = false) {
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            const frag = document.createDocumentFragment();
+            for (const item of rows) {
+                const tr = document.createElement('tr');
+                if (serving) tr.classList.add('serving');
+                const badgeClass = serving ? 'tv-queue-badge serving' : 'tv-queue-badge';
+                tr.innerHTML = `
+                    <td><span class="${badgeClass}">${item.queue_number}</span></td>
+                    <td>${item.name || 'Khách hàng'}</td>
+                    <td>${item.phone || 'Chưa có'}</td>
+                    <td>${formatTimeGMT7(item.checkin_time)}</td>
+                `;
+                frag.appendChild(tr);
+            }
+            tbody.appendChild(frag);
+        }
+
+        async function loadWaitingListForTv() {
+            try {
+                const list = await fetchJson('/api/checkin/waiting-list');
+                const serving = list.filter((i) => i.status === 'serving');
+                const waiting = list.filter((i) => i.status === 'waiting');
+
+                if (!serving.length) renderEmpty(els.servingListBody, 'Chưa có bệnh nhân nào đang khám');
+                else renderRows(els.servingListBody, serving, true);
+
+                if (!waiting.length) renderEmpty(els.waitingListBody, 'Hiện không có bệnh nhân nào đang chờ khám');
+                else renderRows(els.waitingListBody, waiting, false);
+
+                if (els.lastUpdatedLabel) {
+                    const now = new Date();
+                    els.lastUpdatedLabel.textContent =
+                        'Cập nhật: ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+                }
+                cachedServingActive = serving.length > 0;
+                evaluateIdleOverlay();
+                updateDoctorSessionUI();
+            } catch (err) {
+                console.error('Lỗi load waiting list (TV):', err);
+                renderEmpty(els.waitingListBody, 'Không thể tải danh sách. Vui lòng kiểm tra kết nối.');
+            }
+        }
+
+        function _todayYYYYMMDD() {
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        async function loadTodayScheduleSummary() {
+            try {
+                const date = _todayYYYYMMDD();
+                const shifts = await fetchJson(`/api/admin/work-schedule?date=${encodeURIComponent(date)}`);
+
+                if (!Array.isArray(shifts) || !shifts.length) {
+                    if (els.schedTime) els.schedTime.textContent = '--';
+                    if (els.schedDoctor) els.schedDoctor.textContent = '--';
+                    if (els.adsSchedTime) els.adsSchedTime.textContent = '--';
+                    if (els.adsSchedDoctor) els.adsSchedDoctor.textContent = '--';
+                    cachedSessionDoctorName = '';
+                    cachedDoctorsArray = [];
+                    return;
+                }
+
+                const anyClosed = shifts.some((s) => s && s.is_closed);
+                if (anyClosed && shifts.every((s) => s && s.is_closed)) {
+                    if (els.schedTime) els.schedTime.textContent = 'Nghỉ';
+                    if (els.schedDoctor) els.schedDoctor.textContent = 'Nghỉ';
+                    if (els.adsSchedTime) els.adsSchedTime.textContent = 'Nghỉ';
+                    if (els.adsSchedDoctor) els.adsSchedDoctor.textContent = 'Nghỉ';
+                    cachedSessionDoctorName = '';
+                    cachedDoctorsArray = [];
+                    return;
+                }
+
+                const openShifts = shifts.filter((s) => s && !s.is_closed);
+                const times = openShifts
+                    .map((s) => ({
+                        start: String(s.start_time || ''),
+                        end: String(s.end_time || '')
+                    }))
+                    .filter((t) => t.start && t.end)
+                    .sort((a, b) => a.start.localeCompare(b.start));
+
+                // Hiển thị đầy đủ từng ca: 1 ca → "08:00-12:00"; 2+ ca → mỗi ca 1 dòng: "Ca 1: 16:00-20:30\nCa 2: 21:01-23:30"
+                const scheduleParts = times.map((t, i) =>
+                    times.length >= 2 ? `Ca ${i + 1}: ${t.start}-${t.end}` : `${t.start}-${t.end}`
+                );
+                const timesText = scheduleParts.length ? scheduleParts.join('\n') : '';
+
+                const doctors = Array.from(new Set(
+                    openShifts.flatMap((s) =>
+                        String(s.doctor_name || '').split(/\s*\+\s*/).map((d) => d.trim()).filter(Boolean)
+                    )
+                ));
+                cachedSessionDoctorName = openShifts.length && openShifts[0] ? String(openShifts[0].doctor_name || '').trim() : (doctors.length ? doctors[0] : '');
+                cachedDoctorsArray = doctors;
+
+                // 1 bác sĩ → "BS A"; 2+ bác sĩ → mỗi bác sĩ 1 dòng (không có nhãn Ca/Bác sĩ)
+                const doctorsText = doctors.length
+                    ? (doctors.length >= 2 ? doctors.join('\n') : doctors[0])
+                    : '';
+
+                if (els.schedTime) els.schedTime.textContent = timesText ? timesText : '--';
+                if (els.schedDoctor) els.schedDoctor.textContent = doctorsText || '--';
+                if (els.adsSchedTime) els.adsSchedTime.textContent = timesText ? timesText : '--';
+                if (els.adsSchedDoctor) els.adsSchedDoctor.textContent = doctorsText || '--';
+                updateDoctorSessionUI();
+            } catch (err) {
+                console.error('Lỗi load lịch khám hôm nay (TV):', err);
+            }
+        }
+
+        // ===== Settings from server =====
+        let qrDisplaySettings = null;
+        let adsContact = {
+            clinicName: '',
+            phone: '',
+            address: ''
+        };
+        let lastActiveAt = Date.now();
+        let idleOverlayShowing = false;
+        let adsSlideTimer = null;
+        let adsClockTimer = null;
+        let adsSlideIdx = 0;
+        let cachedStatsActive = false;
+        let cachedServingActive = false;
+        let cachedSessionDoctorName = '';
+        let cachedDoctorsArray = [];
+
+        function _parseBool(v, fallback = false) {
+            if (v === true || v === false) return v;
+            const s = String(v ?? '').trim().toLowerCase();
+            if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
+            if (s === 'false' || s === '0' || s === 'no' || s === 'off') return false;
+            return fallback;
+        }
+
+        function _parseSlides(v) {
+            const raw = String(v ?? '').trim();
+            if (!raw) return [];
+            return raw.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+        }
+
+        function _normalizeYouTubeUrl(u) {
+            if (!u) return '';
+            let s = String(u).trim();
+            if (!s) return '';
+            // allow plain ID
+            if (/^[a-zA-Z0-9_-]{11}$/.test(s)) return s;
+            // prepend scheme if missing
+            if (/^www\.youtube\.com\//i.test(s)) s = 'https://' + s;
+            if (/^www\.youtu\.be\//i.test(s)) s = 'https://' + s;
+            if (/^youtu\.be\//i.test(s) && !/^https?:\/\//i.test(s)) s = 'https://' + s;
+            if (/^youtube\.com\//i.test(s) && !/^https?:\/\//i.test(s)) s = 'https://' + s;
+            return s;
+        }
+
+        function _extractYouTubeId(u) {
+            const s = _normalizeYouTubeUrl(u);
+            if (!s) return '';
+            if (/^[a-zA-Z0-9_-]{11}$/.test(s)) return s;
+            // URL-based extraction
+            try {
+                const url = new URL(s);
+                const host = url.hostname.replace(/^www\./i, '').toLowerCase();
+                if (host === 'youtu.be') {
+                    const id = url.pathname.split('/').filter(Boolean)[0];
+                    if (id && /^[a-zA-Z0-9_-]{11}$/.test(id)) return id;
+                }
+                if (host.endsWith('youtube.com')) {
+                    // watch?v=
+                    const v = url.searchParams.get('v');
+                    if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return v;
+                    // /embed/ID or /shorts/ID
+                    const m = url.pathname.match(/\/(embed|shorts)\/([a-zA-Z0-9_-]{11})/);
+                    if (m && m[2]) return m[2];
+                    // /live/ID
+                    const m2 = url.pathname.match(/\/live\/([a-zA-Z0-9_-]{11})/);
+                    if (m2 && m2[1]) return m2[1];
+                }
+            } catch (e) {
+                // fallback regex
+            }
+            // Regex fallback
+            const m3 = String(s).match(/(?:v=|\/embed\/|\/shorts\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+            if (m3 && m3[1]) return m3[1];
+            return '';
+        }
+
+        function _getSlideKind(url) {
+            const s = String(url || '').trim();
+            if (!s) return 'none';
+            const isYoutube = /youtube\.com|youtu\.be/i.test(s);
+            if (isYoutube || /^[a-zA-Z0-9_-]{11}$/.test(s)) return 'youtube';
+            if (/\.(mp4|webm)(\?.*)?$/i.test(s)) return 'video';
+            return 'image';
+        }
+
+        function _toYouTubeEmbedSrc(url) {
+            const id = _extractYouTubeId(url);
+            if (!id) return '';
+            const normalized = _normalizeYouTubeUrl(url).toLowerCase();
+            // Heuristic:
+            // - Watch/youtu.be page links sometimes cannot autoplay on TV browsers.
+            // - For these, we omit autoplay so at least thumbnail/video frame is shown.
+            const isWatchPage = normalized.includes('youtube.com/watch') || normalized.includes('youtu.be/');
+
+            const commonParams = `controls=0&rel=0&modestbranding=1&playsinline=1&loop=1&playlist=${id}`;
+            if (isWatchPage) {
+                // No autoplay: show poster/frame, user gesture may be needed.
+                return `https://www.youtube-nocookie.com/embed/${id}?mute=1&${commonParams}`;
+            }
+
+            // Autoplay-friendly for embed/shorts style links.
+            return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&${commonParams}`;
+        }
+
+        function _normalizeDigits(s) {
+            return String(s || '').replace(/[^\d]/g, '');
+        }
+
+        function _pickContactValue(items, matcher) {
+            if (!Array.isArray(items)) return '';
+            const found = items.find((x) => matcher(String((x && x.type) || '')));
+            return found && found.value ? String(found.value).trim() : '';
+        }
+
+        function _slugifyDoctorKey(s) {
+            const raw = String(s || '').trim().toLowerCase();
+            if (!raw) return '';
+            // Vietnamese diacritics removal
+            const normalized = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            const withoutĐ = normalized.replace(/đ/g, 'd').replace(/Đ/g, 'd');
+            return withoutĐ.replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
+        }
+
+        async function loadAdsContactFromHomeContent() {
+            try {
+                const data = await fetchJson('/api/home-content');
+                const contact = Array.isArray(data.contactInfo) ? data.contactInfo : [];
+
+                const clinicName =
+                    _pickContactValue(contact, (t) => /tên\s*phòng\s*khám/i.test(t)) ||
+                    (data && data.heroTitle ? String(data.heroTitle).trim() : '');
+                const address = _pickContactValue(contact, (t) => /địa\s*chỉ/i.test(t));
+                const phone = _pickContactValue(contact, (t) => /(điện\s*thoại|số\s*điện\s*thoại|hotline)/i.test(t));
+
+                adsContact = { clinicName, address, phone };
+
+                const nameEl = document.getElementById('idleAdsClinicName');
+                if (nameEl && clinicName) nameEl.textContent = clinicName.toUpperCase();
+
+                // Update visible fields on overlay
+                const hotlineEl = document.getElementById('idleAdsHotlineValue');
+                if (hotlineEl) hotlineEl.textContent = phone || '--';
+                const addressEl = document.getElementById('idleAdsAddressValue');
+                if (addressEl) addressEl.textContent = address || '--';
+
+            } catch (e) {
+                // ignore (overlay will show placeholders)
+            }
+        }
+
+        async function loadQrDisplaySettings() {
+            try {
+                const data = await fetchJson('/api/qr-display-settings');
+                qrDisplaySettings = data?.success ? (data.settings || {}) : null;
+            } catch (e) {
+                qrDisplaySettings = null;
+            }
+        }
+
+        function updateIdleOverlayClock() {
+            const now = new Date();
+            const timeNow = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+            const el = document.getElementById('idleAdsClock');
+            if (el) el.textContent = timeNow;
+        }
+
+        function stopAdsTimers() {
+            if (adsSlideTimer) clearInterval(adsSlideTimer);
+            adsSlideTimer = null;
+            if (adsClockTimer) clearInterval(adsClockTimer);
+            adsClockTimer = null;
+        }
+
+        function startAdsClock() {
+            const el = document.getElementById('idleAdsClock');
+            if (!el) return;
+            updateIdleOverlayClock();
+            if (!adsClockTimer) adsClockTimer = setInterval(updateIdleOverlayClock, 1000);
+        }
+
+        function renderAdsOverlayFromSettings() {
+            const s = qrDisplaySettings || {};
+            const slides = _parseSlides(s.qrAdsSlides);
+            const servicesText = String(s.qrAdsServicesText || '').trim();
+
+            // Removed overlay text inside the image frame (idleAdsServicesText)
+            // const servicesEl = document.getElementById('idleAdsServicesText');
+            // if (servicesEl) servicesEl.textContent = servicesText || '...';
+
+            // Footer text: label đứng im, nội dung chạy chữ
+            const iconEl = document.getElementById('idleAdsFooterIcon');
+            const labelEl = document.getElementById('idleAdsFooterLabelText');
+            const text1El = document.getElementById('idleAdsFooterText1');
+            const text2El = document.getElementById('idleAdsFooterText2');
+
+            if (iconEl || labelEl || text1El || text2El) {
+                const tickerText = (s.qrAdText ||
+                    'Phòng khám chuyên khoa Phụ Sản Đại Anh - Khám thai, siêu âm 5D, sàng lọc dị tật, khám phụ khoa, tư vấn vô sinh hiếm muộn...').trim();
+                const labelText = (s.qrAdLabelText || 'DỊCH VỤ NỔI BẬT').trim();
+                const textColor = s.qrAdColor || '#fbbf24';
+                const labelColor = s.qrAdLabelColor || '#38bdf8';
+                const fontSize = parseInt(s.qrAdFontSize || '20', 10) || 20;
+                const fontFamily = s.qrAdFontFamily || 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+                const fontWeight = (s.qrAdFontWeight || 'normal') === 'bold' ? 'bold' : 'normal';
+                const fontStyle = (s.qrAdFontStyle || 'normal') === 'italic' ? 'italic' : 'normal';
+
+                if (iconEl) iconEl.style.color = labelColor;
+                if (labelEl) {
+                    labelEl.textContent = labelText;
+                    labelEl.style.color = labelColor;
+                    labelEl.style.fontFamily = fontFamily;
+                }
+
+                if (text1El) {
+                    text1El.textContent = tickerText;
+                    text1El.style.color = textColor;
+                    text1El.style.fontFamily = fontFamily;
+                    text1El.style.fontSize = fontSize + 'px';
+                    text1El.style.fontWeight = fontWeight;
+                    text1El.style.fontStyle = fontStyle;
+                }
+                if (text2El) {
+                    text2El.textContent = tickerText;
+                    text2El.style.color = textColor;
+                    text2El.style.fontFamily = fontFamily;
+                    text2El.style.fontSize = fontSize + 'px';
+                    text2El.style.fontWeight = fontWeight;
+                    text2El.style.fontStyle = fontStyle;
+                }
+            }
+
+            // Slides
+            const img = document.getElementById('idleAdsSlideImg');
+            const video = document.getElementById('idleAdsSlideVideo');
+            const frame = document.getElementById('idleAdsSlideYoutube');
+            const current = slides.length ? slides[Math.min(adsSlideIdx, slides.length - 1)] : '';
+            const kind = _getSlideKind(current);
+
+            if (img) {
+                if (!current || kind !== 'image') {
+                    img.style.display = 'none';
+                    img.removeAttribute('src');
+                } else {
+                    img.style.display = 'block';
+                    img.src = current;
+                }
+            }
+
+            if (video) {
+                const isVideo = kind === 'video';
+                if (!current || !isVideo) {
+                    video.pause?.();
+                    video.style.display = 'none';
+                    video.removeAttribute('src');
+                    video.load?.();
+                } else {
+                    video.style.display = 'block';
+                    video.src = current;
+                    video.play?.().catch(() => {});
+                }
+            }
+
+            if (frame) {
+                if (!current || kind !== 'youtube') {
+                    frame.style.display = 'none';
+                    frame.removeAttribute('src');
+                } else {
+                    frame.style.display = 'block';
+                    const embedSrc = _toYouTubeEmbedSrc(current);
+                    if (embedSrc) frame.src = embedSrc;
+                }
+            }
+
+            // slideshow timer (only when overlay is showing)
+            if (idleOverlayShowing && (img || video)) {
+                if (adsSlideTimer) clearInterval(adsSlideTimer);
+                adsSlideTimer = null;
+                const slideInterval = Math.max(3, parseInt(s.qrAdsSlideIntervalSeconds || '10', 10) || 10);
+                if (slides.length > 1) {
+                    adsSlideTimer = setInterval(() => {
+                        const s2 = qrDisplaySettings || {};
+                        const slides2 = _parseSlides(s2.qrAdsSlides);
+                        if (!slides2.length) return;
+                        adsSlideIdx = (adsSlideIdx + 1) % slides2.length;
+                        const next = slides2[adsSlideIdx];
+                        const kind2 = _getSlideKind(next);
+
+                        const img2 = document.getElementById('idleAdsSlideImg');
+                        const video2 = document.getElementById('idleAdsSlideVideo');
+                        const frame2 = document.getElementById('idleAdsSlideYoutube');
+
+                        if (img2) {
+                            if (kind2 !== 'image') {
+                                img2.style.display = 'none';
+                                img2.removeAttribute('src');
+                            } else {
+                                img2.style.display = 'block';
+                                img2.src = next;
+                            }
+                        }
+                        if (video2) {
+                            const isVideo2 = kind2 === 'video';
+                            if (!isVideo2) {
+                                video2.pause?.();
+                                video2.style.display = 'none';
+                                video2.removeAttribute('src');
+                                video2.load?.();
+                            } else {
+                                video2.style.display = 'block';
+                                video2.src = next;
+                                video2.play?.().catch(() => {});
+                            }
+                        }
+                        if (frame2) {
+                            if (kind2 !== 'youtube') {
+                                frame2.style.display = 'none';
+                                frame2.removeAttribute('src');
+                            } else {
+                                frame2.style.display = 'block';
+                                const embedSrc2 = _toYouTubeEmbedSrc(next);
+                                if (embedSrc2) frame2.src = embedSrc2;
+                            }
+                        }
+                    }, slideInterval * 1000);
+                }
+                startAdsClock();
+            }
+        }
+
+        function setIdleOverlayVisible(visible) {
+            const overlay = document.getElementById('idleAdsOverlay');
+            const layout = document.getElementById('tvLayout');
+            if (!overlay || !layout) return;
+
+            if (visible) {
+                overlay.classList.add('show');
+                overlay.setAttribute('aria-hidden', 'false');
+                layout.style.display = 'none';
+                idleOverlayShowing = true;
+                const lu = document.getElementById('idleAdsLastUpdate');
+                if (lu) {
+                    const now = new Date();
+                    lu.textContent =
+                        'Cập nhật: ' + now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+                }
+                renderAdsOverlayFromSettings();
+                startAdsClock();
+            } else {
+                overlay.classList.remove('show');
+                overlay.setAttribute('aria-hidden', 'true');
+                layout.style.display = '';
+                idleOverlayShowing = false;
+                stopAdsTimers();
+            }
+        }
+
+        function evaluateIdleOverlay() {
+            const s = qrDisplaySettings || {};
+            const alwaysOn = _parseBool(s.qrAdsAlwaysOn, false);
+            if (alwaysOn) {
+                if (!idleOverlayShowing) setIdleOverlayVisible(true);
+                return;
+            }
+            const enabled = _parseBool(s.qrIdleAdsEnabled, true);
+            const idleSeconds = Math.max(30, parseInt(s.qrIdleSeconds || '300', 10) || 300);
+
+            const isActive = !!(cachedStatsActive || cachedServingActive);
+            if (isActive) {
+                lastActiveAt = Date.now();
+                if (idleOverlayShowing) setIdleOverlayVisible(false);
+                return;
+            }
+
+            if (!enabled) {
+                if (idleOverlayShowing) setIdleOverlayVisible(false);
+                return;
+            }
+
+            const idleFor = Date.now() - lastActiveAt;
+            if (!idleOverlayShowing && idleFor >= idleSeconds * 1000) {
+                setIdleOverlayVisible(true);
+            }
+        }
+
+        function setDoctorPhotoByNameTo(imgEl, nameEl, doctorName, photoKey) {
+            if (!imgEl || !nameEl) return;
+            const wrapEl = imgEl.parentElement;
+            const key = (photoKey !== undefined && photoKey !== null && String(photoKey).trim()) ? String(photoKey).trim() : _slugifyDoctorKey(doctorName);
+            nameEl.textContent = doctorName ? String(doctorName) : '--';
+            if (!key) {
+                imgEl.style.display = 'none';
+                imgEl.removeAttribute('src');
+                if (wrapEl) wrapEl.classList.add('no-photo');
+                return;
+            }
+
+            const exts = ['jpg', 'jpeg', 'png', 'webp'];
+            let idx = 0;
+
+            const tryNext = () => {
+                if (idx >= exts.length) {
+                    imgEl.style.display = 'none';
+                    imgEl.removeAttribute('src');
+                    if (wrapEl) wrapEl.classList.add('no-photo');
+                    return;
+                }
+                const ext = exts[idx++];
+                const src = `/qr-ads-doctor-images/${key}.${ext}`;
+                const probe = new Image();
+                probe.onload = () => {
+                    imgEl.src = src;
+                    imgEl.style.display = 'block';
+                    if (wrapEl) wrapEl.classList.remove('no-photo');
+                };
+                probe.onerror = () => {
+                    tryNext();
+                };
+                probe.src = src;
+            };
+
+            tryNext();
+        }
+
+        function updateDoctorSessionUI() {
+            const row = document.querySelector('.tv-stats-row');
+            // Hiển thị ảnh bác sĩ theo lịch làm việc (không phụ thuộc có/không có người chờ/đang khám)
+            const showDoctor = !!(cachedSessionDoctorName && String(cachedSessionDoctorName).trim());
+            if (row) row.classList.toggle('doctor-active', showDoctor);
+
+            if (!els.doctorPhotoImg || !els.doctorPhotoName) return;
+            if (!showDoctor) {
+                els.doctorPhotoImg.style.display = 'none';
+                els.doctorPhotoImg.removeAttribute('src');
+                els.doctorPhotoName.textContent = '--';
+                const wrap = document.getElementById('doctorPhotoWrap');
+                if (wrap) wrap.classList.add('no-photo');
+                return;
+            }
+            const displayName = cachedDoctorsArray.length >= 2 ? cachedDoctorsArray.join('\n') : (cachedSessionDoctorName || '');
+            const imgKey = cachedDoctorsArray.length >= 2 ? 'multiple' : null;
+            setDoctorPhotoByNameTo(els.doctorPhotoImg, els.doctorPhotoName, displayName, imgKey);
+
+            // Overlay (ads) doctor card
+            if (els.adsDoctorPhotoImg && els.adsDoctorPhotoName) {
+                if (!showDoctor) {
+                    els.adsDoctorPhotoImg.style.display = 'none';
+                    els.adsDoctorPhotoImg.removeAttribute('src');
+                    els.adsDoctorPhotoName.textContent = '--';
+                    const adsWrap = els.adsDoctorPhotoImg.parentElement;
+                    if (adsWrap) adsWrap.classList.add('no-photo');
+                } else {
+                    setDoctorPhotoByNameTo(els.adsDoctorPhotoImg, els.adsDoctorPhotoName, displayName, imgKey);
+                }
+            }
+        }
+
+        function applyTickerSettings() {
+            try {
+                const s = qrDisplaySettings || {};
+                const text = s.qrAdText ||
+                    'Phòng khám chuyên khoa Phụ Sản Đại Anh - Khám thai, siêu âm 5D, sàng lọc dị tật, khám phụ khoa, tư vấn vô sinh hiếm muộn...';
+                const color = s.qrAdColor || '#fbbf24';
+                const labelText = s.qrAdLabelText || 'DỊCH VỤ NỔI BẬT';
+                const labelColor = s.qrAdLabelColor || '#38bdf8';
+                const fontSize = parseInt(s.qrAdFontSize || '20', 10);
+                const fontFamily = s.qrAdFontFamily || 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+                const fontWeight = (s.qrAdFontWeight || 'normal') === 'bold' ? 'bold' : 'normal';
+                const fontStyle = (s.qrAdFontStyle || 'normal') === 'italic' ? 'italic' : 'normal';
+
+                const style = { color, fontSize: (fontSize || 20) + 'px', fontFamily, fontWeight, fontStyle };
+                [els.tvTickerText, els.tvTickerTextCopy].forEach((el) => {
+                    if (!el) return;
+                    el.textContent = text;
+                    el.style.color = style.color;
+                    el.style.fontSize = style.fontSize;
+                    el.style.fontFamily = style.fontFamily;
+                    el.style.fontWeight = style.fontWeight;
+                    el.style.fontStyle = style.fontStyle;
+                });
+                if (els.tvTickerLabel) {
+                    els.tvTickerLabel.style.color = labelColor;
+                    els.tvTickerLabel.innerHTML = `<i class="fas fa-star"></i> ${labelText}`;
+                }
+            } catch (e) {
+                console.error('Lỗi apply ticker:', e);
+            }
+        }
+
+        function applyNewServiceSettings() {
+            try {
+                const s = qrDisplaySettings || {};
+                const text = s.qrNewServiceText ||
+                    'Siêu âm 5D - Tầm soát dị tật thai - Sàng lọc NIPT - Khám phụ khoa - Nam khoa - Vô sinh hiếm muộn';
+                const color = s.qrNewServiceColor || '#e5e7eb';
+                const labelText = s.qrNewServiceLabelText || 'DỊCH VỤ MỚI';
+                const labelColor = s.qrNewServiceLabelColor || '#38bdf8';
+                const fontSize = parseInt(s.qrNewServiceFontSize || '18', 10);
+                const fontFamily = s.qrNewServiceFontFamily || 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+                const fontWeight = (s.qrNewServiceFontWeight || 'normal') === 'bold' ? 'bold' : 'normal';
+                const fontStyle = (s.qrNewServiceFontStyle || 'normal') === 'italic' ? 'italic' : 'normal';
+
+                [els.tvNewServiceText, els.tvNewServiceTextCopy].forEach((el) => {
+                    if (!el) return;
+                    el.textContent = text;
+                    el.style.color = color;
+                    el.style.fontSize = (fontSize || 18) + 'px';
+                    el.style.fontFamily = fontFamily;
+                    el.style.fontWeight = fontWeight;
+                    el.style.fontStyle = fontStyle;
+                });
+                [els.adsNewServiceText, els.adsNewServiceTextCopy].forEach((el) => {
+                    if (!el) return;
+                    el.textContent = text;
+                    el.style.color = color;
+                    el.style.fontSize = (fontSize || 18) + 'px';
+                    el.style.fontFamily = fontFamily;
+                    el.style.fontWeight = fontWeight;
+                    el.style.fontStyle = fontStyle;
+                });
+                if (els.tvNewServiceLabel) {
+                    els.tvNewServiceLabel.style.color = labelColor;
+                    els.tvNewServiceLabel.innerHTML = `<i class="fas fa-sparkles"></i> ${labelText}`;
+                }
+                if (els.adsNewServiceLabel) {
+                    els.adsNewServiceLabel.style.color = labelColor;
+                    els.adsNewServiceLabel.innerHTML = `<i class="fas fa-sparkles"></i> ${labelText}`;
+                    els.adsNewServiceLabel.style.fontFamily = fontFamily;
+                }
+            } catch (e) {
+                console.error('Lỗi apply dịch vụ mới:', e);
+            }
+        }
+
+        // ===== Refresh loops =====
+        function startAutoRefresh() {
+            loadStatsForTv();
+            loadWaitingListForTv();
+            loadTodayScheduleSummary();
+            setInterval(() => {
+                loadStatsForTv();
+                loadWaitingListForTv();
+                loadTodayScheduleSummary();
+            }, 10000);
+        }
+
+        document.addEventListener('DOMContentLoaded', async function () {
+            cacheEls();
+            updateClock();
+            setInterval(updateClock, 1000);
+
+            startAutoRefresh();
+
+            await loadAdsContactFromHomeContent();
+            await loadQrDisplaySettings();
+            applyTickerSettings();
+            applyNewServiceSettings();
+            renderAdsOverlayFromSettings();
+            evaluateIdleOverlay();
+
+            // Tự đồng bộ cấu hình từ server
+            setInterval(async () => {
+                await loadAdsContactFromHomeContent();
+                await loadQrDisplaySettings();
+                applyTickerSettings();
+                applyNewServiceSettings();
+                renderAdsOverlayFromSettings();
+                evaluateIdleOverlay();
+            }, 30000);
+        });
+    </script>
+</body>
+</html>
+

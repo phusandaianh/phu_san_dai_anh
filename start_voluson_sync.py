@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script khởi động service đồng bộ với máy siêu âm Voluson E10
+Script khởi động service đồng bộ với máy siêu âm
 Chạy độc lập hoặc tích hợp vào ứng dụng Flask chính
 """
 
@@ -16,15 +16,15 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('voluson_sync.log'),
+        logging.FileHandler('ultrasound_sync.log'),
         logging.StreamHandler(sys.stdout)
     ]
 )
 
 logger = logging.getLogger(__name__)
 
-class VolusonSyncDaemon:
-    """Daemon service cho đồng bộ Voluson E10"""
+class UltrasoundSyncDaemon:
+    """Daemon service cho đồng bộ máy siêu âm"""
     
     def __init__(self):
         self.sync_service = get_voluson_sync_service()
@@ -32,7 +32,7 @@ class VolusonSyncDaemon:
         
     def start(self):
         """Khởi động daemon"""
-        logger.info("Đang khởi động Voluson Sync Daemon...")
+        logger.info("Đang khởi động Ultrasound Sync Daemon...")
         
         # Thiết lập signal handlers
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -43,8 +43,12 @@ class VolusonSyncDaemon:
             self.sync_service.start_sync_service()
             self.running = True
             
-            logger.info("Voluson Sync Daemon đã khởi động thành công")
-            logger.info(f"Cấu hình: IP={self.sync_service.voluson_ip}, Port={self.sync_service.voluson_port}")
+            logger.info("Ultrasound Sync Daemon đã khởi động thành công")
+            logger.info(
+                "Cấu hình: IP=%s, Port=%s",
+                self.sync_service.voluson_ip,
+                self.sync_service.voluson_port,
+            )
             
             # Vòng lặp chính
             while self.running:
@@ -60,10 +64,10 @@ class VolusonSyncDaemon:
     def stop(self):
         """Dừng daemon"""
         if self.running:
-            logger.info("Đang dừng Voluson Sync Daemon...")
+            logger.info("Đang dừng Ultrasound Sync Daemon...")
             self.sync_service.stop_sync_service()
             self.running = False
-            logger.info("Voluson Sync Daemon đã dừng")
+            logger.info("Ultrasound Sync Daemon đã dừng")
     
     def _signal_handler(self, signum, frame):
         """Xử lý tín hiệu dừng"""
@@ -73,13 +77,13 @@ class VolusonSyncDaemon:
 def main():
     """Hàm main"""
     print("=" * 60)
-    print("    VOLUSON E10 SYNC DAEMON")
+    print("    ULTRASOUND SYNC DAEMON")
     print("    Phòng khám chuyên khoa Phụ Sản Đại Anh")
     print("=" * 60)
     
     # Kiểm tra file cấu hình
-    if not os.path.exists('voluson_config.json'):
-        print("Cảnh báo: File cấu hình voluson_config.json không tồn tại")
+    if not os.path.exists('voluson_config.json') and not os.path.exists('Maysieuam_config.json'):
+        print("Cảnh báo: File cấu hình máy siêu âm chưa tồn tại")
         print("Sẽ tạo file cấu hình mặc định...")
     
     # Kiểm tra database
@@ -89,7 +93,7 @@ def main():
         sys.exit(1)
     
     # Khởi động daemon
-    daemon = VolusonSyncDaemon()
+    daemon = UltrasoundSyncDaemon()
     
     try:
         daemon.start()

@@ -67,7 +67,7 @@ Set-Service MWL_SERVER -StartupType Automatic
 1. Nhấn chuột phải vào "Task Scheduler Library"
 2. Chọn "Create Basic Task..."
 3. Tên: `MWL Server`
-4. Mô tả: `Modality Worklist Server for Voluson E10`
+4. Mô tả: `Modality Worklist Server for Maysieuam E10`
 
 ### Bước 3: Thiết lập Trigger
 1. **When do you want the task to start?**: Chọn "At log on"

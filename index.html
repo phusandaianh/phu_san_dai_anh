@@ -11,6 +11,25 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
     <link rel="stylesheet" href="ai-assistant.css">
     <style>
+        /* Center header content on homepage */
+        @media (min-width: 992px) {
+            .header.has-mobile-nav .container {
+                justify-content: center;
+                gap: 24px;
+            }
+            .header.has-mobile-nav .logo-container {
+                flex: 0 0 auto;
+            }
+            .header.has-mobile-nav .main-nav {
+                flex: 0 0 auto;
+                min-width: auto;
+                overflow: visible;
+            }
+            .header.has-mobile-nav .main-nav ul {
+                justify-content: center;
+            }
+        }
+
         .contact-modal { position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .contact-modal-overlay { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); cursor: pointer; }
         .contact-modal-content { position: relative; z-index: 1; background: #fff; border-radius: 12px; padding: 24px; max-width: 400px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
@@ -44,8 +63,7 @@
             <nav class="main-nav">
                 <ul>
                     <li><a href="#home" class="nav-link">Trang chủ</a></li>
-                    <li><a href="/booking.html" class="nav-link">Đặt lịch khám</a></li>
-                    <li><a href="/schedule.html" class="nav-link">Lịch làm việc</a></li>
+                    <li><a href="/qr-display.html" class="nav-link">QR Display (TV)</a></li>
                     <li><a href="pregnancy-utilities.html" class="nav-link">Tiện ích mẹ bầu</a></li>
                     <li><a href="/users.html" class="nav-link" title="Đăng nhập cho nhân viên">
                         <i class="fas fa-user-lock"></i> Đăng nhập NV
@@ -58,7 +76,7 @@
     <section id="home" class="hero-section">
         <div class="container">
             <div class="hero-content animate__animated animate__fadeInUp">
-                <h2>Chào mừng đến với Phòng khám chuyên khoa Phụ Sản Đại Anh</h2>
+                <h2>Chào mừng đến với <span id="clinic-name">Phòng khám chuyên khoa Phụ Sản Đại Anh</span></h2>
                 <p class="service-highlight">Khám, quản lý thai nghén, siêu âm dị tật thai chuyên sâu 5D</p>
                 <p class="service-highlight-sub">Khám phụ khoa, nam khoa, vô sinh hiếm muộn. Tư vấn xét nghiệm NIPT, ADN, sàng lọc ung thư cổ tử cung...</p>
                 <div class="cta-buttons">
@@ -67,6 +85,9 @@
                     </a>
                     <a href="/booking.html" class="btn primary-btn" style="background: #e91e63; color: white;">Đặt lịch khám ngay</a>
                     <a href="#" class="btn secondary-btn" id="btnLienHeTuVan" onclick="showContactModal(event)">Liên hệ tư vấn</a>
+                    <a href="https://maps.app.goo.gl/goQkMmX5rN918uq66" id="home-clinic-maps-link" target="_blank" rel="noopener" class="btn secondary-btn" style="background:#1e88e5;color:white;">
+                        <i class="fas fa-map-marker-alt"></i> Địa chỉ phòng khám
+                    </a>
                 </div>
             </div>
         </div>
@@ -78,15 +99,15 @@
         <div class="contact-modal-content">
             <button type="button" class="contact-modal-close" onclick="closeContactModal()" aria-label="Đóng">&times;</button>
             <h3><i class="fas fa-phone-alt"></i> Liên hệ tư vấn</h3>
-            <p class="contact-modal-phone">Số điện thoại phòng khám: <strong>0858838616</strong></p>
+            <p class="contact-modal-phone">Số điện thoại phòng khám: <strong id="clinic-phone">0858838616</strong></p>
             <div class="contact-modal-actions">
-                <a href="tel:0858838616" class="contact-modal-btn contact-modal-btn-phone">
+                <a href="tel:0858838616" id="clinic-phone-tel" class="contact-modal-btn contact-modal-btn-phone">
                     <i class="fas fa-phone"></i> Gọi điện thoại
                 </a>
-                <a href="https://zalo.me/0858838616" target="_blank" rel="noopener" class="contact-modal-btn contact-modal-btn-zalo">
+                <a href="https://zalo.me/0858838616" id="clinic-phone-zalo" target="_blank" rel="noopener" class="contact-modal-btn contact-modal-btn-zalo">
                     <i class="fas fa-comment-dots"></i> Nhắn Zalo
                 </a>
-                <a href="https://zalo.me/0858838616" target="_blank" rel="noopener" class="contact-modal-btn contact-modal-btn-zalocall">
+                <a href="https://zalo.me/0858838616" id="clinic-phone-zalocall" target="_blank" rel="noopener" class="contact-modal-btn contact-modal-btn-zalocall">
                     <i class="fas fa-phone-volume"></i> Gọi Zalo
                 </a>
             </div>
@@ -101,6 +122,8 @@
 
 <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
 <script src="ai-assistant.js"></script>
+<!-- Đồng bộ footer theo cài đặt trung tâm -->
+<script src="footer-loader.js"></script>
 
 <!-- Đồng bộ nội dung hero với trang Quản lý nội dung (home-content.html) -->
 <script>
@@ -163,7 +186,25 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', loadHomeHeroContent);
+    async function loadClinicMapsLink() {
+        try {
+            const res = await fetch('/api/clinic-maps');
+            if (!res.ok) return;
+            const data = await res.json();
+            const a = document.getElementById('home-clinic-maps-link');
+            if (!a) return;
+            if (data && data.googleMapsLink) {
+                a.href = data.googleMapsLink;
+            }
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadHomeHeroContent();
+        loadClinicMapsLink();
+    });
 
     function showContactModal(e) {
         if (e) e.preventDefault();

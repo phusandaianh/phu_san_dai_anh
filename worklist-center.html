@@ -1,0 +1,806 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Worklist & Máy siêu âm</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f5f7fb; color: #1f2937; }
+    /* Dùng gần hết chiều ngang màn hình; chỉ giữ lề nhỏ hai bên */
+    .wrap { width: 100%; max-width: none; margin: 16px 0; padding: 0 clamp(12px, 2.5vw, 28px); box-sizing: border-box; }
+    .topbar { display:flex; gap:10px; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .title { font-size: 22px; font-weight: 700; }
+    .muted { color:#6b7280; font-size: 13px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; }
+    .card h3 { margin:0 0 10px 0; font-size:16px; }
+    .row { display:grid; grid-template-columns: 150px 1fr; gap:10px; margin-bottom: 10px; align-items: center; }
+    .field-stack { display:flex; flex-direction:column; gap:4px; }
+    .field-hint { font-size:12px; color:#6b7280; line-height:1.35; }
+    input, button { font-size:14px; }
+    input[type="text"], input[type="number"] { width:100%; padding:8px; border:1px solid #d1d5db; border-radius:8px; }
+    button { padding:8px 10px; border:0; border-radius:8px; cursor:pointer; }
+    .btn-primary { background:#2563eb; color:#fff; }
+    .btn-muted { background:#e5e7eb; color:#111827; }
+    .btn-danger { background:#dc2626; color:#fff; }
+    .status { padding:8px; border-radius:8px; background:#f3f4f6; }
+    .status.ok { background:#dcfce7; }
+    .status.warn { background:#fef3c7; }
+    .status.err { background:#fee2e2; }
+    table { width:100%; border-collapse: collapse; background:#fff; }
+    th, td { border:1px solid #e5e7eb; padding:8px; text-align:left; font-size:13px; }
+    th { background:#f9fafb; }
+    .toolbar { display:flex; gap:8px; margin: 10px 0; flex-wrap: wrap; }
+    .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); }
+    .modal-card { background:#fff; width:min(860px, 96vw); margin:40px auto; padding:14px; border-radius:10px; }
+    .form-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
+    @media (max-width: 900px){ .grid { grid-template-columns: 1fr; } .row { grid-template-columns: 1fr; } .form-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <div class="title">Worklist & Máy siêu âm</div>
+        <div class="muted">Quản lý tập trung: Đồng bộ máy siêu âm + Quản lý MWL + Đồng bộ Worklist</div>
+        <div id="authNotice" class="muted" style="margin-top:6px; color:#b91c1c; display:none;"></div>
+      </div>
+      <div class="toolbar">
+        <button class="btn-muted" onclick="window.location.href='/examination-list.html'">Quay lại danh sách khám</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Cấu hình máy siêu âm (DICOM)</h3>
+        <div class="row">
+          <label><strong>Bật đồng bộ</strong></label>
+          <label><input id="ultrasound-sync-enabled" type="checkbox"> Tự động đồng bộ chỉ định siêu âm</label>
+        </div>
+        <div class="row">
+          <label><strong>IP máy siêu âm</strong></label>
+          <div class="field-stack">
+            <input id="ultrasound-ip" type="text" value="10.17.2.1">
+            <div class="field-hint">Nhập IPv4 của máy siêu âm trong cùng mạng LAN. Ví dụ: <code>10.17.2.1</code></div>
+          </div>
+        </div>
+        <div class="row">
+          <label><strong>Port DICOM</strong></label>
+          <div class="field-stack">
+            <input id="ultrasound-port" type="number" value="104">
+            <div class="field-hint">Port DICOM của máy siêu âm, thường là <code>104</code>.</div>
+          </div>
+        </div>
+        <div class="row">
+          <label><strong>AE Title (máy)</strong></label>
+          <div class="field-stack">
+            <input id="modality-ae-title" type="text" value="MAY_SIEU_AM">
+            <div class="field-hint">Tên AE của máy siêu âm (Called AE). Cần trùng chính xác với cấu hình trên máy.</div>
+          </div>
+        </div>
+        <div class="row">
+          <label><strong>AE Title (hệ thống)</strong></label>
+          <div class="field-stack">
+            <input id="local-ae-title" type="text" value="CLINIC_SYSTEM">
+            <div class="field-hint">Tên AE của phần mềm phòng khám (Local/Calling AE). Ví dụ: <code>CLINIC_SYSTEM</code>.</div>
+          </div>
+        </div>
+        <div class="row">
+          <label><strong>MWL Server AE</strong></label>
+          <div class="field-stack">
+            <input id="mwl-server-ae-title" type="text" value="CLINIC_SYSTEM">
+            <div class="field-hint">AE của server MWL mà máy sẽ gọi để truy vấn worklist. Thường trùng AE hệ thống.</div>
+          </div>
+        </div>
+        <div class="row">
+          <label><strong>MWL Server IP</strong></label>
+          <div class="field-stack">
+            <input id="mwl-server-ip" type="text" value="127.0.0.1">
+            <div class="field-hint">IP máy chạy server MWL. Nếu cùng máy với phần mềm: <code>127.0.0.1</code>.</div>
+          </div>
+        </div>
+        <div class="row">
+          <label><strong>MWL Server Port</strong></label>
+          <div class="field-stack">
+            <input id="mwl-server-port" type="number" value="104">
+            <div class="field-hint">Port MWL SCP đang lắng nghe. Phổ biến: <code>104</code> hoặc <code>11112</code>.</div>
+          </div>
+        </div>
+        <div class="row">
+          <label><strong>Profile máy</strong></label>
+          <div class="field-stack">
+            <select id="machine-profile" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:8px;">
+              <option value="custom">Tùy chỉnh</option>
+              <option value="ge">GE / Voluson</option>
+              <option value="mindray">Mindray</option>
+              <option value="samsung">Samsung</option>
+            </select>
+            <div class="field-hint">Chọn nhanh mẫu AE theo hãng, sau đó chỉnh tay nếu cần.</div>
+          </div>
+        </div>
+        <div class="row">
+          <label><strong>Chế độ tích hợp</strong></label>
+          <div class="field-stack">
+            <select id="integration-mode" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:8px;">
+              <option value="mwl_query_only">MWL Query only</option>
+              <option value="mwl_plus_store">MWL + C-STORE</option>
+            </select>
+            <div class="field-hint"><code>MWL Query only</code> cho nhu cầu lấy danh sách khám; <code>MWL + C-STORE</code> khi có gửi ảnh DICOM về hệ thống.</div>
+          </div>
+        </div>
+        <div class="row">
+          <label><strong>Require Called AE</strong></label>
+          <label><input id="require-called-aet" type="checkbox"> Bắt buộc Called AE đúng</label>
+        </div>
+        <div class="row">
+          <label><strong>Allowed Calling AE</strong></label>
+          <div class="field-stack">
+            <input id="allowed-calling-aets" type="text" placeholder="Ví dụ: MAY_SIEU_AM,US_ROOM1 (để trống = cho phép tất cả)">
+            <div class="field-hint">Nhập danh sách AE được phép gọi vào MWL, phân tách bằng dấu phẩy. Để trống để cho phép tất cả.</div>
+          </div>
+        </div>
+        <div class="row">
+          <label><strong>Trạng thái</strong></label>
+          <div id="ultrasound-status" class="status"><span id="ultrasound-status-text">Chưa kiểm tra</span></div>
+        </div>
+        <div class="toolbar">
+          <button class="btn-primary" onclick="saveUltrasoundSettings()">Lưu cài đặt</button>
+          <button class="btn-muted" onclick="testUltrasoundConnection()">Kiểm tra kết nối</button>
+          <button class="btn-muted" onclick="testDicomTcp()">Test TCP</button>
+          <button class="btn-muted" onclick="testDicomEcho()">Test DICOM Echo</button>
+          <button class="btn-muted" onclick="testMwlCFind()">Test MWL C-FIND</button>
+          <button class="btn-primary" onclick="runDicomWorkflowChecklist()">Checklist 1 nút (MWL/C-STORE/SR)</button>
+          <button class="btn-muted" onclick="exportMachineChecklist()">Xuất checklist cấu hình cho kỹ sư máy</button>
+        </div>
+        <div id="dicom-workflow-checklist-result" class="status" style="margin-top:10px;">Chưa chạy checklist 1 nút.</div>
+      </div>
+
+      <div class="card">
+        <h3>Đồng bộ Worklist</h3>
+        <div class="muted">Chạy đồng bộ ngay từ nguồn lịch hẹn sang `mwl.db`.</div>
+        <div id="sync-status" class="status" style="margin-top:10px;">Sẵn sàng</div>
+        <div class="toolbar">
+          <button class="btn-primary" onclick="syncNow()">Đồng bộ ngay</button>
+          <button class="btn-muted" onclick="fetchEntries()">Làm mới danh sách</button>
+          <button class="btn-muted" onclick="openModal('new', {})">Thêm entry</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <h3>Quản lý Worklist (MWL)</h3>
+      <div style="overflow:auto;">
+        <table id="entriesTable">
+          <thead>
+            <tr>
+              <th>ID</th><th>PatientName</th><th>PatientID</th><th>BirthDate</th><th>StudyDescription</th>
+              <th>Modality</th><th>ScheduledDate</th><th>ScheduledTime</th><th>Accession</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal" class="modal">
+    <div class="modal-card">
+      <h3 id="modalTitle">New Entry</h3>
+      <div class="form-grid">
+        <input id="fPatientName" placeholder="PatientName">
+        <input id="fPatientID" placeholder="PatientID">
+        <input id="fBirthDate" placeholder="YYYYMMDD">
+        <input id="fStudyDesc" placeholder="StudyDescription">
+        <input id="fModality" placeholder="Modality" value="US">
+        <input id="fScheduledDate" placeholder="YYYYMMDD">
+        <input id="fScheduledTime" placeholder="HHMMSS">
+        <input id="fAccession" placeholder="AccessionNumber">
+      </div>
+      <div class="toolbar">
+        <button class="btn-primary" id="saveBtn">Lưu</button>
+        <button class="btn-muted" id="cancelBtn">Hủy</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api/mwl-entries';
+    const SYNC_API = '/api/mwl-sync';
+    const VOLUSON_SYNC_KEY = 'voluson_sync_enabled_v1';
+    const VOLUSON_IP_KEY = 'voluson_ip_v1';
+    const VOLUSON_PORT_KEY = 'voluson_port_v1';
+    let token = (localStorage.getItem('authToken') || '').trim();
+    let canManageWorklist = false;
+
+    function authHeaders() {
+      return token ? { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token } : { 'Content-Type': 'application/json' };
+    }
+    function setAuthNotice(message) {
+      const el = document.getElementById('authNotice');
+      if (!el) return;
+      el.textContent = message || '';
+      el.style.display = message ? 'block' : 'none';
+    }
+    function setControlsEnabled(enabled) {
+      canManageWorklist = !!enabled;
+      const selectors = [
+        '#ultrasound-sync-enabled',
+        '#ultrasound-ip',
+        '#ultrasound-port',
+        '#machine-profile',
+        '#integration-mode',
+        '#require-called-aet',
+        '#allowed-calling-aets',
+        '#mwl-server-ip',
+        '#saveBtn',
+        '#cancelBtn'
+      ];
+      selectors.forEach((sel) => {
+        const node = document.querySelector(sel);
+        if (node) node.disabled = !enabled;
+      });
+      document.querySelectorAll('button').forEach((btn) => {
+        if (btn.textContent.includes('Quay lại danh sách khám')) return;
+        btn.disabled = !enabled;
+      });
+    }
+    async function checkManageWorklistPermission() {
+      if (!token) {
+        setAuthNotice('Bạn chưa đăng nhập. Vui lòng đăng nhập để sử dụng Worklist & Máy siêu âm.');
+        setControlsEnabled(false);
+        return false;
+      }
+      try {
+        const currentUserRaw = localStorage.getItem('currentUser');
+        if (!currentUserRaw) {
+          setAuthNotice('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+          setControlsEnabled(false);
+          return false;
+        }
+        const currentUser = JSON.parse(currentUserRaw);
+        const res = await fetch('/api/role-permissions', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!res.ok) {
+          setAuthNotice('Không kiểm tra được quyền truy cập. Vui lòng đăng nhập lại.');
+          setControlsEnabled(false);
+          return false;
+        }
+        const mapping = await res.json();
+        const roles = Array.isArray(currentUser.roles) ? currentUser.roles : [];
+        const hasPermission = roles.some((role) => (mapping[role] || []).includes('manage_worklist'));
+        if (!hasPermission) {
+          setAuthNotice('Bạn không có quyền manage_worklist để truy cập trang này.');
+          setControlsEnabled(false);
+          return false;
+        }
+        setAuthNotice('');
+        setControlsEnabled(true);
+        return true;
+      } catch (e) {
+        setAuthNotice('Lỗi kiểm tra quyền truy cập: ' + e.message);
+        setControlsEnabled(false);
+        return false;
+      }
+    }
+
+    async function loadUltrasoundSettings() {
+      try {
+        const res = await fetch('/api/voluson/config', { headers: authHeaders() });
+        const cfg = await res.json();
+        if (cfg && !cfg.error) {
+          document.getElementById('ultrasound-sync-enabled').checked = !!cfg.sync_enabled;
+          document.getElementById('ultrasound-ip').value = cfg.voluson_ip || '10.17.2.1';
+          document.getElementById('ultrasound-port').value = cfg.voluson_port || 104;
+          document.getElementById('local-ae-title').value = cfg.ae_title || 'CLINIC_SYSTEM';
+          document.getElementById('modality-ae-title').value = cfg.voluson_ae_title || 'MAY_SIEU_AM';
+          document.getElementById('mwl-server-ae-title').value = cfg.mwl_server_ae_title || (cfg.ae_title || 'CLINIC_SYSTEM');
+          document.getElementById('mwl-server-ip').value = cfg.mwl_server_ip || '127.0.0.1';
+          document.getElementById('mwl-server-port').value = cfg.mwl_server_port || 104;
+          document.getElementById('integration-mode').value = cfg.integration_mode || 'mwl_query_only';
+          document.getElementById('require-called-aet').checked = !!cfg.require_called_aet;
+          const allowed = Array.isArray(cfg.allowed_calling_ae_titles) ? cfg.allowed_calling_ae_titles.join(', ') : '';
+          document.getElementById('allowed-calling-aets').value = allowed;
+          return;
+        }
+      } catch (e) {
+        // ignore and fall back
+      }
+      const savedSync = localStorage.getItem(VOLUSON_SYNC_KEY);
+      const savedIp = localStorage.getItem(VOLUSON_IP_KEY) || '10.17.2.1';
+      const savedPort = localStorage.getItem(VOLUSON_PORT_KEY) || '104';
+      document.getElementById('ultrasound-sync-enabled').checked = savedSync === null ? true : savedSync === 'true';
+      document.getElementById('ultrasound-ip').value = savedIp;
+      document.getElementById('ultrasound-port').value = savedPort;
+    }
+    async function saveUltrasoundSettings() {
+      if (!canManageWorklist) {
+        alert('Bạn không có quyền lưu cấu hình.');
+        return;
+      }
+      const sync = document.getElementById('ultrasound-sync-enabled').checked;
+      const ip = document.getElementById('ultrasound-ip').value || '10.17.2.1';
+      const port = document.getElementById('ultrasound-port').value || '104';
+      const localAe = (document.getElementById('local-ae-title').value || 'CLINIC_SYSTEM').trim();
+      const modalityAe = (document.getElementById('modality-ae-title').value || 'MAY_SIEU_AM').trim();
+      const mwlAe = (document.getElementById('mwl-server-ae-title').value || localAe).trim();
+      const mwlIp = (document.getElementById('mwl-server-ip').value || '127.0.0.1').trim();
+      const mwlPort = parseInt(document.getElementById('mwl-server-port').value || '104', 10);
+      const integrationMode = document.getElementById('integration-mode').value || 'mwl_query_only';
+      const requireCalledAet = !!document.getElementById('require-called-aet').checked;
+      const allowedCalling = (document.getElementById('allowed-calling-aets').value || '')
+        .split(',').map(s => s.trim()).filter(Boolean);
+
+      // keep localStorage as fallback
+      localStorage.setItem(VOLUSON_SYNC_KEY, String(sync));
+      localStorage.setItem(VOLUSON_IP_KEY, ip);
+      localStorage.setItem(VOLUSON_PORT_KEY, String(port));
+
+      try {
+        const payload = {
+          sync_enabled: !!sync,
+          voluson_ip: ip,
+          voluson_port: parseInt(port, 10),
+          ae_title: localAe,
+          voluson_ae_title: modalityAe,
+          mwl_server_ip: mwlIp,
+          mwl_server_ae_title: mwlAe,
+          mwl_server_port: mwlPort,
+          modality_station_ae_title: modalityAe,
+          integration_mode: integrationMode,
+          require_called_aet: requireCalledAet,
+          allowed_calling_ae_titles: allowedCalling
+        };
+
+        const res = await fetch('/api/voluson/config', {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+        const saveData = await res.json();
+        if (!res.ok || (saveData && saveData.error)) {
+          throw new Error((saveData && (saveData.error || saveData.message)) || `HTTP ${res.status}`);
+        }
+
+        // Verify by reading server config again (ưu tiên dữ liệu từ server)
+        const verifyRes = await fetch('/api/voluson/config', { headers: authHeaders() });
+        const verifyData = await verifyRes.json();
+        if (!verifyRes.ok || (verifyData && verifyData.error)) {
+          throw new Error((verifyData && (verifyData.error || verifyData.message)) || `HTTP ${verifyRes.status}`);
+        }
+
+        document.getElementById('ultrasound-sync-enabled').checked = !!verifyData.sync_enabled;
+        document.getElementById('ultrasound-ip').value = verifyData.voluson_ip || ip;
+        document.getElementById('ultrasound-port').value = verifyData.voluson_port || port;
+        document.getElementById('local-ae-title').value = verifyData.ae_title || localAe;
+        document.getElementById('modality-ae-title').value = verifyData.voluson_ae_title || modalityAe;
+        document.getElementById('mwl-server-ae-title').value = verifyData.mwl_server_ae_title || mwlAe;
+        document.getElementById('mwl-server-ip').value = verifyData.mwl_server_ip || mwlIp;
+        document.getElementById('mwl-server-port').value = verifyData.mwl_server_port || mwlPort;
+        document.getElementById('integration-mode').value = verifyData.integration_mode || integrationMode;
+        document.getElementById('require-called-aet').checked = !!verifyData.require_called_aet;
+        const allowedStr = Array.isArray(verifyData.allowed_calling_ae_titles)
+          ? verifyData.allowed_calling_ae_titles.join(', ')
+          : '';
+        document.getElementById('allowed-calling-aets').value = allowedStr;
+
+        alert('Đã lưu cài đặt lên server thành công.');
+      } catch (e) {
+        alert('Lỗi lưu cấu hình lên server: ' + e.message);
+      }
+    }
+
+    async function testUltrasoundConnection() {
+      if (!canManageWorklist) return;
+      const statusDiv = document.getElementById('ultrasound-status');
+      const statusText = document.getElementById('ultrasound-status-text');
+      statusText.textContent = 'Đang kiểm tra MWL (TCP + C-FIND)...';
+      statusDiv.classList.remove('ok','err');
+      statusDiv.classList.add('warn');
+      try {
+        // Test đúng luồng Worklist: app -> MWL SCP (TCP + C-FIND)
+        const mwlIp = (document.getElementById('mwl-server-ip').value || '').trim();
+        const mwlPort = parseInt(document.getElementById('mwl-server-port').value || '104', 10);
+        const mwlAe = (document.getElementById('mwl-server-ae-title').value || 'CLINIC_SYSTEM').trim();
+        const localAe = (document.getElementById('local-ae-title').value || 'CLINIC_SYSTEM').trim();
+
+        if (!mwlIp) {
+          statusText.textContent = 'Lỗi: Thiếu MWL Server IP';
+          statusDiv.classList.remove('warn','ok');
+          statusDiv.classList.add('err');
+          return;
+        }
+
+        const tcpRes = await fetch('/api/test-dicom-tcp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ip: mwlIp, port: mwlPort })
+        });
+        const tcpData = await tcpRes.json();
+        if (!tcpData.success) {
+          statusText.textContent = 'Lỗi TCP MWL: ' + (tcpData.error || 'Không rõ nguyên nhân');
+          statusDiv.classList.remove('warn','ok');
+          statusDiv.classList.add('err');
+          return;
+        }
+
+        const cfindRes = await fetch('/api/test-mwl-cfind', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ip: mwlIp,
+            port: mwlPort,
+            called_ae_title: mwlAe,
+            local_ae_title: localAe,
+            modality: 'US'
+          })
+        });
+        const cfindData = await cfindRes.json();
+        if (cfindData.success) {
+          const matches = Number(cfindData.matches || 0);
+          const dbN = cfindData.mwl_db_count;
+          if (matches === 0) {
+            statusText.textContent = 'MWL OK (TCP + C-FIND) nhưng chưa có bệnh nhân chờ siêu âm. Gợi ý: bấm "Đồng bộ ngay".';
+            statusDiv.classList.remove('ok','err');
+            statusDiv.classList.add('warn');
+            return;
+          }
+          let line = `MWL OK (TCP + C-FIND). C-FIND: ${matches} dòng`;
+          if (typeof dbN === 'number' && dbN !== matches) {
+            line += ` — mwl.db (app): ${dbN} dòng. Nếu khác: đồng bộ chỉ lấy lịch hôm nay, hoặc mwl_server chạy sai thư mục / chưa tải lại DB.`;
+          }
+          statusText.textContent = line;
+          statusDiv.classList.remove('warn','err');
+          statusDiv.classList.add('ok');
+          return;
+        }
+
+        statusText.textContent = 'Lỗi C-FIND MWL: ' + (cfindData.error || 'Không rõ nguyên nhân');
+        statusDiv.classList.remove('warn','ok');
+        statusDiv.classList.add('err');
+      } catch (e) {
+        statusText.textContent = 'Lỗi kiểm tra MWL: ' + e.message;
+        statusDiv.classList.remove('warn','ok');
+        statusDiv.classList.add('err');
+      }
+    }
+
+    async function testDicomTcp() {
+      if (!canManageWorklist) return;
+      const ip = document.getElementById('mwl-server-ip').value || '127.0.0.1';
+      const port = parseInt(document.getElementById('mwl-server-port').value || '104', 10);
+      const res = await fetch('/api/test-dicom-tcp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip, port })
+      });
+      const data = await res.json();
+      alert(data.success ? (data.message || 'TCP OK') : ('TCP lỗi: ' + (data.error || 'Unknown')));
+    }
+
+    async function testDicomEcho() {
+      if (!canManageWorklist) return;
+      const ip = document.getElementById('ultrasound-ip').value;
+      const port = parseInt(document.getElementById('ultrasound-port').value || '104', 10);
+      const calledAe = (document.getElementById('modality-ae-title').value || '').trim();
+      const localAe = (document.getElementById('local-ae-title').value || '').trim();
+      const res = await fetch('/api/test-dicom-echo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip, port, called_ae_title: calledAe, local_ae_title: localAe })
+      });
+      const data = await res.json();
+      alert(data.success ? (data.message || 'C-ECHO OK') : ('C-ECHO lỗi: ' + (data.error || 'Unknown')));
+    }
+
+    async function testMwlCFind() {
+      if (!canManageWorklist) return;
+      const ip = document.getElementById('mwl-server-ip').value;
+      const port = parseInt(document.getElementById('mwl-server-port').value || '104', 10);
+      const calledAe = (document.getElementById('mwl-server-ae-title').value || '').trim();
+      const localAe = (document.getElementById('local-ae-title').value || '').trim();
+      const res = await fetch('/api/test-mwl-cfind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip, port, called_ae_title: calledAe, local_ae_title: localAe, modality: 'US' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const m = data.matches || 0;
+        const dbN = data.mwl_db_count;
+        const path = data.mwl_db_abspath || '';
+        let msg = `C-FIND OK. Số bản ghi trả về: ${m}.`;
+        if (typeof dbN === 'number') {
+          msg += `\nTrong mwl.db (cùng thư mục app): ${dbN} dòng.`;
+          if (path) msg += `\nFile: ${path}`;
+        }
+        if (typeof dbN === 'number' && dbN !== m) {
+          msg += '\n\nNếu bạn có nhiều BN siêu âm nhưng C-FIND ít hơn:\n• Đồng bộ worklist (mwl_sync) chỉ đưa lịch HÔM NAY vào mwl.db.\n• Hai BN có thể là ngày khác nhau — chỉ BN hôm nay mới vào MWL.\n• Nếu mwl.db (app) > C-FIND: khởi động lại mwl_server.py từ ĐÚNG thư mục dự án (cùng file mwl.db).';
+        }
+        alert(msg);
+      } else alert('C-FIND lỗi: ' + (data.error || 'Unknown'));
+    }
+
+    async function runDicomWorkflowChecklist() {
+      if (!canManageWorklist) return;
+      const out = document.getElementById('dicom-workflow-checklist-result');
+      out.classList.remove('ok', 'err');
+      out.classList.add('warn');
+      out.innerHTML = 'Đang chạy checklist tổng hợp...';
+      try {
+        const mwlIp = (document.getElementById('mwl-server-ip').value || '').trim();
+        const mwlPort = parseInt(document.getElementById('mwl-server-port').value || '104', 10);
+        const mwlAe = (document.getElementById('mwl-server-ae-title').value || 'CLINIC_SYSTEM').trim();
+        const localAe = (document.getElementById('local-ae-title').value || 'CLINIC_SYSTEM').trim();
+        const res = await fetch('/api/test-dicom-workflow-checklist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mwl_ip: mwlIp,
+            mwl_port: mwlPort,
+            mwl_called_ae_title: mwlAe,
+            local_ae_title: localAe,
+            modality: 'US',
+            recent_minutes: 180
+          })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error((data && (data.error || data.message)) || ('HTTP ' + res.status));
+        }
+        const rows = (data.results || []).map(item => {
+          const icon = item.pass ? '✅ PASS' : '❌ FAIL';
+          const msg = item.message || '';
+          return `<div style="margin:4px 0;"><strong>${icon} - ${item.label}:</strong> ${msg}</div>`;
+        }).join('');
+        const checkedAt = data.checked_at ? `<div style="margin-top:6px; opacity:0.85;">Thời điểm kiểm tra: ${data.checked_at}</div>` : '';
+        out.innerHTML = rows + checkedAt;
+        out.classList.remove('warn');
+        out.classList.add(data.overall_pass ? 'ok' : 'err');
+      } catch (e) {
+        out.classList.remove('warn', 'ok');
+        out.classList.add('err');
+        out.textContent = 'Checklist lỗi: ' + e.message;
+      }
+    }
+
+    function applyMachineProfile() {
+      const profile = document.getElementById('machine-profile').value;
+      if (!profile || profile === 'custom') return;
+      const map = {
+        ge: { modalityAe: 'MAY_SIEU_AM', localAe: 'CLINIC_SYSTEM' },
+        mindray: { modalityAe: 'MINDRAY', localAe: 'CLINIC_SYSTEM' },
+        samsung: { modalityAe: 'SAMSUNG_US', localAe: 'CLINIC_SYSTEM' }
+      };
+      const p = map[profile] || map.ge;
+      document.getElementById('modality-ae-title').value = p.modalityAe;
+      document.getElementById('local-ae-title').value = p.localAe;
+      document.getElementById('mwl-server-ae-title').value = p.localAe;
+    }
+
+    function exportMachineChecklist() {
+      const now = new Date();
+      const nowStr = now.toLocaleString('vi-VN');
+      const profile = document.getElementById('machine-profile').value || 'custom';
+      const profileLabel = ({
+        custom: 'Tùy chỉnh',
+        ge: 'GE / Voluson',
+        mindray: 'Mindray',
+        samsung: 'Samsung'
+      })[profile] || profile;
+      const integrationMode = document.getElementById('integration-mode').value || 'mwl_query_only';
+      const integrationLabel = integrationMode === 'mwl_plus_store' ? 'MWL + C-STORE' : 'MWL Query only';
+
+      const data = {
+        ultrasoundIp: document.getElementById('ultrasound-ip').value || '',
+        ultrasoundPort: document.getElementById('ultrasound-port').value || '',
+        calledAe: document.getElementById('modality-ae-title').value || '',
+        localAe: document.getElementById('local-ae-title').value || '',
+        mwlServerIp: document.getElementById('mwl-server-ip').value || '',
+        mwlServerPort: document.getElementById('mwl-server-port').value || '',
+        mwlServerAe: document.getElementById('mwl-server-ae-title').value || '',
+        requireCalledAe: document.getElementById('require-called-aet').checked ? 'Bật' : 'Tắt',
+        allowedCalling: document.getElementById('allowed-calling-aets').value || '(để trống: cho phép tất cả)'
+      };
+
+      const html = `
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Checklist cấu hình máy siêu âm</title>
+  <style>
+    @page { size: A4; margin: 16mm; }
+    body { font-family: Arial, sans-serif; color:#111; }
+    h1 { margin: 0 0 8px 0; font-size: 20px; }
+    .muted { color:#555; font-size: 12px; margin-bottom: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+    th, td { border: 1px solid #999; padding: 8px; text-align: left; font-size: 13px; vertical-align: top; }
+    th { background: #f3f4f6; width: 34%; }
+    .section { margin-top: 12px; margin-bottom: 6px; font-weight: 700; }
+    .chk { font-size: 13px; line-height: 1.6; }
+    .line { border-bottom: 1px dashed #888; height: 18px; margin: 2px 0 8px 0; }
+  </style>
+</head>
+<body>
+  <h1>Checklist cấu hình máy siêu âm (DICOM MWL)</h1>
+  <div class="muted">In từ Worklist & Máy siêu âm lúc: ${nowStr}</div>
+
+  <table>
+    <tr><th>Profile máy</th><td>${profileLabel}</td></tr>
+    <tr><th>Chế độ tích hợp</th><td>${integrationLabel}</td></tr>
+    <tr><th>IP máy siêu âm</th><td>${data.ultrasoundIp}</td></tr>
+    <tr><th>Port DICOM (máy)</th><td>${data.ultrasoundPort}</td></tr>
+    <tr><th>AE Title (máy)</th><td>${data.calledAe}</td></tr>
+    <tr><th>AE Title (hệ thống)</th><td>${data.localAe}</td></tr>
+    <tr><th>MWL Server IP</th><td>${data.mwlServerIp}</td></tr>
+    <tr><th>MWL Server Port</th><td>${data.mwlServerPort}</td></tr>
+    <tr><th>MWL Server AE</th><td>${data.mwlServerAe}</td></tr>
+    <tr><th>Require Called AE</th><td>${data.requireCalledAe}</td></tr>
+    <tr><th>Allowed Calling AE</th><td>${data.allowedCalling}</td></tr>
+  </table>
+
+  <div class="section">Checklist thực hiện cho kỹ sư máy</div>
+  <div class="chk">[ ] Nhập đúng IP/Port/AE trên máy siêu âm</div>
+  <div class="chk">[ ] Kiểm tra mạng nội bộ thông suốt (ping/tcp)</div>
+  <div class="chk">[ ] Chạy Test TCP từ trang cấu hình</div>
+  <div class="chk">[ ] Chạy Test DICOM Echo (nếu máy hỗ trợ)</div>
+  <div class="chk">[ ] Chạy Test MWL C-FIND và xác nhận có kết quả</div>
+  <div class="chk">[ ] Lưu cấu hình và khởi động lại dịch vụ MWL nếu cần</div>
+</body>
+</html>`;
+
+      const w = window.open('', '_blank');
+      if (!w) {
+        alert('Trình duyệt chặn popup. Hãy cho phép popup để in checklist.');
+        return;
+      }
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      w.focus();
+      setTimeout(() => w.print(), 200);
+    }
+
+    function formatBirthDateForDisplay(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return '';
+      // yyyymmdd -> dd/mm/yyyy
+      if (/^\d{8}$/.test(raw)) return `${raw.slice(6, 8)}/${raw.slice(4, 6)}/${raw.slice(0, 4)}`;
+      // yyyy-mm-dd -> dd/mm/yyyy
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw.slice(8, 10)}/${raw.slice(5, 7)}/${raw.slice(0, 4)}`;
+      return raw;
+    }
+
+    function formatTimeForDisplay(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return '';
+      // hhmmss -> hh:mm
+      if (/^\d{6}$/.test(raw)) return `${raw.slice(0, 2)}:${raw.slice(2, 4)}`;
+      // hhmm -> hh:mm
+      if (/^\d{4}$/.test(raw)) return `${raw.slice(0, 2)}:${raw.slice(2, 4)}`;
+      // hh:mm:ss -> hh:mm
+      if (/^\d{2}:\d{2}:\d{2}$/.test(raw)) return raw.slice(0, 5);
+      return raw;
+    }
+
+    async function fetchEntries() {
+      if (!canManageWorklist) return;
+      const res = await fetch(API_BASE, { headers: authHeaders() });
+      const data = await res.json();
+      if (!data.success) { alert('Lỗi tải dữ liệu: ' + (data.error || JSON.stringify(data))); return; }
+      const tbody = document.querySelector('#entriesTable tbody');
+      tbody.innerHTML = '';
+      (data.entries || []).forEach(e => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${e.id || ''}</td>
+          <td>${e.PatientName || ''}</td>
+          <td>${e.PatientID || ''}</td>
+          <td>${formatBirthDateForDisplay(e.PatientBirthDate)}</td>
+          <td>${e.StudyDescription || ''}</td>
+          <td>${e.Modality || ''}</td>
+          <td>${formatBirthDateForDisplay(e.ScheduledProcedureStepStartDate)}</td>
+          <td>${formatTimeForDisplay(e.ScheduledProcedureStepStartTime)}</td>
+          <td>${e.AccessionNumber || ''}</td>
+          <td>
+            <button class="btn-muted" onclick="editEntry(${e.id})">Sửa</button>
+            <button class="btn-danger" onclick="deleteEntry(${e.id})">Xóa</button>
+          </td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function syncNow() {
+      if (!canManageWorklist) return;
+      const status = document.getElementById('sync-status');
+      status.textContent = 'Đang đồng bộ...';
+      status.style.background = '#fef3c7';
+      const res = await fetch(SYNC_API, { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      if (!data.success) {
+        status.textContent = 'Lỗi đồng bộ: ' + (data.error || 'Unknown');
+        status.style.background = '#fee2e2';
+        return;
+      }
+      const imported = Number(data.imported || 0);
+      const added = Number(data.added || 0);
+      const updated = Number(data.updated || 0);
+      const unchanged = Number(data.unchanged || 0);
+      const removed = Number(data.removed || 0);
+      const totalAfter = Number(data.total_after_sync || imported);
+      status.textContent = `Đồng bộ xong. Thêm mới: ${added}, Cập nhật: ${updated}, Giữ nguyên: ${unchanged}, Xóa: ${removed}, Tổng sau đồng bộ: ${totalAfter}.`;
+      status.style.background = '#dcfce7';
+      await fetchEntries();
+    }
+
+    function openModal(mode, entry) {
+      if (!canManageWorklist) return;
+      document.getElementById('modalTitle').textContent = mode === 'edit' ? 'Edit Entry' : 'New Entry';
+      document.getElementById('fPatientName').value = entry?.PatientName || '';
+      document.getElementById('fPatientID').value = entry?.PatientID || '';
+      document.getElementById('fBirthDate').value = entry?.PatientBirthDate || '';
+      document.getElementById('fStudyDesc').value = entry?.StudyDescription || '';
+      document.getElementById('fModality').value = entry?.Modality || 'US';
+      document.getElementById('fScheduledDate').value = entry?.ScheduledProcedureStepStartDate || '';
+      document.getElementById('fScheduledTime').value = entry?.ScheduledProcedureStepStartTime || '';
+      document.getElementById('fAccession').value = entry?.AccessionNumber || '';
+      document.getElementById('saveBtn').dataset.editId = entry?.id || '';
+      document.getElementById('modal').style.display = 'block';
+    }
+
+    async function saveEntry() {
+      if (!canManageWorklist) return;
+      const id = document.getElementById('saveBtn').dataset.editId;
+      const payload = {
+        PatientName: document.getElementById('fPatientName').value,
+        PatientID: document.getElementById('fPatientID').value,
+        PatientBirthDate: document.getElementById('fBirthDate').value,
+        StudyDescription: document.getElementById('fStudyDesc').value,
+        Modality: document.getElementById('fModality').value,
+        ScheduledProcedureStepStartDate: document.getElementById('fScheduledDate').value,
+        ScheduledProcedureStepStartTime: document.getElementById('fScheduledTime').value,
+        AccessionNumber: document.getElementById('fAccession').value
+      };
+      const res = await fetch(id ? `${API_BASE}/${id}` : API_BASE, {
+        method: id ? 'PUT' : 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!data.success) { alert('Lỗi lưu: ' + (data.error || JSON.stringify(data))); return; }
+      document.getElementById('modal').style.display = 'none';
+      await fetchEntries();
+    }
+
+    async function deleteEntry(id) {
+      if (!canManageWorklist) return;
+      if (!confirm('Xóa entry #' + id + '?')) return;
+      const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE', headers: authHeaders() });
+      const data = await res.json();
+      if (!data.success) { alert('Lỗi xóa: ' + (data.error || JSON.stringify(data))); return; }
+      await fetchEntries();
+    }
+
+    async function editEntry(id) {
+      if (!canManageWorklist) return;
+      const res = await fetch(API_BASE, { headers: authHeaders() });
+      const data = await res.json();
+      const found = (data.entries || []).find(x => x.id == id);
+      openModal('edit', found || {});
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', saveEntry);
+    document.getElementById('cancelBtn').addEventListener('click', () => { document.getElementById('modal').style.display = 'none'; });
+    document.getElementById('machine-profile').addEventListener('change', applyMachineProfile);
+
+    (async function init() {
+      await loadUltrasoundSettings();
+      const allowed = await checkManageWorklistPermission();
+      if (allowed) {
+        await fetchEntries();
+      }
+    })();
+  </script>
+  <script src="footer-loader.js"></script>
+</body>
+</html>

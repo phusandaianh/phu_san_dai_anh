@@ -479,6 +479,7 @@
         <!-- Search and Filters -->
         <div class="search-filters">
             <input type="text" id="search-name" placeholder="Tìm theo tên bệnh nhân">
+            <input type="text" id="search-pid" placeholder="Tìm theo PID (BNyy##### hoặc số)">
             <input type="text" id="search-phone" placeholder="Tìm theo số điện thoại">
             <input type="date" id="search-date-from" placeholder="Từ ngày">
             <input type="date" id="search-date-to" placeholder="Đến ngày">
@@ -509,6 +510,7 @@
                     <thead>
                         <tr>
                             <th>STT</th>
+                            <th>PID</th>
                             <th>Tên bệnh nhân</th>
                             <th>Số điện thoại</th>
                             <th>Ngày khám</th>
@@ -869,6 +871,7 @@
             tbody.innerHTML = records.map((record, index) => `
                 <tr>
                     <td>${index + 1}</td>
+                    <td><code>${record.patient_pid || ''}</code></td>
                     <td>${record.patient_name}</td>
                     <td>${record.patient_phone}</td>
                     <td>${formatDateTime(record.appointment_date)}</td>
@@ -909,81 +912,70 @@
         }
 
         // Search records
-        function searchRecords() {
-            const name = document.getElementById('search-name').value;
-            const phone = document.getElementById('search-phone').value;
-            const dateFrom = document.getElementById('search-date-from').value;
-            const dateTo = document.getElementById('search-date-to').value;
-            const status = document.getElementById('filter-status').value;
+        async function searchRecords() {
+            const name = (document.getElementById('search-name').value || '').trim();
+            const pid = (document.getElementById('search-pid').value || '').trim();
+            const phone = (document.getElementById('search-phone').value || '').trim();
+            const dateFrom = document.getElementById('search-date-from').value || '';
+            const dateTo = document.getElementById('search-date-to').value || '';
+            const status = document.getElementById('filter-status').value || '';
 
-            // Filter records based on search criteria
-            let filteredRecords = records.filter(record => {
-                const matchesName = !name || record.patient_name.toLowerCase().includes(name.toLowerCase());
-                const matchesPhone = !phone || record.patient_phone.includes(phone);
-                const matchesStatus = !status || record.status === status;
-                
-                let matchesDate = true;
-                if (dateFrom || dateTo) {
-                    const recordDate = new Date(record.appointment_date);
-                    if (dateFrom) {
-                        const fromDate = new Date(dateFrom);
-                        matchesDate = matchesDate && recordDate >= fromDate;
-                    }
-                    if (dateTo) {
-                        const toDate = new Date(dateTo);
-                        toDate.setHours(23, 59, 59, 999);
-                        matchesDate = matchesDate && recordDate <= toDate;
-                    }
+            const hasAnyFilter = !!(name || pid || phone || dateFrom || dateTo || status);
+            if (!hasAnyFilter) {
+                await loadRecords();
+                return;
+            }
+
+            try {
+                const params = new URLSearchParams();
+                if (name) params.set('name', name);
+                if (pid) params.set('pid', pid);
+                if (phone) params.set('phone', phone);
+                if (dateFrom) params.set('date_from', dateFrom);
+                if (dateTo) params.set('date_to', dateTo);
+                if (status) params.set('status', status);
+
+                const url = '/api/patient-records' + (params.toString() ? ('?' + params.toString()) : '');
+                const response = await fetch(url);
+                if (!response.ok) {
+                    console.error('Lỗi tìm kiếm hồ sơ:', response.status);
+                    return;
                 }
-
-                return matchesName && matchesPhone && matchesStatus && matchesDate;
-            });
-
-            // Update display
-            const tbody = document.getElementById('records-tbody');
-            const noRecords = document.getElementById('no-records');
-            
-            if (filteredRecords.length === 0) {
-                tbody.innerHTML = '';
-                noRecords.style.display = 'block';
-            } else {
-                noRecords.style.display = 'none';
-                tbody.innerHTML = filteredRecords.map((record, index) => `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${record.patient_name}</td>
-                        <td>${record.patient_phone}</td>
-                        <td>${formatDateTime(record.appointment_date)}</td>
-                        <td>${record.service_type}</td>
-                        <td>${record.doctor_name || 'Chưa xác định'}</td>
-                        <td><span class="status-badge status-${record.status}">${getStatusText(record.status)}</span></td>
-                        <td>
-                            <div class="action-buttons">
-                                <button class="btn btn-primary btn-small" onclick="viewRecord(${record.id})" title="Xem kết quả cận lâm sàng">
-                                    <i class="fas fa-vials"></i>
-                                </button>
-                                <button class="btn btn-secondary btn-small" onclick="editRecord(${record.id})" title="Sửa">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn btn-danger btn-small" onclick="deleteRecord(${record.id})" title="Xóa">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `).join('');
+                records = await response.json();
+                renderRecords();
+            } catch (e) {
+                console.error('Lỗi tìm kiếm hồ sơ:', e);
             }
         }
 
         // Clear filters
-        function clearFilters() {
+        async function clearFilters() {
             document.getElementById('search-name').value = '';
+            const pidEl = document.getElementById('search-pid');
+            if (pidEl) pidEl.value = '';
             document.getElementById('search-phone').value = '';
             document.getElementById('search-date-from').value = '';
             document.getElementById('search-date-to').value = '';
             document.getElementById('filter-status').value = '';
-            renderRecords();
+            await loadRecords();
         }
+
+        // Debounced searching (nhanh & giảm request khi gõ)
+        let patientRecordSearchTimer = null;
+        function bindSearchInputDebounce() {
+            const ids = ['search-name', 'search-pid', 'search-phone'];
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.addEventListener('input', () => {
+                    clearTimeout(patientRecordSearchTimer);
+                    patientRecordSearchTimer = setTimeout(() => {
+                        searchRecords();
+                    }, 350);
+                });
+            });
+        }
+        bindSearchInputDebounce();
 
         // Open add modal
         function openAddModal() {

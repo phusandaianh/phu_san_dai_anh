@@ -173,6 +173,7 @@
             <div class="nav-top-row">
                 <a href="/admin.html" class="back-link btn secondary-btn"><i class="fas fa-arrow-left"></i> Quay lại trang quản trị</a>
                 <div class="nav-top-actions">
+                    <button id="manage-provider-units-btn" class="btn primary-btn">Quản lý đơn vị thực hiện dịch vụ</button>
                     <button id="manage-service-groups-btn" class="btn primary-btn">Quản lý nhóm</button>
                     <button id="package-management-btn" class="btn primary-btn">Gói cận lâm sàng</button>
                 </div>
@@ -480,15 +481,8 @@
 
         // Attach modal open to all provider unit inputs (table and add form)
         function attachProviderUnitInputListeners() {
-            // Table inputs
-            document.querySelectorAll('.edit-service-provider-unit').forEach(input => {
-                input.onclick = openProviderUnitModal;
-            });
-            // Add form input
-            const addInput = document.getElementById('newServiceProviderUnit');
-            if (addInput) {
-                addInput.onclick = openProviderUnitModal;
-            }
+            // Không mở modal khi click vào ô Đơn vị thực hiện dịch vụ nữa.
+            // Ô này chỉ dùng datalist để chọn nhanh đơn vị.
         }
 
         // Function to update the datalist for provider units
@@ -1085,6 +1079,9 @@
         // Service group modal interactions
         document.getElementById('manage-service-groups-btn').addEventListener('click', openServiceGroupModal);
         document.getElementById('close-service-group-modal').addEventListener('click', closeServiceGroupModal);
+
+        // Provider units management tab button - mở modal quản lý đơn vị thực hiện dịch vụ
+        document.getElementById('manage-provider-units-btn').addEventListener('click', openProviderUnitModal);
 
         document.getElementById('add-service-group-form').addEventListener('submit', async (e) => {
             e.preventDefault();

@@ -44,3 +44,44 @@ git push origin main
 ## URL sau khi deploy
 
 Render sẽ cấp URL dạng: `https://phong-kham-dai-anh.onrender.com`
+
+## Mô hình đề xuất theo yêu cầu hiện tại
+
+- Dữ liệu bệnh nhân lưu và vận hành chính trên máy nội bộ (local).
+- Render dùng làm cổng đăng ký online (`/booking.html`) cho bệnh nhân.
+- Đăng ký online và đăng ký nội bộ được hợp nhất về cùng danh sách khám tại local qua sync event.
+
+## Cấu hình để hợp nhất online + nội bộ
+
+### 1) Trên Render (node online)
+
+Trong Render Dashboard -> Environment, cấu hình:
+
+- `PUBLIC_BOOKING_URL=https://<app>.onrender.com`
+- `SYNC_ROLE=online`
+- `SYNC_TOKEN=<chuoi-bi-mat-dong-bo>`
+
+Ghi chú:
+- `SYNC_ROLE=online` để node này phát sinh event từ booking online.
+- `SYNC_TOKEN` phải giống ở máy local.
+
+### 2) Trên máy nội bộ (node local)
+
+Thiết lập biến môi trường khi chạy app local:
+
+- `SYNC_ROLE=local`
+- `SYNC_REMOTE_URL=https://<app>.onrender.com`
+- `SYNC_TOKEN=<chuoi-bi-mat-dong-bo>`
+
+Khi đó local sẽ tự chạy vòng lặp:
+- Pull event đăng ký online từ Render về local.
+- Push event đăng ký nội bộ từ local lên Render.
+
+Kết quả:
+- Hai phía dùng chung trạng thái lịch hẹn (slot, đổi giờ, hủy).
+- Danh sách khám tại local là dữ liệu hợp nhất của cả 2 kênh.
+
+## Link dùng thực tế
+
+- Bệnh nhân online: `https://<app>.onrender.com/booking.html`
+- Đăng ký nội bộ: `http://<IP-may-noi-bo>:5000/booking.html?internal=1`

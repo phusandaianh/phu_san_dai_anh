@@ -58,7 +58,7 @@ Generated: **11-Nov-2025 12:39 UTC+7**
 ```bash
 python mwl_server.py
 ```
-✅ Runs on port 104, ready for Voluson E10
+✅ Runs on port 104, ready for Maysieuam E10
 
 ### Start Flask Web App:
 ```bash
@@ -152,7 +152,7 @@ PRE-DEPLOYMENT CHECKS:
 ✅ Code syntax checked
 ✅ Port availability confirmed
 ✅ DICOM compatibility verified
-✅ Voluson E10 settings documented
+✅ Maysieuam settings documented
 ✅ Service scripts ready
 
 STATUS: 🟢 READY FOR DEPLOYMENT
@@ -163,7 +163,7 @@ STATUS: 🟢 READY FOR DEPLOYMENT
 ## 💡 SYSTEM CAPABILITIES
 
 ### When MWL Server is Running (port 104):
-✅ Accept DICOM C-FIND queries from Voluson E10  
+✅ Accept DICOM C-FIND queries from Maysieuam  
 ✅ Provide Modality Worklist (MWL) entries  
 ✅ Support multiple calling AE titles  
 ✅ Auto-sync data every 5 minutes  
@@ -196,7 +196,7 @@ STATUS: 🟢 READY FOR DEPLOYMENT
    # Service will auto-start and run continuously
    ```
 
-3. **To Connect Voluson E10:**
+3. **To Connect Maysieuam E10:**
    - Set IP: 10.17.2.2 (server IP)
    - Set Port: 104
    - Set AE Title: CLINIC_SYSTEM
@@ -272,7 +272,7 @@ Resource Usage:
 │                 COMPLETE SYSTEM FLOW                        │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  Voluson E10 (Ultrasound Machine)                          │
+│  Maysieuam (Ultrasound Machine)                          │
 │  ↓ DICOM C-FIND Query (IP: 10.17.2.2, Port: 104)         │
 │  ↓                                                          │
 │  MWL Server (Python - mwl_server.py)                      │
@@ -322,7 +322,7 @@ Resource Usage:
 - Deploy when ready (system is production-ready)
 - Monitor auto-sync for continuous operation
 - Backup databases weekly
-- Test Voluson connection in staging first
+- Test Maysieuam connection in staging first
 
 **Next Check:** In 24 hours (recommended)
 

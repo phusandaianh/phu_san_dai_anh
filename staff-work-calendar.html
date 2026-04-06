@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lịch làm việc nhân viên & lương - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="utilities.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .page-header {
+            margin: 18px auto 10px auto;
+            padding: 14px 18px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #0c4a6e 0%, #0369a1 55%, #0ea5e9 100%);
+            color: white;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        .page-header h1 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+        .range-meta {
+            margin-top: 8px;
+            opacity: 0.95;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin: 14px 0;
+        }
+        .control {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        select, input[type="date"] {
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+        .month-block {
+            margin-top: 18px;
+            padding: 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(14,165,233,0.25);
+            background: rgba(255,255,255,0.9);
+        }
+        .month-block h2 {
+            margin: 0 0 10px 0;
+            font-size: 1.05rem;
+            color: #0c4a6e;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            overflow: hidden;
+            border-radius: 12px;
+        }
+        th, td {
+            padding: 10px 10px;
+            border-bottom: 1px solid #eee;
+            vertical-align: top;
+        }
+        th {
+            background: #f5f5f5;
+            color: #0c4a6e;
+            text-align: left;
+            font-size: 0.95rem;
+        }
+        tr:hover td {
+            background: #fbfdff;
+        }
+        .muted {
+            color: #6b7280;
+            font-size: 0.95rem;
+        }
+        .link {
+            color: #0369a1;
+            text-decoration: none;
+            font-weight: 700;
+        }
+        .link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="page-header">
+            <h1><i class="fas fa-calendar-alt"></i> Lịch làm việc nhân viên & lương</h1>
+            <div class="range-meta" id="rangeMeta"></div>
+        </div>
+
+        <div class="controls">
+            <div class="control">
+                <span class="muted" style="font-weight:700;">Lọc nhân viên:</span>
+                <select id="staffFilter">
+                    <option value="__all__">Tất cả</option>
+                </select>
+            </div>
+            <div class="control">
+                <span class="muted" style="font-weight:700;">Lương theo giờ:</span>
+                <input id="hourlyRateInput" type="number" min="0" step="1000" value="0" style="width:160px;">
+                <button id="saveRateBtn" class="btn secondary-btn" type="button">
+                    <i class="fas fa-save"></i> Lưu
+                </button>
+            </div>
+        </div>
+
+        <div id="monthsContainer"></div>
+    </div>
+
+    <script>
+        function formatYMD(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        function parseTimeToMinutes(t) {
+            if (!t || typeof t !== 'string') return null;
+            const parts = t.split(':');
+            if (parts.length !== 2) return null;
+            const hh = parseInt(parts[0], 10);
+            const mm = parseInt(parts[1], 10);
+            if (isNaN(hh) || isNaN(mm)) return null;
+            return hh * 60 + mm;
+        }
+
+        function diffMinutes(startT, endT) {
+            const s = parseTimeToMinutes(startT);
+            const e = parseTimeToMinutes(endT);
+            if (s === null || e === null) return 0;
+            let diff = e - s;
+            if (diff < 0) diff = 0; // không xử lý qua đêm ở phiên bản đầu
+            return diff;
+        }
+
+        function formatMoneyVND(n) {
+            const val = Number(n) || 0;
+            return val.toLocaleString('vi-VN') + ' ₫';
+        }
+
+        function monthLabel(yyyyMm) {
+            const [y, m] = yyyyMm.split('-').map(x => parseInt(x, 10));
+            const d = new Date(y, m - 1, 1);
+            return d.toLocaleString('vi-VN', { month: 'long', year: 'numeric' });
+        }
+
+        async function fetchJson(url, options) {
+            const res = await fetch(url, options || undefined);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const err = data && (data.error || data.message) ? (data.error || data.message) : ('HTTP ' + res.status);
+                throw new Error(err);
+            }
+            return data;
+        }
+
+        function getMonthKeys() {
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = now.getMonth(); // 0-11
+            const prev = new Date(y, m - 1, 1);
+            const cur = new Date(y, m, 1);
+            const next = new Date(y, m + 1, 1);
+            const toKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            return [toKey(prev), toKey(cur), toKey(next)];
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const now = new Date();
+                const y = now.getFullYear();
+                const m = now.getMonth();
+                const startDate = new Date(y, m - 1, 1);
+                const endDate = new Date(y, m + 2, 0); // ngày cuối của tháng kế tiếp
+
+                const startYMD = formatYMD(startDate);
+                const endYMD = formatYMD(endDate);
+
+                const keys = getMonthKeys();
+                document.getElementById('rangeMeta').textContent =
+                    `Hiển thị từ ${startYMD} đến ${endYMD} (3 tháng: ${monthLabel(keys[0])}, ${monthLabel(keys[1])}, ${monthLabel(keys[2])})`;
+
+                const rateData = await fetchJson('/api/staff-hourly-rate');
+                const hourlyRate = Number(rateData.hourly_rate) || 0;
+                const hourlyRateInput = document.getElementById('hourlyRateInput');
+                hourlyRateInput.value = hourlyRate;
+
+                document.getElementById('saveRateBtn').addEventListener('click', async () => {
+                    const val = Number(hourlyRateInput.value) || 0;
+                    await fetchJson('/api/staff-hourly-rate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ hourly_rate: val })
+                    });
+                    alert('Đã cập nhật lương theo giờ');
+                    renderMonths(); // render lại với rate mới
+                });
+
+                const staffFilterEl = document.getElementById('staffFilter');
+                const monthsContainer = document.getElementById('monthsContainer');
+
+                const shifts = await fetchJson(`/api/admin/work-schedule?start_date=${encodeURIComponent(startYMD)}&end_date=${encodeURIComponent(endYMD)}`);
+
+                const staffs = Array.from(new Set((shifts || []).map(s => s.doctor_name).filter(Boolean))).sort((a,b)=>a.localeCompare(b,'vi'));
+                staffs.forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = name;
+                    staffFilterEl.appendChild(opt);
+                });
+
+                staffFilterEl.addEventListener('change', () => renderMonths());
+
+                function renderMonths() {
+                    monthsContainer.innerHTML = '';
+                    const selectedStaff = staffFilterEl.value;
+                    const rate = Number(hourlyRateInput.value) || 0;
+
+                    const grouped = {};
+                    (shifts || []).forEach(shift => {
+                        const key = (shift.date || '').slice(0, 7);
+                        if (!key) return;
+                        if (!grouped[key]) grouped[key] = [];
+                        grouped[key].push(shift);
+                    });
+
+                    keys.forEach(key => {
+                        const block = document.createElement('div');
+                        block.className = 'month-block';
+                        block.innerHTML = `<h2>${monthLabel(key)}</h2>`;
+
+                        let monthShifts = grouped[key] || [];
+                        monthShifts.sort((a,b) => (a.date.localeCompare(b.date) || (a.start_time || '').localeCompare(b.start_time || '')));
+
+                        if (selectedStaff !== '__all__') {
+                            monthShifts = monthShifts.filter(s => s.doctor_name === selectedStaff);
+                        }
+
+                        if (!monthShifts.length) {
+                            const p = document.createElement('div');
+                            p.className = 'muted';
+                            p.textContent = 'Chưa có lịch trong khoảng này.';
+                            block.appendChild(p);
+                        } else {
+                            const table = document.createElement('table');
+                            table.innerHTML = `
+                                <thead>
+                                    <tr>
+                                        <th>Ngày</th>
+                                        <th>Nhân viên</th>
+                                        <th>Giờ</th>
+                                        <th>Thời lượng</th>
+                                        <th>Lương dự kiến</th>
+                                        <th>Chấm công</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            `;
+                            const tbody = table.querySelector('tbody');
+
+                            monthShifts.forEach(shift => {
+                                const mins = diffMinutes(shift.start_time, shift.end_time);
+                                const hours = mins / 60;
+                                const salary = hours * rate;
+
+                                const tr = document.createElement('tr');
+                                const attUrl = `staff-attendance.html?staff=${encodeURIComponent(shift.doctor_name)}&date=${encodeURIComponent(shift.date)}`;
+                                tr.innerHTML = `
+                                    <td>${shift.date}</td>
+                                    <td>${shift.doctor_name}</td>
+                                    <td>${shift.start_time} - ${shift.end_time}</td>
+                                    <td>${hours.toFixed(2)} h</td>
+                                    <td>${formatMoneyVND(salary)}</td>
+                                    <td><a class="link" href="${attUrl}">Chấm công</a></td>
+                                `;
+                                tbody.appendChild(tr);
+                            });
+
+                            block.appendChild(table);
+                        }
+
+                        monthsContainer.appendChild(block);
+                    });
+                }
+
+                renderMonths();
+            } catch (err) {
+                console.error(err);
+                alert('Lỗi tải lịch làm việc: ' + (err.message || err));
+            }
+        });
+    </script>
+</body>
+</html>
+

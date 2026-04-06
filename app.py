@@ -1,6 +1,7 @@
 from flask import Flask, render_template, send_from_directory, request, jsonify, send_file, Response, abort, after_this_request
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import or_, inspect, func, text, bindparam
+from sqlalchemy import or_, inspect, func, text, bindparam, cast, Integer
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta
 import os
 from reportlab.pdfgen import canvas
@@ -24,14 +25,99 @@ from email.mime.text import MIMEText
 import zipfile
 import tempfile
 import shutil
+import socket
 from urllib.parse import unquote
 import sqlite3
 import hashlib
+import sys
 import hmac
+import uuid
+import urllib.request
+import urllib.error
+import unicodedata
+from pathlib import Path
+import subprocess
 from voluson_sync_service import get_voluson_sync_service
 import mwl_store
 
+# Khi chạy bằng `python app.py`, module name là __main__.
+# Một số blueprint có `from app import ...` → nếu không alias sẽ tạo module app thứ 2,
+# gây lỗi Flask-SQLAlchemy "current app is not registered".
+sys.modules.setdefault('app', sys.modules[__name__])
+
 app = Flask(__name__, static_folder='.', template_folder='')
+
+# ===== QR Ads media uploads =====
+QR_ADS_MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'qr-ads-media')
+try:
+    os.makedirs(QR_ADS_MEDIA_DIR, exist_ok=True)
+except Exception:
+    pass
+
+QR_ADS_MEDIA_ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.webm'}
+
+def _qr_ads_media_public_url(filename: str) -> str:
+    return f"/qr-ads-media/{filename}"
+
+# ===== QR Ads doctor images uploads =====
+QR_ADS_DOCTOR_MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'qr-ads-doctor-images')
+try:
+    os.makedirs(QR_ADS_DOCTOR_MEDIA_DIR, exist_ok=True)
+except Exception:
+    pass
+
+QR_ADS_DOCTOR_ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.webp'}
+
+def _qr_ads_doctor_media_public_url(filename: str) -> str:
+    return f"/qr-ads-doctor-images/{filename}"
+
+# ===== Ultrasound capture media uploads =====
+ULTRASOUND_MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ultrasound-media')
+try:
+    os.makedirs(ULTRASOUND_MEDIA_DIR, exist_ok=True)
+except Exception:
+    pass
+
+ULTRASOUND_MEDIA_ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.mp4', '.webm'}
+
+def _ultrasound_media_public_url(filename: str) -> str:
+    return f"/ultrasound-media/{filename}"
+
+
+def _find_ffmpeg_binary() -> str:
+    """Tìm ffmpeg theo ENV/PATH/vị trí phổ biến trên Windows."""
+    env_path = str(os.environ.get('FFMPEG_PATH') or '').strip()
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        env_path,
+        shutil.which('ffmpeg'),
+        shutil.which('ffmpeg.exe'),
+        os.path.join(project_root, 'ffmpeg', 'bin', 'ffmpeg.exe'),
+        os.path.join(project_root, 'tools', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+        r'C:\ffmpeg\bin\ffmpeg.exe',
+        r'C:\Program Files\ffmpeg\bin\ffmpeg.exe',
+    ]
+    for c in candidates:
+        if not c:
+            continue
+        if os.path.isfile(c):
+            return c
+    return ''
+
+def _slugify_doctor_key(s: str) -> str:
+    if s is None:
+        return ''
+    text = str(s).strip().lower()
+    if not text:
+        return ''
+    # Remove Vietnamese diacritics
+    text = text.replace('đ', 'd').replace('Đ', 'd').replace('Đ', 'd')
+    text = unicodedata.normalize('NFKD', text)
+    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
+    # Replace non-alphanum with hyphen
+    text = re.sub(r'[^a-z0-9]+', '-', text)
+    text = re.sub(r'-{2,}', '-', text).strip('-')
+    return text[:80]
 
 # Cấu hình: ưu tiên từ config.py và biến môi trường (theo khuyến nghị bảo mật)
 try:
@@ -107,6 +193,9 @@ def rate_limit(key_prefix=''):
 # Simple in-memory token store for auth (non-persistent)
 TOKENS = {}
 TOKEN_TTL_SECONDS = 3600
+_AUTH_SESSION_TABLE_READY = False
+_AUTH_SESSION_CLEANUP_INTERVAL_SECONDS = 600
+_AUTH_SESSION_LAST_CLEANUP_AT = None
 
 # Lưu danh sách IP đã từng đăng nhập theo user để phát hiện "máy lạ"
 USER_KNOWN_IPS = defaultdict(set)
@@ -115,54 +204,171 @@ def register_token(token, user_id, ip_address=None, user_agent=None, is_new_devi
     """Đăng ký token đăng nhập (lưu thêm thông tin IP, user-agent)."""
     session_id = __import__('secrets').token_hex(8)
     now = datetime.utcnow()
-    TOKENS[token] = {
-        'user_id': user_id,
-        'expires_at': now + timedelta(seconds=TOKEN_TTL_SECONDS),
-        'created_at': now,
-        'last_seen': now,
-        'ip_address': ip_address or '',
-        'user_agent': user_agent or '',
-        'session_id': session_id,
-        'revoked': False,
-        'is_new_device': bool(is_new_device),
-    }
+    expires_at = now + timedelta(seconds=TOKEN_TTL_SECONDS)
+    _ensure_auth_session_table()
+    _maybe_cleanup_auth_sessions()
+    try:
+        # Upsert theo token để tránh trùng nếu client gửi lại.
+        existing = AuthSession.query.filter_by(token=token).first()
+        if existing:
+            existing.user_id = user_id
+            existing.expires_at = expires_at
+            existing.created_at = now
+            existing.last_seen = now
+            existing.ip_address = ip_address or ''
+            existing.user_agent = user_agent or ''
+            existing.session_id = session_id
+            existing.revoked = False
+            existing.is_new_device = bool(is_new_device)
+        else:
+            db.session.add(AuthSession(
+                token=token,
+                user_id=user_id,
+                expires_at=expires_at,
+                created_at=now,
+                last_seen=now,
+                ip_address=ip_address or '',
+                user_agent=user_agent or '',
+                session_id=session_id,
+                revoked=False,
+                is_new_device=bool(is_new_device),
+            ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        # Fallback giữ tương thích nếu DB gặp sự cố.
+        TOKENS[token] = {
+            'user_id': user_id,
+            'expires_at': expires_at,
+            'created_at': now,
+            'last_seen': now,
+            'ip_address': ip_address or '',
+            'user_agent': user_agent or '',
+            'session_id': session_id,
+            'revoked': False,
+            'is_new_device': bool(is_new_device),
+        }
     return session_id
 
 def get_user_from_token(token):
-    if not token or token not in TOKENS:
+    if not token:
         return None
-    entry = TOKENS[token]
-    if entry.get('revoked'):
+    now = datetime.utcnow()
+    _ensure_auth_session_table()
+    _maybe_cleanup_auth_sessions()
+    try:
+        entry = AuthSession.query.filter_by(token=token).first()
+    except Exception:
+        entry = None
+
+    if entry:
+        if bool(entry.revoked):
+            return None
+        last_seen = entry.last_seen or entry.created_at or now
+        if (now - last_seen).total_seconds() > TOKEN_TTL_SECONDS:
+            entry.revoked = True
+            db.session.commit()
+            return None
+        if entry.expires_at and entry.expires_at < now:
+            entry.revoked = True
+            db.session.commit()
+            return None
+        # Sliding session
+        entry.last_seen = now
+        entry.expires_at = now + timedelta(seconds=TOKEN_TTL_SECONDS)
+        db.session.commit()
+        return entry.user_id
+
+    # Backward compatibility for old in-memory sessions created before this update.
+    if token not in TOKENS:
+        return None
+    mem_entry = TOKENS[token]
+    if mem_entry.get('revoked'):
         try:
             del TOKENS[token]
         except Exception:
             pass
         return None
-    if entry['expires_at'] < datetime.utcnow():
+    last_seen = mem_entry.get('last_seen') or mem_entry.get('created_at') or now
+    if (now - last_seen).total_seconds() > TOKEN_TTL_SECONDS:
         try:
             del TOKENS[token]
         except Exception:
             pass
         return None
-    entry['last_seen'] = datetime.utcnow()
-    return entry['user_id']
+    if mem_entry['expires_at'] < now:
+        try:
+            del TOKENS[token]
+        except Exception:
+            pass
+        return None
+    mem_entry['last_seen'] = now
+    mem_entry['expires_at'] = now + timedelta(seconds=TOKEN_TTL_SECONDS)
+    return mem_entry['user_id']
 
 def _find_token_by_session_id(session_id):
-    for token, info in list(TOKENS.items()):
+    _ensure_auth_session_table()
+    try:
+        row = AuthSession.query.filter_by(session_id=session_id).first()
+        if row:
+            return row.token, row
+    except Exception:
+        pass
+    for token, info in list(TOKENS.items()):  # fallback old memory sessions
         if info.get('session_id') == session_id:
             return token, info
     return None, None
 
 def revoke_session(session_id):
-    token, info = _find_token_by_session_id(session_id)
-    if not token:
+    token, row = _find_token_by_session_id(session_id)
+    if not token or not row:
         return False
-    info['revoked'] = True
     try:
-        del TOKENS[token]
+        if isinstance(row, AuthSession):
+            row.revoked = True
+            db.session.commit()
+        else:
+            row['revoked'] = True
+            try:
+                del TOKENS[token]
+            except Exception:
+                pass
+    except Exception:
+        db.session.rollback()
+        return False
+    return True
+
+def _ensure_auth_session_table():
+    global _AUTH_SESSION_TABLE_READY
+    if _AUTH_SESSION_TABLE_READY:
+        return
+    try:
+        db.create_all()
+        _AUTH_SESSION_TABLE_READY = True
     except Exception:
         pass
-    return True
+
+def _maybe_cleanup_auth_sessions(force: bool = False):
+    """
+    Dọn phiên đăng nhập đã hết hạn hoặc revoked theo chu kỳ,
+    tránh để bảng auth_session phình lâu ngày.
+    """
+    global _AUTH_SESSION_LAST_CLEANUP_AT
+    now = datetime.utcnow()
+    if not force and _AUTH_SESSION_LAST_CLEANUP_AT is not None:
+        elapsed = (now - _AUTH_SESSION_LAST_CLEANUP_AT).total_seconds()
+        if elapsed < _AUTH_SESSION_CLEANUP_INTERVAL_SECONDS:
+            return 0
+    try:
+        deleted = AuthSession.query.filter(
+            (AuthSession.revoked == True) | (AuthSession.expires_at < now)  # noqa: E712
+        ).delete(synchronize_session=False)
+        db.session.commit()
+        _AUTH_SESSION_LAST_CLEANUP_AT = now
+        return int(deleted or 0)
+    except Exception:
+        db.session.rollback()
+        return 0
 
 PASSWORD_MIN_LENGTH = 8
 
@@ -348,16 +554,13 @@ def _gdrive_client():
 
     return build('drive', 'v3', credentials=creds, cache_discovery=False)
 
-def upload_backup_to_gdrive():
-    """Upload bản sao lưu zip lên Google Drive (Folder ID cấu hình)."""
+def upload_backup_to_gdrive_from_buffer(buf: BytesIO, filename: str):
+    """Upload zip backup từ buffer lên Google Drive (Folder ID cấu hình)."""
     folder_id = os.environ.get('GDRIVE_FOLDER_ID') or app.config.get('GDRIVE_FOLDER_ID')
     if not folder_id:
         raise RuntimeError('Thiếu GDRIVE_FOLDER_ID')
 
     drive = _gdrive_client()
-
-    buf = _create_backup_zip_bytes()
-    filename = f"backup-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.zip"
 
     from googleapiclient.http import MediaIoBaseUpload
     media = MediaIoBaseUpload(buf, mimetype='application/zip', resumable=False)
@@ -380,16 +583,137 @@ def upload_backup_to_gdrive():
 
     return created
 
+def upload_backup_to_gdrive():
+    """Upload bản sao lưu zip lên Google Drive (Folder ID cấu hình)."""
+    buf = _create_backup_zip_bytes()
+    filename = f"backup-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.zip"
+    return upload_backup_to_gdrive_from_buffer(buf, filename)
+
 def scheduled_daily_backup():
     """Job chạy theo lịch: sao lưu và upload lên Google Drive."""
     enabled = (os.environ.get('GDRIVE_BACKUP_ENABLED') or app.config.get('GDRIVE_BACKUP_ENABLED') or '1').strip()
     if enabled not in ('1', 'true', 'True', 'yes', 'YES'):
         return
     try:
-        created = upload_backup_to_gdrive()
-        print(f"[BACKUP] Uploaded to Google Drive: {created.get('name')} ({created.get('id')})")
+        # 1) Tạo zip backup (BytesIO)
+        buf = _create_backup_zip_bytes()
+        filename = f"backup-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.zip"
+
+        # 2) Ghi thêm ra thư mục local để không mất dữ liệu khi tắt máy
+        local_dir = (os.environ.get('BACKUP_LOCAL_DIR') or app.config.get('BACKUP_LOCAL_DIR') or '').strip()
+        if not local_dir:
+            # Mặc định lưu trong thư mục backups ở cùng cấp project
+            local_dir = os.path.abspath('backups')
+
+        try:
+            os.makedirs(local_dir, exist_ok=True)
+            local_path = os.path.join(local_dir, filename)
+            # BytesIO -> file
+            with open(local_path, 'wb') as f:
+                f.write(buf.getbuffer())
+            print(f"[BACKUP] Saved local backup: {local_path}")
+
+            # Giữ lại N bản gần nhất trên local (mặc định 7)
+            keep_n = int(os.environ.get('BACKUP_LOCAL_KEEP') or app.config.get('BACKUP_LOCAL_KEEP') or 7)
+            try:
+                backups = [
+                    os.path.join(local_dir, f) for f in os.listdir(local_dir)
+                    if f.startswith('backup-') and f.endswith('.zip')
+                ]
+                backups.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+                for old in backups[keep_n:]:
+                    try:
+                        os.remove(old)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        except Exception as e:
+            # Không fail backup nếu không ghi được local
+            print(f"[BACKUP] Cannot save local backup: {e}")
+
+        # 3) Upload lên Google Drive (nếu cấu hình đầy đủ)
+        try:
+            # Reuse cùng buffer đã tạo để không zip 2 lần
+            created = upload_backup_to_gdrive_from_buffer(buf, filename)
+            print(f"[BACKUP] Uploaded to Google Drive: {created.get('name')} ({created.get('id')})")
+        except Exception as e:
+            print(f"[BACKUP] Google Drive upload skipped/failed: {e}")
     except Exception as e:
         print(f"[BACKUP] Failed: {e}")
+
+def backup_if_db_changed():
+    """
+    Backup nhưng chỉ chạy khi DB có thay đổi (dựa trên mtime của file sqlite).
+    Điều này gần đúng yêu cầu "chỉ backup phần thay đổi".
+    """
+    try:
+        db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+        db_path = _sqlite_path_from_uri(db_uri)
+        if not db_path or not os.path.exists(db_path):
+            print("[BACKUP] Skip: clinic db not found")
+            return False
+
+        mwl_path = os.path.abspath('mwl.db')
+        clinic_mtime = int(os.path.getmtime(db_path))
+        mwl_mtime = int(os.path.getmtime(mwl_path)) if os.path.exists(mwl_path) and _is_sqlite_file(mwl_path) else 0
+
+        # Lưu mốc lần backup gần nhất
+        last_clinic_mtime = int(AppSetting.get_value('backup_last_clinic_mtime', 0) or 0)
+        last_mwl_mtime = int(AppSetting.get_value('backup_last_mwl_mtime', 0) or 0)
+
+        if clinic_mtime == last_clinic_mtime and mwl_mtime == last_mwl_mtime:
+            print("[BACKUP] Skip: DB unchanged")
+            return False
+
+        # Ghi nhận mốc thay đổi trước khi chạy backup (tránh chạy trùng nếu race)
+        AppSetting.set_value('backup_last_clinic_mtime', str(clinic_mtime))
+        AppSetting.set_value('backup_last_mwl_mtime', str(mwl_mtime))
+
+        # Reuse scheduled_daily_backup logic (local + optional gdrive)
+        scheduled_daily_backup()
+        return True
+    except Exception as e:
+        print(f"[BACKUP] backup_if_db_changed error: {e}")
+        return False
+
+def run_backup_loop_startup_and_every_2h():
+    """
+    Khi app bắt đầu chạy:
+    - Nếu chưa backup trong ngày hôm nay -> backup lần đầu.
+    - Sau đó backup mỗi 2 tiếng.
+    - Chỉ backup khi DB có thay đổi (mtime).
+    """
+    try:
+        import time as _time
+        with app.app_context():
+            last_day = AppSetting.get_value('backup_last_day_ymd', '') or ''
+            today_ymd = datetime.now().strftime('%Y-%m-%d')
+
+            # Backup lần đầu trong ngày nếu chưa
+            if last_day != today_ymd:
+                if backup_if_db_changed():
+                    AppSetting.set_value('backup_last_day_ymd', today_ymd)
+            else:
+                # Nếu đã backup hôm nay rồi thì không cần chạy lại ngay
+                pass
+
+        interval_sec = int(os.environ.get('BACKUP_EVERY_SECONDS') or app.config.get('BACKUP_EVERY_SECONDS') or (2 * 60 * 60))
+        interval_sec = max(60, interval_sec)
+
+        while True:
+            try:
+                with app.app_context():
+                    # Backup theo chu kỳ 2 tiếng (có điều kiện "DB changed")
+                    changed = backup_if_db_changed()
+                    if changed:
+                        # update day marker (dù vẫn có thể trong ngày)
+                        AppSetting.set_value('backup_last_day_ymd', datetime.now().strftime('%Y-%m-%d'))
+            except Exception as e:
+                print(f"[BACKUP] Loop error: {e}")
+            _time.sleep(interval_sec)
+    except Exception as e:
+        print(f"[BACKUP] run_backup_loop_startup_and_every_2h error: {e}")
 
 def send_security_email(subject, body, to_email=None):
     """Gửi email cảnh báo bảo mật, fallback sang in-console nếu chưa cấu hình SMTP."""
@@ -525,7 +849,16 @@ def add_security_headers(response):
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         # CSP cơ bản (có thể nới lỏng nếu trang cần inline script/style)
         if not response.headers.get('Content-Security-Policy'):
-            response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'"
+            # Cho phép nhúng Google Maps (iframe) trên các trang như clinic-maps.html
+            response.headers['Content-Security-Policy'] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; "
+                "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
+                "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; "
+                "img-src 'self' data: https:; "
+                "connect-src 'self'; "
+                "frame-src 'self' https://www.google.com https://maps.google.com https://www.google.com.vn https://www.youtube.com https://www.youtube-nocookie.com"
+            )
         response._security_headers_added = True
     return response
 
@@ -665,7 +998,7 @@ def api_login():
             'session_id': session_id,
             'is_new_device': False,
         }))
-        resp.set_cookie('auth_token', token, httponly=True, samesite='Lax', max_age=3600)
+        resp.set_cookie('auth_token', token, httponly=True, samesite='Lax', max_age=TOKEN_TTL_SECONDS)
         return resp
     except Exception as e:
         import traceback
@@ -676,6 +1009,22 @@ def api_login():
 @app.route('/api/logout', methods=['POST'])
 def api_logout():
     """POST /api/logout - Xóa cookie auth"""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else (request.cookies.get('auth_token') or auth_header)
+    if token:
+        _ensure_auth_session_table()
+        _maybe_cleanup_auth_sessions()
+        try:
+            row = AuthSession.query.filter_by(token=token).first()
+            if row:
+                row.revoked = True
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
+        try:
+            TOKENS.pop(token, None)
+        except Exception:
+            pass
     resp = jsonify({'message': 'Đã đăng xuất'})
     resp.set_cookie('auth_token', '', max_age=0, expires=0)
     return resp
@@ -759,7 +1108,7 @@ def api_login_verify_otp():
         'session_id': session_id,
         'is_new_device': False,
     }))
-    resp.set_cookie('auth_token', token, httponly=True, samesite='Lax', max_age=3600)
+    resp.set_cookie('auth_token', token, httponly=True, samesite='Lax', max_age=TOKEN_TTL_SECONDS)
     return resp
 
 @app.route('/api/login-resend-otp', methods=['POST'])
@@ -878,12 +1227,14 @@ def api_active_sessions():
 
     sessions = []
     now = datetime.utcnow()
-    for tkn, info in list(TOKENS.items()):
-        if info.get('revoked'):
-            continue
-        if info.get('expires_at') and info['expires_at'] < now:
-            continue
-        uid = info['user_id']
+    _ensure_auth_session_table()
+    _maybe_cleanup_auth_sessions()
+    db_rows = AuthSession.query.filter(
+        AuthSession.revoked == False,  # noqa: E712
+        AuthSession.expires_at >= now
+    ).order_by(AuthSession.last_seen.desc()).all()
+    for info in db_rows:
+        uid = info.user_id
         row = db.session.execute(
             text("SELECT username, full_name FROM user WHERE id = :uid"),
             {'uid': uid}
@@ -893,16 +1244,16 @@ def api_active_sessions():
         username, full_name = row
         roles = get_user_roles(uid)
         sessions.append({
-            'sessionId': info.get('session_id'),
+            'sessionId': info.session_id,
             'userId': uid,
             'username': username,
             'fullName': full_name or '',
             'roles': roles,
-            'ipAddress': info.get('ip_address') or '',
-            'userAgent': info.get('user_agent') or '',
-            'createdAt': info.get('created_at').isoformat() if info.get('created_at') else None,
-            'lastSeen': info.get('last_seen').isoformat() if info.get('last_seen') else None,
-            'isNewDevice': bool(info.get('is_new_device')),
+            'ipAddress': info.ip_address or '',
+            'userAgent': info.user_agent or '',
+            'createdAt': info.created_at.isoformat() if info.created_at else None,
+            'lastSeen': info.last_seen.isoformat() if info.last_seen else None,
+            'isNewDevice': bool(info.is_new_device),
         })
     return jsonify(sessions)
 
@@ -927,6 +1278,15 @@ def api_login_device_history():
         """),
         {}
     ).fetchall()
+
+    def _to_iso_or_none(v):
+        if not v:
+            return None
+        try:
+            return v.isoformat()
+        except Exception:
+            return str(v)
+
     for row in rows:
         rid, uid, ip, ua, created, approved, is_appr, username, full_name = row
         devices.append({
@@ -936,8 +1296,8 @@ def api_login_device_history():
             'fullName': full_name or '',
             'ipAddress': ip or '',
             'userAgent': (ua or '')[:200],
-            'createdAt': created.isoformat() if created else None,
-            'approvedAt': approved.isoformat() if approved else None,
+            'createdAt': _to_iso_or_none(created),
+            'approvedAt': _to_iso_or_none(approved),
             'isApproved': bool(is_appr),
         })
     return jsonify(devices)
@@ -978,6 +1338,192 @@ def api_backup():
     filename = f"backup-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.zip"
     return send_file(buf, mimetype='application/zip', as_attachment=True, download_name=filename)
 
+
+def _backup_local_dir():
+    local_dir = (os.environ.get('BACKUP_LOCAL_DIR') or app.config.get('BACKUP_LOCAL_DIR') or '').strip()
+    if not local_dir:
+        local_dir = os.path.abspath('backups')
+    return local_dir
+
+
+@app.route('/api/backup/list', methods=['GET'])
+def api_backup_list():
+    """Liệt kê file backup-*.zip trong thư mục backups (hoặc BACKUP_LOCAL_DIR). Chỉ manage_users."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    local_dir = _backup_local_dir()
+    try:
+        os.makedirs(local_dir, exist_ok=True)
+    except Exception as e:
+        return jsonify({'error': str(e), 'files': [], 'directory': local_dir}), 500
+
+    files = []
+    try:
+        for name in os.listdir(local_dir):
+            if not (name.startswith('backup-') and name.endswith('.zip')):
+                continue
+            path = os.path.join(local_dir, name)
+            if not os.path.isfile(path):
+                continue
+            st = os.stat(path)
+            files.append({
+                'name': name,
+                'size': st.st_size,
+                'modified_at': datetime.utcfromtimestamp(st.st_mtime).isoformat(timespec='seconds') + 'Z',
+            })
+        files.sort(key=lambda x: x['name'], reverse=True)
+    except Exception as e:
+        return jsonify({'error': str(e), 'files': [], 'directory': local_dir}), 500
+
+    return jsonify({'files': files, 'directory': local_dir})
+
+
+def _backup_disk_path_for_name(filename: str):
+    """Trả về đường dẫn tuyệt đối tới file backup-*.zip trong thư mục backup, hoặc None."""
+    safe = os.path.basename(filename or '')
+    if not (safe.startswith('backup-') and safe.endswith('.zip')):
+        return None
+    local_dir = os.path.abspath(_backup_local_dir())
+    path = os.path.join(local_dir, safe)
+    if not os.path.isfile(path):
+        return None
+    if os.path.commonpath([local_dir, os.path.abspath(path)]) != local_dir:
+        return None
+    return path
+
+
+def _restore_resolve_clinic_mwl_from_workdir(workdir: str, db_path: str):
+    cand_clinic = os.path.join(workdir, os.path.basename(db_path) or 'clinic.db')
+    if not os.path.exists(cand_clinic):
+        cand_clinic = os.path.join(workdir, 'clinic.db')
+    clinic_new = cand_clinic if os.path.exists(cand_clinic) else None
+    cand_mwl = os.path.join(workdir, 'mwl.db')
+    mwl_new = cand_mwl if os.path.exists(cand_mwl) else None
+    return clinic_new, mwl_new
+
+
+def _apply_restore_replace_dbs(clinic_new: str, mwl_new, cleanup_tmp):
+    """Thay clinic.db (và mwl.db nếu có), dọn thư mục tạm sau response, lên lịch khởi động lại process."""
+    db_path = _sqlite_path_from_uri(app.config.get('SQLALCHEMY_DATABASE_URI', ''))
+    ts = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+    try:
+        if os.path.exists(db_path):
+            shutil.copy2(db_path, f"{db_path}.bak.{ts}")
+    except Exception:
+        pass
+    try:
+        db.session.remove()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+    try:
+        db.engine.dispose()
+    except Exception:
+        pass
+    shutil.copy2(clinic_new, db_path)
+    if mwl_new and os.path.exists(mwl_new):
+        mwl_path = os.path.abspath('mwl.db')
+        try:
+            if os.path.exists(mwl_path):
+                shutil.copy2(mwl_path, f"{mwl_path}.bak.{ts}")
+        except Exception:
+            pass
+        shutil.copy2(mwl_new, mwl_path)
+
+    @after_this_request
+    def _after(resp):
+        cleanup_tmp()
+        return resp
+
+    try:
+        threading.Timer(1.0, lambda: os._exit(0)).start()
+    except Exception:
+        pass
+
+    return jsonify({'message': 'Đã khôi phục dữ liệu. Hệ thống sẽ tự khởi động lại trong vài giây.'})
+
+
+@app.route('/api/backup/file/<path:filename>', methods=['GET', 'DELETE'])
+def api_backup_download_file(filename):
+    """Tải hoặc xóa file backup-*.zip đã lưu trên đĩa. Chỉ manage_users."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    safe = os.path.basename(filename or '')
+    if not (safe.startswith('backup-') and safe.endswith('.zip')):
+        return jsonify({'error': 'Tên file không hợp lệ'}), 400
+
+    local_dir = os.path.abspath(_backup_local_dir())
+    path = os.path.join(local_dir, safe)
+    if not os.path.isfile(path):
+        return jsonify({'error': 'Không tìm thấy file'}), 404
+    if os.path.commonpath([local_dir, os.path.abspath(path)]) != local_dir:
+        return jsonify({'error': 'Đường dẫn không hợp lệ'}), 400
+
+    if request.method == 'DELETE':
+        try:
+            os.remove(path)
+            return jsonify({'message': 'Đã xóa file backup.'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    return send_file(path, mimetype='application/zip', as_attachment=True, download_name=safe)
+
+
+@app.route('/api/restore/from-backup', methods=['POST'])
+def api_restore_from_backup():
+    """Khôi phục từ file backup-*.zip đã có sẵn trong thư mục backups. Chỉ manage_users."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get('filename') or request.form.get('filename') or '').strip()
+    zip_path = _backup_disk_path_for_name(name)
+    if not zip_path:
+        return jsonify({'error': 'Không tìm thấy file backup hoặc tên không hợp lệ'}), 404
+
+    db_path = _sqlite_path_from_uri(app.config.get('SQLALCHEMY_DATABASE_URI', ''))
+    if not db_path:
+        return jsonify({'error': 'CSDL hiện tại không phải SQLite file, không hỗ trợ khôi phục tự động'}), 500
+
+    tmpdir = tempfile.mkdtemp(prefix='restore_')
+
+    def _cleanup_tmp():
+        try:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        except Exception:
+            pass
+
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            zf.extractall(tmpdir)
+        clinic_new, mwl_new = _restore_resolve_clinic_mwl_from_workdir(tmpdir, db_path)
+        if not clinic_new or not os.path.exists(clinic_new):
+            _cleanup_tmp()
+            return jsonify({'error': 'Không tìm thấy file clinic.db trong gói khôi phục'}), 400
+        if not _is_sqlite_file(clinic_new):
+            _cleanup_tmp()
+            return jsonify({'error': 'File khôi phục không phải SQLite hợp lệ'}), 400
+        return _apply_restore_replace_dbs(clinic_new, mwl_new, _cleanup_tmp)
+    except zipfile.BadZipFile:
+        _cleanup_tmp()
+        return jsonify({'error': 'File zip không hợp lệ'}), 400
+    except Exception as e:
+        _cleanup_tmp()
+        return jsonify({'error': f'Lỗi khôi phục dữ liệu: {str(e)}'}), 500
+
+
 @app.route('/api/restore', methods=['POST'])
 def api_restore():
     """Khôi phục dữ liệu từ file .db hoặc .zip. Chỉ admin / manage_users.
@@ -1000,7 +1546,6 @@ def api_restore():
         return jsonify({'error': 'CSDL hiện tại không phải SQLite file, không hỗ trợ khôi phục tự động'}), 500
 
     ext = os.path.splitext(f.filename.lower())[1]
-    ts = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
     tmpdir = tempfile.mkdtemp(prefix='restore_')
 
     def _cleanup_tmp():
@@ -1018,72 +1563,22 @@ def api_restore():
             f.save(zip_path)
             with zipfile.ZipFile(zip_path, 'r') as zf:
                 zf.extractall(tmpdir)
-            # Ưu tiên file đúng tên
-            cand_clinic = os.path.join(tmpdir, os.path.basename(db_path) or 'clinic.db')
-            if not os.path.exists(cand_clinic):
-                cand_clinic = os.path.join(tmpdir, 'clinic.db')
-            if os.path.exists(cand_clinic):
-                clinic_new = cand_clinic
-            cand_mwl = os.path.join(tmpdir, 'mwl.db')
-            if os.path.exists(cand_mwl):
-                mwl_new = cand_mwl
+            clinic_new, mwl_new = _restore_resolve_clinic_mwl_from_workdir(tmpdir, db_path)
         elif ext == '.db':
             clinic_new = os.path.join(tmpdir, 'clinic.db')
             f.save(clinic_new)
         else:
+            _cleanup_tmp()
             return jsonify({'error': 'Chỉ hỗ trợ file .db hoặc .zip'}), 400
 
         if not clinic_new or not os.path.exists(clinic_new):
+            _cleanup_tmp()
             return jsonify({'error': 'Không tìm thấy file clinic.db trong gói khôi phục'}), 400
         if not _is_sqlite_file(clinic_new):
+            _cleanup_tmp()
             return jsonify({'error': 'File khôi phục không phải SQLite hợp lệ'}), 400
 
-        # Backup file hiện tại trước khi thay
-        try:
-            if os.path.exists(db_path):
-                shutil.copy2(db_path, f"{db_path}.bak.{ts}")
-        except Exception:
-            pass
-
-        # Đóng kết nối DB trước khi replace
-        try:
-            db.session.remove()
-        except Exception:
-            try:
-                db.session.rollback()
-            except Exception:
-                pass
-        try:
-            db.engine.dispose()
-        except Exception:
-            pass
-
-        # Dùng shutil.copy2 thay os.replace để hỗ trợ copy giữa các ổ đĩa (Windows C: <-> D:)
-        shutil.copy2(clinic_new, db_path)
-
-        # Nếu có mwl.db trong gói khôi phục thì thay luôn
-        if mwl_new and os.path.exists(mwl_new):
-            mwl_path = os.path.abspath('mwl.db')
-            try:
-                if os.path.exists(mwl_path):
-                    shutil.copy2(mwl_path, f"{mwl_path}.bak.{ts}")
-            except Exception:
-                pass
-            shutil.copy2(mwl_new, mwl_path)
-
-        # Dọn tmp sau response
-        @after_this_request
-        def _after(resp):
-            _cleanup_tmp()
-            return resp
-
-        # Tự khởi động lại process để app load DB mới (Render/WSGI thường tự restart)
-        try:
-            threading.Timer(1.0, lambda: os._exit(0)).start()
-        except Exception:
-            pass
-
-        return jsonify({'message': 'Đã khôi phục dữ liệu. Hệ thống sẽ tự khởi động lại trong vài giây.'})
+        return _apply_restore_replace_dbs(clinic_new, mwl_new, _cleanup_tmp)
     except Exception as e:
         _cleanup_tmp()
         return jsonify({'error': f'Lỗi khôi phục dữ liệu: {str(e)}'}), 500
@@ -1106,14 +1601,84 @@ def api_list_permissions():
                 'manage_diagnosis',
                 'view_reports',
                 'system_config',
-                'manage_voluson_sync'
+                'manage_Maysieuam_sync'
             ]
         return jsonify({'permissions': perms})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# API: Đồng bộ Worklist từ clinic.db sang mwl.db (DICOM)
-@app.route('/api/mwl-sync', methods=['POST'])
+@app.route('/api/permission-pages', methods=['GET'])
+@require_permission('system_config')
+def api_get_permission_pages(*args, **kwargs):
+    mapping = _load_permission_pages_mapping()
+    return jsonify({
+        'mapping': mapping,
+        'availablePages': _available_staff_pages()
+    })
+
+@app.route('/api/permission-pages', methods=['PUT'])
+@require_permission('system_config')
+def api_put_permission_pages(*args, **kwargs):
+    data = request.get_json(silent=True) or {}
+    mapping = data.get('mapping') if isinstance(data, dict) else None
+    if not isinstance(mapping, dict):
+        return jsonify({'error': 'mapping không hợp lệ'}), 400
+    allowed_pages = set(_available_staff_pages())
+    cleaned = {}
+    for k, v in mapping.items():
+        if not isinstance(k, str):
+            continue
+        if not isinstance(v, list):
+            continue
+        pages = []
+        for p in v:
+            p = str(p)
+            if p in allowed_pages:
+                pages.append(p)
+        cleaned[k] = sorted(set(pages))
+    _save_permission_pages_mapping(cleaned)
+    return jsonify({'success': True, 'mapping': cleaned})
+
+# API: trả về quyền hiện tại của user (để UI ẩn/hiện theo menu/trang)
+@app.route('/api/me', methods=['GET'])
+def api_me():
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    roles = get_user_roles(user_id)
+
+    # permissions for this user
+    ensure_role_permission_table()
+    all_perm_rows = db.session.execute(text("SELECT DISTINCT permission_key FROM role_permission")).fetchall()
+    all_perms = sorted({r[0] for r in all_perm_rows if r and r[0]})
+
+    if 'admin' in roles:
+        perms = all_perms or [
+            'manage_users','manage_worklist','manage_appointments','view_patients','manage_patients',
+            'manage_diagnosis','view_reports','system_config','manage_Maysieuam_sync'
+        ]
+    else:
+        stmt = text("SELECT DISTINCT permission_key FROM role_permission WHERE role_name IN :roles").bindparams(bindparam("roles", expanding=True))
+        rows = db.session.execute(stmt, {'roles': list(roles)}).fetchall() if roles else []
+        perms = sorted({r[0] for r in rows if r and r[0]})
+
+    allowed_pages = allowed_pages_for_user(user_id)
+
+    return jsonify({
+        'user': user.to_dict(),
+        'roles': roles,
+        'permissions': perms,
+        'allowedPages': allowed_pages
+    })
+
+# API cũ (giữ tương thích thủ công), tránh trùng với route /api/mwl-sync mới bên dưới
+@app.route('/api/mwl-sync-legacy', methods=['POST'])
 @require_permission('manage_worklist')
 def api_mwl_sync(*args, **kwargs):
     """Đồng bộ worklist từ clinic.db sang mwl.db"""
@@ -1170,7 +1735,8 @@ ROLE_ALLOWED_PAGES = {
 # Trang bệnh nhân truy cập: booking.html, schedule.html (đặt lịch); index.html (trang chủ); pregnancy-utilities (tiện ích)
 # users.html: trang đăng nhập nhân viên (admin, bác sĩ, điều dưỡng)
 PUBLIC_PAGES = set([
-    'index.html', 'booking.html', 'schedule.html', 'users.html', 'pregnancy-utilities.html', 'links.html'
+    'index.html', 'booking.html', 'schedule.html', 'users.html', 'pregnancy-utilities.html', 'links.html',
+    'qr-display.html', 'tv-display-launcher.html'
 ])
 
 # Trang yêu cầu đăng nhập (admin, bác sĩ, điều dưỡng)
@@ -1180,12 +1746,13 @@ STAFF_ONLY_PAGES = set([
     'clinical-form-templates.html', 'medical-charts.html', 'treatment-plans.html',
     'doctor-schedule.html', 'checkin-admin.html', 'qr-checkin.html',
     'home-content.html', 'clinical-services-admin.html',
-    'voluson-sync-admin.html', 'ai-assistant-admin.html', 'prescription-management.html',
+    'ai-assistant-admin.html', 'prescription-management.html',
     'disease-tests.html', 'test-meanings.html', 'ultrasound-analysis.html',
     'ultrasound-general.html', 'ctg-analysis.html', 'cervical-examination-analysis.html',
     'mom-apps.html', 'appointment-details.html', 'lab-pricelist.html',
     'staff-training.html', 'improved-lab-result-template.html', 'improved-lab-request-template.html',
     'links.html', 'clinic-maps.html', 'pregnancy-utilities.html',
+    'staff-work-calendar.html', 'staff-attendance.html',
 ])
 
 DEFAULT_CLINICAL_SERVICE_GROUPS = [
@@ -1232,6 +1799,68 @@ def has_permission(user_id, permission_key):
     stmt = text("SELECT 1 FROM role_permission WHERE role_name IN :roles AND permission_key = :perm LIMIT 1").bindparams(bindparam("roles", expanding=True))
     rows = db.session.execute(stmt, {'roles': list(roles), 'perm': permission_key}).fetchone()
     return bool(rows)
+
+# ===== Permission -> Pages (server-side) =====
+PERMISSION_PAGES_KEY = 'permission_pages_v1'
+
+def _load_permission_pages_mapping():
+    """Return dict permission_key -> list[page]. Stored in AppSetting as JSON."""
+    try:
+        raw = AppSetting.get_value(PERMISSION_PAGES_KEY, '') or ''
+        if not raw:
+            return {}
+        obj = json.loads(raw)
+        if isinstance(obj, dict):
+            out = {}
+            for k, v in obj.items():
+                if not isinstance(k, str):
+                    continue
+                if isinstance(v, list):
+                    out[k] = [str(p) for p in v if p]
+            return out
+    except Exception:
+        pass
+    return {}
+
+def _save_permission_pages_mapping(mapping: dict):
+    try:
+        AppSetting.set_value(PERMISSION_PAGES_KEY, json.dumps(mapping or {}, ensure_ascii=False))
+    except Exception:
+        # best effort
+        pass
+
+def _available_staff_pages():
+    # Only meaningful for staff pages; public pages are always accessible.
+    try:
+        return sorted(set(list(STAFF_ONLY_PAGES)))
+    except Exception:
+        return []
+
+def allowed_pages_for_user(user_id: int):
+    """Compute allowed pages for a user from permission->pages mapping (fallback: ROLE_ALLOWED_PAGES)."""
+    roles = get_user_roles(user_id)
+    if 'admin' in roles:
+        return ['*']
+
+    mapping = _load_permission_pages_mapping()
+    if mapping:
+        # union pages based on permissions
+        ensure_role_permission_table()
+        stmt = text("SELECT DISTINCT permission_key FROM role_permission WHERE role_name IN :roles").bindparams(bindparam("roles", expanding=True))
+        rows = db.session.execute(stmt, {'roles': list(roles)}).fetchall() if roles else []
+        perms = {r[0] for r in rows if r and r[0]}
+        pages = set()
+        for p in perms:
+            for page in mapping.get(p, []) or []:
+                pages.add(page)
+        return sorted(pages)
+
+    # Fallback to legacy role->pages
+    allowed = set()
+    for role in roles:
+        for p in ROLE_ALLOWED_PAGES.get(role, []):
+            allowed.add(p)
+    return sorted(allowed)
 
 # Database Models
 class Role(db.Model):
@@ -1285,6 +1914,20 @@ class TrustedLoginIP(db.Model):
     is_approved = db.Column(db.Boolean, default=False)
     approval_token = db.Column(db.String(64), unique=True, nullable=False)
 
+class AuthSession(db.Model):
+    """Phiên đăng nhập bền vững, lưu DB để không mất khi restart server."""
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    session_id = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    ip_address = db.Column(db.String(45))
+    user_agent = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    last_seen = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False, index=True)
+    revoked = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    is_new_device = db.Column(db.Boolean, default=False, nullable=False)
+
 class Patient(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     patient_id = db.Column(db.String(20), unique=True)  # PID (Patient ID) - unique identifier
@@ -1301,12 +1944,49 @@ class Appointment(db.Model):
     service_type = db.Column(db.String(100), nullable=False)
     status = db.Column(db.String(20), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # ===== Sync giữa ONLINE (Render) và LOCAL (phòng khám) =====
+    # global_id dùng để upsert giữa 2 DB khác nhau.
+    global_id = db.Column(db.String(36), unique=True, index=True)
+    source = db.Column(db.String(20), default='local')  # local | online
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    version = db.Column(db.Integer, default=1)
+    last_modified_by = db.Column(db.String(20), default='clinic')  # clinic | patient | system
     # Optional: assigned doctor for clinical forms
     doctor_name = db.Column(db.String(100), default='PK Đại Anh')
-    # Voluson sync fields
-    voluson_synced = db.Column(db.Boolean, default=False)
-    voluson_sync_time = db.Column(db.DateTime)
+    # Optional obstetric field (yyyy-mm-dd)
+    expected_delivery_date = db.Column(db.Date)
+    # Ultrasound machine sync fields
+    Maysieuam_synced = db.Column(db.Boolean, default=False)
+    Maysieuam_sync_time = db.Column(db.DateTime)
     patient = db.relationship('Patient', backref=db.backref('appointments', lazy=True))
+
+class AppointmentChangeRequest(db.Model):
+    """Yêu cầu đổi giờ / hủy do bệnh nhân (phòng khám sẽ duyệt)."""
+    id = db.Column(db.Integer, primary_key=True)
+    request_id = db.Column(db.String(36), unique=True, index=True, nullable=False)
+    appointment_id = db.Column(db.Integer, db.ForeignKey('appointment.id'), nullable=False)
+    appointment_global_id = db.Column(db.String(36), index=True)
+    request_type = db.Column(db.String(20), nullable=False)  # reschedule | cancel
+    requested_date = db.Column(db.String(10))  # yyyy-mm-dd
+    requested_time = db.Column(db.String(5))   # HH:MM
+    status = db.Column(db.String(20), default='pending')  # pending | approved | rejected
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    decided_at = db.Column(db.DateTime)
+    decided_by = db.Column(db.String(20))
+    note = db.Column(db.Text)
+
+    appointment = db.relationship('Appointment', backref=db.backref('change_requests', lazy=True))
+
+class SyncEvent(db.Model):
+    """Event log để đồng bộ online <-> local (append-only)."""
+    id = db.Column(db.Integer, primary_key=True)  # seq tăng dần (SQLite autoincrement)
+    event_id = db.Column(db.String(36), unique=True, index=True, nullable=False)  # UUID
+    entity = db.Column(db.String(30), nullable=False)   # appointment | change_request
+    global_id = db.Column(db.String(36), index=True)    # appointment.global_id
+    event_type = db.Column(db.String(50), nullable=False) # appointment.created / updated / ...
+    payload = db.Column(db.Text, default='{}')          # JSON string
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 class Service(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -1385,6 +2065,13 @@ class ClinicalService(db.Model):
     appointment_id = db.Column(db.Integer, db.ForeignKey('appointment.id'), nullable=False)
     service_id = db.Column(db.Integer, db.ForeignKey('clinical_service_setting.id'), nullable=False)
     status = db.Column(db.String(20), default='pending')  # pending, completed
+    # Ultrasound/MWL per-order sync tracking (for each ultrasound indication)
+    Maysieuam_status = db.Column(db.String(20), default='')  # '', queued, syncing, synced, failed
+    Maysieuam_retry_count = db.Column(db.Integer, default=0)
+    Maysieuam_last_error = db.Column(db.Text)
+    Maysieuam_last_attempt = db.Column(db.DateTime)
+    Maysieuam_synced_at = db.Column(db.DateTime)
+    Maysieuam_accession = db.Column(db.String(64))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     appointment = db.relationship('Appointment', backref=db.backref('clinical_services', lazy=True))
     service = db.relationship('ClinicalServiceSetting', backref=db.backref('clinical_services', lazy=True))
@@ -1538,6 +2225,36 @@ def ensure_clinical_service_setting_columns():
         db.session.rollback()
         # Best-effort migration; ignore if cannot alter (e.g., already exists or locked)
 
+def ensure_clinical_service_sync_columns():
+    """Best-effort migration: thêm cột theo dõi sync máy siêu âm trên clinical_service (SQLite)."""
+    try:
+        # Ensure tables exist
+        try:
+            db.create_all()
+        except Exception:
+            pass
+        result = db.session.execute(text('PRAGMA table_info(clinical_service)'))
+        columns = [row[1] for row in result.fetchall()]
+        alter_sql = []
+        if 'Maysieuam_status' not in columns:
+            alter_sql.append("ALTER TABLE clinical_service ADD COLUMN Maysieuam_status VARCHAR(20) DEFAULT ''")
+        if 'Maysieuam_retry_count' not in columns:
+            alter_sql.append("ALTER TABLE clinical_service ADD COLUMN Maysieuam_retry_count INTEGER DEFAULT 0")
+        if 'Maysieuam_last_error' not in columns:
+            alter_sql.append("ALTER TABLE clinical_service ADD COLUMN Maysieuam_last_error TEXT")
+        if 'Maysieuam_last_attempt' not in columns:
+            alter_sql.append("ALTER TABLE clinical_service ADD COLUMN Maysieuam_last_attempt DATETIME")
+        if 'Maysieuam_synced_at' not in columns:
+            alter_sql.append("ALTER TABLE clinical_service ADD COLUMN Maysieuam_synced_at DATETIME")
+        if 'Maysieuam_accession' not in columns:
+            alter_sql.append("ALTER TABLE clinical_service ADD COLUMN Maysieuam_accession VARCHAR(64)")
+        for sql in alter_sql:
+            db.session.execute(text(sql))
+        if alter_sql:
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
 def ensure_work_schedule_columns():
     """Ensure new columns exist on work_schedule: is_locked (bool), slot_minutes (int)."""
     try:
@@ -1598,6 +2315,178 @@ def ensure_appointment_doctor_column():
             db.session.commit()
     except Exception:
         db.session.rollback()
+
+def ensure_appointment_expected_delivery_date_column():
+    """Ensure Appointment table has expected_delivery_date column."""
+    try:
+        result = db.session.execute(text('PRAGMA table_info(appointment)'))
+        columns = [row[1] for row in result.fetchall()]
+        if 'expected_delivery_date' not in columns:
+            db.session.execute(text("ALTER TABLE appointment ADD COLUMN expected_delivery_date DATE"))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+def ensure_appointment_sync_columns():
+    """Best-effort migration: thêm các cột phục vụ đồng bộ online/local cho bảng appointment (SQLite)."""
+    try:
+        # Ensure tables exist
+        try:
+            db.create_all()
+        except Exception:
+            pass
+
+        result = db.session.execute(text('PRAGMA table_info(appointment)'))
+        columns = [row[1] for row in result.fetchall()]
+        alter_sql = []
+
+        if 'global_id' not in columns:
+            alter_sql.append("ALTER TABLE appointment ADD COLUMN global_id VARCHAR(36)")
+        if 'source' not in columns:
+            alter_sql.append("ALTER TABLE appointment ADD COLUMN source VARCHAR(20) DEFAULT 'local'")
+        if 'updated_at' not in columns:
+            alter_sql.append("ALTER TABLE appointment ADD COLUMN updated_at DATETIME")
+        if 'version' not in columns:
+            alter_sql.append("ALTER TABLE appointment ADD COLUMN version INTEGER DEFAULT 1")
+        if 'last_modified_by' not in columns:
+            alter_sql.append("ALTER TABLE appointment ADD COLUMN last_modified_by VARCHAR(20) DEFAULT 'clinic'")
+        if 'Maysieuam_synced' not in columns:
+            alter_sql.append("ALTER TABLE appointment ADD COLUMN Maysieuam_synced BOOLEAN DEFAULT 0")
+        if 'Maysieuam_sync_time' not in columns:
+            alter_sql.append("ALTER TABLE appointment ADD COLUMN Maysieuam_sync_time DATETIME")
+        if 'expected_delivery_date' not in columns:
+            alter_sql.append("ALTER TABLE appointment ADD COLUMN expected_delivery_date DATE")
+
+        for sql in alter_sql:
+            db.session.execute(text(sql))
+
+        # Unique index for global_id
+        try:
+            db.session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_appointment_global_id ON appointment(global_id)"))
+        except Exception:
+            pass
+
+        if alter_sql:
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+    # Keep AppointmentChangeRequest schema compatible as the two features are coupled.
+    ensure_appointment_change_request_columns()
+
+def ensure_appointment_change_request_columns():
+    """Best-effort migration cho bảng appointment_change_request trên DB cũ."""
+    try:
+        try:
+            db.create_all()
+        except Exception:
+            pass
+        result = db.session.execute(text('PRAGMA table_info(appointment_change_request)'))
+        columns = [row[1] for row in result.fetchall()]
+        alter_sql = []
+        if 'updated_at' not in columns:
+            alter_sql.append("ALTER TABLE appointment_change_request ADD COLUMN updated_at DATETIME")
+        if 'decided_at' not in columns:
+            alter_sql.append("ALTER TABLE appointment_change_request ADD COLUMN decided_at DATETIME")
+        if 'decided_by' not in columns:
+            alter_sql.append("ALTER TABLE appointment_change_request ADD COLUMN decided_by VARCHAR(20)")
+        if 'note' not in columns:
+            alter_sql.append("ALTER TABLE appointment_change_request ADD COLUMN note TEXT")
+
+        for sql in alter_sql:
+            db.session.execute(text(sql))
+        if alter_sql:
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+def _sync_token_ok(req) -> bool:
+    expected = (os.environ.get('SYNC_TOKEN') or app.config.get('SYNC_TOKEN') or '').strip()
+    if not expected:
+        return False
+    got = (req.headers.get('X-Sync-Token') or '').strip()
+    return hmac.compare_digest(got.encode('utf-8'), expected.encode('utf-8'))
+
+def _emit_sync_event(entity: str, global_id: str, event_type: str, payload_obj: dict) -> None:
+    """Ghi event để đồng bộ (best-effort)."""
+    if not global_id:
+        return
+    try:
+        ev = SyncEvent(
+            event_id=str(uuid.uuid4()),
+            entity=entity,
+            global_id=global_id,
+            event_type=event_type,
+            payload=json.dumps(payload_obj or {}, ensure_ascii=False),
+        )
+        db.session.add(ev)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+def _http_json(method: str, url: str, headers: dict = None, body_obj=None, timeout_s: int = 15):
+    """Gọi HTTP JSON dùng urllib (không phụ thuộc requests)."""
+    req_headers = {'Content-Type': 'application/json'}
+    if headers:
+        req_headers.update(headers)
+    data = None
+    if body_obj is not None:
+        data = json.dumps(body_obj, ensure_ascii=False).encode('utf-8')
+    req = urllib.request.Request(url=url, data=data, headers=req_headers, method=method.upper())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+            raw = resp.read()
+            text_body = raw.decode('utf-8', errors='replace') if raw else ''
+            if not text_body:
+                return resp.getcode(), {}
+            try:
+                return resp.getcode(), json.loads(text_body)
+            except Exception:
+                return resp.getcode(), {'raw': text_body}
+    except urllib.error.HTTPError as e:
+        raw = e.read()
+        text_body = raw.decode('utf-8', errors='replace') if raw else ''
+        try:
+            return e.code, json.loads(text_body) if text_body else {}
+        except Exception:
+            return e.code, {'raw': text_body}
+    except Exception as e:
+        return 0, {'error': str(e)}
+
+def _notify_new_appointment_via_zalo_webhook(appointment, patient) -> bool:
+    """Gửi thông báo đăng ký khám mới qua webhook trung gian Zalo (nếu cấu hình)."""
+    webhook_url = (os.environ.get('ZALO_NOTIFY_WEBHOOK_URL') or app.config.get('ZALO_NOTIFY_WEBHOOK_URL') or '').strip()
+    if not webhook_url:
+        return False
+    try:
+        appt_time = appointment.appointment_date.strftime('%H:%M %d/%m/%Y') if appointment and appointment.appointment_date else ''
+        payload = {
+            'event': 'new_appointment',
+            'channel': 'zalo',
+            'appointment_id': appointment.id if appointment else None,
+            'patient_name': patient.name if patient else '',
+            'patient_phone': patient.phone if patient else '',
+            'patient_address': patient.address if patient else '',
+            'service_type': appointment.service_type if appointment else '',
+            'doctor_name': getattr(appointment, 'doctor_name', '') if appointment else '',
+            'appointment_time': appt_time,
+            'message': (
+                f"Co phieu dang ky kham moi\n"
+                f"Benh nhan: {(patient.name if patient else '')}\n"
+                f"SDT: {(patient.phone if patient else '')}\n"
+                f"Gio hen: {appt_time}\n"
+                f"Dich vu: {(appointment.service_type if appointment else '')}\n"
+                f"Bac si: {(getattr(appointment, 'doctor_name', '') if appointment else '')}"
+            )
+        }
+        status_code, resp = _http_json('POST', webhook_url, body_obj=payload, timeout_s=10)
+        ok = 200 <= int(status_code or 0) < 300
+        if not ok:
+            print(f"[ZALO_NOTIFY] Webhook failed: status={status_code}, resp={resp}")
+        return ok
+    except Exception as e:
+        print(f"[ZALO_NOTIFY] Error: {e}")
+        return False
+
 
 def ensure_lab_order_columns():
     """Ensure lab_order table has appointment_id and clinical_service_id columns for backward compatibility."""
@@ -1776,6 +2665,21 @@ class WorkSchedule(db.Model):
     is_closed = db.Column(db.Boolean, default=False)  # nghỉ làm việc
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
+class StaffAttendance(db.Model):
+    """Chấm công đi làm theo nhân viên và theo ngày."""
+    id = db.Column(db.Integer, primary_key=True)
+    staff_name = db.Column(db.String(100), nullable=False)
+    date = db.Column(db.String(10), nullable=False)  # yyyy-mm-dd
+    check_in_time = db.Column(db.String(5))   # HH:MM
+    check_out_time = db.Column(db.String(5))  # HH:MM
+    note = db.Column(db.Text, default='')
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('staff_name', 'date', name='uix_staff_attendance_staff_date'),
+    )
+
 # Models for Clinical Service Packages
 class ClinicalServicePackage(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -1929,40 +2833,146 @@ if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Helper function to generate unique Patient ID (PID)
-def generate_patient_id(phone):
+# Tiền tố mã bệnh nhân (Bệnh nhân), tách biệt hóa đơn / xét nghiệm
+PATIENT_PID_PREFIX = 'BN'
+PATIENT_PID_SUFFIX_DIGITS = 5
+
+
+def generate_patient_id(phone=None):
     """
-    Generate a unique patient_id based on phone number.
-    Format: phone_number + suffix_number if duplicate exists
-    Example: '0987654321', '09876543211', '09876543212', ...
+    Sinh mã bệnh nhân (PID): [Tiền tố BN] + [2 số cuối năm] + [5 chữ số thứ tự].
+    Ví dụ năm 2026: BN2600001, BN2600002, ...
+
+    Tham số ``phone`` giữ để tương thích các lời gọi cũ; không dùng trong quy tắc mã mới.
+    Trường hợp tạo đồng thời nhiều bệnh nhân: dùng ``_create_patient_with_fresh_bn_pid`` (savepoint + retry).
     """
-    # Base PID is the phone number itself
-    base_pid = phone
-    
-    # Check if base PID already exists
-    existing_patient = Patient.query.filter_by(patient_id=base_pid).first()
-    if not existing_patient:
-        return base_pid
-    
-    # If exists, try with suffix starting from 1
-    suffix = 1
-    while True:
-        new_pid = f"{phone}{suffix}"
-        existing_patient = Patient.query.filter_by(patient_id=new_pid).first()
-        if not existing_patient:
-            return new_pid
-        suffix += 1
-        # Safety check to prevent infinite loop
-        if suffix > 999:
-            # Fallback: use timestamp if somehow all combinations are taken
-            return f"{phone}_{int(datetime.utcnow().timestamp())}"
+    now = datetime.now()
+    yy = now.strftime('%y')
+    prefix = f'{PATIENT_PID_PREFIX}{yy}'
+    total_len = len(prefix) + PATIENT_PID_SUFFIX_DIGITS
+    # SQLite substr bắt đầu từ 1: phần số sau prefix (5 ký tự)
+    start_pos = len(prefix) + 1
+    max_seq = (
+        db.session.query(
+            func.max(cast(func.substr(Patient.patient_id, start_pos, PATIENT_PID_SUFFIX_DIGITS), Integer))
+        )
+        .filter(
+            Patient.patient_id.like(prefix + '%'),
+            func.length(Patient.patient_id) == total_len,
+        )
+        .scalar()
+    )
+    max_seq = int(max_seq) if max_seq is not None else 0
+    next_seq = max_seq + 1
+    max_allowed = 10 ** PATIENT_PID_SUFFIX_DIGITS - 1
+    if next_seq > max_allowed:
+        raise ValueError(f'Đã hết dải mã PID trong năm (tối đa {max_allowed} mã).')
+    return f'{prefix}{next_seq:0{PATIENT_PID_SUFFIX_DIGITS}d}'
+
+
+def normalize_patient_display_name(name):
+    """Chuẩn hóa họ tên bệnh nhân khi lưu: trim + in hoa (Unicode, tiếng Việt)."""
+    if name is None:
+        return ''
+    return str(name).strip().upper()
+
+
+def _find_patient_by_phone_name_dob(phone, name_norm, date_of_birth):
+    """Một SĐT có thể có nhiều Patient; khớp theo SĐT + tên (đã chuẩn hóa) + ngày sinh."""
+    if not phone or not name_norm or not date_of_birth:
+        return None
+    return (
+        Patient.query.filter(
+            Patient.phone == phone,
+            Patient.name == name_norm,
+            Patient.date_of_birth == date_of_birth,
+        )
+        .order_by(Patient.id.desc())
+        .first()
+    )
+
+
+def _resolve_booking_patient(data, dob_date):
+    """
+    Gắn Patient cho đăng ký khám: ưu tiên patient_id (cùng SĐT), sau đó khớp tên+NS,
+    nếu không có thì tạo hồ sơ mới (cùng SĐT được phép).
+    Cập nhật name/address/dob từ form lên bản ghi đã chọn.
+    """
+    phone = (data.get('phone') or '').strip()
+    storage_name = normalize_patient_display_name(data.get('name') or '')
+    addr = data.get('address')
+    patient = None
+    raw_pid = data.get('patient_id')
+    if raw_pid is not None and raw_pid != '':
+        try:
+            want_id = int(raw_pid)
+        except (TypeError, ValueError):
+            want_id = None
+        if want_id:
+            cand = Patient.query.get(want_id)
+            if cand and (cand.phone or '').strip() == phone:
+                patient = cand
+    if not patient:
+        patient = _find_patient_by_phone_name_dob(phone, storage_name, dob_date)
+    if patient:
+        patient.name = storage_name
+        patient.address = addr
+        patient.date_of_birth = dob_date
+        return patient
+    return _create_patient_with_fresh_bn_pid(
+        name=storage_name,
+        phone=phone,
+        address=addr,
+        date_of_birth=dob_date,
+    )
+
+
+def _sync_patient_payload(patient):
+    """Payload bệnh nhân kèm mã PID / id nội bộ để đồng bộ đa hồ sơ cùng SĐT."""
+    if not patient:
+        return {}
+    return {
+        'name': patient.name,
+        'phone': patient.phone,
+        'address': patient.address,
+        'date_of_birth': patient.date_of_birth.isoformat() if patient.date_of_birth else None,
+        'patient_pid': patient.patient_id or '',
+        'patient_internal_id': patient.id,
+    }
+
+
+def _create_patient_with_fresh_bn_pid(*, name, phone, address=None, date_of_birth=None):
+    """Tạo Patient mới với patient_id dạng BNyy#####; retry khi trùng PID (hiếm, đồng thời)."""
+    name = normalize_patient_display_name(name)
+    last_exc = None
+    for _ in range(32):
+        try:
+            with db.session.begin_nested():
+                pid = generate_patient_id(phone)
+                patient = Patient(
+                    patient_id=pid,
+                    name=name or '',
+                    phone=phone,
+                    address=address,
+                    date_of_birth=date_of_birth,
+                )
+                db.session.add(patient)
+                db.session.flush()
+            return patient
+        except IntegrityError as ex:
+            last_exc = ex
+            continue
+    if last_exc:
+        raise last_exc
+    raise RuntimeError('Không tạo được mã bệnh nhân (PID).')
 
 # ============ App Settings (Key-Value) ============
 class AppSetting(db.Model):
     __tablename__ = 'app_settings'
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(100), unique=True, nullable=False)
-    value = db.Column(db.String(500))
+    # TEXT: lưu JSON cấu hình siêu âm + danh sách phát nhiều file (không giới hạn 500 ký tự)
+    value = db.Column(db.Text)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     @staticmethod
@@ -1979,6 +2989,74 @@ class AppSetting(db.Model):
             setting = AppSetting(key=key, value=value)
             db.session.add(setting)
         db.session.commit()
+
+_APP_SETTINGS_VALUE_TEXT_MIGRATED = False
+
+
+def ensure_app_settings_value_text_column():
+    """Nâng cột app_settings.value lên TEXT trên PostgreSQL/MySQL (SQLite không cần)."""
+    global _APP_SETTINGS_VALUE_TEXT_MIGRATED
+    if _APP_SETTINGS_VALUE_TEXT_MIGRATED:
+        return
+    try:
+        dialect = db.engine.dialect.name
+        if dialect == 'postgresql':
+            db.session.execute(text('ALTER TABLE app_settings ALTER COLUMN value TYPE TEXT'))
+            db.session.commit()
+        elif dialect in ('mysql', 'mariadb'):
+            db.session.execute(text('ALTER TABLE app_settings MODIFY value TEXT'))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+    finally:
+        _APP_SETTINGS_VALUE_TEXT_MIGRATED = True
+
+
+def _normalize_ultrasound_main_media_playlist(raw):
+    """Chuẩn hóa danh sách phát màn hình chính: [{filename, kind}, ...], tối đa 100 mục."""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for x in raw[:100]:
+        if not isinstance(x, dict):
+            continue
+        fn = str(x.get('filename') or '').strip()
+        if not fn or '/' in fn or '..' in fn:
+            continue
+        safe = werkzeug.utils.secure_filename(os.path.basename(fn))
+        if not safe or len(safe) > 200:
+            continue
+        kind = str(x.get('kind') or '').strip().lower()
+        ext = os.path.splitext(safe)[1].lower()
+        if kind not in ('video', 'image'):
+            kind = 'video' if ext in ('.mp4', '.webm') else 'image'
+        if kind == 'video' and ext not in ('.mp4', '.webm'):
+            continue
+        if kind == 'image' and ext not in ('.jpg', '.jpeg', '.png', '.webp'):
+            continue
+        out.append({'filename': safe, 'kind': kind})
+    return out
+
+
+def _ultrasound_media_keep_filenames(cfg):
+    """Filename giữ lại khi dọn retention (logo, overlay, video phụ, danh sách phát, ...)."""
+    names = set()
+    if not isinstance(cfg, dict):
+        return names
+    for k in ('effect_overlay_filename', 'avatar_overlay_filename', 'logo_filename',
+              'aux_video_filename', 'main_video_filename'):
+        v = str(cfg.get(k) or '').strip()
+        if v:
+            names.add(v)
+    pl = cfg.get('main_media_playlist')
+    if isinstance(pl, list):
+        for item in pl:
+            if isinstance(item, dict):
+                fn = str(item.get('filename') or '').strip()
+                if fn:
+                    names.add(fn)
+    return names
+
 
 class AIAssistantAvatar(db.Model):
     __tablename__ = 'ai_assistant_avatar'
@@ -2091,8 +3169,87 @@ def work_schedule_default_slot_minutes():
         return jsonify({'success': False, 'message': str(e)}), 500
 
 # Routes
+_MWL_AUTOSTART_LOCK = threading.Lock()
+_MWL_AUTOSTART_LAST_TRY_AT = None
+_MWL_AUTOSTART_COOLDOWN_SECONDS = 15
+
+def _is_local_port_open(port: int, timeout_sec: float = 0.6) -> bool:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout_sec)
+        code = s.connect_ex(('127.0.0.1', int(port)))
+        s.close()
+        return code == 0
+    except Exception:
+        return False
+
+def _ensure_mwl_server_running() -> bool:
+    """
+    Auto-start MWL server on port 104 when web is opened.
+    Best effort: do nothing if already running.
+    """
+    global _MWL_AUTOSTART_LAST_TRY_AT
+    if _is_local_port_open(104):
+        return True
+
+    now = datetime.utcnow()
+    with _MWL_AUTOSTART_LOCK:
+        if _is_local_port_open(104):
+            return True
+        if _MWL_AUTOSTART_LAST_TRY_AT is not None:
+            elapsed = (now - _MWL_AUTOSTART_LAST_TRY_AT).total_seconds()
+            if elapsed < _MWL_AUTOSTART_COOLDOWN_SECONDS:
+                return False
+        _MWL_AUTOSTART_LAST_TRY_AT = now
+
+        script_path = (Path(__file__).resolve().parent / 'mwl_server.py')
+        if not script_path.exists():
+            print("[MWL-AUTOSTART] Không tìm thấy mwl_server.py")
+            return False
+
+        try:
+            popen_kwargs = {
+                'cwd': str(script_path.parent),
+                'stdin': subprocess.DEVNULL,
+                'stdout': subprocess.DEVNULL,
+                'stderr': subprocess.DEVNULL,
+                'close_fds': True,
+            }
+            if os.name == 'nt':
+                popen_kwargs['creationflags'] = (
+                    getattr(subprocess, 'DETACHED_PROCESS', 0)
+                    | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+                )
+            subprocess.Popen([sys.executable, str(script_path)], **popen_kwargs)
+        except Exception as e:
+            print(f"[MWL-AUTOSTART] Không thể khởi động mwl_server.py: {e}")
+            return False
+    return False
+
+@app.before_request
+def auto_start_mwl_for_main_pages():
+    """
+    Đảm bảo MWL server chạy khi người dùng mở các trang giao diện chính.
+    Áp dụng cho GET / và các URL .html, bỏ qua API/static nhị phân.
+    """
+    try:
+        if request.method != 'GET':
+            return
+        path = (request.path or '').lower()
+        if path.startswith('/api/') or path.startswith('/dicom/'):
+            return
+        if path == '/' or path.endswith('.html'):
+            _ensure_mwl_server_running()
+    except Exception as e:
+        print(f"[MWL-AUTOSTART] before_request error: {e}")
+
 @app.route('/')
 def index():
+    # Khi mở trang chủ, đảm bảo MWL server (port 104) đang chạy.
+    try:
+        _ensure_mwl_server_running()
+    except Exception as e:
+        print(f"[MWL-AUTOSTART] Lỗi khi kiểm tra/khởi động MWL: {e}")
     return render_template('index.html')
 
 @app.route('/api/health')
@@ -2104,12 +3261,27 @@ def health_check():
     Gọi mỗi 5-10 phút để tránh sleep sau 15 phút không hoạt động."""
     return jsonify({'status': 'ok', 'timestamp': datetime.utcnow().isoformat()}), 200
 
+
+@app.route('/api/public-config', methods=['GET'])
+def public_config():
+    """Cấu hình công khai cho trang đặt lịch (URL đầy đủ khi deploy Render, v.v.)."""
+    raw = (os.environ.get('PUBLIC_BOOKING_URL') or '').strip().rstrip('/')
+    return jsonify({
+        'public_booking_url': raw or None,
+        'booking_path': '/booking.html',
+    })
+
+
 @app.route('/schedule.html')
 def schedule_page():
     return send_from_directory('templates', 'schedule.html')
 @app.route('/api/appointments', methods=['POST'])
 def create_appointment():
     data = request.json
+    # Ensure sync columns exist (best-effort migration)
+    ensure_appointment_doctor_column()
+    ensure_appointment_expected_delivery_date_column()
+    ensure_appointment_sync_columns()
     # Kiểm tra dữ liệu đầu vào
     required_fields = ['name', 'phone', 'address', 'date_of_birth', 'service_type']
     for field in required_fields:
@@ -2155,60 +3327,74 @@ def create_appointment():
     try:
         # Kiểm tra trùng slot: đã có người đặt cùng thời điểm này
         existing_slot = Appointment.query.filter(
-            Appointment.appointment_date == appointment_dt
+            Appointment.appointment_date == appointment_dt,
+            Appointment.status != 'cancelled'
         ).first()
         if existing_slot:
             return jsonify({'message': 'Khung giờ này đã có người đăng ký. Vui lòng chọn giờ khác.'}), 400
 
-        # Kiểm tra số điện thoại chỉ được đăng ký 1 lần trong cùng phiên (ca) khám
+        # Cùng một hồ sơ (patient_id) không đặt 2 lịch trong cùng phiên ca (nhiều người cùng SĐT vẫn được)
         day_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        # So sánh thời gian theo chuỗi HH:MM trong SQLite
-        same_shift_by_phone = Appointment.query.join(Patient, Appointment.patient_id == Patient.id) \
-            .filter(
-                Patient.phone == data['phone'],
-                db.func.date(Appointment.appointment_date) == day_date,
-                db.func.strftime('%H:%M', Appointment.appointment_date) >= containing_shift.start_time,
-                db.func.strftime('%H:%M', Appointment.appointment_date) < containing_shift.end_time
-            ).first()
-        if same_shift_by_phone:
-            return jsonify({'message': 'Mỗi số điện thoại chỉ được đăng ký 1 lần trong 1 phiên khám.'}), 400
 
-        # Tìm hoặc tạo bệnh nhân theo số điện thoại
-        patient = Patient.query.filter_by(phone=data['phone']).first()
-        if not patient:
-            # Generate unique patient_id (PID)
-            pid = generate_patient_id(data['phone'])
-            patient = Patient(
-                patient_id=pid,
-                name=data['name'],
-                phone=data['phone'],
-                address=data.get('address'),
-                date_of_birth=dob
-            )
-            db.session.add(patient)
-            db.session.flush()
+        patient = _resolve_booking_patient(data, dob)
+
+        same_shift_same_person = Appointment.query.filter(
+            Appointment.patient_id == patient.id,
+            db.func.date(Appointment.appointment_date) == day_date,
+            db.func.strftime('%H:%M', Appointment.appointment_date) >= containing_shift.start_time,
+            db.func.strftime('%H:%M', Appointment.appointment_date) < containing_shift.end_time,
+            Appointment.status != 'cancelled',
+        ).first()
+        if same_shift_same_person:
+            return jsonify({'message': 'Hồ sơ này đã có lịch trong phiên khám đã chọn. Vui lòng chọn giờ khác hoặc hồ sơ khác.'}), 400
 
         appointment = Appointment(
             patient_id=patient.id,
             appointment_date=appointment_dt,
-            service_type=data['service_type']
+            service_type=data['service_type'],
+            doctor_name=doctor_name or 'PK Đại Anh',
+            global_id=str(uuid.uuid4()),
+            source=(os.environ.get('SYNC_ROLE') or app.config.get('SYNC_ROLE') or 'local'),
+            version=1,
+            last_modified_by='patient',
         )
         db.session.add(appointment)
         db.session.commit()
 
-        # Tự động đồng bộ với Voluson E10 nếu có cấu hình
+        # Emit sync event (best-effort)
         try:
-            sync_service = get_voluson_sync_service()
-            if sync_service.sync_enabled:
-                # Đồng bộ bất đồng bộ để không làm chậm response
-                threading.Thread(
-                    target=sync_service.sync_single_appointment,
-                    args=(appointment.id,),
-                    daemon=True
-                ).start()
+            payload = {
+                'appointment': {
+                    'global_id': appointment.global_id,
+                    'appointment_date': appointment.appointment_date.isoformat(),
+                    'service_type': appointment.service_type,
+                    'status': appointment.status,
+                    'doctor_name': getattr(appointment, 'doctor_name', None),
+                    'source': appointment.source,
+                    'updated_at': appointment.updated_at.isoformat() if appointment.updated_at else None,
+                    'version': appointment.version,
+                    'last_modified_by': appointment.last_modified_by,
+                },
+                'patient': _sync_patient_payload(patient),
+            }
+            _emit_sync_event('appointment', appointment.global_id, 'appointment.created', payload)
+        except Exception:
+            pass
+
+        # Khi có chỉ định siêu âm, đồng bộ MWL realtime ngay
+        try:
+            if _is_ultrasound_text(appointment.service_type):
+                _mark_appointment_Maysieuam_pending(appointment.id)
+                _sync_appointment_ultrasound_worklist(appointment.id)
+                _kick_Maysieuam_sync_now(appointment.id)
         except Exception as sync_error:
-            # Log lỗi nhưng không ảnh hưởng đến việc tạo cuộc hẹn
-            print(f"Error syncing with Voluson E10: {sync_error}")
+            print(f"Error syncing with ultrasound machine: {sync_error}")
+
+        # Gửi thông báo có phiếu đăng ký khám qua webhook Zalo (best-effort)
+        try:
+            _notify_new_appointment_via_zalo_webhook(appointment, patient)
+        except Exception as zalo_error:
+            print(f"[ZALO_NOTIFY] Failed to send notification: {zalo_error}")
 
         return jsonify({'message': 'Đăng ký lịch khám thành công', 'appointment_id': appointment.id})
     except Exception as e:
@@ -2246,15 +3432,22 @@ def get_available_slots():
             all_slots.append(to_hhmm(t))
             t += slot_minutes
         # Lấy giờ đã được đặt
-        appts = Appointment.query.filter(
+        # Chỉ lấy cột cần thiết để tránh lỗi khi DB thiếu các cột mở rộng mới.
+        # (Ví dụ một số máy chưa migrate đầy đủ schema của bảng appointment)
+        appts = db.session.query(
+            Appointment.id,
+            Appointment.appointment_date,
+            Appointment.status
+        ).filter(
             db.func.date(Appointment.appointment_date) == day,
-            db.func.strftime('%H:%M', Appointment.appointment_date).in_(all_slots)
+            db.func.strftime('%H:%M', Appointment.appointment_date).in_(all_slots),
+            Appointment.status != 'cancelled'
         ).all()
         taken = set()
-        for a in appts:
-            if exclude_appointment_id and a.id == exclude_appointment_id:
+        for appt_id, appt_dt, _status in appts:
+            if exclude_appointment_id and appt_id == exclude_appointment_id:
                 continue
-            taken.add(a.appointment_date.strftime('%H:%M'))
+            taken.add(appt_dt.strftime('%H:%M'))
         # Nếu hôm nay, loại bỏ các slot đã qua
         now = datetime.now()
         if now.date() == day:
@@ -2281,16 +3474,72 @@ def update_appointment(appointment_id: int):
             appt = _get_or_404(Appointment, appointment_id)
             reason = (data.get('service_type') or '').strip()
             doctor = (data.get('doctor_name') or '').strip()
+            has_expected_delivery_date = 'expected_delivery_date' in data
+            expected_delivery_raw = (data.get('expected_delivery_date') or '').strip()
             if reason:
                 appt.service_type = reason
                 changed = True
             if doctor:
                 ensure_appointment_doctor_column()
+                ensure_appointment_expected_delivery_date_column()
                 appt.doctor_name = doctor
                 changed = True
+            if has_expected_delivery_date:
+                ensure_appointment_expected_delivery_date_column()
+                if expected_delivery_raw:
+                    try:
+                        new_edd = datetime.strptime(expected_delivery_raw[:10], '%Y-%m-%d').date()
+                    except ValueError:
+                        return jsonify({'message': 'Ngày dự kiến sinh không hợp lệ (yyyy-mm-dd).'}), 400
+                else:
+                    new_edd = None
+                if appt.expected_delivery_date != new_edd:
+                    appt.expected_delivery_date = new_edd
+                    changed = True
             if not changed:
                 return jsonify({'message': 'Không có gì để cập nhật.'}), 400
+            # Sync fields metadata
+            ensure_appointment_sync_columns()
+            if not appt.global_id:
+                appt.global_id = str(uuid.uuid4())
+                appt.source = appt.source or (os.environ.get('SYNC_ROLE') or app.config.get('SYNC_ROLE') or 'local')
+                appt.version = (appt.version or 1)
+            appt.last_modified_by = 'clinic'
+            appt.version = (appt.version or 1) + 1
+            appt.updated_at = datetime.utcnow()
             db.session.commit()
+
+            # Nếu đổi lý do khám liên quan siêu âm thì cập nhật MWL ngay
+            try:
+                if reason:
+                    _sync_appointment_ultrasound_worklist(appt.id)
+                    if _is_ultrasound_text(appt.service_type):
+                        _mark_appointment_Maysieuam_pending(appt.id)
+                        _kick_Maysieuam_sync_now(appt.id)
+            except Exception as mwl_err:
+                print(f"Realtime MWL from appointment update (reason-only) failed: {mwl_err}")
+
+            # Emit sync event
+            try:
+                payload = {
+                    'appointment': {
+                        'global_id': appt.global_id,
+                        'appointment_date': appt.appointment_date.isoformat(),
+                        'service_type': appt.service_type,
+                        'status': appt.status,
+                        'doctor_name': getattr(appt, 'doctor_name', None),
+                        'expected_delivery_date': appt.expected_delivery_date.isoformat() if getattr(appt, 'expected_delivery_date', None) else None,
+                        'source': appt.source,
+                        'updated_at': appt.updated_at.isoformat() if appt.updated_at else None,
+                        'version': appt.version,
+                        'last_modified_by': appt.last_modified_by,
+                    },
+                    'patient': _sync_patient_payload(appt.patient),
+                }
+                _emit_sync_event('appointment', appt.global_id, 'appointment.updated', payload)
+            except Exception:
+                pass
+
             return jsonify({'message': 'Đã cập nhật lịch khám', 'appointment_id': appt.id})
         except Exception as e:
             db.session.rollback()
@@ -2324,20 +3573,68 @@ def update_appointment(appointment_id: int):
         ).first()
         if conflict:
             return jsonify({'message': 'Khung giờ đã có người đăng ký.'}), 400
-        # Kiểm tra số điện thoại trong cùng phiên (ca) khám chỉ 1 lần (loại trừ bản ghi này)
+        # Cùng hồ sơ không có 2 lịch trong cùng phiên ca (loại trừ bản ghi này)
         day_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        same_shift = Appointment.query.join(Patient, Appointment.patient_id == Patient.id) \
-            .filter(
-                Appointment.id != appointment_id,
-                Patient.phone == appt.patient.phone,
-                db.func.date(Appointment.appointment_date) == day_date,
-                db.func.strftime('%H:%M', Appointment.appointment_date) >= containing_shift.start_time,
-                db.func.strftime('%H:%M', Appointment.appointment_date) < containing_shift.end_time
-            ).first()
+        same_shift = Appointment.query.filter(
+            Appointment.id != appointment_id,
+            Appointment.patient_id == appt.patient_id,
+            db.func.date(Appointment.appointment_date) == day_date,
+            db.func.strftime('%H:%M', Appointment.appointment_date) >= containing_shift.start_time,
+            db.func.strftime('%H:%M', Appointment.appointment_date) < containing_shift.end_time,
+            Appointment.status != 'cancelled',
+        ).first()
         if same_shift:
-            return jsonify({'message': 'Số ĐT này đã đăng ký trong phiên khám này.'}), 400
+            return jsonify({'message': 'Bệnh nhân này đã có lịch khác trong phiên khám này.'}), 400
         appt.appointment_date = new_dt
+        if 'expected_delivery_date' in data:
+            ensure_appointment_expected_delivery_date_column()
+            expected_delivery_raw = (data.get('expected_delivery_date') or '').strip()
+            if expected_delivery_raw:
+                try:
+                    appt.expected_delivery_date = datetime.strptime(expected_delivery_raw[:10], '%Y-%m-%d').date()
+                except ValueError:
+                    return jsonify({'message': 'Ngày dự kiến sinh không hợp lệ (yyyy-mm-dd).'}), 400
+            else:
+                appt.expected_delivery_date = None
+        ensure_appointment_sync_columns()
+        if not appt.global_id:
+            appt.global_id = str(uuid.uuid4())
+            appt.source = appt.source or (os.environ.get('SYNC_ROLE') or app.config.get('SYNC_ROLE') or 'local')
+        appt.last_modified_by = 'clinic'
+        appt.version = (appt.version or 1) + 1
+        appt.updated_at = datetime.utcnow()
         db.session.commit()
+
+        # Đổi ngày/giờ khám -> cập nhật lại ScheduledProcedureStep trong MWL
+        try:
+            sync_stat = _sync_appointment_ultrasound_worklist(appt.id)
+            if (sync_stat.get('upserted', 0) > 0) or _is_ultrasound_text(appt.service_type):
+                _mark_appointment_Maysieuam_pending(appt.id)
+                _kick_Maysieuam_sync_now(appt.id)
+        except Exception as mwl_err:
+            print(f"Realtime MWL from appointment reschedule failed: {mwl_err}")
+
+        # Emit sync event
+        try:
+            payload = {
+                'appointment': {
+                    'global_id': appt.global_id,
+                    'appointment_date': appt.appointment_date.isoformat(),
+                    'service_type': appt.service_type,
+                    'status': appt.status,
+                    'doctor_name': getattr(appt, 'doctor_name', None),
+                    'expected_delivery_date': appt.expected_delivery_date.isoformat() if getattr(appt, 'expected_delivery_date', None) else None,
+                    'source': appt.source,
+                    'updated_at': appt.updated_at.isoformat() if appt.updated_at else None,
+                    'version': appt.version,
+                    'last_modified_by': appt.last_modified_by,
+                },
+                'patient': _sync_patient_payload(appt.patient),
+            }
+            _emit_sync_event('appointment', appt.global_id, 'appointment.updated', payload)
+        except Exception:
+            pass
+
         return jsonify({'message': 'Đã cập nhật thời gian khám', 'appointment_id': appt.id})
     except Exception as e:
         db.session.rollback()
@@ -2352,11 +3649,199 @@ def update_appointment_reason(appointment_id: int):
             return jsonify({'message': 'Thiếu lý do khám (service_type).'}), 400
         appt = _get_or_404(Appointment, appointment_id)
         appt.service_type = reason
+        if _is_ultrasound_text(reason):
+            appt.Maysieuam_synced = False
+            appt.Maysieuam_sync_time = None
         db.session.commit()
+
+        # Realtime MWL theo "lý do khám" (và ưu tiên service-level nếu có)
+        try:
+            _sync_appointment_ultrasound_worklist(appointment_id)
+            if _is_ultrasound_text(reason):
+                _kick_Maysieuam_sync_now(appointment_id)
+        except Exception as mwl_err:
+            print(f"Realtime MWL from reason update failed: {mwl_err}")
+
         return jsonify({'message': 'Đã cập nhật lý do khám', 'service_type': appt.service_type})
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Lỗi cập nhật lý do khám: {str(e)}'}), 500
+
+@app.route('/api/appointments/<int:appointment_id>/reschedule-request', methods=['POST'])
+def request_reschedule_appointment(appointment_id: int):
+    """Bệnh nhân đổi giờ trực tiếp nếu còn >= 30 phút so với hiện tại.
+    Nếu < 30 phút thì không cho đổi và yêu cầu liên hệ phòng khám.
+    """
+    ensure_appointment_sync_columns()
+    try:
+        data = request.json or {}
+        phone = (data.get('phone') or '').strip()
+        dob_str = (data.get('date_of_birth') or '').strip()  # yyyy-mm-dd
+        requested_date = (data.get('requested_date') or '').strip()  # yyyy-mm-dd
+        requested_time = (data.get('requested_time') or '').strip()  # HH:MM
+
+        if not phone or not dob_str or not requested_date or not requested_time:
+            return jsonify({'message': 'Thiếu thông tin (phone, date_of_birth, requested_date, requested_time).'}), 400
+        if not re.match(r'^\d{10,11}$', phone):
+            return jsonify({'message': 'Số điện thoại không hợp lệ.'}), 400
+
+        try:
+            dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
+        except Exception:
+            return jsonify({'message': 'Ngày sinh không hợp lệ (yyyy-mm-dd).'}), 400
+
+        appt = _get_or_404(Appointment, appointment_id)
+        appt_phone = (appt.patient.phone or '').strip() if appt.patient else ''
+        appt_dob = appt.patient.date_of_birth if appt.patient else None
+        if not appt.patient or appt_phone != phone or appt_dob != dob:
+            return jsonify({'message': 'Không xác thực được lịch hẹn (sai SĐT hoặc ngày sinh).'}), 403
+
+        # Parse requested datetime
+        try:
+            new_dt = datetime.strptime(f"{requested_date} {requested_time}", '%Y-%m-%d %H:%M')
+        except Exception:
+            return jsonify({'message': 'Thời gian đăng ký không hợp lệ.'}), 400
+
+        # Rule: chỉ cho sửa nếu giờ mới còn cách hiện tại >= 30 phút
+        now = datetime.now()
+        if (new_dt - now) < timedelta(minutes=30):
+            return jsonify({'message': 'Vui lòng liên hệ phòng khám theo  số điện thoại (Zalo) : 0858838616.'}), 400
+
+        # Validate shift exists and not closed
+        try:
+            ws = WorkSchedule.query.filter_by(date=requested_date).all()
+            def to_min(t):
+                h, m = [int(x) for x in t.split(':')]
+                return h * 60 + m
+            sel_min = to_min(requested_time)
+            containing_shift = None
+            for s in ws:
+                if getattr(s, 'is_closed', False):
+                    continue
+                if to_min(s.start_time) <= sel_min < to_min(s.end_time):
+                    containing_shift = s
+                    break
+            if not containing_shift:
+                return jsonify({'message': 'Giờ cập nhật không nằm trong ca khám hợp lệ.'}), 400
+        except Exception:
+            return jsonify({'message': 'Thời gian đăng ký không hợp lệ.'}), 400
+
+        # Slot conflict check (exclude current appointment)
+        conflict = Appointment.query.filter(
+            Appointment.id != appointment_id,
+            Appointment.appointment_date == new_dt
+        ).first()
+        if conflict:
+            return jsonify({'message': 'Khung giờ đã có người đăng ký.'}), 400
+
+        # Cùng hồ sơ không hai lịch trong một phiên ca (exclude current)
+        day_date = datetime.strptime(requested_date, '%Y-%m-%d').date()
+        same_shift = Appointment.query.filter(
+            Appointment.id != appointment_id,
+            Appointment.patient_id == appt.patient_id,
+            db.func.date(Appointment.appointment_date) == day_date,
+            db.func.strftime('%H:%M', Appointment.appointment_date) >= containing_shift.start_time,
+            db.func.strftime('%H:%M', Appointment.appointment_date) < containing_shift.end_time,
+            Appointment.status != 'cancelled',
+        ).first()
+        if same_shift:
+            return jsonify({'message': 'Bệnh nhân này đã có lịch khác trong phiên khám này.'}), 400
+
+        # Update appointment
+        appt.appointment_date = new_dt
+        if not appt.global_id:
+            appt.global_id = str(uuid.uuid4())
+            appt.source = appt.source or (os.environ.get('SYNC_ROLE') or app.config.get('SYNC_ROLE') or 'local')
+        appt.last_modified_by = 'patient'
+        appt.version = (appt.version or 1) + 1
+        appt.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        # Emit sync event
+        try:
+            payload = {
+                'appointment': {
+                    'global_id': appt.global_id,
+                    'appointment_date': appt.appointment_date.isoformat(),
+                    'service_type': appt.service_type,
+                    'status': appt.status,
+                    'doctor_name': getattr(appt, 'doctor_name', None),
+                    'source': appt.source,
+                    'updated_at': appt.updated_at.isoformat() if appt.updated_at else None,
+                    'version': appt.version,
+                    'last_modified_by': appt.last_modified_by,
+                },
+                'patient': _sync_patient_payload(appt.patient),
+            }
+            _emit_sync_event('appointment', appt.global_id, 'appointment.updated', payload)
+        except Exception:
+            pass
+
+        return jsonify({
+            'message': 'Đã cập nhật giờ khám',
+            'appointment_id': appt.id,
+            'updated_time': appt.appointment_date.strftime('%H:%M')
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi tạo yêu cầu đổi giờ: {str(e)}'}), 500
+
+@app.route('/api/appointments/<int:appointment_id>/cancel', methods=['POST'])
+def cancel_appointment_by_patient(appointment_id: int):
+    """Bệnh nhân hủy đăng ký khám (xác thực bằng SĐT + ngày sinh)."""
+    ensure_appointment_sync_columns()
+    try:
+        data = request.json or {}
+        phone = (data.get('phone') or '').strip()
+        dob_str = (data.get('date_of_birth') or '').strip()
+        if not phone or not dob_str:
+            return jsonify({'message': 'Thiếu thông tin (phone, date_of_birth).'}), 400
+        if not re.match(r'^\d{10,11}$', phone):
+            return jsonify({'message': 'Số điện thoại không hợp lệ.'}), 400
+        try:
+            dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
+        except Exception:
+            return jsonify({'message': 'Ngày sinh không hợp lệ (yyyy-mm-dd).'}), 400
+
+        appt = _get_or_404(Appointment, appointment_id)
+        appt_phone = (appt.patient.phone or '').strip() if appt.patient else ''
+        appt_dob = appt.patient.date_of_birth if appt.patient else None
+        if not appt.patient or appt_phone != phone or appt_dob != dob:
+            return jsonify({'message': 'Không xác thực được lịch hẹn (sai SĐT hoặc ngày sinh).'}), 403
+
+        appt.status = 'cancelled'
+        if not appt.global_id:
+            appt.global_id = str(uuid.uuid4())
+            appt.source = appt.source or (os.environ.get('SYNC_ROLE') or app.config.get('SYNC_ROLE') or 'local')
+        appt.last_modified_by = 'patient'
+        appt.version = (appt.version or 1) + 1
+        appt.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        # Emit sync event
+        try:
+            payload = {
+                'appointment': {
+                    'global_id': appt.global_id,
+                    'appointment_date': appt.appointment_date.isoformat(),
+                    'service_type': appt.service_type,
+                    'status': appt.status,
+                    'doctor_name': getattr(appt, 'doctor_name', None),
+                    'source': appt.source,
+                    'updated_at': appt.updated_at.isoformat() if appt.updated_at else None,
+                    'version': appt.version,
+                    'last_modified_by': appt.last_modified_by,
+                },
+                'patient': _sync_patient_payload(appt.patient),
+            }
+            _emit_sync_event('appointment', appt.global_id, 'appointment.updated', payload)
+        except Exception:
+            pass
+
+        return jsonify({'message': 'Đã hủy đăng ký khám.', 'appointment_id': appt.id})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi hủy đăng ký: {str(e)}'}), 500
 
 @app.route('/api/doctors', methods=['GET'])
 def get_doctors():
@@ -2456,6 +3941,8 @@ def delete_clinic_doctor(doctor_id):
 @app.route('/api/appointments/<int:appointment_id>', methods=['DELETE'])
 def delete_appointment(appointment_id: int):
     try:
+        ensure_appointment_change_request_columns()
+        ensure_clinical_service_sync_columns()
         # Tìm appointment cần xóa
         appointment = _get_or_404(Appointment, appointment_id)
         
@@ -2463,7 +3950,23 @@ def delete_appointment(appointment_id: int):
         patient_name = appointment.patient.name
         appointment_time = appointment.appointment_date.strftime('%H:%M')
         
-        # Xóa appointment (cascade sẽ xóa các bản ghi liên quan)
+        # Xóa bản ghi con trước để tránh DB cũ bị lỗi NOT NULL/FK khi ORM set NULL.
+        AppointmentChangeRequest.query.filter_by(appointment_id=appointment_id).delete(synchronize_session=False)
+        Notification.query.filter_by(appointment_id=appointment_id).delete(synchronize_session=False)
+        MedicalRecord.query.filter_by(appointment_id=appointment_id).delete(synchronize_session=False)
+        TestResult.query.filter_by(appointment_id=appointment_id).delete(synchronize_session=False)
+        PatientVital.query.filter_by(appointment_id=appointment_id).delete(synchronize_session=False)
+        LabOrder.query.filter_by(appointment_id=appointment_id).delete(synchronize_session=False)
+
+        # clinical_service có quan hệ riêng, xóa rõ ràng để không bị UPDATE appointment_id = NULL
+        for cs in ClinicalService.query.filter_by(appointment_id=appointment_id).all():
+            try:
+                LabOrder.query.filter_by(clinical_service_id=cs.id).delete(synchronize_session=False)
+            except Exception:
+                pass
+            db.session.delete(cs)
+
+        # Xóa appointment sau cùng
         db.session.delete(appointment)
         db.session.commit()
         
@@ -2770,16 +4273,475 @@ scheduler_thread = threading.Thread(target=run_scheduler)
 scheduler_thread.daemon = True
 scheduler_thread.start()
 
+# Start backup loop: backup lần đầu khi app chạy + mỗi 2 tiếng
+backup_loop_thread = threading.Thread(target=run_backup_loop_startup_and_every_2h)
+backup_loop_thread.daemon = True
+backup_loop_thread.start()
+
+# ===================== SYNC ONLINE <-> LOCAL (Appointment/ChangeRequest) =====================
+def _resolve_patient_from_sync_payload(pt: dict):
+    """Tìm Patient từ payload đồng bộ (ưu tiên id nội bộ / mã PID / khớp tên+NS+SĐT / SĐT đơn)."""
+    phone = (pt.get('phone') or '').strip()
+    if not phone:
+        return None
+    internal = pt.get('patient_internal_id')
+    if internal is not None:
+        try:
+            internal = int(internal)
+        except (TypeError, ValueError):
+            internal = None
+    if internal:
+        cand = Patient.query.get(internal)
+        if cand and (cand.phone or '').strip() == phone:
+            return cand
+    pid_bn = (pt.get('patient_pid') or '').strip()
+    if pid_bn:
+        cand = Patient.query.filter_by(patient_id=pid_bn).first()
+        if cand and (cand.phone or '').strip() == phone:
+            return cand
+    name_n = normalize_patient_display_name(pt.get('name'))
+    dob_d = None
+    dob_s = pt.get('date_of_birth')
+    if dob_s:
+        try:
+            dob_d = datetime.fromisoformat(str(dob_s).replace('Z', '+00:00')).date()
+        except Exception:
+            pass
+    if name_n and dob_d:
+        return (
+            Patient.query.filter(
+                Patient.phone == phone,
+                Patient.name == name_n,
+                Patient.date_of_birth == dob_d,
+            )
+            .order_by(Patient.id.desc())
+            .first()
+        )
+    # Payload cũ chỉ có SĐT: giữ tương thích (bản ghi nhỏ nhất theo id)
+    return Patient.query.filter_by(phone=phone).order_by(Patient.id.asc()).first()
+
+
+def _apply_sync_event(event_type: str, payload_obj: dict) -> None:
+    """Áp dụng event vào DB hiện tại. Best-effort, idempotent theo event_id được đảm bảo ở tầng SyncEvent."""
+    try:
+        if event_type in ('appointment.created', 'appointment.updated'):
+            ap = (payload_obj or {}).get('appointment') or {}
+            pt = (payload_obj or {}).get('patient') or {}
+            global_id = (ap.get('global_id') or '').strip()
+            if not global_id:
+                return
+
+            ensure_appointment_doctor_column()
+            ensure_appointment_expected_delivery_date_column()
+            ensure_appointment_sync_columns()
+
+            phone = (pt.get('phone') or '').strip()
+            if not phone:
+                return
+
+            patient = _resolve_patient_from_sync_payload(pt)
+            if not patient:
+                dob_c = None
+                if pt.get('date_of_birth'):
+                    try:
+                        dob_c = datetime.fromisoformat(str(pt.get('date_of_birth')).replace('Z', '+00:00')).date()
+                    except Exception:
+                        pass
+                patient = _create_patient_with_fresh_bn_pid(
+                    name=pt.get('name') or '',
+                    phone=phone,
+                    address=pt.get('address'),
+                    date_of_birth=dob_c,
+                )
+            else:
+                if pt.get('name'):
+                    patient.name = normalize_patient_display_name(pt.get('name'))
+                if pt.get('address') is not None:
+                    patient.address = pt.get('address')
+                if pt.get('date_of_birth'):
+                    try:
+                        patient.date_of_birth = datetime.fromisoformat(str(pt.get('date_of_birth')).replace('Z', '+00:00')).date()
+                    except Exception:
+                        pass
+
+            appt = Appointment.query.filter_by(global_id=global_id).first()
+            if not appt:
+                # Create minimal appointment; sẽ được patch thêm sau
+                appt = Appointment(
+                    patient_id=patient.id,
+                    appointment_date=datetime.utcnow(),
+                    service_type=ap.get('service_type') or 'Khác',
+                    doctor_name=ap.get('doctor_name') or 'PK Đại Anh',
+                    global_id=global_id,
+                    source=ap.get('source') or 'local',
+                    version=ap.get('version') or 1,
+                    last_modified_by=ap.get('last_modified_by') or 'system',
+                )
+                db.session.add(appt)
+
+            if ap.get('appointment_date'):
+                try:
+                    appt.appointment_date = datetime.fromisoformat(ap.get('appointment_date'))
+                except Exception:
+                    pass
+            if ap.get('service_type') is not None:
+                appt.service_type = ap.get('service_type')
+            if ap.get('status') is not None:
+                appt.status = ap.get('status')
+            if ap.get('doctor_name'):
+                appt.doctor_name = ap.get('doctor_name')
+            if ap.get('source'):
+                appt.source = ap.get('source')
+            if ap.get('last_modified_by'):
+                appt.last_modified_by = ap.get('last_modified_by')
+            if ap.get('version'):
+                try:
+                    appt.version = int(ap.get('version'))
+                except Exception:
+                    pass
+            if ap.get('updated_at'):
+                try:
+                    appt.updated_at = datetime.fromisoformat(ap.get('updated_at'))
+                except Exception:
+                    pass
+            db.session.commit()
+            return
+
+        if event_type == 'appointment.reschedule_requested':
+            cr = (payload_obj or {}).get('change_request') or {}
+            ap = (payload_obj or {}).get('appointment') or {}
+            request_id = (cr.get('request_id') or '').strip()
+            ap_global_id = (cr.get('appointment_global_id') or ap.get('global_id') or '').strip()
+            if not request_id or not ap_global_id:
+                return
+
+            ensure_appointment_sync_columns()
+            appt = Appointment.query.filter_by(global_id=ap_global_id).first()
+            if not appt:
+                return
+
+            exists = AppointmentChangeRequest.query.filter_by(request_id=request_id).first()
+            if exists:
+                return
+
+            req = AppointmentChangeRequest(
+                request_id=request_id,
+                appointment_id=appt.id,
+                appointment_global_id=ap_global_id,
+                request_type=cr.get('request_type') or 'reschedule',
+                requested_date=cr.get('requested_date'),
+                requested_time=cr.get('requested_time'),
+                status=cr.get('status') or 'pending',
+            )
+            db.session.add(req)
+            db.session.commit()
+            return
+    except Exception as e:
+        print(f"[SYNC] apply event error: {e}")
+
+def _store_and_apply_remote_events(events: list[dict]) -> int:
+    latest_seq = 0
+    for ev in (events or []):
+        try:
+            seq = int(ev.get('seq') or 0)
+        except Exception:
+            seq = 0
+        latest_seq = max(latest_seq, seq)
+
+        event_id = (ev.get('event_id') or '').strip()
+        if not event_id:
+            continue
+
+        if SyncEvent.query.filter_by(event_id=event_id).first():
+            continue
+
+        payload_raw = ev.get('payload') or '{}'
+        try:
+            payload_obj = json.loads(payload_raw) if isinstance(payload_raw, str) else (payload_raw or {})
+        except Exception:
+            payload_obj = {}
+
+        row = SyncEvent(
+            event_id=event_id,
+            entity=ev.get('entity') or 'unknown',
+            global_id=ev.get('global_id'),
+            event_type=ev.get('event_type') or '',
+            payload=json.dumps(payload_obj, ensure_ascii=False),
+        )
+        db.session.add(row)
+        db.session.commit()
+        _apply_sync_event(row.event_type, payload_obj)
+    return latest_seq
+
+@app.route('/api/sync/pull', methods=['GET'])
+def api_sync_pull():
+    """LOCAL gọi ONLINE để lấy event mới (tăng dần theo seq). Auth: X-Sync-Token."""
+    if not _sync_token_ok(request):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    since_seq = request.args.get('since_seq', type=int, default=0)
+    limit = request.args.get('limit', type=int, default=500)
+    limit = max(1, min(limit, 2000))
+
+    rows = SyncEvent.query.filter(SyncEvent.id > since_seq).order_by(SyncEvent.id.asc()).limit(limit).all()
+    events = [{
+        'seq': r.id,
+        'event_id': r.event_id,
+        'entity': r.entity,
+        'global_id': r.global_id,
+        'event_type': r.event_type,
+        'payload': r.payload,
+    } for r in rows]
+    latest_seq = events[-1]['seq'] if events else since_seq
+    return jsonify({'latest_seq': latest_seq, 'events': events})
+
+@app.route('/api/sync/push', methods=['POST'])
+def api_sync_push():
+    """LOCAL đẩy event local lên ONLINE. Auth: X-Sync-Token."""
+    if not _sync_token_ok(request):
+        return jsonify({'error': 'Forbidden'}), 403
+    data = request.json or {}
+    events = data.get('events') or []
+    if not isinstance(events, list):
+        return jsonify({'error': 'events must be a list'}), 400
+
+    accepted = 0
+    for ev in events:
+        event_id = (ev.get('event_id') or '').strip()
+        if not event_id:
+            continue
+        if SyncEvent.query.filter_by(event_id=event_id).first():
+            continue
+
+        payload_raw = ev.get('payload') or '{}'
+        try:
+            payload_obj = json.loads(payload_raw) if isinstance(payload_raw, str) else (payload_raw or {})
+        except Exception:
+            payload_obj = {}
+
+        row = SyncEvent(
+            event_id=event_id,
+            entity=ev.get('entity') or 'unknown',
+            global_id=ev.get('global_id'),
+            event_type=ev.get('event_type') or '',
+            payload=json.dumps(payload_obj, ensure_ascii=False),
+        )
+        db.session.add(row)
+        db.session.commit()
+        _apply_sync_event(row.event_type, payload_obj)
+        accepted += 1
+    return jsonify({'message': 'OK', 'accepted': accepted})
+
+def run_sync_loop_local():
+    """LOCAL chạy nền: pull từ ONLINE + push event local."""
+    remote = (os.environ.get('SYNC_REMOTE_URL') or app.config.get('SYNC_REMOTE_URL') or '').rstrip('/')
+    token = (os.environ.get('SYNC_TOKEN') or app.config.get('SYNC_TOKEN') or '').strip()
+    if not remote or not token:
+        return
+
+    headers = {'X-Sync-Token': token}
+
+    while True:
+        try:
+            # 1) Pull remote -> local
+            last_pulled = int(AppSetting.get_value('sync_last_pulled_seq', 0) or 0)
+            code, resp = _http_json('GET', f"{remote}/api/sync/pull?since_seq={last_pulled}&limit=500", headers=headers, timeout_s=20)
+            if code == 200 and isinstance(resp, dict):
+                latest = resp.get('latest_seq') or last_pulled
+                events = resp.get('events') or []
+                if events:
+                    latest2 = _store_and_apply_remote_events(events)
+                    if int(latest2) > last_pulled:
+                        AppSetting.set_value('sync_last_pulled_seq', str(int(latest2)))
+
+            # 2) Push local -> remote
+            last_pushed = int(AppSetting.get_value('sync_last_pushed_seq', 0) or 0)
+            to_push = SyncEvent.query.filter(SyncEvent.id > last_pushed).order_by(SyncEvent.id.asc()).limit(500).all()
+            if to_push:
+                payload_events = [{
+                    'seq': r.id,
+                    'event_id': r.event_id,
+                    'entity': r.entity,
+                    'global_id': r.global_id,
+                    'event_type': r.event_type,
+                    'payload': r.payload,
+                } for r in to_push]
+
+                code2, resp2 = _http_json('POST', f"{remote}/api/sync/push", headers=headers, body_obj={'events': payload_events}, timeout_s=20)
+                if code2 == 200:
+                    AppSetting.set_value('sync_last_pushed_seq', str(to_push[-1].id))
+        except Exception as e:
+            print(f"[SYNC] loop error: {e}")
+
+        time.sleep(int(os.environ.get('SYNC_INTERVAL_SECONDS') or 15))
+
+# Start sync loop on LOCAL
+try:
+    if (os.environ.get('SYNC_ROLE') or app.config.get('SYNC_ROLE') or '').strip().lower() == 'local':
+        if (os.environ.get('SYNC_REMOTE_URL') or app.config.get('SYNC_REMOTE_URL') or '').strip() and (os.environ.get('SYNC_TOKEN') or app.config.get('SYNC_TOKEN') or '').strip():
+            _sync_thread = threading.Thread(target=run_sync_loop_local)
+            _sync_thread.daemon = True
+            _sync_thread.start()
+except Exception:
+    pass
+
 # Route for serving static files
 @app.route('/<path:filename>')
 def static_files(filename):
     # Trang HTML không trong PUBLIC_PAGES → yêu cầu đăng nhập (dành cho nhân viên)
     if filename.endswith('.html') and filename not in PUBLIC_PAGES:
         token = request.cookies.get('auth_token') or request.headers.get('Authorization', '').replace('Bearer ', '')
-        if not token or not get_user_from_token(token):
+        user_id = get_user_from_token(token) if token else None
+        if not token or not user_id:
             from flask import redirect
             return redirect('/users.html?msg=Đăng nhập để truy cập trang này')
+        # Chặn truy cập trang không thuộc quyền theo vai trò (page/menu permissions)
+        try:
+            allowed = allowed_pages_for_user(user_id)
+            if '*' not in allowed and filename not in allowed:
+                return Response("Forbidden", status=403, mimetype='text/plain; charset=utf-8')
+        except Exception:
+            # Nếu có lỗi phụ trợ, vẫn ưu tiên không chặn để tránh ảnh hưởng vận hành
+            pass
     return send_from_directory('.', filename)
+
+
+# ==================== DICOM VIEWER ROUTES ====================
+_DICOM_BASE_DIR = Path("received_dicoms")
+
+@app.route('/dicom/<patient>/<filename>')
+def serve_dicom_file(patient, filename):
+    """Serve raw DICOM file for web viewer."""
+    safe_patient = os.path.basename(str(patient))
+    safe_filename = os.path.basename(str(filename))
+    dicom_path = (_DICOM_BASE_DIR / safe_patient / safe_filename).resolve()
+    base_resolved = _DICOM_BASE_DIR.resolve()
+    if not str(dicom_path).startswith(str(base_resolved)):
+        return Response("Invalid path", status=400, mimetype='text/plain; charset=utf-8')
+    if not dicom_path.exists() or not dicom_path.is_file():
+        return Response("Không tìm thấy file DICOM", status=404, mimetype='text/plain; charset=utf-8')
+    return send_file(str(dicom_path), mimetype='application/dicom')
+
+@app.route('/viewer/<patient>/<filename>')
+def dicom_interactive_viewer(patient, filename):
+    """Interactive Cornerstone viewer with patient/filename in path."""
+    return render_template(
+        'dicom_viewer.html',
+        patient=patient,
+        filename=filename,
+        cors_proxy=False
+    )
+
+@app.route('/api/admin/dicom/cleanup', methods=['POST'])
+@require_permission('admin.dicom_cleanup')
+def api_admin_dicom_cleanup():
+    """
+    Admin tool: move any loose received_dicoms/*.dcm into patient folders.
+
+    Query params:
+      - dry_run=1: report actions only, do not move files
+      - limit=<n>: max number of files to process (default 500)
+    """
+    try:
+        import re
+        import shutil
+        import pydicom
+        from datetime import datetime
+
+        dry_run = str(request.args.get('dry_run') or '').strip() in ('1', 'true', 'yes', 'on')
+        try:
+            limit = int(request.args.get('limit') or 500)
+        except Exception:
+            limit = 500
+        limit = max(1, min(limit, 5000))
+
+        base_dir = _DICOM_BASE_DIR
+        base_dir.mkdir(exist_ok=True)
+
+        def _safe_folder_name(name: str) -> str:
+            s = str(name or 'UNKNOWN').strip()
+            # Keep ASCII letters/digits/underscore; collapse repeats
+            s = re.sub(r'[^A-Za-z0-9_]+', '_', s)
+            s = re.sub(r'_+', '_', s).strip('_')
+            return s or 'UNKNOWN'
+
+        loose_files = sorted(base_dir.glob("*.dcm"))
+        actions = []
+        moved = 0
+        skipped = 0
+        errors = 0
+
+        for f in loose_files[:limit]:
+            try:
+                # Read metadata only; tolerate imperfect files
+                ds = pydicom.dcmread(str(f), stop_before_pixels=True, force=True)
+                patient = _safe_folder_name(ds.get('PatientName', 'UNKNOWN'))
+            except Exception:
+                patient = 'UNKNOWN'
+
+            target_dir = base_dir / patient
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target = target_dir / f.name
+            if target.exists():
+                stem, ext = f.stem, f.suffix
+                i = 1
+                while (target_dir / f"{stem}_{i}{ext}").exists():
+                    i += 1
+                target = target_dir / f"{stem}_{i}{ext}"
+
+            actions.append({
+                'from': str(f).replace('\\', '/'),
+                'to': str(target).replace('\\', '/'),
+                'patient': patient,
+            })
+
+            if dry_run:
+                skipped += 1
+                continue
+
+            try:
+                shutil.move(str(f), str(target))
+                moved += 1
+            except Exception as e:
+                errors += 1
+                actions[-1]['error'] = str(e)
+
+        return jsonify({
+            'success': True,
+            'dry_run': dry_run,
+            'limit': limit,
+            'found_loose': len(loose_files),
+            'processed': min(len(loose_files), limit),
+            'moved': moved,
+            'skipped': skipped,
+            'errors': errors,
+            'timestamp': datetime.utcnow().isoformat() + 'Z',
+            'actions': actions[:200],  # cap to keep payload reasonable
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/dicom_viewer.html')
+@app.route('/templates/dicom_viewer.html')
+def dicom_viewer_alias():
+    """
+    Backward-compatible route for direct access:
+    /templates/dicom_viewer.html?patient=<name>&filename=<file.dcm>
+    """
+    patient = (request.args.get('patient') or '').strip()
+    filename = (request.args.get('filename') or '').strip()
+    if not patient or not filename:
+        return Response(
+            "Thiếu tham số. Dùng: /templates/dicom_viewer.html?patient=<ten_benh_nhan>&filename=<file.dcm>",
+            status=400,
+            mimetype='text/plain; charset=utf-8'
+        )
+    return render_template(
+        'dicom_viewer.html',
+        patient=patient,
+        filename=filename,
+        cors_proxy=False
+    )
 
 # appointments/today, by-date, patients, diagnosis, notes -> đã chuyển sang api/v1/
 
@@ -3594,6 +5556,122 @@ def update_footer_content(**kwargs):
         print(f"Error updating footer content: {e}")
         return jsonify({'error': 'Lỗi khi cập nhật cài đặt Footer'}), 500
 
+# ============ Clinic Maps Config (Server-side) ============
+def _clinic_maps_config_path():
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    except Exception:
+        base_dir = os.getcwd()
+    return os.path.join(base_dir, 'clinic_maps.json')
+
+def _read_clinic_maps_config():
+    path = _clinic_maps_config_path()
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+def _write_clinic_maps_config(data: dict):
+    path = _clinic_maps_config_path()
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(data or {}, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+@app.route('/api/clinic-maps', methods=['GET'])
+def get_clinic_maps_config():
+    """Cấu hình bản đồ/địa chỉ phòng khám để trang chủ dùng chung."""
+    data = _read_clinic_maps_config()
+    return jsonify(data)
+
+@app.route('/api/clinic-maps', methods=['POST'])
+def update_clinic_maps_config():
+    """Cập nhật cấu hình bản đồ/địa chỉ phòng khám.
+
+    Lưu server-side để mọi người dùng thấy được (không phụ thuộc localStorage).
+    """
+    data = request.get_json(silent=True) or {}
+    payload = {
+        'clinicName': (data.get('clinicName') or '').strip(),
+        'address': (data.get('address') or '').strip(),
+        'phone': (data.get('phone') or '').strip(),
+        'email': (data.get('email') or '').strip(),
+        'coordinates': (data.get('coordinates') or '').strip(),
+        'googleMapsLink': (data.get('googleMapsLink') or '').strip(),
+        'updatedAt': datetime.utcnow().isoformat()
+    }
+    _write_clinic_maps_config(payload)
+    return jsonify({'message': 'Đã cập nhật địa chỉ Google Maps', 'data': payload})
+
+# ============ QR Display Settings (Server-side) ============
+QR_DISPLAY_SETTING_KEYS = [
+    # Bottom ticker (dịch vụ nổi bật)
+    'qrAdText',
+    'qrAdColor',
+    'qrAdFontSize',
+    'qrAdFontFamily',
+    'qrAdFontWeight',
+    'qrAdFontStyle',
+    'qrAdLabelColor',
+    'qrAdLabelText',
+    # Top-right "dịch vụ mới"
+    'qrNewServiceText',
+    'qrNewServiceColor',
+    'qrNewServiceFontSize',
+    'qrNewServiceFontFamily',
+    'qrNewServiceFontWeight',
+    'qrNewServiceFontStyle',
+    'qrNewServiceLabelColor',
+    'qrNewServiceLabelText',
+    # Idle ads overlay (full screen)
+    'qrIdleAdsEnabled',
+    # Force overlay always on (override idle/patient state)
+    'qrAdsAlwaysOn',
+    'qrIdleSeconds',
+    'qrAdsSlideIntervalSeconds',
+    'qrAdsSlides',              # newline separated URLs/paths
+    'qrAdsServicesText',        # text block for services
+    'qrAdsZaloUrl',             # URL to encode as QR (zalo.me/...)
+    'qrAdsHotline',
+    'qrAdsAddress',
+]
+
+@app.route('/api/qr-display-settings', methods=['GET'])
+def api_get_qr_display_settings():
+    """Lấy cấu hình hiển thị QR Display (lưu trong DB, dùng chung mọi trình duyệt)."""
+    try:
+        data = {}
+        for k in QR_DISPLAY_SETTING_KEYS:
+            data[k] = AppSetting.get_value(k, None)
+        return jsonify({'success': True, 'settings': data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/qr-display-settings', methods=['POST'])
+@require_auth
+def api_set_qr_display_settings(**kwargs):
+    """Lưu cấu hình hiển thị QR Display (lưu trong DB, dùng chung mọi trình duyệt)."""
+    try:
+        payload = request.get_json() or {}
+        settings = payload.get('settings') if isinstance(payload, dict) else None
+        if not isinstance(settings, dict):
+            return jsonify({'success': False, 'error': 'Thiếu settings (object).'}), 400
+
+        # Only accept whitelisted keys
+        for k, v in settings.items():
+            if k not in QR_DISPLAY_SETTING_KEYS:
+                continue
+            # Store as string (AppSetting.value is String)
+            AppSetting.set_value(k, None if v is None else str(v))
+
+        return jsonify({'success': True, 'message': 'Đã lưu cấu hình QR Display.'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/examination-settings', methods=['GET'])
 def get_examination_settings():
     settings = ExaminationSettings.query.first()
@@ -3693,6 +5771,624 @@ def delete_test_result(id):
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+# ===== QR Ads Media (upload + serve) =====
+@app.route('/qr-ads-media/<path:filename>')
+def qr_ads_media_file(filename):
+    return send_from_directory(QR_ADS_MEDIA_DIR, filename)
+
+@app.route('/api/qr-ads-media/upload', methods=['POST'])
+@require_auth
+def api_qr_ads_media_upload(**kwargs):
+    try:
+        files = request.files.getlist('files')
+        if not files:
+            return jsonify({'success': False, 'error': 'Thiếu files.'}), 400
+
+        saved = []
+        for f in files:
+            if not f or not getattr(f, 'filename', ''):
+                continue
+            original = str(f.filename)
+            filename = werkzeug.utils.secure_filename(original)
+            if not filename:
+                continue
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in QR_ADS_MEDIA_ALLOWED_EXTS:
+                return jsonify({'success': False, 'error': f'File không hỗ trợ: {original}'}), 400
+
+            # Avoid overwrite
+            base = os.path.splitext(filename)[0]
+            final_name = filename
+            i = 1
+            dst = os.path.join(QR_ADS_MEDIA_DIR, final_name)
+            while os.path.exists(dst):
+                final_name = f"{base}-{i}{ext}"
+                dst = os.path.join(QR_ADS_MEDIA_DIR, final_name)
+                i += 1
+
+            f.save(dst)
+            saved.append({
+                'filename': final_name,
+                'url': _qr_ads_media_public_url(final_name)
+            })
+
+        if not saved:
+            return jsonify({'success': False, 'error': 'Không có file hợp lệ để lưu.'}), 400
+
+        return jsonify({'success': True, 'files': saved})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/qr-ads-media/list', methods=['GET'])
+@require_auth
+def api_qr_ads_media_list(**kwargs):
+    """Liệt kê file trong qr-ads-media."""
+    try:
+        if not os.path.isdir(QR_ADS_MEDIA_DIR):
+            return jsonify({'success': True, 'files': []})
+        files = []
+        for name in os.listdir(QR_ADS_MEDIA_DIR):
+            if name.startswith('.'):
+                continue
+            path = os.path.join(QR_ADS_MEDIA_DIR, name)
+            if os.path.isfile(path):
+                ext = os.path.splitext(name)[1].lower()
+                if ext in QR_ADS_MEDIA_ALLOWED_EXTS:
+                    files.append({'filename': name, 'url': _qr_ads_media_public_url(name)})
+        return jsonify({'success': True, 'files': sorted(files, key=lambda x: x['filename'])})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/qr-ads-media/delete', methods=['POST'])
+@require_auth
+def api_qr_ads_media_delete(**kwargs):
+    """Xóa file trong qr-ads-media."""
+    try:
+        data = request.get_json() or request.form or {}
+        filename = (data.get('filename') or request.form.get('filename') or '').strip()
+        if not filename or '/' in filename or '..' in filename:
+            return jsonify({'success': False, 'error': 'Tên file không hợp lệ.'}), 400
+        safe = werkzeug.utils.secure_filename(os.path.basename(filename))
+        if not safe:
+            return jsonify({'success': False, 'error': 'Tên file không hợp lệ.'}), 400
+        path = os.path.join(QR_ADS_MEDIA_DIR, safe)
+        if not os.path.isfile(path):
+            return jsonify({'success': False, 'error': 'File không tồn tại.'}), 404
+        os.remove(path)
+        return jsonify({'success': True, 'message': 'Đã xóa file.'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/qr-ads-doctor-images/<path:filename>')
+def qr_ads_doctor_images_file(filename):
+    return send_from_directory(QR_ADS_DOCTOR_MEDIA_DIR, filename)
+
+@app.route('/api/qr-ads-doctor-images/upload', methods=['POST'])
+@require_auth
+def api_qr_ads_doctor_images_upload(**kwargs):
+    try:
+        doctor_key = (request.form.get('doctorKey') or '').strip()
+        if not doctor_key:
+            return jsonify({'success': False, 'error': 'Thiếu doctorKey.'}), 400
+
+        f = request.files.get('image') or request.files.get('file')
+        if not f or not getattr(f, 'filename', ''):
+            return jsonify({'success': False, 'error': 'Thiếu file ảnh.'}), 400
+
+        original = str(f.filename)
+        safe_name = werkzeug.utils.secure_filename(original)
+        ext = os.path.splitext(safe_name)[1].lower()
+        if ext not in QR_ADS_DOCTOR_ALLOWED_EXTS:
+            return jsonify({'success': False, 'error': f'File không hỗ trợ: {original}'}), 400
+
+        slug = _slugify_doctor_key(doctor_key)
+        if not slug:
+            return jsonify({'success': False, 'error': 'doctorKey không hợp lệ sau khi slugify.'}), 400
+
+        # Avoid overwrite: add suffix if needed
+        final_name = f"{slug}{ext}"
+        dst = os.path.join(QR_ADS_DOCTOR_MEDIA_DIR, final_name)
+        i = 1
+        while os.path.exists(dst):
+            final_name = f"{slug}-{i}{ext}"
+            dst = os.path.join(QR_ADS_DOCTOR_MEDIA_DIR, final_name)
+            i += 1
+
+        f.save(dst)
+
+        return jsonify({
+            'success': True,
+            'url': _qr_ads_doctor_media_public_url(final_name),
+            'filename': final_name,
+            'doctorKey': doctor_key,
+            'slug': slug
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/qr-ads-doctor-images/delete', methods=['POST'])
+@require_auth
+def api_qr_ads_doctor_images_delete(**kwargs):
+    """Xóa ảnh bác sĩ theo doctorKey (slug)."""
+    try:
+        data = request.get_json() or request.form or {}
+        doctor_key = (data.get('doctorKey') or request.form.get('doctorKey') or '').strip()
+        if not doctor_key:
+            return jsonify({'success': False, 'error': 'Thiếu doctorKey.'}), 400
+        slug = _slugify_doctor_key(doctor_key)
+        if not slug:
+            return jsonify({'success': False, 'error': 'doctorKey không hợp lệ.'}), 400
+        deleted = []
+        if os.path.isdir(QR_ADS_DOCTOR_MEDIA_DIR):
+            for name in os.listdir(QR_ADS_DOCTOR_MEDIA_DIR):
+                base = os.path.splitext(name)[0]
+                if base == slug or base.startswith(slug + '-'):
+                    path = os.path.join(QR_ADS_DOCTOR_MEDIA_DIR, name)
+                    if os.path.isfile(path):
+                        os.remove(path)
+                        deleted.append(name)
+        return jsonify({'success': True, 'deleted': deleted, 'message': f'Đã xóa {len(deleted)} file.'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/ultrasound-media/<path:filename>')
+def ultrasound_media_file(filename):
+    return send_from_directory(ULTRASOUND_MEDIA_DIR, filename)
+
+def _read_ultrasound_capture_settings():
+    setting_key = 'ultrasound_capture_settings'
+    raw = AppSetting.get_value(setting_key, '{}') or '{}'
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            data = {}
+    except Exception:
+        data = {}
+    return data
+
+def _get_ultrasound_retention_days(settings=None):
+    cfg = settings if isinstance(settings, dict) else _read_ultrasound_capture_settings()
+    try:
+        days = int(cfg.get('retention_days') or 10)
+    except Exception:
+        days = 10
+    if days < 1:
+        days = 1
+    if days > 365:
+        days = 365
+    return days
+
+def _cleanup_ultrasound_media_by_retention(retention_days=None):
+    if not os.path.isdir(ULTRASOUND_MEDIA_DIR):
+        return 0
+    cfg = _read_ultrasound_capture_settings()
+    days = retention_days if isinstance(retention_days, int) else _get_ultrasound_retention_days(cfg)
+    keep_names = _ultrasound_media_keep_filenames(cfg)
+    cutoff_ts = datetime.utcnow().timestamp() - (days * 86400)
+    deleted = 0
+    for name in os.listdir(ULTRASOUND_MEDIA_DIR):
+        if name.startswith('.'):
+            continue
+        if name in keep_names:
+            continue
+        path = os.path.join(ULTRASOUND_MEDIA_DIR, name)
+        if not os.path.isfile(path):
+            continue
+        ext = os.path.splitext(name)[1].lower()
+        if ext not in ULTRASOUND_MEDIA_ALLOWED_EXTS:
+            continue
+        try:
+            mtime = os.path.getmtime(path)
+        except Exception:
+            mtime = 0
+        if mtime and mtime < cutoff_ts:
+            try:
+                os.remove(path)
+                deleted += 1
+            except Exception:
+                pass
+    return deleted
+
+@app.route('/api/ultrasound-media/list', methods=['GET'])
+@require_auth
+def api_ultrasound_media_list(**kwargs):
+    try:
+        if not os.path.isdir(ULTRASOUND_MEDIA_DIR):
+            return jsonify({'success': True, 'files': []})
+        _cleanup_ultrasound_media_by_retention()
+        rows = []
+        for name in os.listdir(ULTRASOUND_MEDIA_DIR):
+            if name.startswith('.'):
+                continue
+            path = os.path.join(ULTRASOUND_MEDIA_DIR, name)
+            if not os.path.isfile(path):
+                continue
+            ext = os.path.splitext(name)[1].lower()
+            if ext not in ULTRASOUND_MEDIA_ALLOWED_EXTS:
+                continue
+            kind = 'video' if ext in {'.mp4', '.webm'} else 'image'
+            try:
+                mtime = os.path.getmtime(path)
+            except Exception:
+                mtime = 0
+            try:
+                size_bytes = os.path.getsize(path)
+            except Exception:
+                size_bytes = 0
+            rows.append({
+                'filename': name,
+                'url': _ultrasound_media_public_url(name),
+                'kind': kind,
+                'updated_at': datetime.fromtimestamp(mtime).isoformat() if mtime else '',
+                'file_size': int(size_bytes or 0)
+            })
+        rows.sort(key=lambda x: x.get('updated_at', ''), reverse=True)
+        return jsonify({'success': True, 'files': rows})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/ultrasound-media/upload', methods=['POST'])
+@require_auth
+def api_ultrasound_media_upload(**kwargs):
+    try:
+        f = request.files.get('file')
+        if not f or not getattr(f, 'filename', ''):
+            return jsonify({'success': False, 'error': 'Thiếu file upload.'}), 400
+
+        original = str(f.filename)
+        safe_name = werkzeug.utils.secure_filename(original)
+        ext = os.path.splitext(safe_name)[1].lower()
+        if ext not in ULTRASOUND_MEDIA_ALLOWED_EXTS:
+            return jsonify({'success': False, 'error': f'File không hỗ trợ: {original}'}), 400
+
+        kind = (request.form.get('kind') or '').strip().lower()
+        stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        base_prefix = 'video' if ext in {'.mp4', '.webm'} else 'image'
+        if kind in ('video', 'image'):
+            base_prefix = kind
+        final_name = f"{base_prefix}-{stamp}{ext}"
+        dst = os.path.join(ULTRASOUND_MEDIA_DIR, final_name)
+        i = 1
+        while os.path.exists(dst):
+            final_name = f"{base_prefix}-{stamp}-{i}{ext}"
+            dst = os.path.join(ULTRASOUND_MEDIA_DIR, final_name)
+            i += 1
+
+        f.save(dst)
+        _cleanup_ultrasound_media_by_retention()
+        return jsonify({
+            'success': True,
+            'filename': final_name,
+            'url': _ultrasound_media_public_url(final_name),
+            'kind': 'video' if ext in {'.mp4', '.webm'} else 'image'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/ultrasound-media/delete', methods=['POST'])
+@require_auth
+def api_ultrasound_media_delete(**kwargs):
+    try:
+        data = request.get_json() or request.form or {}
+        filename = (data.get('filename') or request.form.get('filename') or '').strip()
+        if not filename or '/' in filename or '..' in filename:
+            return jsonify({'success': False, 'error': 'Tên file không hợp lệ.'}), 400
+        safe = werkzeug.utils.secure_filename(os.path.basename(filename))
+        if not safe:
+            return jsonify({'success': False, 'error': 'Tên file không hợp lệ.'}), 400
+        path = os.path.join(ULTRASOUND_MEDIA_DIR, safe)
+        if not os.path.isfile(path):
+            return jsonify({'success': False, 'error': 'File không tồn tại.'}), 404
+        os.remove(path)
+        return jsonify({'success': True, 'message': 'Đã xóa file.'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/ultrasound-media/enhance', methods=['POST'])
+@require_auth
+def api_ultrasound_media_enhance(**kwargs):
+    """Tăng cường chất lượng media đã lưu (tạo file mới)."""
+    try:
+        data = request.get_json(silent=True) or {}
+        filename = str(data.get('filename') or '').strip()
+        mode = str(data.get('mode') or 'light').strip().lower()
+        if mode not in ('light', 'strong'):
+            mode = 'light'
+        if not filename or '/' in filename or '..' in filename:
+            return jsonify({'success': False, 'error': 'Tên file không hợp lệ.'}), 400
+        safe = werkzeug.utils.secure_filename(os.path.basename(filename))
+        if not safe:
+            return jsonify({'success': False, 'error': 'Tên file không hợp lệ.'}), 400
+        src = os.path.join(ULTRASOUND_MEDIA_DIR, safe)
+        if not os.path.isfile(src):
+            return jsonify({'success': False, 'error': 'File không tồn tại.'}), 404
+
+        stem, ext = os.path.splitext(safe)
+        ext = ext.lower()
+        stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        # Bản sao tăng cường: tên có chữ AI để phân biệt với file gốc
+        out_name = f"{stem}-AI-{mode}-{stamp}{ext}"
+        out_path = os.path.join(ULTRASOUND_MEDIA_DIR, out_name)
+
+        if ext in {'.jpg', '.jpeg', '.png', '.webp'}:
+            try:
+                import cv2
+                img = cv2.imread(src, cv2.IMREAD_COLOR)
+                if img is None:
+                    return jsonify({'success': False, 'error': 'Không đọc được ảnh nguồn.'}), 400
+                if mode == 'strong':
+                    den = cv2.fastNlMeansDenoisingColored(img, None, 9, 9, 7, 21)
+                    enh = cv2.detailEnhance(den, sigma_s=14, sigma_r=0.22)
+                    result = cv2.convertScaleAbs(enh, alpha=1.12, beta=4)
+                else:
+                    den = cv2.fastNlMeansDenoisingColored(img, None, 6, 6, 7, 15)
+                    enh = cv2.detailEnhance(den, sigma_s=9, sigma_r=0.18)
+                    result = cv2.convertScaleAbs(enh, alpha=1.06, beta=2)
+                ok = cv2.imwrite(out_path, result)
+                if not ok:
+                    return jsonify({'success': False, 'error': 'Không ghi được ảnh tăng cường.'}), 500
+            except Exception as e:
+                return jsonify({'success': False, 'error': f'Lỗi tăng cường ảnh: {e}'}), 500
+        elif ext in {'.mp4', '.webm'}:
+            try:
+                import subprocess
+                ffmpeg = _find_ffmpeg_binary()
+                if not ffmpeg:
+                    msg = (
+                        'Chưa tìm thấy FFmpeg trên server. '
+                        'Cài FFmpeg (Windows: winget install Gyan.FFmpeg) '
+                        'hoặc đặt biến môi trường FFMPEG_PATH trỏ tới ffmpeg.exe.'
+                    )
+                    return jsonify({'success': False, 'error': msg}), 400
+                vf = 'hqdn3d=1.2:1.2:6:6,unsharp=5:5:0.6:5:5:0.0,eq=contrast=1.06:brightness=0.02:saturation=1.06'
+                crf = '19'
+                if mode == 'strong':
+                    vf = 'hqdn3d=2:1.8:8:6,unsharp=5:5:1.0:5:5:0.0,eq=contrast=1.12:brightness=0.03:saturation=1.10'
+                    crf = '17'
+                cmd = [
+                    ffmpeg, '-y', '-i', src,
+                    '-vf', vf,
+                    '-c:v', 'libx264',
+                    '-preset', 'medium',
+                    '-crf', crf,
+                    '-movflags', '+faststart',
+                    '-an',
+                    out_path
+                ]
+                proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                if proc.returncode != 0 or not os.path.isfile(out_path):
+                    err = (proc.stderr or b'').decode('utf-8', errors='ignore')
+                    return jsonify({'success': False, 'error': f'FFmpeg lỗi: {err[-300:] if err else "unknown"}'}), 500
+            except Exception as e:
+                return jsonify({'success': False, 'error': f'Lỗi tăng cường video: {e}'}), 500
+        else:
+            return jsonify({'success': False, 'error': 'Định dạng file không hỗ trợ tăng cường.'}), 400
+
+        _cleanup_ultrasound_media_by_retention()
+        return jsonify({
+            'success': True,
+            'filename': out_name,
+            'url': _ultrasound_media_public_url(out_name),
+            'message': 'Đã tạo bản tăng cường.'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+_AD_TICKER_FONT_KEYS = frozenset({'system', 'arial', 'georgia', 'times', 'verdana', 'courier', 'tahoma'})
+
+
+def _sanitize_ad_ticker_hex(val, default='#38bdf8'):
+    t = str(val or '').strip()
+    if re.fullmatch(r'#[0-9a-fA-F]{6}', t):
+        return '#' + t[1:].lower()
+    if re.fullmatch(r'#[0-9a-fA-F]{3}', t):
+        r, g, b = t[1], t[2], t[3]
+        return '#' + (r + r + g + g + b + b).lower()
+    return default
+
+
+def _ad_ticker_font_key(val):
+    k = str(val or 'system').strip().lower()[:20]
+    return k if k in _AD_TICKER_FONT_KEYS else 'system'
+
+
+def _ad_ticker_int_clamp(val, default, lo, hi):
+    try:
+        x = int(val)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, x))
+
+
+def _aux_shape_key(val):
+    s = str(val or 'oval').strip().lower()[:10]
+    return s if s in ('oval', 'circle', 'heart') else 'oval'
+
+
+def _aux_offset_pct(val):
+    try:
+        x = float(val)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(-20.0, min(20.0, round(x, 1)))
+
+
+def _aux_inset_pct_setting(val):
+    try:
+        x = int(val)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(25, x))
+
+
+@app.route('/api/ultrasound-media/settings', methods=['GET', 'POST'])
+@require_auth
+def api_ultrasound_media_settings(**kwargs):
+    """Lưu/đọc cấu hình overlay capture siêu âm."""
+    setting_key = 'ultrasound_capture_settings'
+    try:
+        ensure_app_settings_value_text_column()
+        if request.method == 'GET':
+            raw = AppSetting.get_value(setting_key, '{}') or '{}'
+            try:
+                data = json.loads(raw)
+                if not isinstance(data, dict):
+                    data = {}
+            except Exception:
+                data = {}
+            if not isinstance(data.get('main_media_playlist'), list):
+                mf = str(data.get('main_video_filename') or '').strip()
+                if mf:
+                    ext = os.path.splitext(mf)[1].lower()
+                    if ext in ('.mp4', '.webm'):
+                        kd = 'video'
+                    elif ext in ('.jpg', '.jpeg', '.png', '.webp'):
+                        kd = 'image'
+                    else:
+                        kd = 'video'
+                    data['main_media_playlist'] = [{'filename': mf, 'kind': kd}]
+                else:
+                    data['main_media_playlist'] = []
+            return jsonify({'success': True, 'settings': data})
+
+        payload = request.get_json(silent=True) or {}
+        settings = payload.get('settings') if isinstance(payload, dict) else {}
+        if not isinstance(settings, dict):
+            return jsonify({'success': False, 'error': 'settings phải là object'}), 400
+
+        main_pl = _normalize_ultrasound_main_media_playlist(settings.get('main_media_playlist'))
+        if not main_pl:
+            mf = str(settings.get('main_video_filename') or '').strip()
+            if mf and '/' not in mf and '..' not in mf:
+                safe_m = werkzeug.utils.secure_filename(os.path.basename(mf))
+                if safe_m:
+                    ext_m = os.path.splitext(safe_m)[1].lower()
+                    if ext_m in {'.mp4', '.webm'}:
+                        main_pl = [{'filename': safe_m, 'kind': 'video'}]
+                    elif ext_m in {'.jpg', '.jpeg', '.png', '.webp'}:
+                        main_pl = [{'filename': safe_m, 'kind': 'image'}]
+
+        compact = {
+            'effect_filter': str(settings.get('effect_filter') or 'none')[:60],
+            'avatar_frame': bool(settings.get('avatar_frame', False)),
+            'effect_overlay_filename': str(settings.get('effect_overlay_filename') or '')[:80],
+            'avatar_overlay_filename': str(settings.get('avatar_overlay_filename') or '')[:80],
+            'bg_enabled': bool(settings.get('bg_enabled', False)),
+            'bg_filename': str(settings.get('bg_filename') or '')[:120],
+            'bg_kind': str(settings.get('bg_kind') or 'image')[:20],
+            'bg_fit': str(settings.get('bg_fit') or 'cover')[:10],
+            'bg_blur': int(settings.get('bg_blur') or 8),
+            'logo_filename': str(settings.get('logo_filename') or '')[:80],
+            'logo_position': str(settings.get('logo_position') or 'top-right')[:30],
+            'logo_scale': int(settings.get('logo_scale') or 100),
+            'logo_anim': str(settings.get('logo_anim') or 'none')[:20],
+            'heart_rain': bool(settings.get('heart_rain', False)),
+            'main_source_type': str(settings.get('main_source_type') or 'camera')[:20],
+            'main_video_filename': main_pl[0]['filename'] if main_pl else '',
+            'main_media_playlist': main_pl,
+            'quality_profile': str(settings.get('quality_profile') or 'balanced')[:20],
+            'record_fps': int(settings.get('record_fps') or 30),
+            'record_bitrate': int(settings.get('record_bitrate') or 8000000),
+            'main_brightness_pct': _ad_ticker_int_clamp(settings.get('main_brightness_pct'), 100, 40, 180),
+            'main_contrast_pct': _ad_ticker_int_clamp(settings.get('main_contrast_pct'), 100, 40, 180),
+            'enhance_realtime': str(settings.get('enhance_realtime') or 'off')[:20],
+            'audio_enabled': bool(settings.get('audio_enabled', False)),
+            'audio_source': str(settings.get('audio_source') or 'mic')[:20],
+            'audio_device_id': str(settings.get('audio_device_id') or '')[:200],
+            'audio_gain': int(settings.get('audio_gain') or 100),
+            'audio_noise_suppression': bool(settings.get('audio_noise_suppression', True)),
+            'aux_enabled': bool(settings.get('aux_enabled', False)),
+            'aux_source_type': str(settings.get('aux_source_type') or 'camera')[:20],
+            'aux_device_id': str(settings.get('aux_device_id') or '')[:120],
+            'aux_video_filename': str(settings.get('aux_video_filename') or '')[:60],
+            'aux_corner': str(settings.get('aux_corner') or 'top-right')[:20],
+            'aux_width': int(settings.get('aux_width') or 28),
+            'aux_height': int(settings.get('aux_height') or 26),
+            'aux_zoom': int(settings.get('aux_zoom') or 100),
+            'aux_shape': _aux_shape_key(settings.get('aux_shape')),
+            'aux_offset_x_pct': _aux_offset_pct(settings.get('aux_offset_x_pct')),
+            'aux_offset_y_pct': _aux_offset_pct(settings.get('aux_offset_y_pct')),
+            'aux_inset_pct': _aux_inset_pct_setting(settings.get('aux_inset_pct')),
+            'default_device_id': str(settings.get('default_device_id') or '')[:200],
+            'gallery_view_mode': str(settings.get('gallery_view_mode') or 'detail')[:20],
+            'retention_days': int(settings.get('retention_days') or 10),
+            'ad_ticker_enabled': bool(settings.get('ad_ticker_enabled', False)),
+            'ad_ticker_label': str(settings.get('ad_ticker_label') or '')[:40],
+            'ad_ticker_text': str(settings.get('ad_ticker_text') or '')[:600],
+            'ad_ticker_speed_sec': int(settings.get('ad_ticker_speed_sec') or 30),
+            'ad_ticker_label_color': _sanitize_ad_ticker_hex(settings.get('ad_ticker_label_color'), '#38bdf8'),
+            'ad_ticker_label_bg_color': _sanitize_ad_ticker_hex(settings.get('ad_ticker_label_bg_color'), '#38bdf8'),
+            'ad_ticker_label_size_px': _ad_ticker_int_clamp(settings.get('ad_ticker_label_size_px'), 12, 8, 24),
+            'ad_ticker_label_font': _ad_ticker_font_key(settings.get('ad_ticker_label_font')),
+            'ad_ticker_scroll_color': _sanitize_ad_ticker_hex(settings.get('ad_ticker_scroll_color'), '#e5e7eb'),
+            'ad_ticker_scroll_bg_color': _sanitize_ad_ticker_hex(settings.get('ad_ticker_scroll_bg_color'), '#38bdf8'),
+            'ad_ticker_scroll_size_px': _ad_ticker_int_clamp(settings.get('ad_ticker_scroll_size_px'), 15, 10, 36),
+            'ad_ticker_scroll_font': _ad_ticker_font_key(settings.get('ad_ticker_scroll_font')),
+        }
+        if compact['logo_scale'] < 20:
+            compact['logo_scale'] = 20
+        if compact['logo_scale'] > 100:
+            compact['logo_scale'] = 100
+        if compact['gallery_view_mode'] not in ('detail', 'icons'):
+            compact['gallery_view_mode'] = 'detail'
+        if compact['main_source_type'] not in ('camera', 'upload'):
+            compact['main_source_type'] = 'camera'
+        if compact['quality_profile'] not in ('balanced', 'high', 'ultra'):
+            compact['quality_profile'] = 'balanced'
+        if compact['record_fps'] < 15:
+            compact['record_fps'] = 15
+        if compact['record_fps'] > 60:
+            compact['record_fps'] = 60
+        if compact['record_bitrate'] < 1000000:
+            compact['record_bitrate'] = 1000000
+        if compact['record_bitrate'] > 30000000:
+            compact['record_bitrate'] = 30000000
+        if compact['enhance_realtime'] not in ('off', 'light', 'strong'):
+            compact['enhance_realtime'] = 'off'
+        if compact['audio_source'] not in ('mic', 'file', 'none'):
+            compact['audio_source'] = 'mic'
+        if compact['audio_gain'] < 0:
+            compact['audio_gain'] = 0
+        if compact['audio_gain'] > 200:
+            compact['audio_gain'] = 200
+        if compact['aux_source_type'] not in ('camera', 'upload'):
+            compact['aux_source_type'] = 'camera'
+        if compact['bg_kind'] not in ('image', 'video'):
+            compact['bg_kind'] = 'image'
+        if compact['bg_fit'] not in ('cover', 'contain'):
+            compact['bg_fit'] = 'cover'
+        if compact['bg_blur'] < 0:
+            compact['bg_blur'] = 0
+        if compact['bg_blur'] > 20:
+            compact['bg_blur'] = 20
+        if compact['aux_corner'] not in ('top-left', 'top-right', 'bottom-left', 'bottom-right'):
+            compact['aux_corner'] = 'top-right'
+        if compact['aux_width'] < 12:
+            compact['aux_width'] = 12
+        if compact['aux_width'] > 50:
+            compact['aux_width'] = 50
+        if compact['aux_height'] < 12:
+            compact['aux_height'] = 12
+        if compact['aux_height'] > 50:
+            compact['aux_height'] = 50
+        if compact['aux_zoom'] < 50:
+            compact['aux_zoom'] = 50
+        if compact['aux_zoom'] > 220:
+            compact['aux_zoom'] = 220
+        if compact['retention_days'] < 1:
+            compact['retention_days'] = 1
+        if compact['retention_days'] > 365:
+            compact['retention_days'] = 365
+        if compact['ad_ticker_speed_sec'] < 8:
+            compact['ad_ticker_speed_sec'] = 8
+        if compact['ad_ticker_speed_sec'] > 120:
+            compact['ad_ticker_speed_sec'] = 120
+        AppSetting.set_value(setting_key, json.dumps(compact, ensure_ascii=False))
+        return jsonify({'success': True, 'settings': compact, 'message': 'Đã lưu cấu hình capture.'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/booking-content', methods=['GET'])
 def get_booking_content():
     # Ensure column exists for older databases
@@ -3783,8 +6479,20 @@ def admin_get_work_schedule():
     ensure_work_schedule_columns()
     # Lấy lịch làm việc theo ngày (có thể truyền ?date=yyyy-mm-dd)
     date = request.args.get('date')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
     q = WorkSchedule.query
-    if date:
+    if start_date and end_date:
+        try:
+            sd = datetime.strptime(start_date, '%Y-%m-%d').date().strftime('%Y-%m-%d')
+            ed = datetime.strptime(end_date, '%Y-%m-%d').date().strftime('%Y-%m-%d')
+            q = q.filter(WorkSchedule.date >= sd, WorkSchedule.date <= ed)
+        except Exception:
+            # fallback về mode theo 'date' nếu start/end sai định dạng
+            if date:
+                q = q.filter_by(date=date)
+    elif date:
         q = q.filter_by(date=date)
     schedules = q.order_by(WorkSchedule.date, WorkSchedule.start_time).all()
     return jsonify([
@@ -3844,6 +6552,92 @@ def admin_delete_work_schedule(id):
     db.session.delete(ws)
     db.session.commit()
     return jsonify({'message': 'Đã xóa ca khám!'})
+
+STAFF_HOURLY_RATE_KEY = 'staff_hourly_rate'
+
+@app.route('/api/staff-hourly-rate', methods=['GET'])
+def api_get_staff_hourly_rate():
+    try:
+        raw = AppSetting.get_value(STAFF_HOURLY_RATE_KEY, '0') or '0'
+        return jsonify({'hourly_rate': float(raw)})
+    except Exception:
+        return jsonify({'hourly_rate': 0})
+
+@app.route('/api/staff-hourly-rate', methods=['POST'])
+def api_set_staff_hourly_rate():
+    data = request.json or {}
+    raw = data.get('hourly_rate', 0)
+    try:
+        val = float(raw)
+    except Exception:
+        val = 0
+    AppSetting.set_value(STAFF_HOURLY_RATE_KEY, str(val))
+    return jsonify({'message': 'Đã cập nhật lương theo giờ', 'hourly_rate': val})
+
+@app.route('/api/staff-attendance', methods=['GET'])
+def api_get_staff_attendance():
+    staff_name = (request.args.get('staff') or '').strip()
+    date_str = (request.args.get('date') or '').strip()
+    if not staff_name or not date_str:
+        return jsonify({'error': 'Thiếu staff hoặc date'}), 400
+
+    rec = StaffAttendance.query.filter_by(staff_name=staff_name, date=date_str).first()
+    if not rec:
+        return jsonify({'staff_name': staff_name, 'date': date_str, 'record': None})
+
+    return jsonify({
+        'staff_name': rec.staff_name,
+        'date': rec.date,
+        'record': {
+            'id': rec.id,
+            'check_in_time': rec.check_in_time,
+            'check_out_time': rec.check_out_time,
+            'note': rec.note or '',
+            'updated_at': rec.updated_at.isoformat() if rec.updated_at else None
+        }
+    })
+
+@app.route('/api/staff-attendance', methods=['POST'])
+def api_upsert_staff_attendance():
+    data = request.json or {}
+    staff_name = (data.get('staff_name') or data.get('staff') or '').strip()
+    date_str = (data.get('date') or '').strip()
+
+    if not staff_name or not date_str:
+        return jsonify({'error': 'Thiếu staff_name hoặc date'}), 400
+
+    check_in = data.get('check_in_time') or data.get('checkIn') or ''
+    check_out = data.get('check_out_time') or data.get('checkOut') or ''
+    note = data.get('note') or ''
+
+    rec = StaffAttendance.query.filter_by(staff_name=staff_name, date=date_str).first()
+    if rec:
+        rec.check_in_time = check_in or None
+        rec.check_out_time = check_out or None
+        rec.note = note
+    else:
+        rec = StaffAttendance(
+            staff_name=staff_name,
+            date=date_str,
+            check_in_time=check_in or None,
+            check_out_time=check_out or None,
+            note=note
+        )
+        db.session.add(rec)
+
+    db.session.commit()
+    return jsonify({
+        'message': 'Đã lưu chấm công',
+        'staff_name': rec.staff_name,
+        'date': rec.date,
+        'record': {
+            'id': rec.id,
+            'check_in_time': rec.check_in_time,
+            'check_out_time': rec.check_out_time,
+            'note': rec.note or '',
+            'updated_at': rec.updated_at.isoformat() if rec.updated_at else None
+        }
+    })
 
 @app.route('/api/admin/work-schedule/copy-week', methods=['POST'])
 def copy_work_schedule_week():
@@ -4624,6 +7418,8 @@ def get_patients():
 
 @app.route('/api/appointments/<int:appointment_id>/clinical-services', methods=['GET'])
 def get_appointment_clinical_services(appointment_id):
+    ensure_clinical_service_setting_columns()
+    ensure_clinical_service_sync_columns()
     appointment = _get_or_404(Appointment, appointment_id)
     services = appointment.clinical_services
     return jsonify([{
@@ -4632,13 +7428,199 @@ def get_appointment_clinical_services(appointment_id):
         'name': s.service.name,
         'price': s.service.price,
         'service_group': s.service.service_group,  # Thêm service_group để kiểm tra nhóm dịch vụ
-        'description': getattr(s.service, 'description', '')  # Thêm description nếu có
+        'description': getattr(s.service, 'description', ''),  # Thêm description nếu có
+        'Maysieuam': {
+            'status': getattr(s, 'Maysieuam_status', '') or '',
+            'retry_count': int(getattr(s, 'Maysieuam_retry_count', 0) or 0),
+            'last_error': getattr(s, 'Maysieuam_last_error', None),
+            'last_attempt': s.Maysieuam_last_attempt.isoformat() if getattr(s, 'Maysieuam_last_attempt', None) else None,
+            'synced_at': s.Maysieuam_synced_at.isoformat() if getattr(s, 'Maysieuam_synced_at', None) else None,
+            'accession': getattr(s, 'Maysieuam_accession', None),
+        }
     } for s in services])
+
+
+def _is_ultrasound_text(value: str) -> bool:
+    s = (value or '').strip().lower()
+    if not s:
+        return False
+    keys = ['siêu âm', 'sieu am', 'ultrasound', ' us ', 'us ']
+    return any(k in f' {s} ' for k in keys)
+
+
+def _mwl_accession_for_appointment(appointment_id: int, service_key: str = '') -> str:
+    base = f"ACC{int(appointment_id):06d}"
+    suffix = str(service_key or '').strip()
+    return f"{base}-{suffix}" if suffix else base
+
+
+def _upsert_mwl_entry_for_appointment(appointment, study_description: str, accession_number: str) -> bool:
+    try:
+        if not appointment or not appointment.patient:
+            return False
+        patient = appointment.patient
+        if not appointment.appointment_date:
+            return False
+        dob = patient.date_of_birth.strftime('%Y%m%d') if getattr(patient, 'date_of_birth', None) else ''
+        expected_delivery_date = appointment.expected_delivery_date.strftime('%Y-%m-%d') if getattr(appointment, 'expected_delivery_date', None) else ''
+        base_study_desc = (study_description or appointment.service_type or 'Siêu âm').strip()
+        # Embed DKS directly into StudyDescription so modality can read it from MWL list/details.
+        if expected_delivery_date and 'dks ' not in base_study_desc.lower():
+            dks_display = expected_delivery_date
+            if len(expected_delivery_date) == 10 and expected_delivery_date[4] == '-' and expected_delivery_date[7] == '-':
+                dks_display = f"{expected_delivery_date[8:10]}/{expected_delivery_date[5:7]}/{expected_delivery_date[0:4]}"
+            base_study_desc = f"{base_study_desc} | DKS {dks_display}"
+        entry = {
+            'PatientName': patient.name or '',
+            'PatientID': getattr(patient, 'patient_id', None) or f"PAT_{appointment.id}",
+            'PatientBirthDate': dob,
+            'StudyDescription': base_study_desc,
+            'Modality': 'US',
+            'ScheduledProcedureStepStartDate': appointment.appointment_date.strftime('%Y%m%d'),
+            'ScheduledProcedureStepStartTime': appointment.appointment_date.strftime('%H%M%S'),
+            'AccessionNumber': accession_number,
+            'ExpectedDeliveryDate': expected_delivery_date
+        }
+        mwl_store.init_db()
+        mwl_store.upsert_entry(entry)
+        return True
+    except Exception as e:
+        print(f"Realtime MWL upsert failed: {e}")
+        return False
+
+
+def _delete_mwl_entry_by_accession(accession_number: str) -> bool:
+    try:
+        mwl_store.init_db()
+        return bool(mwl_store.delete_entry_by_accession(accession_number))
+    except Exception as e:
+        print(f"Realtime MWL delete failed: {e}")
+        return False
+
+def _sync_appointment_ultrasound_worklist(appointment_id: int) -> dict:
+    """Đồng bộ realtime MWL cho một lịch khám."""
+    result = {'upserted': 0, 'deleted': 0}
+    try:
+        ensure_clinical_service_sync_columns()
+        appt = db.session.get(Appointment, int(appointment_id))
+        if not appt:
+            return result
+
+        ultrasound_services = []
+        for cs in (appt.clinical_services or []):
+            svc_name = (cs.service.name if cs.service else '')
+            svc_group = (cs.service.service_group if cs.service else '')
+            if _is_ultrasound_text(svc_name) or _is_ultrasound_text(svc_group):
+                ultrasound_services.append(cs)
+
+        fallback_acc = _mwl_accession_for_appointment(appt.id)
+        if ultrasound_services:
+            for cs in ultrasound_services:
+                if not getattr(cs, 'Maysieuam_accession', None):
+                    # Use clinical_service row id for stable unique accession per indication
+                    cs.Maysieuam_accession = _mwl_accession_for_appointment(appt.id, f"svc{cs.id}")
+                ok = _upsert_mwl_entry_for_appointment(
+                    appt,
+                    study_description=(cs.service.name if cs.service else appt.service_type),
+                    accession_number=cs.Maysieuam_accession
+                )
+                if ok:
+                    result['upserted'] += 1
+            if _delete_mwl_entry_by_accession(fallback_acc):
+                result['deleted'] += 1
+            db.session.commit()
+            return result
+
+        if _is_ultrasound_text(appt.service_type):
+            if _upsert_mwl_entry_for_appointment(appt, appt.service_type, fallback_acc):
+                result['upserted'] += 1
+        else:
+            if _delete_mwl_entry_by_accession(fallback_acc):
+                result['deleted'] += 1
+        return result
+    except Exception as e:
+        db.session.rollback()
+        print(f"_sync_appointment_ultrasound_worklist failed: {e}")
+        return result
+
+
+def _mark_appointment_Maysieuam_pending(appointment_id: int) -> None:
+    try:
+        ensure_appointment_sync_columns()
+        appointment = Appointment.query.get(appointment_id)
+        if appointment:
+            appointment.Maysieuam_synced = False
+            appointment.Maysieuam_sync_time = None
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"Set ultrasound pending failed: {e}")
+
+
+def _kick_Maysieuam_sync_now(appointment_id: int, clinical_service_id: int = None) -> None:
+    """Trigger sync one appointment in background, avoid blocking API."""
+    def _run():
+        with app.app_context():
+            try:
+                # Mark per-order status as syncing (best-effort)
+                if clinical_service_id is not None:
+                    try:
+                        ensure_clinical_service_sync_columns()
+                        cs = ClinicalService.query.get(int(clinical_service_id))
+                        if cs:
+                            cs.Maysieuam_status = 'syncing'
+                            cs.Maysieuam_last_attempt = datetime.utcnow()
+                            db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+
+                from voluson_sync_service import get_voluson_sync_service
+                svc = get_voluson_sync_service()
+                if svc and svc.sync_enabled:
+                    ok = bool(svc.sync_single_appointment(int(appointment_id)))
+                    if clinical_service_id is not None:
+                        try:
+                            ensure_clinical_service_sync_columns()
+                            cs = ClinicalService.query.get(int(clinical_service_id))
+                            if cs:
+                                if ok:
+                                    cs.Maysieuam_status = 'synced'
+                                    cs.Maysieuam_synced_at = datetime.utcnow()
+                                    cs.Maysieuam_last_error = None
+                                else:
+                                    cs.Maysieuam_status = 'failed'
+                                    cs.Maysieuam_retry_count = int(cs.Maysieuam_retry_count or 0) + 1
+                                    cs.Maysieuam_last_error = (cs.Maysieuam_last_error or 'sync_single_appointment returned False')
+                                db.session.commit()
+                        except Exception:
+                            db.session.rollback()
+            except Exception as e:
+                if clinical_service_id is not None:
+                    try:
+                        ensure_clinical_service_sync_columns()
+                        cs = ClinicalService.query.get(int(clinical_service_id))
+                        if cs:
+                            cs.Maysieuam_status = 'failed'
+                            cs.Maysieuam_retry_count = int(cs.Maysieuam_retry_count or 0) + 1
+                            cs.Maysieuam_last_error = str(e)
+                            cs.Maysieuam_last_attempt = datetime.utcnow()
+                            db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+                print(f"Ultrasound immediate sync failed: {e}")
+
+    try:
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+    except Exception as e:
+        print(f"Start ultrasound sync thread failed: {e}")
+
 
 @app.route('/api/appointments/<int:appointment_id>/clinical-services', methods=['POST'])
 def add_appointment_clinical_service(appointment_id):
     # Ensure backward-compatible columns exist on older databases before selecting service
     ensure_clinical_service_setting_columns()
+    ensure_clinical_service_sync_columns()
     try:
         appointment = _get_or_404(Appointment, appointment_id)
         data = request.json or {}
@@ -4688,48 +7670,106 @@ def add_appointment_clinical_service(appointment_id):
             # Không chặn việc thêm dịch vụ nếu sync thất bại; chỉ log ra console
             print(f"Lab sync failed: {lab_err}")
 
-        # Đồng bộ với Voluson E10 nếu là dịch vụ siêu âm
+        is_ultrasound_service = False
+        # Nhận diện dịch vụ siêu âm để xử lý realtime sau khi commit DB
         try:
             # Kiểm tra dịch vụ siêu âm qua service_group hoặc tên dịch vụ
-            is_ultrasound = False
             if service.service_group:
                 service_group_lower = service.service_group.lower()
                 if 'siêu âm' in service_group_lower or 'sieu am' in service_group_lower or 'ultrasound' in service_group_lower:
-                    is_ultrasound = True
+                    is_ultrasound_service = True
             
             # Nếu chưa phát hiện qua service_group, kiểm tra tên dịch vụ
-            if not is_ultrasound and service.name:
+            if not is_ultrasound_service and service.name:
                 service_name_lower = service.name.lower()
                 if 'siêu âm' in service_name_lower or 'sieu am' in service_name_lower or 'ultrasound' in service_name_lower:
-                    is_ultrasound = True
-            
-            if is_ultrasound:
-                from voluson_sync_service import get_voluson_sync_service
-                sync_service = get_voluson_sync_service()
-                if sync_service and sync_service.sync_enabled:
-                    # Tạo worklist entry cho Voluson
-                    success = sync_service.add_appointment_to_worklist(
-                        appointment_id=appointment_id,
-                        service_name=service.name,
-                        modality='US'  # Ultrasound
-                    )
-                    if success:
-                        print(f"Da dong bo dich vu sieu am '{service.name}' voi Voluson E10")
-                    else:
-                        print(f"Khong the dong bo dich vu sieu am '{service.name}' voi Voluson E10")
-        except Exception as voluson_err:
-            # Không chặn việc thêm dịch vụ nếu sync thất bại; chỉ log ra console
-            print(f"Voluson sync failed: {voluson_err}")
+                    is_ultrasound_service = True
+            if is_ultrasound_service:
+                appointment.Maysieuam_synced = False
+                appointment.Maysieuam_sync_time = None
+                clinical_service.Maysieuam_status = 'queued'
+                clinical_service.Maysieuam_retry_count = 0
+                clinical_service.Maysieuam_last_error = None
+                clinical_service.Maysieuam_last_attempt = datetime.utcnow()
+                clinical_service.Maysieuam_synced_at = None
+                clinical_service.Maysieuam_accession = _mwl_accession_for_appointment(appointment_id, f"svc{service.id}")
+        except Exception as Maysieuam_err:
+            print(f"Ultrasound pre-sync prep failed: {Maysieuam_err}")
 
         db.session.commit()
+
+        # Chỉ đồng bộ realtime sau khi DB commit thành công
+        if is_ultrasound_service:
+            _upsert_mwl_entry_for_appointment(
+                appointment,
+                study_description=service.name,
+                accession_number=_mwl_accession_for_appointment(appointment_id, f"svc{service.id}")
+            )
+            # fallback accession theo appointment/service_type (cho luồng reason-based)
+            _upsert_mwl_entry_for_appointment(
+                appointment,
+                study_description=appointment.service_type or service.name,
+                accession_number=_mwl_accession_for_appointment(appointment_id)
+            )
+            _kick_Maysieuam_sync_now(appointment_id, clinical_service_id=clinical_service.id)
+
         return jsonify({'message': 'Service added successfully'})
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Failed to add service: {str(e)}'}), 500
 
+@app.route('/api/appointments/<int:appointment_id>/clinical-services', methods=['DELETE'])
+def remove_all_appointment_clinical_services(appointment_id):
+    """Xóa toàn bộ dịch vụ cận lâm sàng của một lịch hẹn."""
+    try:
+        ensure_clinical_service_sync_columns()
+        appointment = _get_or_404(Appointment, appointment_id)
+        services = ClinicalService.query.filter_by(appointment_id=appointment_id).all()
+        if not services:
+            return jsonify({'message': 'Bệnh nhân chưa có dịch vụ cận lâm sàng nào.', 'deleted': 0})
+
+        deleted_count = 0
+        ultrasound_service_ids = []
+        for cs in services:
+            try:
+                svc_name = (cs.service.name if cs.service else '')
+                svc_group = (cs.service.service_group if cs.service else '')
+                if _is_ultrasound_text(svc_name) or _is_ultrasound_text(svc_group):
+                    ultrasound_service_ids.append(cs.service_id)
+            except Exception:
+                pass
+
+            try:
+                related_lab = LabOrder.query.filter_by(clinical_service_id=cs.id).first()
+                if related_lab:
+                    db.session.delete(related_lab)
+            except Exception:
+                pass
+
+            db.session.delete(cs)
+            deleted_count += 1
+
+        db.session.commit()
+
+        # Best-effort cleanup realtime sync for ultrasound services
+        try:
+            if ultrasound_service_ids:
+                for sid in ultrasound_service_ids:
+                    _delete_mwl_entry_by_accession(_mwl_accession_for_appointment(appointment_id, f"svc{sid}"))
+                _mark_appointment_Maysieuam_pending(appointment_id)
+                _kick_Maysieuam_sync_now(appointment_id)
+        except Exception:
+            pass
+
+        return jsonify({'message': f'Đã xóa {deleted_count} dịch vụ cận lâm sàng.', 'deleted': deleted_count})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Đã xảy ra lỗi khi xóa dịch vụ cận lâm sàng: {str(e)}'}), 500
+
 @app.route('/api/appointments/<int:appointment_id>/clinical-services/<int:service_id>', methods=['DELETE'])
 def remove_appointment_clinical_service(appointment_id, service_id):
     try:
+        ensure_clinical_service_sync_columns()
         clinical_service = ClinicalService.query.filter_by(
             appointment_id=appointment_id,
             service_id=service_id
@@ -4737,6 +7777,16 @@ def remove_appointment_clinical_service(appointment_id, service_id):
         
         if not clinical_service:
             return jsonify({'message': 'Không tìm thấy dịch vụ khám này'}), 404
+
+        is_ultrasound_service = False
+        cs_id = clinical_service.id
+        # Realtime MWL: nếu là dịch vụ siêu âm thì xóa entry MWL tương ứng
+        try:
+            svc_name = (clinical_service.service.name if clinical_service.service else '')
+            svc_group = (clinical_service.service.service_group if clinical_service.service else '')
+            is_ultrasound_service = _is_ultrasound_text(svc_name) or _is_ultrasound_text(svc_group)
+        except Exception as mwl_err:
+            print(f"Realtime MWL cleanup failed: {mwl_err}")
             
         # Xóa bản ghi LabOrder liên quan nếu có
         try:
@@ -4748,6 +7798,11 @@ def remove_appointment_clinical_service(appointment_id, service_id):
 
         db.session.delete(clinical_service)
         db.session.commit()
+
+        if is_ultrasound_service:
+            _delete_mwl_entry_by_accession(_mwl_accession_for_appointment(appointment_id, f"svc{service_id}"))
+            _mark_appointment_Maysieuam_pending(appointment_id)
+            _kick_Maysieuam_sync_now(appointment_id, clinical_service_id=cs_id)
         
         return jsonify({'message': 'Đã xóa dịch vụ khám thành công'})
     except Exception as e:
@@ -4775,10 +7830,11 @@ def checkin():
         
         db.session.add(checkin)
         db.session.commit()
-        
+        db.session.refresh(checkin)
         return jsonify({
             'success': True,
             'queue_number': next_queue_number,
+            'checkin_time': checkin.checkin_time.isoformat() if checkin.checkin_time else None,
             'message': f'Check-in thành công! Số thứ tự của bạn là {next_queue_number}'
         })
         
@@ -4790,71 +7846,137 @@ def checkin():
         }), 500
 
 
-    # ============ Modality Worklist API (CRUD) ============
-    @app.route('/api/mwl-entries', methods=['GET'])
-    @require_permission('manage_worklist')
-    def api_get_mwl_entries():
-        try:
-            mwl_store.init_db()
-            entries = mwl_store.get_all_entries()
-            return jsonify({'success': True, 'entries': entries})
-        except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
+# ============ Modality Worklist API (CRUD) ============
+def _cleanup_outdated_mwl_entries() -> int:
+    """
+    Xóa tự động các ca MWL đã qua ngày (scheduled_date < hôm nay).
+    Trả về số dòng đã xóa.
+    """
+    try:
+        today_yyyymmdd = datetime.now().strftime('%Y%m%d')
+        mwl_store.init_db()
+        rows = mwl_store.get_all_entries() or []
+        removed = 0
+        for row in rows:
+            row_id = row.get('id')
+            sched = str(row.get('ScheduledProcedureStepStartDate') or '').strip()
+            # Chỉ xử lý khi có ngày hợp lệ dạng yyyymmdd
+            if row_id and len(sched) == 8 and sched.isdigit() and sched < today_yyyymmdd:
+                if mwl_store.delete_entry_by_id(int(row_id)):
+                    removed += 1
+        return removed
+    except Exception as e:
+        print(f"MWL cleanup old entries failed: {e}")
+        return 0
+
+@app.route('/api/mwl-entries', methods=['GET'])
+@require_permission('manage_worklist')
+def api_get_mwl_entries():
+    try:
+        mwl_store.init_db()
+        _cleanup_outdated_mwl_entries()
+        mwl_store.remove_duplicate_mwl_rows()
+        entries = mwl_store.get_all_entries()
+        return jsonify({'success': True, 'entries': entries})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
-    @app.route('/api/mwl-entries', methods=['POST'])
-    @require_permission('manage_worklist')
-    def api_post_mwl_entry():
-        try:
-            data = request.json or {}
-            if not data:
-                return jsonify({'success': False, 'error': 'Missing JSON body'}), 400
-            mwl_store.init_db()
-            entry_id = mwl_store.upsert_entry(data)
-            return jsonify({'success': True, 'entry_id': entry_id})
-        except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
+@app.route('/api/mwl-entries', methods=['POST'])
+@require_permission('manage_worklist')
+def api_post_mwl_entry():
+    try:
+        data = request.json or {}
+        if not data:
+            return jsonify({'success': False, 'error': 'Missing JSON body'}), 400
+        mwl_store.init_db()
+        entry_id = mwl_store.upsert_entry(data)
+        return jsonify({'success': True, 'entry_id': entry_id})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
-    @app.route('/api/mwl-entries/<int:entry_id>', methods=['PUT'])
-    @require_permission('manage_worklist')
-    def api_put_mwl_entry(entry_id):
-        try:
-            data = request.json or {}
-            mwl_store.init_db()
-            updated = mwl_store.update_entry_by_id(entry_id, data)
-            if not updated:
-                return jsonify({'success': False, 'error': 'Entry not found'}), 404
-            return jsonify({'success': True, 'entry': updated})
-        except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
+@app.route('/api/mwl-entries/<int:entry_id>', methods=['PUT'])
+@require_permission('manage_worklist')
+def api_put_mwl_entry(entry_id):
+    try:
+        data = request.json or {}
+        mwl_store.init_db()
+        updated = mwl_store.update_entry_by_id(entry_id, data)
+        if not updated:
+            return jsonify({'success': False, 'error': 'Entry not found'}), 404
+        return jsonify({'success': True, 'entry': updated})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
-    @app.route('/api/mwl-entries/<int:entry_id>', methods=['DELETE'])
-    @require_permission('manage_worklist')
-    def api_delete_mwl_entry(entry_id):
-        try:
-            mwl_store.init_db()
-            ok = mwl_store.delete_entry_by_id(entry_id)
-            return jsonify({'success': ok})
-        except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
+@app.route('/api/mwl-entries/<int:entry_id>', methods=['DELETE'])
+@require_permission('manage_worklist')
+def api_delete_mwl_entry(entry_id):
+    try:
+        mwl_store.init_db()
+        ok = mwl_store.delete_entry_by_id(entry_id)
+        return jsonify({'success': ok})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
-    @app.route('/api/mwl-sync', methods=['POST'])
-    @require_permission('manage_worklist')
-    def api_trigger_mwl_sync():
-        try:
-            # Trigger immediate sync: run mwl_sync logic inline
-            import mwl_sync
-            entries = mwl_sync.build_worklist_entries()
-            mwl_store.init_db()
-            mwl_store.clear_all()
-            for e in entries:
-                mwl_store.upsert_entry(e)
-            return jsonify({'success': True, 'imported': len(entries)})
-        except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
+@app.route('/api/mwl-sync', methods=['POST'])
+@require_permission('manage_worklist')
+def api_trigger_mwl_sync():
+    try:
+        # Trigger immediate sync: run mwl_sync logic inline
+        import mwl_sync
+        entries = mwl_sync.build_worklist_entries()
+        mwl_store.init_db()
+        _cleanup_outdated_mwl_entries()
+        old_entries = mwl_store.get_all_entries()
+        old_by_acc = {
+            (x.get('AccessionNumber') or ''): x
+            for x in old_entries
+            if (x.get('AccessionNumber') or '')
+        }
+
+        new_by_acc = {
+            (x.get('AccessionNumber') or ''): x
+            for x in entries
+            if (x.get('AccessionNumber') or '')
+        }
+
+        added = 0
+        updated = 0
+        unchanged = 0
+        removed = 0
+
+        for acc, row in new_by_acc.items():
+            old_row = old_by_acc.get(acc)
+            if not old_row:
+                added += 1
+                continue
+            if old_row == row:
+                unchanged += 1
+            else:
+                updated += 1
+
+        for acc in old_by_acc.keys():
+            if acc not in new_by_acc:
+                removed += 1
+
+        mwl_store.clear_all()
+        for e in entries:
+            mwl_store.upsert_entry(e)
+        return jsonify({
+            'success': True,
+            'imported': len(entries),
+            'added': added,
+            'updated': updated,
+            'unchanged': unchanged,
+            'removed': removed,
+            'total_after_sync': len(entries),
+            'total_before_sync': len(old_entries)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/checkin/stats', methods=['GET'])
 def checkin_stats():
@@ -5615,6 +8737,7 @@ def get_appointment_full_info(appointment_id):
             'service_type': appointment.service_type,
             'status': appointment.status,
             'doctor_name': getattr(appointment, 'doctor_name', 'PK Đại Anh'),
+            'expected_delivery_date': appointment.expected_delivery_date.isoformat() if getattr(appointment, 'expected_delivery_date', None) else None,
             'diagnosis': medical_record.diagnosis if medical_record else '',
             'prescription': medical_record.prescription if medical_record else '',
             'notes': medical_record.notes if medical_record else '',
@@ -5791,10 +8914,10 @@ def delete_special_template(template_id):
         db.session.rollback()
         return jsonify({'message': f'Lỗi khi xóa mẫu đặc biệt: {str(e)}'}), 500
 
-# ============ Voluson E10 Sync API ============
-@app.route('/api/voluson/sync-status', methods=['GET'])
-def get_voluson_sync_status():
-    """Lấy trạng thái đồng bộ với Voluson E10"""
+# ============ Ultrasound Sync API (legacy routes kept) ============
+@app.route('/api/Maysieuam/sync-status', methods=['GET'])
+def get_Maysieuam_sync_status():
+    """Lấy trạng thái đồng bộ với máy siêu âm"""
     try:
         sync_service = get_voluson_sync_service()
         status = sync_service.get_sync_status()
@@ -5802,29 +8925,29 @@ def get_voluson_sync_status():
     except Exception as e:
         return jsonify({'error': f'Lỗi khi lấy trạng thái đồng bộ: {str(e)}'}), 500
 
-@app.route('/api/voluson/start-sync', methods=['POST'])
-def start_voluson_sync():
-    """Khởi động service đồng bộ với Voluson E10"""
+@app.route('/api/Maysieuam/start-sync', methods=['POST'])
+def start_Maysieuam_sync():
+    """Khởi động service đồng bộ với máy siêu âm"""
     try:
         sync_service = get_voluson_sync_service()
         sync_service.start_sync_service()
-        return jsonify({'message': 'Đã khởi động service đồng bộ với Voluson E10'})
+        return jsonify({'message': 'Đã khởi động service đồng bộ với máy siêu âm'})
     except Exception as e:
         return jsonify({'error': f'Lỗi khi khởi động đồng bộ: {str(e)}'}), 500
 
-@app.route('/api/voluson/stop-sync', methods=['POST'])
-def stop_voluson_sync():
-    """Dừng service đồng bộ với Voluson E10"""
+@app.route('/api/Maysieuam/stop-sync', methods=['POST'])
+def stop_Maysieuam_sync():
+    """Dừng service đồng bộ với máy siêu âm"""
     try:
         sync_service = get_voluson_sync_service()
         sync_service.stop_sync_service()
-        return jsonify({'message': 'Đã dừng service đồng bộ với Voluson E10'})
+        return jsonify({'message': 'Đã dừng service đồng bộ với máy siêu âm'})
     except Exception as e:
         return jsonify({'error': f'Lỗi khi dừng đồng bộ: {str(e)}'}), 500
 
-@app.route('/api/voluson/sync-appointment/<int:appointment_id>', methods=['POST'])
+@app.route('/api/Maysieuam/sync-appointment/<int:appointment_id>', methods=['POST'])
 def sync_single_appointment(appointment_id):
-    """Đồng bộ một cuộc hẹn cụ thể với Voluson E10"""
+    """Đồng bộ một cuộc hẹn cụ thể với máy siêu âm"""
     try:
         sync_service = get_voluson_sync_service()
         success = sync_service.sync_single_appointment(appointment_id)
@@ -5836,9 +8959,9 @@ def sync_single_appointment(appointment_id):
     except Exception as e:
         return jsonify({'error': f'Lỗi khi đồng bộ cuộc hẹn: {str(e)}'}), 500
 
-@app.route('/api/voluson/config', methods=['GET'])
-def get_voluson_config():
-    """Lấy cấu hình đồng bộ Voluson E10"""
+@app.route('/api/Maysieuam/config', methods=['GET'])
+def get_Maysieuam_config():
+    """Lấy cấu hình đồng bộ máy siêu âm"""
     try:
         sync_service = get_voluson_sync_service()
         config = sync_service.config
@@ -5848,25 +8971,66 @@ def get_voluson_config():
     except Exception as e:
         return jsonify({'error': f'Lỗi khi lấy cấu hình: {str(e)}'}), 500
 
-@app.route('/api/voluson/config', methods=['PUT'])
-def update_voluson_config():
-    """Cập nhật cấu hình đồng bộ Voluson E10"""
+@app.route('/api/voluson/config', methods=['GET'])
+def get_voluson_config_alias():
+    """Alias route cho UI mới (tương thích ngược)."""
+    return get_Maysieuam_config()
+
+@app.route('/api/Maysieuam/config', methods=['PUT'])
+def update_Maysieuam_config():
+    """Cập nhật cấu hình đồng bộ máy siêu âm"""
     try:
         data = request.json
         sync_service = get_voluson_sync_service()
         
+        # Map legacy keys from UI if needed
+        key_aliases = {
+            'Maysieuam_ip': 'voluson_ip',
+            'Maysieuam_port': 'voluson_port',
+            'Maysieuam_ae_title': 'voluson_ae_title',
+        }
+        normalized = {}
+        for k, v in (data or {}).items():
+            normalized[k] = v
+            if k in key_aliases:
+                normalized[key_aliases[k]] = v
+        data = normalized
+
         # Cập nhật cấu hình
         for key, value in data.items():
             if key in sync_service.config:
                 sync_service.config[key] = value
+
+        # Apply key settings immediately (keep singleton in sync)
+        try:
+            sync_service.sync_enabled = bool(sync_service.config.get('sync_enabled', True))
+            sync_service.voluson_ip = sync_service.config.get('voluson_ip', sync_service.config.get('Maysieuam_ip', sync_service.voluson_ip))
+            sync_service.voluson_port = int(sync_service.config.get('voluson_port', sync_service.config.get('Maysieuam_port', sync_service.voluson_port)))
+            sync_service.ae_title = sync_service.config.get('ae_title', sync_service.ae_title)
+            sync_service.voluson_ae_title = sync_service.config.get('voluson_ae_title', sync_service.config.get('Maysieuam_ae_title', sync_service.voluson_ae_title))
+            sync_service.db_path = sync_service.config.get('database_path', sync_service.db_path)
+            # Keep legacy attrs in sync
+            sync_service.Maysieuam_ip = sync_service.voluson_ip
+            sync_service.Maysieuam_port = sync_service.voluson_port
+            sync_service.Maysieuam_ae_title = sync_service.voluson_ae_title
+        except Exception:
+            pass
         
         # Lưu cấu hình vào file
         with open('voluson_config.json', 'w', encoding='utf-8') as f:
+            json.dump(sync_service.config, f, indent=2, ensure_ascii=False)
+        # Legacy backup file name
+        with open('Maysieuam_config.json', 'w', encoding='utf-8') as f:
             json.dump(sync_service.config, f, indent=2, ensure_ascii=False)
         
         return jsonify({'message': 'Đã cập nhật cấu hình thành công'})
     except Exception as e:
         return jsonify({'error': f'Lỗi khi cập nhật cấu hình: {str(e)}'}), 500
+
+@app.route('/api/voluson/config', methods=['PUT'])
+def update_voluson_config_alias():
+    """Alias route cho UI mới (tương thích ngược)."""
+    return update_Maysieuam_config()
 
 # Helper utilities for patient records
 def _merge_notes(existing_note, new_note):
@@ -6550,8 +9714,66 @@ def init_patient_records_table():
 @app.route('/api/patient-records', methods=['GET'])
 def get_patient_records():
     try:
+        from app import Appointment, Patient  # avoid circulars at import time
+
         ensure_patient_record_columns()
-        records = PatientRecord.query.order_by(PatientRecord.appointment_date.desc()).all()
+
+        # Query params for faster server-side filtering
+        q_name = (request.args.get('name') or '').strip()
+        q_pid = (request.args.get('pid') or '').strip()
+        q_phone = (request.args.get('phone') or '').strip()
+        date_from = (request.args.get('date_from') or '').strip()  # yyyy-mm-dd
+        date_to = (request.args.get('date_to') or '').strip()      # yyyy-mm-dd
+        status = (request.args.get('status') or '').strip()
+
+        query = (
+            db.session.query(PatientRecord, Patient.patient_id)
+            .outerjoin(Appointment, Appointment.id == PatientRecord.appointment_id)
+            .outerjoin(Patient, Patient.id == Appointment.patient_id)
+        )
+
+        if q_name:
+            query = query.filter(PatientRecord.patient_name.ilike(f'%{q_name}%'))
+
+        if q_phone:
+            query = query.filter(PatientRecord.patient_phone.ilike(f'%{q_phone}%'))
+
+        if q_pid:
+            # If user inputs digits, they might be old PID==phone or just phone-like.
+            pid_digits = ''.join(ch for ch in q_pid if ch.isdigit())
+            is_only_digits = pid_digits and pid_digits == q_pid
+            if is_only_digits:
+                query = query.filter(
+                    or_(
+                        Patient.patient_id.ilike(f'%{q_pid}%'),
+                        PatientRecord.patient_phone.ilike(f'%{pid_digits}%')
+                    )
+                )
+            else:
+                query = query.filter(Patient.patient_id.ilike(f'%{q_pid}%'))
+
+        # If not choose date range => default all time (no date filter)
+        if date_from or date_to:
+            if date_from:
+                try:
+                    d_from = datetime.strptime(date_from, '%Y-%m-%d')
+                    query = query.filter(PatientRecord.appointment_date >= d_from)
+                except ValueError:
+                    return jsonify({'message': 'Định dạng date_from không hợp lệ (yyyy-mm-dd)'}), 400
+            if date_to:
+                try:
+                    d_to = datetime.strptime(date_to, '%Y-%m-%d')
+                    d_to_end = d_to.replace(hour=23, minute=59, second=59, microsecond=999999)
+                    query = query.filter(PatientRecord.appointment_date <= d_to_end)
+                except ValueError:
+                    return jsonify({'message': 'Định dạng date_to không hợp lệ (yyyy-mm-dd)'}), 400
+
+        if status:
+            query = query.filter(PatientRecord.status == status)
+
+        query = query.order_by(PatientRecord.appointment_date.desc())
+        rows = query.all()
+
         return jsonify([{
             'id': record.id,
             'patient_name': record.patient_name,
@@ -6564,8 +9786,9 @@ def get_patient_records():
             'appointment_id': record.appointment_id,
             'lab_order_id': record.lab_order_id,
             'created_at': record.created_at.isoformat() if record.created_at else None,
-            'updated_at': record.updated_at.isoformat() if record.updated_at else None
-        } for record in records])
+            'updated_at': record.updated_at.isoformat() if record.updated_at else None,
+            'patient_pid': (pid or None)
+        } for (record, pid) in rows])
     except Exception as e:
         return jsonify({'message': f'Lỗi khi lấy danh sách hồ sơ: {str(e)}'}), 500
 
@@ -7756,6 +10979,125 @@ class UltrasoundResult(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
+class PacsStudyLink(db.Model):
+    __tablename__ = 'pacs_study_links'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=True)
+    appointment_id = db.Column(db.Integer, db.ForeignKey('appointment.id'), nullable=True)
+    clinical_service_id = db.Column(db.Integer, db.ForeignKey('clinical_service.id'), nullable=True)
+    accession_number = db.Column(db.String(64), index=True)
+    study_instance_uid = db.Column(db.String(128), index=True)
+    series_instance_uid = db.Column(db.String(128))
+    sop_instance_uid = db.Column(db.String(128))
+    modality = db.Column(db.String(16), default='US')
+    source_ae = db.Column(db.String(64))
+    storage_path = db.Column(db.String(500))
+    ultrasound_result_id = db.Column(db.Integer, db.ForeignKey('ultrasound_results.id'), nullable=True)
+    match_confidence = db.Column(db.Integer, default=0)
+    sync_status = db.Column(db.String(20), default='received')
+    raw_metadata = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'appointment_id': self.appointment_id,
+            'clinical_service_id': self.clinical_service_id,
+            'accession_number': self.accession_number,
+            'study_instance_uid': self.study_instance_uid,
+            'series_instance_uid': self.series_instance_uid,
+            'sop_instance_uid': self.sop_instance_uid,
+            'modality': self.modality,
+            'source_ae': self.source_ae,
+            'storage_path': self.storage_path,
+            'ultrasound_result_id': self.ultrasound_result_id,
+            'match_confidence': self.match_confidence,
+            'sync_status': self.sync_status,
+            'raw_metadata': self.raw_metadata,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+def ensure_pacs_workflow_tables():
+    """Ensure PACS workflow tables exist for MWL->PACS->Report mapping."""
+    try:
+        db.create_all()
+        result = db.session.execute(db.text('PRAGMA table_info(pacs_study_links)'))
+        columns = [row[1] for row in result]
+        if 'ultrasound_result_id' not in columns:
+            db.session.execute(db.text('ALTER TABLE pacs_study_links ADD COLUMN ultrasound_result_id INTEGER'))
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"⚠️ ensure_pacs_workflow_tables failed: {e}")
+
+def _to_float_or_none(value):
+    try:
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        text_value = str(value).strip().replace(',', '.')
+        m = re.search(r'[-+]?\d+(?:\.\d+)?', text_value)
+        return float(m.group(0)) if m else None
+    except Exception:
+        return None
+
+def _extract_measurements_from_dicom_dataset(ds):
+    """
+    MVP extractor:
+    - Try known DICOM keywords first.
+    - Fallback to regex scan on dataset text (supports machine overlay text dumps).
+    """
+    text_blob = str(ds)[:200000]
+
+    def pick_by_keywords(keywords):
+        for key in keywords:
+            try:
+                if hasattr(ds, key):
+                    v = _to_float_or_none(getattr(ds, key))
+                    if v is not None:
+                        return v
+            except Exception:
+                continue
+        return None
+
+    def pick_by_regex(patterns):
+        for pattern in patterns:
+            m = re.search(pattern, text_blob, flags=re.IGNORECASE)
+            if m:
+                v = _to_float_or_none(m.group(1))
+                if v is not None:
+                    return v
+        return None
+
+    result = {
+        'gestational_age': pick_by_keywords(['GestationalAge']) or pick_by_regex([r'\bGA\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+        'bpd': pick_by_keywords(['BiparietalDiameter']) or pick_by_regex([r'\bBPD\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+        'hc': pick_by_keywords(['HeadCircumference']) or pick_by_regex([r'\bHC\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+        'ac': pick_by_keywords(['AbdominalCircumference']) or pick_by_regex([r'\bAC\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+        'fl': pick_by_keywords(['FemurLength']) or pick_by_regex([r'\bFL\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+        'afi': pick_by_keywords(['AmnioticFluidIndex']) or pick_by_regex([r'\bAFI\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+        'estimated_weight': pick_by_keywords(['EstimatedFetalWeight']) or pick_by_regex([r'\bEFW\b\s*[:=]?\s*(\d+(?:\.\d+)?)'])
+    }
+    return result
+
+def _resolve_appointment_from_accession(accession_number):
+    if not accession_number:
+        return None, None, None
+    try:
+        clinical_service = ClinicalService.query.filter_by(Maysieuam_accession=accession_number).first()
+        if clinical_service:
+            appointment = db.session.get(Appointment, clinical_service.appointment_id)
+            if appointment:
+                return appointment.id, appointment.patient_id, clinical_service.id
+    except Exception as e:
+        print(f"resolve appointment from accession failed: {e}")
+    return None, None, None
+
 @app.route('/api/ctg-results', methods=['GET'])
 def get_ctg_results():
     """Lấy danh sách kết quả CTG"""
@@ -8593,6 +11935,88 @@ def analyze_ultrasound_data():
     except Exception as e:
         return jsonify({'message': f'Lỗi khi phân tích dữ liệu siêu âm: {str(e)}'}), 500
 
+
+@app.route('/api/analyze-ultrasound-measurements', methods=['POST'])
+def analyze_ultrasound_measurements():
+    """
+    Phân tích khuyến nghị dựa trên các chỉ số đo thủ công (hoặc tự động trích từ annotation).
+    Khác với analyze-ultrasound-data: endpoint này KHÔNG bắt buộc tuổi thai (gestational_age).
+    """
+    try:
+        data = request.json or {}
+
+        bpd = data.get('bpd')
+        hc = data.get('hc')
+        ac = data.get('ac')
+        fl = data.get('fl')
+
+        # Scoring: mỗi chỉ số hợp lý +2 điểm (tối đa 8)
+        score = 0
+        max_score = 0
+        abnormalities = []
+
+        def add_metric(val, low, high, ab_msg):
+            nonlocal score, max_score
+            if val is None:
+                return
+            try:
+                v = float(val)
+            except Exception:
+                return
+            max_score += 2
+            if low <= v <= high:
+                score += 2
+            else:
+                abnormalities.append(ab_msg)
+
+        # Ranges dùng chung với analyze-ultrasound-image/data (demo hiện tại)
+        add_metric(bpd, 20, 100, 'Đường kính lưỡng đỉnh (BPD) bất thường')
+        add_metric(hc, 60, 350, 'Chu vi đầu (HC) bất thường')
+        add_metric(ac, 50, 400, 'Chu vi bụng (AC) bất thường')
+        add_metric(fl, 10, 80, 'Chiều dài xương đùi (FL) bất thường')
+
+        if max_score == 0:
+            return jsonify({'message': 'Thiếu dữ liệu BPD/HC/AC/FL'}), 400
+
+        # Xếp loại theo tỷ lệ score
+        ratio = score / max_score if max_score else 0
+        if ratio >= 0.80:
+            status = 'normal'
+        elif ratio >= 0.60:
+            status = 'warning'
+        else:
+            status = 'danger'
+
+        recommendations = []
+        if status == 'warning':
+            recommendations.append('Cần theo dõi thêm và có thể cần siêu âm lại')
+            recommendations.append('Tư vấn với bác sĩ chuyên khoa sản')
+        elif status == 'danger':
+            recommendations.append('Cần đánh giá ngay lập tức bởi bác sĩ chuyên khoa')
+            recommendations.append('Có thể cần thực hiện các xét nghiệm bổ sung')
+
+        # Thêm khuyến nghị theo bất thường cụ thể
+        if abnormalities:
+            recommendations.append('Khuyến nghị: đối chiếu kết quả đo trên siêu âm với tuổi thai thực tế và phác đồ của bác sĩ')
+
+        return jsonify({
+            'message': 'Phân tích tự động từ annotation thành công',
+            'gestational_age': data.get('gestational_age'),
+            'bpd': bpd,
+            'hc': hc,
+            'ac': ac,
+            'fl': fl,
+            'analysis_score': score,
+            'max_score': max_score,
+            'analysis_status': status,
+            'confidence': 85,
+            'abnormalities': abnormalities,
+            'recommendations': recommendations,
+            'analysis_method': 'annotation_auto',
+        })
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi phân tích đo từ annotation: {str(e)}'}), 500
+
 @app.route('/api/ultrasound-results', methods=['POST'])
 def save_ultrasound_results():
     """Lưu kết quả siêu âm thai"""
@@ -8731,6 +12155,177 @@ def update_ultrasound_result(result_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Lỗi khi cập nhật kết quả siêu âm: {str(e)}'}), 500
+
+@app.route('/api/pacs/study-links', methods=['GET'])
+def get_pacs_study_links():
+    """Tra cứu mapping giữa y lệnh (appointment/accession) và study DICOM."""
+    ensure_pacs_workflow_tables()
+    try:
+        appointment_id = request.args.get('appointment_id', type=int)
+        accession_number = (request.args.get('accession_number') or '').strip()
+        q = PacsStudyLink.query
+        if appointment_id:
+            q = q.filter_by(appointment_id=appointment_id)
+        if accession_number:
+            q = q.filter_by(accession_number=accession_number)
+        rows = q.order_by(PacsStudyLink.created_at.desc()).limit(200).all()
+        return jsonify({'success': True, 'items': [x.to_dict() for x in rows]})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/pacs/autofill-status', methods=['GET'])
+def get_pacs_autofill_status():
+    """Tra trạng thái autofill theo patient_name + filename."""
+    ensure_pacs_workflow_tables()
+    try:
+        patient_name = (request.args.get('patient_name') or '').strip()
+        filename = (request.args.get('filename') or '').strip()
+        if not filename:
+            return jsonify({'success': False, 'message': 'Thiếu filename'}), 400
+
+        q = PacsStudyLink.query
+        if patient_name:
+            q = q.filter(PacsStudyLink.storage_path.like(f"%{patient_name}%"))
+        q = q.filter(PacsStudyLink.storage_path.like(f"%{filename}"))
+        row = q.order_by(PacsStudyLink.created_at.desc()).first()
+
+        if not row:
+            return jsonify({
+                'success': True,
+                'status': 'not_found',
+                'label': 'Chưa autofill'
+            })
+
+        label_map = {
+            'autofilled': 'Đã tự điền',
+            'received': 'Đã nhận ảnh',
+            'failed': 'Lỗi autofill'
+        }
+        return jsonify({
+            'success': True,
+            'status': row.sync_status or 'received',
+            'label': label_map.get(row.sync_status or '', row.sync_status or 'Đã nhận ảnh'),
+            'ultrasound_result_id': row.ultrasound_result_id,
+            'appointment_id': row.appointment_id,
+            'patient_id': row.patient_id,
+            'updated_at': row.updated_at.isoformat() if row.updated_at else None
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/pacs/autofill-ultrasound', methods=['POST'])
+def pacs_autofill_ultrasound():
+    """
+    MVP: nhận file DICOM đã lưu, trích chỉ số đo và tự tạo bản ghi ultrasound_results.
+    """
+    ensure_pacs_workflow_tables()
+    ensure_ultrasound_result_columns()
+    try:
+        payload = request.get_json(silent=True) or {}
+        patient_name = (payload.get('patient_name') or '').strip()
+        filename = (payload.get('filename') or '').strip()
+        appointment_id = payload.get('appointment_id')
+        patient_id = payload.get('patient_id')
+        accession_number = (payload.get('accession_number') or '').strip()
+        source_ae = (payload.get('source_ae') or '').strip()
+
+        if not filename:
+            return jsonify({'success': False, 'message': 'Thiếu filename DICOM'}), 400
+
+        base_dir = Path("received_dicoms")
+        dicom_path = base_dir / filename
+        if patient_name:
+            dicom_path = base_dir / patient_name / filename
+        if not dicom_path.exists():
+            fallback_path = base_dir / filename
+            if fallback_path.exists():
+                dicom_path = fallback_path
+            else:
+                return jsonify({'success': False, 'message': 'Không tìm thấy file DICOM'}), 404
+
+        import pydicom
+        ds = pydicom.dcmread(str(dicom_path), force=True)
+
+        ds_accession = str(ds.get("AccessionNumber", "") or '').strip()
+        accession_number = accession_number or ds_accession
+        ds_study_uid = str(ds.get("StudyInstanceUID", "") or '').strip()
+        ds_series_uid = str(ds.get("SeriesInstanceUID", "") or '').strip()
+        ds_sop_uid = str(ds.get("SOPInstanceUID", "") or '').strip()
+        ds_modality = str(ds.get("Modality", "US") or 'US').strip()
+        ds_patient_name = str(ds.get("PatientName", "") or '').strip()
+
+        resolved_appointment_id = appointment_id
+        resolved_patient_id = patient_id
+        resolved_clinical_service_id = None
+        if (not resolved_appointment_id or not resolved_patient_id) and accession_number:
+            a_id, p_id, cs_id = _resolve_appointment_from_accession(accession_number)
+            resolved_appointment_id = resolved_appointment_id or a_id
+            resolved_patient_id = resolved_patient_id or p_id
+            resolved_clinical_service_id = cs_id
+
+        if not resolved_patient_id and resolved_appointment_id:
+            appt = db.session.get(Appointment, int(resolved_appointment_id))
+            if appt:
+                resolved_patient_id = appt.patient_id
+
+        if not resolved_patient_id:
+            return jsonify({
+                'success': False,
+                'message': 'Không map được bệnh nhân. Hãy gửi patient_id hoặc accession_number hợp lệ.'
+            }), 400
+
+        extracted = _extract_measurements_from_dicom_dataset(ds)
+
+        result = UltrasoundResult(
+            patient_id=int(resolved_patient_id),
+            appointment_id=int(resolved_appointment_id) if resolved_appointment_id else None,
+            exam_date=datetime.utcnow(),
+            gestational_age=extracted.get('gestational_age'),
+            bpd=extracted.get('bpd'),
+            hc=extracted.get('hc'),
+            ac=extracted.get('ac'),
+            fl=extracted.get('fl'),
+            afi=extracted.get('afi'),
+            estimated_weight=extracted.get('estimated_weight'),
+            findings=f"Tự động trích xuất từ DICOM: {filename}",
+            recommendations='Bác sĩ kiểm tra và xác nhận lại trước khi ký.',
+            analysis_source='dicom_autofill_mvp'
+        )
+        db.session.add(result)
+        db.session.flush()
+
+        link = PacsStudyLink(
+            patient_id=int(resolved_patient_id),
+            appointment_id=int(resolved_appointment_id) if resolved_appointment_id else None,
+            clinical_service_id=int(resolved_clinical_service_id) if resolved_clinical_service_id else None,
+            accession_number=accession_number or None,
+            study_instance_uid=ds_study_uid or None,
+            series_instance_uid=ds_series_uid or None,
+            sop_instance_uid=ds_sop_uid or None,
+            modality=ds_modality or 'US',
+            source_ae=source_ae or None,
+            storage_path=str(dicom_path),
+            ultrasound_result_id=result.id,
+            match_confidence=90 if accession_number else 60,
+            sync_status='autofilled',
+            raw_metadata=json.dumps({
+                'patient_name': ds_patient_name,
+                'dicom_filename': filename
+            }, ensure_ascii=False)
+        )
+        db.session.add(link)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Đã tự điền kết quả siêu âm từ DICOM (MVP)',
+            'ultrasound_result': result.to_dict(),
+            'study_link': link.to_dict(),
+            'extracted_measurements': extracted
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi autofill PACS: {str(e)}'}), 500
 
 class ArtificialCycle(db.Model):
     __tablename__ = 'artificial_cycles'
@@ -9440,31 +13035,44 @@ def create_user():
         user_id = get_user_from_token(token)
         if not user_id or not has_permission(user_id, 'manage_users'):
             return jsonify({'error': 'Forbidden'}), 403
-        data = request.json
+        data = request.get_json(silent=True) or {}
+
+        # Validate required fields
+        username = (data.get('username') or '').strip()
+        full_name = (data.get('fullName') or data.get('full_name') or '').strip()
+        email = (data.get('email') or '').strip()
+        password = data.get('password') or ''
+        status = (data.get('status') or 'active').strip() or 'active'
+        roles = data.get('roles') if isinstance(data.get('roles'), list) else []
+
+        if not username or not full_name or not email or not password:
+            return jsonify({'error': 'Thiếu thông tin bắt buộc (username, fullName, email, password).'}), 400
+        if status not in ('active', 'inactive'):
+            status = 'active'
         
         # Kiểm tra username và email đã tồn tại chưa
-        if User.query.filter_by(username=data['username']).first():
+        if User.query.filter_by(username=username).first():
             return jsonify({'error': 'Username đã tồn tại'}), 400
-        if User.query.filter_by(email=data['email']).first():
+        if User.query.filter_by(email=email).first():
             return jsonify({'error': 'Email đã tồn tại'}), 400
 
-        ok, msg = validate_password_strength(data.get('password') or '')
+        ok, msg = validate_password_strength(password or '')
         if not ok:
             return jsonify({'error': msg}), 400
         
         # Tạo user mới
         new_user = User(
-            username=data['username'],
-            password_hash=hash_password(data['password']),
-            full_name=data['fullName'],
-            email=data['email'],
-            status=data['status'],
+            username=username,
+            password_hash=hash_password(password),
+            full_name=full_name,
+            email=email,
+            status=status,
             must_change_password=True,
             password_changed_at=None
         )
         
         # Thêm roles
-        for role_name in data['roles']:
+        for role_name in roles:
             role = Role.query.filter_by(name=role_name).first()
             if role:
                 new_user.roles.append(role)
@@ -9677,7 +13285,7 @@ def initialize_default_role_permissions():
         if existing:
             return
         defaults = {
-            'admin': ['manage_users', 'manage_worklist', 'manage_voluson_sync', 'manage_content', 'manage_lab', 'manage_work_schedule'],
+            'admin': ['manage_users', 'manage_worklist', 'manage_Maysieuam_sync', 'manage_content', 'manage_lab', 'manage_work_schedule'],
             'doctor': [],
             'nurse': [],
             'receptionist': []
@@ -9719,6 +13327,9 @@ if __name__ == '__main__':
         ensure_user_status_column()
         ensure_user_security_columns()
         ensure_clinical_result_columns()
+        ensure_appointment_doctor_column()
+        ensure_appointment_expected_delivery_date_column()
+        ensure_appointment_sync_columns()
         initialize_default_doctors()
         initialize_default_medical_charts()
         initialize_default_templates()
@@ -9732,7 +13343,8 @@ if __name__ == '__main__':
 
 # ===== Role Permissions API =====
 @app.route('/api/role-permissions', methods=['GET'])
-def api_get_role_permissions():
+@require_permission('system_config')
+def api_get_role_permissions(*args, **kwargs):
     try:
         ensure_role_permission_table()
         rows = db.session.execute(
@@ -9746,7 +13358,8 @@ def api_get_role_permissions():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/role-permissions', methods=['PUT'])
-def api_put_role_permissions():
+@require_permission('system_config')
+def api_put_role_permissions(*args, **kwargs):
     try:
         ensure_role_permission_table()
         data = request.json or {}
@@ -10082,9 +13695,9 @@ def get_pricing_file():
         print(f"Get pricing file error: {e}")
         return jsonify({'success': False, 'message': f'Lỗi: {str(e)}'}), 500
 
-@app.route('/api/test-voluson-connection', methods=['POST'])
-def test_voluson_connection():
-    """Test kết nối với máy Voluson E10"""
+@app.route('/api/test-Maysieuam-connection', methods=['POST'])
+def test_Maysieuam_connection():
+    """Test kết nối với máy siêu âm"""
     try:
         data = request.json
         ip = data.get('ip', '10.17.2.1')
@@ -10099,8 +13712,280 @@ def test_voluson_connection():
         if success:
             return jsonify({'success': True, 'message': 'Kết nối thành công'})
         else:
-            return jsonify({'success': False, 'error': 'Không thể kết nối đến máy Voluson E10'})
+            return jsonify({'success': False, 'error': 'Không thể kết nối đến máy siêu âm'})
             
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/test-voluson-connection', methods=['POST'])
+def test_voluson_connection_alias():
+    """Alias route cho UI mới (tương thích ngược)."""
+    return test_Maysieuam_connection()
+
+@app.route('/api/test-dicom-tcp', methods=['POST'])
+def test_dicom_tcp():
+    """Test TCP reachability for DICOM endpoint."""
+    try:
+        data = request.json or {}
+        ip = (data.get('ip') or '').strip()
+        port = int(data.get('port') or 104)
+        timeout_sec = float(data.get('timeout_sec') or 3)
+        if not ip:
+            return jsonify({'success': False, 'error': 'Thiếu địa chỉ IP'}), 400
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout_sec)
+        code = s.connect_ex((ip, port))
+        s.close()
+        if code == 0:
+            return jsonify({'success': True, 'message': f'TCP OK {ip}:{port}'})
+        return jsonify({'success': False, 'error': f'Không mở được TCP {ip}:{port} (code={code})'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/test-dicom-echo', methods=['POST'])
+def test_dicom_echo():
+    """Test DICOM C-ECHO to modality."""
+    try:
+        data = request.json or {}
+        ip = (data.get('ip') or '').strip()
+        port = int(data.get('port') or 104)
+        called_ae_title = (data.get('called_ae_title') or '').strip() or 'MAY_SIEU_AM'
+        local_ae_title = (data.get('local_ae_title') or '').strip() or 'CLINIC_SYSTEM'
+        if not ip:
+            return jsonify({'success': False, 'error': 'Thiếu địa chỉ IP'}), 400
+
+        from pynetdicom import AE
+        try:
+            from pynetdicom.sop_class import Verification
+        except Exception:
+            # pynetdicom>=2 thường dùng tên VerificationSOPClass
+            from pynetdicom.sop_class import VerificationSOPClass as Verification
+        ae = AE(ae_title=local_ae_title)
+        ae.add_requested_context(Verification)
+        assoc = ae.associate(ip, port, ae_title=called_ae_title)
+        if not assoc.is_established:
+            return jsonify({'success': False, 'error': 'Không thiết lập được DICOM association'})
+        status = assoc.send_c_echo()
+        assoc.release()
+        ok = bool(status and getattr(status, 'Status', None) == 0x0000)
+        if ok:
+            return jsonify({'success': True, 'message': 'C-ECHO thành công', 'status': '0x0000'})
+        return jsonify({'success': False, 'error': f"C-ECHO thất bại: {hex(getattr(status, 'Status', 0xFFFF))}"})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+def _count_mwl_cfind_matches(assoc, ds, mwl_find_class):
+    """Đếm bản ghi MWL từ iterator C-FIND (0xFF00/0xFF01 đều có thể kèm identifier)."""
+    match_count = 0
+    statuses = []
+    for status, identifier in assoc.send_c_find(ds, mwl_find_class):
+        if not status:
+            continue
+        st = int(getattr(status, 'Status', 0))
+        statuses.append(hex(st))
+        if identifier is not None and st in (0xFF00, 0xFF01):
+            match_count += 1
+    return match_count, statuses
+
+
+@app.route('/api/test-mwl-cfind', methods=['POST'])
+def test_mwl_cfind():
+    """Test MWL C-FIND from app side to MWL SCP."""
+    try:
+        data = request.json or {}
+        ip = (data.get('ip') or '').strip()
+        port = int(data.get('port') or 104)
+        called_ae_title = (data.get('called_ae_title') or '').strip() or 'CLINIC_SYSTEM'
+        local_ae_title = (data.get('local_ae_title') or '').strip() or 'CLINIC_SYSTEM'
+        modality = (data.get('modality') or 'US').strip() or 'US'
+        if not ip:
+            return jsonify({'success': False, 'error': 'Thiếu địa chỉ IP'}), 400
+
+        mwl_db_count = None
+        mwl_db_abspath = None
+        try:
+            import os
+            import mwl_store
+            mwl_store.init_db()
+            mwl_db_count = len(mwl_store.get_all_entries())
+            mwl_db_abspath = os.path.abspath(mwl_store.DB_FILENAME)
+        except Exception:
+            pass
+
+        from pynetdicom import AE
+        from pynetdicom.sop_class import ModalityWorklistInformationFind as MWLFind
+        from pydicom.dataset import Dataset
+        ae = AE(ae_title=local_ae_title)
+        ae.add_requested_context(MWLFind)
+        assoc = ae.associate(ip, port, ae_title=called_ae_title)
+        if not assoc.is_established:
+            return jsonify({
+                'success': False,
+                'error': 'Không thiết lập được DICOM association tới MWL server',
+                'mwl_db_count': mwl_db_count,
+                'mwl_db_abspath': mwl_db_abspath,
+            })
+
+        ds = Dataset()
+        ds.QueryRetrieveLevel = 'PATIENT'
+        ds.PatientName = ''
+        ds.ScheduledProcedureStepSequence = [Dataset()]
+        ds.ScheduledProcedureStepSequence[0].Modality = modality
+
+        match_count, statuses = _count_mwl_cfind_matches(assoc, ds, MWLFind)
+        assoc.release()
+        return jsonify({
+            'success': True,
+            'message': 'C-FIND đã gửi thành công',
+            'matches': match_count,
+            'statuses': statuses[:10],
+            'mwl_db_count': mwl_db_count,
+            'mwl_db_abspath': mwl_db_abspath,
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/test-dicom-workflow-checklist', methods=['POST'])
+def test_dicom_workflow_checklist():
+    """
+    1-nút kiểm tra luồng DICOM:
+    - MWL (C-FIND)
+    - C-STORE (đã nhận file DICOM gần đây)
+    - SR/measurement extraction (tách được số đo từ file mới nhất)
+    """
+    try:
+        data = request.json or {}
+        mwl_ip = (data.get('mwl_ip') or '').strip()
+        mwl_port = int(data.get('mwl_port') or 104)
+        mwl_called_ae = (data.get('mwl_called_ae_title') or '').strip() or 'CLINIC_SYSTEM'
+        local_ae = (data.get('local_ae_title') or '').strip() or 'CLINIC_SYSTEM'
+        modality = (data.get('modality') or 'US').strip() or 'US'
+        recent_minutes = int(data.get('recent_minutes') or 180)
+
+        results = []
+        overall_pass = True
+
+        # 1) MWL test (reuse same logic as /api/test-mwl-cfind)
+        mwl_ok = False
+        mwl_detail = {}
+        mwl_message = ''
+        if not mwl_ip:
+            mwl_message = 'Thiếu MWL Server IP'
+        else:
+            try:
+                from pynetdicom import AE
+                from pynetdicom.sop_class import ModalityWorklistInformationFind as MWLFind
+                from pydicom.dataset import Dataset
+                ae = AE(ae_title=local_ae)
+                ae.add_requested_context(MWLFind)
+                assoc = ae.associate(mwl_ip, mwl_port, ae_title=mwl_called_ae)
+                if not assoc.is_established:
+                    mwl_message = 'Không thiết lập được DICOM association tới MWL server'
+                else:
+                    ds = Dataset()
+                    ds.QueryRetrieveLevel = 'PATIENT'
+                    ds.PatientName = ''
+                    ds.ScheduledProcedureStepSequence = [Dataset()]
+                    ds.ScheduledProcedureStepSequence[0].Modality = modality
+                    match_count, statuses = _count_mwl_cfind_matches(assoc, ds, MWLFind)
+                    assoc.release()
+                    mwl_ok = True
+                    mwl_message = f'C-FIND OK. Matches: {match_count}'
+                    mwl_detail = {'matches': match_count, 'statuses': statuses[:10]}
+            except Exception as e:
+                mwl_message = str(e)
+        results.append({
+            'key': 'mwl',
+            'label': 'MWL C-FIND',
+            'pass': mwl_ok,
+            'message': mwl_message,
+            'detail': mwl_detail
+        })
+        overall_pass = overall_pass and mwl_ok
+
+        # 2) C-STORE test: check latest received DICOM in received_dicoms
+        cstore_ok = False
+        cstore_message = ''
+        cstore_detail = {}
+        latest_dicom_path = None
+        try:
+            base_dir = Path('./received_dicoms')
+            if not base_dir.exists():
+                cstore_message = 'Chưa có thư mục received_dicoms'
+            else:
+                latest_ts = None
+                for p in base_dir.rglob('*.dcm'):
+                    try:
+                        ts = p.stat().st_mtime
+                    except Exception:
+                        continue
+                    if latest_ts is None or ts > latest_ts:
+                        latest_ts = ts
+                        latest_dicom_path = p
+                if latest_dicom_path is None:
+                    cstore_message = 'Chưa nhận file DICOM nào'
+                else:
+                    dt_latest = datetime.fromtimestamp(latest_dicom_path.stat().st_mtime)
+                    age_min = (datetime.now() - dt_latest).total_seconds() / 60.0
+                    cstore_detail = {
+                        'latest_file': str(latest_dicom_path).replace('\\', '/'),
+                        'latest_received_at': dt_latest.isoformat(timespec='seconds'),
+                        'age_minutes': round(age_min, 1)
+                    }
+                    if age_min <= recent_minutes:
+                        cstore_ok = True
+                        cstore_message = f'Đã nhận DICOM gần đây ({round(age_min,1)} phút trước)'
+                    else:
+                        cstore_message = f'Có DICOM nhưng quá cũ ({round(age_min,1)} phút), chưa xác nhận ca mới'
+        except Exception as e:
+            cstore_message = str(e)
+        results.append({
+            'key': 'cstore',
+            'label': 'C-STORE Receive',
+            'pass': cstore_ok,
+            'message': cstore_message,
+            'detail': cstore_detail
+        })
+        overall_pass = overall_pass and cstore_ok
+
+        # 3) SR/Measurement extraction from latest DICOM
+        sr_ok = False
+        sr_message = ''
+        sr_detail = {}
+        try:
+            if not latest_dicom_path or not latest_dicom_path.exists():
+                sr_message = 'Không có DICOM để test extraction'
+            else:
+                import pydicom
+                ds = pydicom.dcmread(str(latest_dicom_path), stop_before_pixels=True, force=True)
+                extracted = _extract_measurements_from_dicom_dataset(ds) or {}
+                non_empty = {k: v for k, v in extracted.items() if v not in (None, '', 0)}
+                sr_detail = {
+                    'source_file': str(latest_dicom_path).replace('\\', '/'),
+                    'non_empty_measurements': non_empty
+                }
+                if non_empty:
+                    sr_ok = True
+                    sr_message = f'Tách được {len(non_empty)} trường số đo'
+                else:
+                    sr_message = 'Không tách được số đo từ DICOM mới nhất (có thể máy chưa gửi SR/measurement tags)'
+        except Exception as e:
+            sr_message = str(e)
+        results.append({
+            'key': 'measurement_extraction',
+            'label': 'SR / Measurement Extraction',
+            'pass': sr_ok,
+            'message': sr_message,
+            'detail': sr_detail
+        })
+        overall_pass = overall_pass and sr_ok
+
+        return jsonify({
+            'success': True,
+            'overall_pass': overall_pass,
+            'checked_at': datetime.utcnow().isoformat(timespec='seconds') + 'Z',
+            'results': results
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -10175,48 +14060,6 @@ def vr_pacs_get_patients():
                 })
                 total_studies += 1
         
-        # Also check for loose DICOM files in root directory
-        for dicom_file in BASE_DIR.glob("*.dcm"):
-            try:
-                ds = pydicom.dcmread(dicom_file, stop_before_pixels=True)
-                patient_name = str(ds.get("PatientName", "UNKNOWN"))
-                
-                # Find or create patient entry
-
-
-
-                patient = next((p for p in patients if p['name'] == patient_name), None)
-                if not patient:
-                    patient = {
-                        'name': patient_name,
-                        'images': [],
-                        'latestDate': '',
-                        'image_count': 0
-                    }
-                    patients.append(patient)
-                    total_studies += 1
-                
-                study_date = ds.get("StudyDate", "")
-                if study_date and (not patient['latestDate'] or study_date > patient['latestDate']):
-                    if len(study_date) == 8:
-                        try:
-                            patient['latestDate'] = datetime.strptime(study_date, "%Y%m%d").strftime("%d/%m/%Y")
-                        except:
-                            patient['latestDate'] = study_date
-                    else:
-                        patient['latestDate'] = study_date
-                
-                patient['images'].append({
-                    'filename': dicom_file.name,
-                    'study_date': study_date,
-                    'size': dicom_file.stat().st_size
-                })
-                patient['image_count'] = len(patient['images'])
-                total_images += 1
-            except Exception as e:
-                print(f"Error reading DICOM file {dicom_file}: {e}")
-                continue
-        
         return jsonify({
             'success': True,
             'patients': patients,
@@ -10247,13 +14090,7 @@ def vr_pacs_get_preview(patient_name, filename):
         
         BASE_DIR = Path("received_dicoms")
         
-        # Try patient folder first
         dicom_path = BASE_DIR / patient_name / filename
-        
-        # If not found, try root directory
-        if not dicom_path.exists():
-            dicom_path = BASE_DIR / filename
-        
         if not dicom_path.exists():
             return jsonify({'error': 'File không tồn tại'}), 404
         
@@ -10315,13 +14152,7 @@ def vr_pacs_get_dicom(patient_name, filename):
         
         BASE_DIR = Path("received_dicoms")
         
-        # Try patient folder first
         dicom_path = BASE_DIR / patient_name / filename
-        
-        # If not found, try root directory
-        if not dicom_path.exists():
-            dicom_path = BASE_DIR / filename
-        
         if not dicom_path.exists():
             print(f"DICOM file not found: {dicom_path}")
             return jsonify({'error': 'File DICOM không tồn tại'}), 404
@@ -10347,6 +14178,150 @@ def vr_pacs_get_dicom(patient_name, filename):
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+def _get_orthanc_settings():
+    """
+    Read Orthanc endpoint/auth from env or local orthanc/orthanc.json.
+    """
+    base_url = (os.environ.get('ORTHANC_BASE_URL') or 'http://127.0.0.1:8042').strip().rstrip('/')
+    username = os.environ.get('ORTHANC_USERNAME')
+    password = os.environ.get('ORTHANC_PASSWORD')
+
+    cfg_path = Path("orthanc/orthanc.json")
+    if cfg_path.exists():
+        try:
+            cfg = json.loads(cfg_path.read_text(encoding='utf-8'))
+            http_port = int(cfg.get('HttpPort', 8042) or 8042)
+            base_url = (os.environ.get('ORTHANC_BASE_URL') or f"http://127.0.0.1:{http_port}").strip().rstrip('/')
+            users = cfg.get('RegisteredUsers') or {}
+            if isinstance(users, dict) and users and (not username or not password):
+                first_user = next(iter(users.keys()))
+                username = username or str(first_user)
+                password = password or str(users[first_user])
+        except Exception as e:
+            print(f"Read orthanc config failed: {e}")
+
+    if not username:
+        username = 'admin'
+    if password is None:
+        password = 'orthanc123'
+    return base_url, username, password
+
+def _orthanc_find_study_id_by_uid(study_instance_uid: str):
+    if not study_instance_uid:
+        return None
+    try:
+        base_url, username, password = _get_orthanc_settings()
+        url = f"{base_url}/tools/find"
+        payload = json.dumps({
+            "Level": "Study",
+            "Expand": False,
+            "Query": {
+                "StudyInstanceUID": str(study_instance_uid)
+            }
+        }).encode('utf-8')
+        req = urllib.request.Request(url, data=payload, method='POST')
+        req.add_header('Content-Type', 'application/json')
+        auth_raw = f"{username}:{password}".encode('utf-8')
+        req.add_header('Authorization', 'Basic ' + base64.b64encode(auth_raw).decode('ascii'))
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            body = resp.read().decode('utf-8', errors='ignore')
+            data = json.loads(body) if body else []
+            if isinstance(data, list) and data:
+                return str(data[0])
+    except Exception as e:
+        print(f"Orthanc find study by UID failed: {e}")
+    return None
+
+def _orthanc_upload_dicom_file(dicom_path: Path) -> bool:
+    """Upload one local DICOM file to Orthanc (/instances)."""
+    try:
+        if not dicom_path.exists() or not dicom_path.is_file():
+            return False
+        base_url, username, password = _get_orthanc_settings()
+        req = urllib.request.Request(f"{base_url}/instances", data=dicom_path.read_bytes(), method='POST')
+        req.add_header('Content-Type', 'application/dicom')
+        auth_raw = f"{username}:{password}".encode('utf-8')
+        req.add_header('Authorization', 'Basic ' + base64.b64encode(auth_raw).decode('ascii'))
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return int(getattr(resp, 'status', 200)) in (200, 201)
+    except Exception as e:
+        print(f"Orthanc upload failed for {dicom_path}: {e}")
+        return False
+
+def _orthanc_ui_base_url(base_url: str, username: str, password: str) -> str:
+    """
+    Prefer Orthanc Explorer 2 (/ui/app/) if available, otherwise fallback to
+    classic explorer (/app/explorer.html).
+    """
+    auth_raw = f"{username}:{password}".encode('utf-8')
+    auth_header = 'Basic ' + base64.b64encode(auth_raw).decode('ascii')
+    # New OE2 route
+    try:
+        probe = urllib.request.Request(f"{base_url}/ui/app/", method='GET')
+        probe.add_header('Authorization', auth_header)
+        with urllib.request.urlopen(probe, timeout=2):
+            return f"{base_url}/ui/app/"
+    except Exception:
+        pass
+    # Some builds expose /ui/ directly
+    try:
+        probe = urllib.request.Request(f"{base_url}/ui/", method='GET')
+        probe.add_header('Authorization', auth_header)
+        with urllib.request.urlopen(probe, timeout=2):
+            return f"{base_url}/ui/"
+    except Exception:
+        return f"{base_url}/app/explorer.html"
+
+@app.route('/api/vr-pacs/orthanc-link/<path:patient_name>/<path:filename>', methods=['GET'])
+def vr_pacs_get_orthanc_link(patient_name, filename):
+    """Map local DICOM to Orthanc study and return direct viewer link."""
+    try:
+        base_dir = Path("received_dicoms")
+        dicom_path = base_dir / patient_name / filename
+        if not dicom_path.exists():
+            dicom_path = base_dir / filename
+        if not dicom_path.exists():
+            return jsonify({'success': False, 'error': 'File không tồn tại'}), 404
+
+        import pydicom
+        ds = pydicom.dcmread(str(dicom_path), stop_before_pixels=True, force=True)
+        study_uid = str(ds.get("StudyInstanceUID", "") or "").strip()
+        if not study_uid:
+            return jsonify({'success': False, 'error': 'DICOM không có StudyInstanceUID'}), 400
+
+        orthanc_study_id = _orthanc_find_study_id_by_uid(study_uid)
+        base_url, username, password = _get_orthanc_settings()
+        ui_base = _orthanc_ui_base_url(base_url, username, password)
+
+        # Auto-sync fallback: nếu chưa có trên Orthanc thì tự upload rồi tra lại.
+        if not orthanc_study_id:
+            uploaded = _orthanc_upload_dicom_file(dicom_path)
+            if uploaded:
+                orthanc_study_id = _orthanc_find_study_id_by_uid(study_uid)
+
+        if not orthanc_study_id:
+            return jsonify({
+                'success': False,
+                'error': 'Chưa tìm thấy study trên Orthanc',
+                'study_instance_uid': study_uid,
+                'orthanc_ui_url': ui_base
+            }), 404
+
+        if '/ui/' in ui_base:
+            study_url = f"{base_url}/ui/app/#/studies/{orthanc_study_id}"
+        else:
+            study_url = ui_base
+        return jsonify({
+            'success': True,
+            'study_instance_uid': study_uid,
+            'orthanc_study_id': orthanc_study_id,
+            'orthanc_ui_url': ui_base,
+            'orthanc_study_url': study_url,
+            'orthanc_rest_study_url': f"{base_url}/studies/{orthanc_study_id}"
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ==================== AI ASSISTANT LEARNING MODELS ====================
 class AIInteraction(db.Model):
@@ -11332,7 +15307,41 @@ def create_tables():
         db.create_all()
         print("Database tables created successfully!")
 
+def bootstrap_schema_on_startup():
+    """Run lightweight, idempotent schema alignment for critical tables."""
+    try:
+        with app.app_context():
+            db.create_all()
+            ensure_appointment_doctor_column()
+            ensure_appointment_expected_delivery_date_column()
+            ensure_appointment_sync_columns()
+    except Exception as e:
+        # Không chặn app start nếu migrate best-effort bị lỗi
+        print(f"[SCHEMA] bootstrap warning: {e}")
+
+# Chạy ngay khi module được import (kể cả khi chạy qua waitress/gunicorn)
+bootstrap_schema_on_startup()
+
 if __name__ == '__main__':
     create_tables()
     # host='0.0.0.0' cho phép máy khác trong mạng truy cập (http://IP_MÁY_CHỦ:5000)
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # HTTPS (self-signed): set USE_HTTPS=1 và tạo ssl/dev.crt + ssl/dev.key bằng generate_dev_ssl.py
+    _use_https = os.environ.get('USE_HTTPS', '').strip().lower() in ('1', 'true', 'yes', 'on')
+    _ssl_cert = os.environ.get('SSL_CERT', os.path.join('ssl', 'dev.crt'))
+    _ssl_key = os.environ.get('SSL_KEY', os.path.join('ssl', 'dev.key'))
+    _ssl_ctx = None
+    if _use_https:
+        if os.path.isfile(_ssl_cert) and os.path.isfile(_ssl_key):
+            _ssl_ctx = (_ssl_cert, _ssl_key)
+        else:
+            print(
+                '[HTTPS] USE_HTTPS bật nhưng thiếu chứng chỉ. Chạy: python generate_dev_ssl.py '
+                f'(tìm {_ssl_cert}, {_ssl_key})'
+            )
+    _run_kw = dict(host='0.0.0.0', port=5000, debug=True)
+    if _ssl_ctx:
+        _run_kw['ssl_context'] = _ssl_ctx
+        print(f'[HTTPS] https://0.0.0.0:{_run_kw["port"]}/ (cert={_ssl_cert})')
+    else:
+        print(f'[HTTP] http://0.0.0.0:{_run_kw["port"]}/')
+    app.run(**_run_kw)

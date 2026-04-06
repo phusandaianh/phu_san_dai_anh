@@ -20,7 +20,7 @@ def test_basic_association():
         
         # Thu ket noi
         print("\nDang ket noi den 10.17.2.1:104...")
-        assoc = ae.associate('10.17.2.1', 104, ae_title='VOLUSON')
+        assoc = ae.associate('10.17.2.1', 104, ae_title='MAY_SIEU_AM')
         
         if assoc.is_established:
             print("OK: Association thanh cong!")

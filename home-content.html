@@ -21,9 +21,11 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            max-width: 1200px;
-            margin: 0 auto;
+            width: 100%;
+            max-width: none;
+            margin: 0;
             padding: 0 1rem;
+            box-sizing: border-box;
         }
         .header h1 {
             color: #e53935;
@@ -46,9 +48,11 @@
             background: #c62828;
         }
         .main-content {
-            max-width: 1200px;
-            margin: 2rem auto;
+            width: 100%;
+            max-width: none;
+            margin: 2rem 0;
             padding: 0 1rem;
+            box-sizing: border-box;
         }
         .content-section {
             background: #fff;
@@ -299,9 +303,14 @@
             <div id="contactInfoList" class="items-list">
                 <!-- Contact info will be added here dynamically -->
             </div>
-            <button type="button" class="add-item-btn" onclick="addContactInfo()">
-                <i class="fas fa-plus"></i> Thêm thông tin liên hệ
-            </button>
+            <div style="display:flex; flex-wrap:wrap; gap:10px;">
+                <button type="button" class="add-item-btn" onclick="addContactInfo()">
+                    <i class="fas fa-plus"></i> Thêm thông tin liên hệ
+                </button>
+                <button type="button" class="btn" style="background:#2196F3;" onclick="saveContactInfoOnly()">
+                    <i class="fas fa-save"></i> Lưu thông tin liên hệ
+                </button>
+            </div>
         </div>
 
         <div class="content-section" id="footer-management-section">
@@ -402,6 +411,8 @@
                 
                 // Load contact info
                 const contactInfoList = document.getElementById('contactInfoList');
+                // Tránh bị nhân đôi nếu loadContent được gọi lại
+                contactInfoList.innerHTML = '';
                 if (homeData.contactInfo && homeData.contactInfo.length > 0) {
                     homeData.contactInfo.forEach(contact => {
                         addContactInfo(contact.type, contact.value);
@@ -564,7 +575,39 @@
 
         // Remove contact info
         function removeContactInfo(button) {
+            if (!confirm('Bạn có chắc chắn muốn xóa thông tin liên hệ này?')) return;
             button.closest('.contact-item').remove();
+        }
+
+        // Lưu riêng mục thông tin liên hệ (lưu server)
+        async function saveContactInfoOnly() {
+            const contactInfo = Array.from(document.querySelectorAll('.contact-item')).map(item => ({
+                type: (item.querySelector('input[name="contactType"]').value || '').trim(),
+                value: (item.querySelector('input[name="contactValue"]').value || '').trim()
+            })).filter(x => x.type || x.value);
+
+            // Validate cơ bản
+            const invalid = contactInfo.some(x => !x.type || !x.value);
+            if (invalid) {
+                showStatusMessage('Vui lòng nhập đầy đủ Loại thông tin và Nội dung cho từng dòng.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/home-content', {
+                    method: 'POST',
+                    headers: getAuthHeaders(true),
+                    body: JSON.stringify({ contactInfo })
+                });
+                if (response.ok) {
+                    showStatusMessage('Thông tin liên hệ đã được lưu lên server!', 'success');
+                } else {
+                    const d = await response.json().catch(() => ({}));
+                    showStatusMessage(d.error || d.message || 'Lỗi khi lưu thông tin liên hệ', 'error');
+                }
+            } catch (e) {
+                showStatusMessage('Lỗi khi lưu thông tin liên hệ', 'error');
+            }
         }
 
         // Form submission

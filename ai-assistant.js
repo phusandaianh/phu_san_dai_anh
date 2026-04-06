@@ -12,9 +12,15 @@ class AIAssistant {
         this.isWakeWordListening = false;
         this.wakeWordEnabled = this.getWakeWordSetting();
         this.messages = [];
-        // Tắt micro trên trang đặt lịch (booking) và lịch làm việc (schedule)
+        // Tắt micro trên các trang không cần dùng: đặt lịch (booking), lịch làm việc (schedule),
+        // trang chủ, và trang QR check-in cho bệnh nhân
         const path = (window.location.pathname || '').toLowerCase();
-        this.disableMic = /booking/i.test(path) || /schedule/i.test(path);
+        this.disableMic =
+            /booking/i.test(path) ||
+            /schedule/i.test(path) ||
+            /qr-checkin/i.test(path) ||
+            path === '/' ||
+            /index\.html$/i.test(path);
         if (!this.disableMic) {
             this.setupRecognition();
             this.setupWakeWordRecognition();

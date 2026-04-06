@@ -144,6 +144,23 @@
             font-size: 0.75em;
             background: rgba(255,255,255,0.25);
         }
+        .admin-header .user-info-bar .camera-manage-link {
+            background-color: var(--admin-btn-bg);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.25);
+            padding: 6px 10px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 0.85rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        .admin-header .user-info-bar .camera-manage-link:hover {
+            background-color: var(--admin-btn-hover);
+            color: white;
+        }
 
         .modal.hidden {
             display: none !important;
@@ -326,6 +343,21 @@
             border-radius: 4px;
             background: white;
         }
+        .admin-backup-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .admin-backup-table th,
+        .admin-backup-table td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        .admin-backup-table th {
+            background: #f5f5f5;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -340,43 +372,55 @@
         <nav>
             <div class="nav-row">
                 <a href="/" class="back-link btn secondary-btn"><i class="fas fa-arrow-left"></i> Quay lại trang chủ</a>
+                <a href="examination-list.html" class="header-nav-btn" title="Danh sách lịch hẹn trong ngày">
+                    <i class="fas fa-calendar-check"></i> Danh sách khám
+                </a>
                 <a href="qr-checkin" class="header-nav-btn checkin-btn" title="Hệ thống Check-in QR Code">
                     <i class="fas fa-qrcode"></i> Check-in QR
                 </a>
-                <a href="examination-list.html" class="header-nav-btn" title="Danh sách lịch hẹn trong ngày">
-                    <i class="fas fa-calendar-check"></i> Danh sách lịch hẹn trong ngày
+                <a href="qr-display.html" class="header-nav-btn" title="Màn hình TV hiển thị số thứ tự">
+                    <i class="fas fa-tv"></i> QR Display (TV)
+                </a>
+                <a href="tv-display-launcher.html" class="header-nav-btn" title="Phản chiếu bảng gọi khám lên màn hình TV">
+                    <i class="fas fa-desktop"></i> Phản chiếu lên TV
+                </a>
+                <a href="ultrasound-video-admin.html" class="header-nav-btn" title="Bắt, xem và lưu video siêu âm từ card HDMI">
+                    <i class="fas fa-video"></i> Quản lý video siêu âm
+                </a>
+                <a href="qr-ads-admin.html" class="header-nav-btn" title="Quản lý nội dung quảng cáo dưới màn hình TV">
+                    <i class="fas fa-bullhorn"></i> QR Display Ads
                 </a>
                 <a href="home-content.html" class="header-nav-btn">Nội dung trang chủ</a>
+                <a href="vr-pacs.html" class="header-nav-btn" title="VR PACS - Quản lý Ảnh Siêu âm">
+                    <i class="fas fa-vr-cardboard"></i> VR PACS
+                </a>
                 <a href="/templates/dicom_viewer.html" class="header-nav-btn" title="Xem/đo ảnh DICOM">
                     <i class="fas fa-x-ray"></i> DICOM Viewer
                 </a>
-                <button class="header-nav-btn" data-tab="examination-settings">Danh sách khám</button>
-                <a href="clinical-services-admin.html" class="header-nav-btn">Quản lý dịch vụ cận lâm sàng</a>
                 <a href="lab-tests.html" class="header-nav-btn">Tổng hợp danh sách xét nghiệm</a>
                 <a href="lab-tests-dai-anh.html" class="header-nav-btn">
                     <i class="fas fa-vial"></i> Danh Sách Thủ Thuật - Đại Anh
                 </a>
+                <a href="clinical-services-admin.html" class="header-nav-btn" title="Quản lý danh mục dịch vụ cận lâm sàng">
+                    <i class="fas fa-microscope"></i> Quản lý dịch vụ cận lâm sàng
+                </a>
                 <a href="clinical-form-templates.html" class="header-nav-btn">Mẫu phiếu cận lâm sàng</a>
-                <a href="voluson-sync-admin.html" class="header-nav-btn">
-                    <i class="fas fa-sync"></i> Đồng bộ Voluson E10
+                <a id="worklistCenterLink" href="worklist-center.html" class="header-nav-btn" style="display: none;">
+                    <i class="fas fa-list"></i> Worklist & Máy siêu âm
                 </a>
-                <a id="mwlAdminLink" href="mwl-admin.html" class="header-nav-btn" style="display: none;">
-                    <i class="fas fa-list"></i> Quản lý Worklist (MWL)
-                </a>
-                <button id="syncWorklistHeaderBtn" class="header-nav-btn" style="display: none; border: none; cursor: pointer;">
-                    <i class="fas fa-sync"></i> Đồng bộ Worklist
-                </button>
                 <a href="ctg-analysis.html" class="header-nav-btn"><i class="fas fa-heartbeat"></i> Phân tích CTG Tim Thai</a>
                 <a href="lab-pricelist.html" class="header-nav-btn">Bảng giá xét nghiệm</a>
             </div>
             <div class="nav-row">
                 <a href="doctor-schedule.html" class="header-nav-btn">Lịch khám</a>
+                <a href="schedule.html" class="header-nav-btn">Lịch làm việc</a>
+                <a href="booking.html" class="header-nav-btn"><i class="fas fa-calendar-plus"></i> Đặt lịch khám</a>
                 <a href="patient-records.html" class="header-nav-btn">Hồ sơ bệnh án</a>
                 <a href="prescription-management.html" class="header-nav-btn">Đơn thuốc</a>
                 <a href="test-meanings.html" class="header-nav-btn">Ý nghĩa các xét nghiệm</a>
                 <a href="disease-tests.html" class="header-nav-btn">Bệnh lý và xét nghiệm</a>
                 <a href="cervical-examination-analysis.html" class="header-nav-btn">Soi cổ tử cung</a>
-                <a href="ultrasound-analysis.html" class="header-nav-btn">Siêu âm thai</a>
+                <a href="ultrasound-analysis.html" class="header-nav-btn">Phân tích siêu âm thai</a>
                 <a href="ultrasound-general.html" class="header-nav-btn"><i class="fas fa-stethoscope"></i> Siêu âm tổng quát</a>
                 <a href="staff-training.html" class="header-nav-btn"><i class="fas fa-graduation-cap"></i> Đào tạo nhân viên</a>
                 <a href="treatment-plans.html" class="header-nav-btn"><i class="fas fa-file-medical"></i> Phác đồ điều trị</a>
@@ -384,6 +428,7 @@
                 <a href="consultation-results.html" class="header-nav-btn"><i class="fas fa-comments"></i> Tư vấn kết quả, HTSS</a>
                 <a href="clinic-maps.html" class="header-nav-btn"><i class="fas fa-map-marker-alt"></i> Địa chỉ Maps</a>
                 <a href="users.html" class="header-nav-btn"><i class="fas fa-users"></i> Quản lý người dùng</a>
+                <a href="staff-work-calendar.html" class="header-nav-btn"><i class="fas fa-calendar-alt"></i> Lịch làm việc & lương</a>
                 <a href="ai-assistant-admin.html" class="header-nav-btn"><i class="fas fa-robot"></i> Quản lý trợ lý AI</a>
             </div>
         </nav>
@@ -391,6 +436,9 @@
             <i class="fas fa-user-circle"></i>
             <span><strong id="adminUserDisplayName"></strong> (<span id="adminUserDisplayUsername"></span>)</span>
             <span id="adminUserRoleBadges"></span>
+            <a href="camera-admin.html" class="camera-manage-link" title="Mở trang Quản lý camera">
+                <i class="fas fa-video"></i> Quản lý camera
+            </a>
         </div>
     </header>
 
@@ -402,25 +450,48 @@
 
         <div class="tab-content active" id="examination-settings">
             <form id="examinationSettingsForm" class="admin-form">
+                <input type="hidden" id="examinationTitlePreserve" name="title" value="">
+                <input type="hidden" id="examinationDescriptionPreserve" name="description" value="">
                 <div class="form-group">
-                    <label for="examinationTitle">Tiêu đề trang</label>
-                    <input type="text" id="examinationTitle" name="title" required>
+                    <label for="examinationNote" style="font-weight: bold;">Ghi chú</label>
+                    <textarea
+                        id="examinationNote"
+                        name="note"
+                        rows="3"
+                        placeholder="Nhập ghi chú để lưu lên server..."
+                        style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                    ></textarea>
                 </div>
-                <div class="form-group">
-                    <label for="examinationDescription">Mô tả</label>
-                    <textarea id="examinationDescription" name="description" rows="3" required></textarea>
-                </div>
-                
-                <h3>Dịch vụ cận lâm sàng</h3>
-                <div id="clinicalServicesList" class="items-list">
-                    <!-- Clinical services will be added here dynamically -->
-                </div>
-                <button type="button" class="add-item-btn" onclick="addClinicalService()">
-                    <i class="fas fa-plus"></i> Thêm dịch vụ
-                </button>
-
-                <button type="submit" class="save-btn">Lưu thay đổi</button>
+                <button type="button" id="saveExaminationNoteBtn" class="save-btn">Lưu ghi chú </button>
             </form>
+        </div>
+
+        <div id="adminBackupSection" class="admin-form" style="display: none; max-width: 900px; margin: 1.5rem auto 0; padding: 0 20px;">
+            <h2 style="margin:0 0 12px; font-size: 1.2rem; color: #0c4a6e;">
+                <i class="fas fa-database"></i> Sao lưu dữ liệu
+            </h2>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:10px;">
+                <button type="button" class="btn primary-btn" onclick="adminDownloadBackup()">
+                    <i class="fas fa-download"></i> Tải backup
+                </button>
+                <button type="button" class="btn secondary-btn" onclick="adminLoadBackupFileList()">
+                    <i class="fas fa-sync-alt"></i> Làm mới danh sách
+                </button>
+            </div>
+            <p id="adminBackupDirHint" style="font-size: 0.9rem; color: #555; margin: 0 0 10px 0;"></p>
+            <div style="overflow-x:auto;">
+                <table class="admin-backup-table">
+                    <thead>
+                        <tr>
+                            <th>Tên file</th>
+                            <th>Kích thước</th>
+                            <th>Cập nhật (UTC)</th>
+                            <th>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminBackupFilesTableBody"></tbody>
+                </table>
+            </div>
         </div>
 
         <div class="tab-content" id="clinical-services-management">
@@ -638,17 +709,21 @@
         // Load existing content on page load and set initial active tab
         document.addEventListener('DOMContentLoaded', async () => {
              
-             // Set initial active tab based on URL hash or default
+             // Set initial active tab based on URL param
              const urlParams = new URLSearchParams(window.location.search);
              const initialTab = urlParams.get('tab') || 'examination-settings';
-             
-             // Find the corresponding button and trigger click
+
+             // Nếu còn nút data-tab thì giữ cơ chế cũ, nếu không thì load trực tiếp tab mặc định
              const initialButton = document.querySelector(`.header-nav-btn[data-tab="${initialTab}"]`);
              if (initialButton) {
                  initialButton.click();
              } else {
-                  // Default to the first button if initialTab is invalid
-                 document.querySelector('.header-nav-btn').click();
+                 const defaultTab = document.getElementById('examination-settings');
+                 if (defaultTab) {
+                     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+                     defaultTab.classList.add('active');
+                 }
+                 loadExaminationSettings();
              }
         });
 
@@ -658,58 +733,74 @@
                 const examResponse = await fetch('/api/examination-settings');
                 const examData = await examResponse.json();
                 
-                document.getElementById('examinationTitle').value = examData.title;
-                document.getElementById('examinationDescription').value = examData.description;
-                
-                const clinicalServicesList = document.getElementById('clinicalServicesList');
-                examData.clinicalServices.forEach(service => {
-                    addClinicalService(service.name, service.description, service.price);
-                });
+                document.getElementById('examinationTitlePreserve').value = examData.title || '';
+                document.getElementById('examinationDescriptionPreserve').value = examData.description || '';
+                const noteEl = document.getElementById('examinationNote');
+                if (noteEl) noteEl.value = examData.description || '';
             } catch (error) {
                 console.error('Error loading examination settings:', error);
                 alert('Có lỗi xảy ra khi tải cài đặt khám');
             }
         }
 
-        // Form submission handlers
+        // Save note handler (tab examination-settings)
+        async function saveExaminationNote() {
+            const noteEl = document.getElementById('examinationNote');
+            if (!noteEl) return;
 
-        document.getElementById('examinationSettingsForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
+            // Map "Ghi chú" => ExaminationSettings.description
+            document.getElementById('examinationDescriptionPreserve').value = noteEl.value || '';
+
+            const token = (localStorage.getItem('authToken') || '').trim();
+            if (!token) {
+                alert('Bạn chưa đăng nhập. Vui lòng đăng nhập lại rồi thử lưu ghi chú.');
+                return;
+            }
+
             const formData = {
-                title: document.getElementById('examinationTitle').value,
-                description: document.getElementById('examinationDescription').value,
-                clinicalServices: Array.from(document.querySelectorAll('.clinical-service-item')).map(item => ({
-                    name: item.querySelector('input[name="serviceName"]').value,
-                    description: item.querySelector('textarea[name="serviceDescription"]').value,
-                    price: parseFloat(item.querySelector('input[name="servicePrice"]').value)
-                }))
+                title: document.getElementById('examinationTitlePreserve').value || '',
+                description: document.getElementById('examinationDescriptionPreserve').value || ''
             };
 
             try {
                 const response = await fetch('/api/examination-settings', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify(formData)
                 });
 
                 if (response.ok) {
-                    alert('Cài đặt danh sách khám đã được cập nhật');
+                    alert('Đã lưu ghi chú lên server');
                 } else {
-                    throw new Error('Failed to update settings');
+                    let errMsg = '';
+                    try {
+                        const err = await response.json();
+                        errMsg = err?.error || err?.message || '';
+                    } catch (_) {
+                        // ignore JSON parse errors; fallback to HTTP status below
+                    }
+                    throw new Error(errMsg || `Failed to update settings (HTTP ${response.status})`);
                 }
             } catch (error) {
-                console.error('Error updating settings:', error);
-                alert('Có lỗi xảy ra khi cập nhật cài đặt');
+                console.error('Error updating examination note:', error);
+                alert('Có lỗi xảy ra khi lưu ghi chú: ' + (error?.message || 'Unknown error'));
             }
-        });
+        }
+
+        const saveNoteBtn = document.getElementById('saveExaminationNoteBtn');
+        if (saveNoteBtn) {
+            saveNoteBtn.addEventListener('click', saveExaminationNote);
+        }
 
         // Dynamic form elements
 
         function addClinicalService(name = '', description = '', price = '') {
             const clinicalServicesList = document.getElementById('clinicalServicesList');
+            if (!clinicalServicesList) return; // UI đã bị ẩn/xóa khỏi admin.html
             const serviceItem = document.createElement('div');
             serviceItem.className = 'clinical-service-item';
             serviceItem.innerHTML = `
@@ -1558,6 +1649,184 @@
                 if (noneDiv) noneDiv.style.display = 'block';
             }
         }
+
+        function adminGetAuthHeaders() {
+            const token = localStorage.getItem('authToken') || '';
+            return token ? { 'Authorization': `Bearer ${token}` } : {};
+        }
+
+        function adminFormatBackupSize(bytes) {
+            if (bytes == null || isNaN(bytes)) return '—';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        async function adminLoadBackupFileList() {
+            const tbody = document.getElementById('adminBackupFilesTableBody');
+            const hint = document.getElementById('adminBackupDirHint');
+            if (!tbody) return;
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#888;">Đang tải...</td></tr>';
+            try {
+                const res = await fetch('/api/backup/list', { headers: { ...adminGetAuthHeaders() } });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#c00;">${data.error || 'Không tải được danh sách'}</td></tr>`;
+                    if (hint) hint.textContent = '';
+                    return;
+                }
+                if (hint && data.directory) {
+                    hint.textContent = 'Thư mục backup trên server: ' + data.directory;
+                }
+                const files = Array.isArray(data.files) ? data.files : [];
+                if (files.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#888;">Chưa có file backup-*.zip trong thư mục.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = files.map(f => {
+                    const raw = String(f.name || '');
+                    const enc = encodeURIComponent(raw);
+                    const esc = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+                    return `
+                        <tr>
+                            <td><code>${esc}</code></td>
+                            <td>${adminFormatBackupSize(f.size)}</td>
+                            <td>${f.modified_at || '—'}</td>
+                            <td style="vertical-align:middle;">
+                                <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                                    <button type="button" class="btn danger-btn" style="padding:6px 10px; font-size:0.9rem;" data-backup-name="${enc}" onclick="adminDeleteBackupFileFromBtn(this)" title="Xóa file trên server">
+                                        <i class="fas fa-trash-alt"></i> Xóa
+                                    </button>
+                                    <button type="button" class="btn primary-btn" style="padding:6px 10px; font-size:0.9rem;" data-backup-name="${enc}" onclick="adminDownloadBackupFileFromBtn(this)" title="Tải về máy">
+                                        <i class="fas fa-download"></i> Tải
+                                    </button>
+                                    <button type="button" class="btn secondary-btn" style="padding:6px 10px; font-size:0.9rem; background:#c2410c; color:#fff; border-color:#9a3412;" data-backup-name="${enc}" onclick="adminRestoreBackupFileFromBtn(this)" title="Khôi phục CSDL từ file này">
+                                        <i class="fas fa-undo"></i> Khôi phục
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>`;
+                }).join('');
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#c00;">Lỗi mạng khi tải danh sách.</td></tr>';
+            }
+        }
+
+        function adminDownloadBackupFileFromBtn(btn) {
+            const enc = btn && btn.getAttribute('data-backup-name');
+            if (!enc) return;
+            try {
+                adminDownloadBackupFile(decodeURIComponent(enc));
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function adminDeleteBackupFileFromBtn(btn) {
+            const enc = btn && btn.getAttribute('data-backup-name');
+            if (!enc) return;
+            let name;
+            try { name = decodeURIComponent(enc); } catch (e) { console.error(e); return; }
+            if (!confirm('Xóa vĩnh viễn file backup trên server: ' + name + ' ?')) return;
+            try {
+                const res = await fetch('/api/backup/file/' + enc, {
+                    method: 'DELETE',
+                    headers: { ...adminGetAuthHeaders() }
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    alert(data.error || 'Không xóa được file.');
+                    return;
+                }
+                adminLoadBackupFileList();
+            } catch (e) {
+                console.error(e);
+                alert('Không xóa được file.');
+            }
+        }
+
+        async function adminRestoreBackupFileFromBtn(btn) {
+            const enc = btn && btn.getAttribute('data-backup-name');
+            if (!enc) return;
+            let name;
+            try { name = decodeURIComponent(enc); } catch (e) { console.error(e); return; }
+            if (!confirm('Khôi phục dữ liệu từ file: ' + name + ' ?\n\nToàn bộ CSDL hiện tại sẽ bị thay thế và hệ thống sẽ tự khởi động lại.')) return;
+            try {
+                const res = await fetch('/api/restore/from-backup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...adminGetAuthHeaders()
+                    },
+                    body: JSON.stringify({ filename: name })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    alert(data.error || 'Khôi phục thất bại.');
+                    return;
+                }
+                alert(data.message || 'Đã gửi yêu cầu khôi phục. Hệ thống sẽ khởi động lại.');
+                setTimeout(async () => {
+                    localStorage.removeItem('authToken');
+                    localStorage.removeItem('currentUser');
+                    try { await fetch('/api/logout', { method: 'POST' }); } catch (err) {}
+                    window.location.href = '/';
+                }, 1500);
+            } catch (e) {
+                console.error(e);
+                alert('Không thể khôi phục. Vui lòng thử lại.');
+            }
+        }
+
+        async function adminDownloadBackupFile(filename) {
+            if (!filename) return;
+            try {
+                const enc = encodeURIComponent(filename);
+                const res = await fetch('/api/backup/file/' + enc, { headers: { ...adminGetAuthHeaders() } });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    alert(data.error || 'Không tải được file.');
+                    return;
+                }
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error(e);
+                alert('Không tải được file backup.');
+            }
+        }
+
+        async function adminDownloadBackup() {
+            try {
+                const res = await fetch('/api/backup', { headers: { ...adminGetAuthHeaders() } });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    alert(data.error || 'Không thể tạo file sao lưu.');
+                    return;
+                }
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+                adminLoadBackupFileList();
+            } catch (e) {
+                console.error(e);
+                alert('Không thể tải file sao lưu. Vui lòng thử lại.');
+            }
+        }
     </script>
     
     <!-- Hiển thị thông tin người đăng nhập trên header -->
@@ -1582,72 +1851,40 @@
             }
         });
     </script>
-    <!-- Hiển thị/ẩn liên kết MWL dựa trên quyền của user (manage_worklist) -->
+    <!-- Hiển thị/ẩn Worklist & khối sao lưu theo quyền (manage_worklist / manage_users) -->
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const token = localStorage.getItem('authToken') || '';
                 const currentUserRaw = localStorage.getItem('currentUser');
-                if (!token || !currentUserRaw) return; // không đăng nhập
+                if (!token || !currentUserRaw) return;
                 const currentUser = JSON.parse(currentUserRaw);
                 const res = await fetch('/api/role-permissions', { headers: { 'Authorization': `Bearer ${token}` } });
                 if (!res.ok) return;
                 const mapping = await res.json();
                 const roles = Array.isArray(currentUser.roles) ? currentUser.roles : [];
+                let showWorklist = false;
+                let showBackup = false;
                 for (const r of roles) {
                     const perms = mapping[r] || [];
-                    if (perms.includes('manage_worklist')) {
-                        const el = document.getElementById('mwlAdminLink');
-                        if (el) el.style.display = 'inline-flex';
-                        
-                        // Hiển thị nút Đồng bộ Worklist
-                        const syncBtn = document.getElementById('syncWorklistHeaderBtn');
-                        if (syncBtn) {
-                            syncBtn.style.display = 'inline-flex';
-                            syncBtn.addEventListener('click', performWorklistSyncFromHeader);
-                        }
-                        return;
+                    if (perms.includes('manage_worklist')) showWorklist = true;
+                    if (perms.includes('manage_users')) showBackup = true;
+                }
+                if (showWorklist) {
+                    const el = document.getElementById('worklistCenterLink');
+                    if (el) el.style.display = 'inline-flex';
+                }
+                if (showBackup) {
+                    const sec = document.getElementById('adminBackupSection');
+                    if (sec) {
+                        sec.style.display = 'block';
+                        if (typeof adminLoadBackupFileList === 'function') adminLoadBackupFileList();
                     }
                 }
             } catch (e) {
-                console.debug('Could not evaluate MWL permission', e);
+                console.debug('Could not evaluate role permissions for admin UI', e);
             }
         });
-        
-        // Handler cho nút Đồng bộ Worklist
-        async function performWorklistSyncFromHeader() {
-            const btn = document.getElementById('syncWorklistHeaderBtn');
-            const originalText = btn.innerHTML;
-            
-            try {
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang đồng bộ...';
-                
-                const token = localStorage.getItem('authToken');
-                const response = await fetch('/api/mwl-sync', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showNotification(`✓ ${data.message}`, 'success');
-                    // Save last sync time
-                    localStorage.setItem('lastWorklistSync', new Date().toISOString());
-                } else {
-                    showNotification(`✗ Lỗi: ${data.message}`, 'error');
-                }
-            } catch (error) {
-                showNotification(`✗ Lỗi: ${error.message}`, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = originalText;
-            }
-        }
     </script>
     <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
     <script src="ai-assistant.js"></script>

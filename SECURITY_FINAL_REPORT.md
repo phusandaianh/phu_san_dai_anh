@@ -16,7 +16,7 @@
 - **Rủi ro**: Bất kỳ ai cũng có thể truy cập dữ liệu bệnh nhân
 - **Endpoints bị ảnh hưởng**:
   - `/api/patients` - Dữ liệu bệnh nhân
-  - `/api/voluson/config` - Cấu hình máy siêu âm
+  - `/api/Maysieuam/config` - Cấu hình máy siêu âm
   - `/api/lab-orders` - Kết quả xét nghiệm
 
 ### 2. **THIẾU MÃ HÓA DỮ LIỆU** (CRITICAL)

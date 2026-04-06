@@ -21,7 +21,7 @@
 cp clinic.db clinic_backup_$(date +%Y%m%d_%H%M%S).db
 
 # Backup cấu hình
-cp voluson_config.json voluson_config_backup_$(date +%Y%m%d_%H%M%S).json
+cp Maysieuam_config.json Maysieuam_config_backup_$(date +%Y%m%d_%H%M%S).json
 
 # Kiểm tra backup
 ls -la *backup*

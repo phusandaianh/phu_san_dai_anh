@@ -66,6 +66,53 @@
         .zalo-btn:hover {
             background: #0056cc;
         }
+
+        .copy-phone {
+            cursor: pointer;
+            color: #0369a1;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-underline-offset: 3px;
+        }
+        .copy-phone:hover {
+            color: #0284c7;
+        }
+
+        /* Exam mode buttons: đồng nhất chiều cao + hiển thị trạng thái active/inactive */
+        #btn-exams-from-today,
+        #btn-past,
+        #btn-today,
+        #btn-all {
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        a.btn.primary-btn[href="patient-records.html"],
+        a.btn.primary-btn[href="booking.html"] {
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #btn-exams-from-today.exam-mode-btn.active,
+        #btn-past.exam-mode-btn.active,
+        #btn-today.exam-mode-btn.active,
+        #btn-all.exam-mode-btn.active {
+            opacity: 1;
+            filter: none;
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.35);
+        }
+
+        #btn-exams-from-today.exam-mode-btn.inactive,
+        #btn-past.exam-mode-btn.inactive,
+        #btn-today.exam-mode-btn.inactive,
+        #btn-all.exam-mode-btn.inactive {
+            opacity: 0.55;
+            filter: grayscale(0.2);
+        }
         
         .settings-btn {
             background: #607d8b;
@@ -267,7 +314,9 @@
     <main class="admin-main">
         <section class="examination-list">
             <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
-                <h2 style="margin: 0;">Danh sách khám ngày hôm nay</h2>
+                <button type="button" id="btn-exams-from-today" class="btn primary-btn exam-mode-btn">
+                    <i class="fas fa-calendar-check"></i> Danh sách khám
+                </button>
                 <a class="btn primary-btn" href="patient-records.html"><i class="fas fa-users"></i> Danh sách bệnh nhân</a>
                 <a class="btn primary-btn" href="booking.html"><i class="fas fa-plus"></i> Đặt lịch khám mới</a>
             </div>
@@ -276,14 +325,28 @@
                 <div style="display:flex; align-items:center; gap:.5rem;">
                     <label for="filter-date" style="font-weight: 500;">Ngày khám:</label>
                     <input type="date" id="filter-date" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;" />
-                    <button id="btn-today" class="btn secondary-btn" type="button">Hôm nay</button>
+                    <button id="btn-past" class="btn secondary-btn exam-mode-btn" type="button" title="Bệnh nhân đã đăng ký khám từ các ngày trước ngày hiện tại">
+                        Đã khám
+                    </button>
+                    <button id="btn-today" class="btn secondary-btn exam-mode-btn" type="button">Hôm nay</button>
+                    <button id="btn-all" class="btn secondary-btn exam-mode-btn" type="button">Chờ khám</button>
                 </div>
             </div>
             
             <div class="appointments-container">
                 <div class="appointments-list">
                     <div class="search-box" style="position: relative;">
-                        <input type="text" id="search-patient" placeholder="Tìm kiếm theo tên hoặc số điện thoại..." style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                            <input type="text" id="search-name" placeholder="Tìm theo họ và tên" style="flex:1; min-width: 220px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                            <input type="text" id="search-pid" placeholder="Tìm theo PID" style="flex:0 0 210px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                            <input type="text" id="search-phone" placeholder="Tìm theo số điện thoại" style="flex:0 0 240px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                            <select id="filter-status" style="flex:0 0 180px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                                <option value="">Tất cả trạng thái</option>
+                                <option value="pending">Chờ khám</option>
+                                <option value="completed">Đã khám</option>
+                                <option value="cancelled">Đã hủy</option>
+                            </select>
+                        </div>
                         <div id="search-suggestions" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; border-radius: 0 0 4px 4px; max-height: 200px; overflow-y: auto; z-index: 1000; display: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                             <!-- Suggestions will be populated here -->
                         </div>
@@ -302,7 +365,7 @@
                                     <th>Chẩn đoán</th>
                                     <th>Trạng thái</th>
                                     <th>Phiếu khám</th>
-                                    <th>Phiếu chỉ định</th>
+                                    <th>Ghi chú</th>
                                     <th>Thao tác
                                         <div style="margin-top:6px; display:flex; gap:6px; justify-content:flex-start;">
                                             <button id="header-edit-btn" class="btn primary-btn" disabled>Sửa</button>
@@ -388,6 +451,27 @@
         </div>
     </div>
 
+    <!-- Modal chọn chỉ định để in phiếu -->
+    <div id="clinical-print-select-modal" class="modal hidden">
+        <div class="modal-content" style="max-width:620px;">
+            <h2>Chọn chỉ định cận lâm sàng để in</h2>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px;">
+                <label style="display:flex; align-items:center; gap:8px; font-weight:600;">
+                    <input type="checkbox" id="clinical-print-select-all" />
+                    Chọn tất cả
+                </label>
+                <span id="clinical-print-selected-count" style="font-size:13px; color:#666;">0 mục được chọn</span>
+            </div>
+            <div id="clinical-print-service-list" style="max-height:320px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:8px; padding:8px;">
+                <i>Đang tải danh sách chỉ định...</i>
+            </div>
+            <div class="modal-actions" style="margin-top:14px;">
+                <button id="clinical-print-run-btn" class="btn primary-btn">In phiếu chỉ định đã chọn</button>
+                <button id="clinical-print-close-btn" class="btn secondary-btn">Đóng</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal sửa thông tin bệnh nhân -->
     <div id="patient-edit-modal" class="modal hidden">
         <div class="modal-content" style="max-width:520px;">
@@ -411,6 +495,8 @@
                 <select id="edit-doctor">
                     <option value="PK Đại Anh">PK Đại Anh</option>
                 </select>
+                <label for="edit-expected-delivery-date">Ngày dự kiến sinh</label>
+                <input id="edit-expected-delivery-date" type="date" />
             </div>
             <div class="modal-actions" style="margin-top:16px;">
                 <button id="save-patient-btn" class="btn primary-btn">Lưu</button>
@@ -570,7 +656,6 @@
                 <button class="tab-btn active" onclick="switchTab('voice', this)" style="flex: 1; padding: 0.5rem; border: none; background: #f5f5f5; cursor: pointer;">Giọng đọc</button>
                 <button class="tab-btn" onclick="switchTab('sound', this)" style="flex: 1; padding: 0.5rem; border: none; background: #f5f5f5; cursor: pointer;">Âm thanh</button>
                 <button class="tab-btn" onclick="switchTab('template', this)" style="flex: 1; padding: 0.5rem; border: none; background: #f5f5f5; cursor: pointer;">Mẫu</button>
-                <button class="tab-btn" onclick="switchTab('voluson', this)" style="flex: 1; padding: 0.5rem; border: none; background: #f5f5f5; cursor: pointer;">Voluson</button>
             </div>
 
             <!-- Voice Tab -->
@@ -684,60 +769,6 @@
                 </div>
             </div>
 
-            <!-- Voluson Tab -->
-            <div id="voluson-tab" class="tab-content" style="display: none;">
-                <div class="settings-row">
-                    <label style="font-weight:600; color:#1565c0;">Đồng bộ với Voluson E10</label>
-                    <div>
-                        <label style="display:flex; align-items:center; gap:0.5rem;">
-                            <input type="checkbox" id="voluson-sync-enabled" style="transform: scale(1.2);">
-                            <span>Tự động đồng bộ dịch vụ siêu âm với máy Voluson E10</span>
-                        </label>
-                        <div style="font-size:0.9rem; color:#666; margin-top:0.3rem;">
-                            Khi bật, các dịch vụ siêu âm sẽ tự động được gửi đến worklist của máy siêu âm
-                        </div>
-                    </div>
-                </div>
-
-                <div class="settings-row">
-                    <label style="font-weight:600; color:#1565c0;">Cấu hình kết nối</label>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.6rem;">
-                        <div>
-                            <div style="font-size:0.9rem; color:#444;">IP máy Voluson</div>
-                            <input id="voluson-ip" type="text" value="10.17.2.1" style="width:100%; padding:0.4rem; border-radius:4px; border:1px solid #ddd;" />
-                        </div>
-                        <div>
-                            <div style="font-size:0.9rem; color:#444;">Cổng DICOM</div>
-                            <input id="voluson-port" type="number" value="104" style="width:100%; padding:0.4rem; border-radius:4px; border:1px solid #ddd;" />
-                        </div>
-                    </div>
-                </div>
-
-                <div class="settings-row">
-                    <label style="font-weight:600; color:#1565c0;">Trạng thái kết nối</label>
-                    <div>
-                        <div id="voluson-status" style="padding:0.5rem; border-radius:4px; background:#f5f5f5; font-size:0.9rem;">
-                            <span id="voluson-status-text">Chưa kiểm tra</span>
-                        </div>
-                        <button type="button" onclick="testVolusonConnection()" style="margin-top:0.5rem; padding:0.3rem 0.8rem; background:#2196f3; color:white; border:none; border-radius:4px; cursor:pointer; font-size:0.8rem;">
-                            <i class="fas fa-network-wired"></i> Kiểm tra kết nối
-                        </button>
-                    </div>
-                </div>
-
-                <div class="settings-row">
-                    <label style="font-weight:600; color:#1565c0;">Dịch vụ tự động đồng bộ</label>
-                    <div>
-                        <div style="font-size:0.9rem; color:#666; margin-bottom:0.5rem;">
-                            Các dịch vụ có nhóm chứa "siêu âm" sẽ được tự động đồng bộ:
-                        </div>
-                        <div id="ultrasound-services" style="max-height:150px; overflow-y:auto; border:1px solid #ddd; border-radius:4px; padding:0.5rem; background:#f9f9f9;">
-                            <div style="font-style:italic; color:#888;">Đang tải danh sách...</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <div class="settings-actions">
                 <button class="btn" onclick="testAnnouncementSample()"><i class="fas fa-volume-up"></i> Phát thử</button>
                 <button class="btn" onclick="testNotificationSound()"><i class="fas fa-bell"></i> Thử âm thanh</button>
@@ -751,6 +782,8 @@
     // API endpoints
         const API_ENDPOINTS = {
         APPOINTMENTS_TODAY: '/api/appointments/today',
+        APPOINTMENTS_FROM_TODAY: '/api/appointments/from-today',
+        APPOINTMENTS_PAST: '/api/appointments/past',
         APPOINTMENTS_BY_DATE: d => `/api/appointments/by-date?date=${encodeURIComponent(d)}`,
             CLINICAL_SERVICES: '/api/clinical-services',
         APPOINTMENT_SERVICES: id => `/api/appointments/${id}/clinical-services`
@@ -758,9 +791,29 @@
 
     // State
     const state = { currentAppointmentId: null, selectedServices: new Set(), allServices: [], pollTimer: null, lastAppointmentsData: null };
+    let allAppointments = [];
+    let clinicalPrintSelection = { appointmentId: null, services: [] };
+    // Chế độ lọc lịch khám:
+    // - today_future: từ hôm nay trở đi (bao gồm hôm nay)
+    // - past: các ngày trước hôm nay
+    // - today: chỉ hôm nay
+    // - future: từ ngày mai trở đi
+    // Mặc định: hiển thị lịch khám của NGÀY HÔM NAY
+    let appointmentsMode = 'today';
 
     // Utils
     const formatCurrency = n => (n || 0).toLocaleString('vi-VN') + 'đ';
+    const escapeHtml = (v) => String(v ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    const formatNoteCell = (notes) => {
+        const text = (notes || '').trim();
+        if (!text) return '<span style="color:#999;">—</span>';
+        return `<div style="white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3;">${escapeHtml(text)}</div>`;
+    };
     const showError = msg => { console.error(msg); alert(msg); };
 
         const api = {
@@ -784,7 +837,13 @@
 
     // Load dịch vụ của bệnh nhân
         async function loadPatientClinicalServices(appointmentId) {
-                const services = await api.get(API_ENDPOINTS.APPOINTMENT_SERVICES(appointmentId));
+                // no-store + cache bust để tránh trình duyệt giữ dữ liệu cũ sau khi xóa
+                const resp = await fetch(`${API_ENDPOINTS.APPOINTMENT_SERVICES(appointmentId)}?_t=${Date.now()}`, { cache: 'no-store' });
+                if (!resp.ok) {
+                    let txt = await resp.text().catch(()=>'');
+                    throw new Error(txt || `Không tải được danh sách dịch vụ (${resp.status})`);
+                }
+                const services = await resp.json();
         const list = document.getElementById('services-list');
         const selectedList = document.getElementById('selected-services-list');
         if (!services.length) {
@@ -808,7 +867,7 @@
                 const showResultBtn = !isOtherService;
                 
                 return `
-                <div class="service-item" data-link-id="${s.id}" data-service-id="${s.service_id}" style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px; border-bottom:1px solid #eee;">
+                <div class="service-item" data-link-id="${s.id}" data-service-id="${s.service_id}" data-price="${Number(s.price || 0)}" style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px; border-bottom:1px solid #eee;">
                     <div style="display:flex; align-items:center; gap:8px;">
                         <button class="btn danger-btn service-delete-btn" data-appointment-id="${appointmentId}" data-service-id="${s.service_id}" title="Xóa dịch vụ">
                             <i class="fas fa-trash"></i>
@@ -833,7 +892,7 @@
             }).join('');
             if (selectedList) {
                 selectedList.innerHTML = services.map(s => `
-                    <div class="selected-service-item">
+                    <div class="selected-service-item" data-service-id="${s.service_id}" data-price="${Number(s.price || 0)}">
                         <span>${s.name}</span>
                         <span>${formatCurrency(s.price)}</span>
                     </div>
@@ -884,7 +943,6 @@
                 await api.post(API_ENDPOINTS.APPOINTMENT_SERVICES(appointmentId), { service_id: id });
             }
 
-            alert('Đã lưu dịch vụ!');
             closeServiceModal();
             // Reload: appointments table and selected services panel
             await loadAppointments();
@@ -1016,13 +1074,138 @@
         });
     }
 
+    async function getAppointmentById(appointmentId) {
+        const idStr = String(appointmentId);
+        const fromCache = (allAppointments || []).find(a => String(a.id) === idStr);
+        if (fromCache) return fromCache;
+        return api.get(`/api/appointments/${appointmentId}`);
+    }
+
+        function _toYmd(d) {
+            try { return new Date(d).toISOString().split('T')[0]; } catch (e) { return ''; }
+        }
+
+        async function fetchAppointmentsData(selectedDate, filters = {}) {
+            const params = new URLSearchParams();
+            if (filters.name) params.set('name', filters.name);
+            if (filters.pid) params.set('pid', filters.pid);
+            if (filters.phone) params.set('phone', filters.phone);
+            if (filters.status) params.set('status', filters.status);
+
+            const paramsStr = params.toString();
+            const todayStr = _toYmd(new Date());
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowStr = _toYmd(tomorrow);
+
+            if (appointmentsMode === 'past') {
+                const p = new URLSearchParams(paramsStr ? params : undefined);
+                p.set('before', todayStr);
+                const q = p.toString();
+                return api.get(`${API_ENDPOINTS.APPOINTMENTS_PAST}${q ? `?${q}` : ''}`);
+            }
+
+            if (appointmentsMode === 'today_future') {
+                return api.get(`${API_ENDPOINTS.APPOINTMENTS_FROM_TODAY}${paramsStr ? `?${paramsStr}` : ''}`);
+            }
+
+            if (appointmentsMode === 'future') {
+                const start = selectedDate || tomorrowStr;
+                const p = new URLSearchParams(paramsStr ? params : undefined);
+                p.set('start', start);
+                const q = p.toString();
+                return api.get(`${API_ENDPOINTS.APPOINTMENTS_FROM_TODAY}${q ? `?${q}` : ''}`);
+            }
+
+            // today
+            const d = selectedDate || todayStr;
+            return api.get(`${API_ENDPOINTS.APPOINTMENTS_BY_DATE(d)}${paramsStr ? `&${paramsStr}` : ''}`);
+        }
+
+    function updateClinicalPrintSelectedCount() {
+        const list = document.getElementById('clinical-print-service-list');
+        const countEl = document.getElementById('clinical-print-selected-count');
+        if (!list || !countEl) return;
+        const checked = list.querySelectorAll('.clinical-print-item:checked').length;
+        countEl.textContent = `${checked} mục được chọn`;
+    }
+
+    function syncClinicalPrintSelectAllState() {
+        const list = document.getElementById('clinical-print-service-list');
+        const selectAll = document.getElementById('clinical-print-select-all');
+        if (!list || !selectAll) return;
+        const items = [...list.querySelectorAll('.clinical-print-item')];
+        if (!items.length) {
+            selectAll.checked = false;
+            selectAll.indeterminate = false;
+            return;
+        }
+        const checkedCount = items.filter(i => i.checked).length;
+        selectAll.checked = checkedCount === items.length;
+        selectAll.indeterminate = checkedCount > 0 && checkedCount < items.length;
+    }
+
+    function closeClinicalPrintSelectModal() {
+        const modal = document.getElementById('clinical-print-select-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    async function openClinicalPrintSelectModal(appointmentId) {
+        const modal = document.getElementById('clinical-print-select-modal');
+        const list = document.getElementById('clinical-print-service-list');
+        const selectAll = document.getElementById('clinical-print-select-all');
+        if (!modal || !list || !selectAll) return;
+        if (!appointmentId) {
+            alert('Vui lòng chọn bệnh nhân trước khi in phiếu chỉ định.');
+            return;
+        }
+        modal.classList.remove('hidden');
+        list.innerHTML = '<i>Đang tải danh sách chỉ định...</i>';
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+        updateClinicalPrintSelectedCount();
+
+        try {
+            const resp = await fetch(`/api/appointments/${appointmentId}/full-info`);
+            if (!resp.ok) {
+                list.innerHTML = '<i>Không tải được danh sách chỉ định.</i>';
+                return;
+            }
+            const appointment = await resp.json();
+            const services = Array.isArray(appointment.clinical_services) ? appointment.clinical_services : [];
+            clinicalPrintSelection = { appointmentId: String(appointmentId), services };
+
+            if (!services.length) {
+                list.innerHTML = '<i>Bệnh nhân chưa có chỉ định cận lâm sàng.</i>';
+                updateClinicalPrintSelectedCount();
+                return;
+            }
+
+            list.innerHTML = services.map((s, idx) => `
+                <label style="display:flex; align-items:flex-start; gap:10px; padding:8px; border-bottom:1px solid #f0f0f0;">
+                    <input type="checkbox" class="clinical-print-item" data-service-id="${s.service_id}" ${idx === 0 ? 'checked' : ''} />
+                    <span>${escapeHtml(s.name || 'Dịch vụ')}</span>
+                </label>
+            `).join('');
+
+            list.querySelectorAll('.clinical-print-item').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    updateClinicalPrintSelectedCount();
+                    syncClinicalPrintSelectAllState();
+                });
+            });
+            updateClinicalPrintSelectedCount();
+            syncClinicalPrintSelectAllState();
+        } catch (err) {
+            console.error('Lỗi mở danh sách in chỉ định:', err);
+            list.innerHTML = `<i>Lỗi tải danh sách chỉ định: ${escapeHtml(err.message || String(err))}</i>`;
+        }
+    }
+
     // Xóa bệnh nhân
     async function deleteAppointment(appointmentId) {
-        // Tìm thông tin bệnh nhân để hiển thị trong cảnh báo
-        const dateInput = document.getElementById('filter-date');
-        const selected = dateInput && dateInput.value ? dateInput.value : null;
-        const appointments = selected ? await api.get(API_ENDPOINTS.APPOINTMENTS_BY_DATE(selected)) : await api.get(API_ENDPOINTS.APPOINTMENTS_TODAY);
-        const appointment = appointments.find(a => a.id == appointmentId);
+        // Lấy trực tiếp theo ID để không phụ thuộc bộ lọc ngày/tất cả
+        const appointment = await getAppointmentById(appointmentId);
         
         if (!appointment) {
             alert('Không tìm thấy thông tin bệnh nhân!');
@@ -1077,16 +1260,18 @@
     async function loadAppointments() {
         const dateInput = document.getElementById('filter-date');
         const selected = dateInput && dateInput.value ? dateInput.value : null;
-        // Build server-side search query (search by name or phone)
-        const searchInputEl = document.getElementById('search-patient');
-        const q = searchInputEl ? (searchInputEl.value || '').trim() : '';
-        let url;
-        if (selected) {
-            url = `/api/appointments/by-date?date=${encodeURIComponent(selected)}` + (q ? `&q=${encodeURIComponent(q)}` : '');
-        } else {
-            url = `/api/appointments/today` + (q ? `?q=${encodeURIComponent(q)}` : '');
-        }
-        const appts = await api.get(url);
+            // Build server-side search filters
+            const nameQ = (document.getElementById('search-name')?.value || '').trim();
+            const pidQ = (document.getElementById('search-pid')?.value || '').trim();
+            const phoneQ = (document.getElementById('search-phone')?.value || '').trim();
+            const statusQ = (document.getElementById('filter-status')?.value || '').trim();
+
+            const appts = await fetchAppointmentsData(selected, {
+                name: nameQ,
+                pid: pidQ,
+                phone: phoneQ,
+                status: statusQ
+            });
         
         // Compare with last data to avoid unnecessary re-rendering
         const currentDataKey = JSON.stringify(appts.map(a => ({
@@ -1108,9 +1293,13 @@
         state.lastAppointmentsData = currentDataKey;
         allAppointments = appts;
         const tbody = document.getElementById('appointments-body');
-        tbody.innerHTML = appts.map((a,i)=>`
+        tbody.innerHTML = appts.map((a, i) => {
+            const ph = String(a.patient_phone || '').trim();
+            const phHtml = ph.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const phData = encodeURIComponent(ph);
+            return `
             <tr data-appointment-id="${a.id}">
-                <td>${i+1}</td><td>${a.patient_pid || a.patient_phone}</td><td>${a.patient_name}</td><td>${a.patient_dob ? new Date(a.patient_dob).getFullYear() : ''}</td><td>${a.patient_phone}</td>
+                <td>${i+1}</td><td>${a.patient_pid || a.patient_phone}</td><td>${a.patient_name}</td><td>${a.patient_dob ? new Date(a.patient_dob).getFullYear() : ''}</td><td><span class="copy-phone" role="button" tabindex="0" title="Nhấn để sao chép số điện thoại" data-phone="${phData}">${phHtml || '—'}</span></td>
                 <td>${new Date(a.appointment_date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false })}</td>
                 <td>${a.service_type}</td>
                 <td class="diagnosis-cell" data-appointment-id="${a.id}"><i>nhấp để nhập</i></td>
@@ -1120,11 +1309,7 @@
                         <i class="fas fa-edit"></i> Sửa phiếu khám
                     </button>
                 </td>
-                <td>
-                    <button class="btn success-btn print-clinical-btn" data-appointment-id="${a.id}" title="In phiếu chỉ định cận lâm sàng">
-                        <i class="fas fa-print"></i> In phiếu
-                    </button>
-                </td>
+                <td>${formatNoteCell(a.notes)}</td>
                 <td>
                     <div style="display: flex; flex-direction: column; gap: 5px;">
                         <button class="btn primary-btn add-service-btn" data-appointment-id="${a.id}">Thêm dịch vụ</button>
@@ -1141,7 +1326,8 @@
                         </button>
                     </div>
                 </td>
-            </tr>`).join('');
+            </tr>`;
+        }).join('');
         // Helper: update header action buttons disabled state
         const updateHeaderActionState = () => {
             const hasSelection = !!state.currentAppointmentId;
@@ -1162,13 +1348,12 @@
                 }
             };
         });
-        // Populate diagnosis values async (read-only display)
+        // Populate diagnosis values (already included in appointments payload)
         tbody.querySelectorAll('.diagnosis-cell').forEach(cell => {
             const id = cell.dataset.appointmentId;
-            fetch(`/api/appointments/${id}/diagnosis`).then(r=>r.ok?r.json():Promise.reject()).then(js=>{
-                const text = (js && js.diagnosis) ? js.diagnosis : '';
-                cell.textContent = text || '—';
-            }).catch(()=>{ cell.textContent = '—'; });
+            const row = appts.find(a => String(a.id) === String(id));
+            const text = (row && row.diagnosis) ? row.diagnosis : '';
+            cell.textContent = text || '—';
             // Remove click functionality - diagnosis can only be edited through the patient edit modal
             cell.style.cursor = 'default';
             cell.title = 'Chẩn đoán - chỉnh sửa qua modal Sửa thông tin bệnh nhân';
@@ -1186,24 +1371,13 @@
                 if (!confirm('Bạn có chắc chắn muốn xóa tất cả dịch vụ cận lâm sàng của bệnh nhân này?')) return;
                 
                 try {
-                    // Get current services for this appointment
-                    const services = await api.get(API_ENDPOINTS.APPOINTMENT_SERVICES(appointmentId));
-                    if (!services.length) {
-                        alert('Bệnh nhân chưa có dịch vụ cận lâm sàng nào.');
+                    const resp = await fetch(API_ENDPOINTS.APPOINTMENT_SERVICES(appointmentId), { method: 'DELETE' });
+                    const data = await resp.json().catch(() => ({}));
+                    if (!resp.ok) {
+                        alert(data.message || `Không thể xóa dịch vụ (${resp.status}).`);
                         return;
                     }
-                    
-                    // Delete all services
-                    for (const service of services) {
-                        const resp = await fetch(`${API_ENDPOINTS.APPOINTMENT_SERVICES(appointmentId)}/${service.service_id}`, { method: 'DELETE' });
-                        if (!resp.ok) {
-                            let txt = await resp.text().catch(()=>'');
-                            alert('Không thể xóa dịch vụ: ' + (txt || resp.status));
-                            return;
-                        }
-                    }
-                    
-                    alert('Đã xóa tất cả dịch vụ cận lâm sàng của bệnh nhân.');
+                    alert(data.message || 'Đã xóa tất cả dịch vụ cận lâm sàng của bệnh nhân.');
                     await loadPatientClinicalServices(appointmentId);
                 } catch (error) {
                     console.error('Lỗi khi xóa dịch vụ:', error);
@@ -1211,18 +1385,13 @@
                 }
             };
         });
-        // Header action buttons
-        const headerEdit = document.getElementById('header-edit-btn');
-        const headerDelete = document.getElementById('header-delete-btn');
-        if (headerEdit) headerEdit.onclick = async (e) => {
-            e.stopPropagation();
-            if (!state.currentAppointmentId) { alert('Vui lòng chọn bệnh nhân.'); return; }
+        async function openPatientEditModalByAppointmentId(appointmentId) {
             try {
-                // Lấy thông tin bệnh nhân từ bản ghi lịch hẹn hiện tại để biết patient_id
-                const dateInput = document.getElementById('filter-date');
-                const selected = dateInput && dateInput.value ? dateInput.value : null;
-                const appts = selected ? await api.get(API_ENDPOINTS.APPOINTMENTS_BY_DATE(selected)) : await api.get(API_ENDPOINTS.APPOINTMENTS_TODAY);
-                const appt = appts.find(a => String(a.id) === String(state.currentAppointmentId));
+                if (!appointmentId) { alert('Vui lòng chọn bệnh nhân.'); return; }
+
+                state.currentAppointmentId = String(appointmentId);
+                // Lấy trực tiếp theo ID để tránh lỗi khi đang lọc/hiển thị 30 ngày
+                const appt = await getAppointmentById(appointmentId);
                 if (!appt) { alert('Không tìm thấy bệnh nhân.'); return; }
                 const patientId = appt.patient_id;
                 const p = await api.get(`/api/patients/${patientId}`);
@@ -1271,6 +1440,7 @@
                 document.getElementById('edit-diagnosis').value = currentDiagnosis;
                 document.getElementById('edit-notes').value = currentNotes;
                 document.getElementById('edit-doctor').value = appt.doctor_name || 'PK Đại Anh';
+                document.getElementById('edit-expected-delivery-date').value = appt.expected_delivery_date || '';
                 document.getElementById('patient-edit-modal').classList.remove('hidden');
                 // Save handler
                 const saveBtn = document.getElementById('save-patient-btn');
@@ -1297,12 +1467,13 @@
                         const diagnosis = document.getElementById('edit-diagnosis').value.trim();
                         const notes = document.getElementById('edit-notes').value.trim();
                         const doctor = (document.getElementById('edit-doctor').value || 'PK Đại Anh').trim() || 'PK Đại Anh';
+                        const expectedDeliveryDate = (document.getElementById('edit-expected-delivery-date').value || '').trim();
                         
-                        console.log('Dữ liệu cập nhật:', { reason, diagnosis, notes, doctor });
+                        console.log('Dữ liệu cập nhật:', { reason, diagnosis, notes, doctor, expectedDeliveryDate });
                         
                         // Update appointment (reason and doctor)
                         console.log('Cập nhật appointment...');
-                        const r2 = await fetch(`/api/appointments/${state.currentAppointmentId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ service_type: reason, doctor_name: doctor }) });
+                        const r2 = await fetch(`/api/appointments/${state.currentAppointmentId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ service_type: reason, doctor_name: doctor, expected_delivery_date: expectedDeliveryDate || null }) });
                         if (!r2.ok) {
                             const t2 = await r2.text().catch(()=> '');
                             console.error('Lỗi cập nhật appointment:', r2.status, r2.statusText, t2);
@@ -1348,6 +1519,15 @@
                 console.error(err);
                 alert('Không thể tải thông tin bệnh nhân.');
             }
+        }
+
+        // Header action buttons
+        const headerEdit = document.getElementById('header-edit-btn');
+        const headerDelete = document.getElementById('header-delete-btn');
+        if (headerEdit) headerEdit.onclick = async (e) => {
+            e.stopPropagation();
+            if (!state.currentAppointmentId) { alert('Vui lòng chọn bệnh nhân.'); return; }
+            await openPatientEditModalByAppointmentId(state.currentAppointmentId);
         };
         if (headerDelete) headerDelete.onclick = (e) => {
             e.stopPropagation();
@@ -1389,6 +1569,40 @@
         document.getElementById('services-list').innerHTML='<i>Chọn bệnh nhân để xem dịch vụ.</i>';
         document.getElementById('save-services').onclick=saveSelectedServices;
         document.getElementById('close-service-modal').onclick=closeServiceModal;
+        const printClinicalServiceBtn = document.getElementById('print-clinical-service');
+        if (printClinicalServiceBtn) {
+            printClinicalServiceBtn.onclick = () => openClinicalPrintSelectModal(state.currentAppointmentId);
+        }
+        const clinicalPrintCloseBtn = document.getElementById('clinical-print-close-btn');
+        if (clinicalPrintCloseBtn) clinicalPrintCloseBtn.onclick = closeClinicalPrintSelectModal;
+        const clinicalPrintSelectAll = document.getElementById('clinical-print-select-all');
+        if (clinicalPrintSelectAll) {
+            clinicalPrintSelectAll.onchange = () => {
+                const list = document.getElementById('clinical-print-service-list');
+                if (!list) return;
+                list.querySelectorAll('.clinical-print-item').forEach(cb => { cb.checked = clinicalPrintSelectAll.checked; });
+                updateClinicalPrintSelectedCount();
+                syncClinicalPrintSelectAllState();
+            };
+        }
+        const clinicalPrintRunBtn = document.getElementById('clinical-print-run-btn');
+        if (clinicalPrintRunBtn) {
+            clinicalPrintRunBtn.onclick = async () => {
+                const list = document.getElementById('clinical-print-service-list');
+                const apptId = clinicalPrintSelection.appointmentId;
+                if (!list || !apptId) {
+                    alert('Không có dữ liệu chỉ định để in.');
+                    return;
+                }
+                const selectedIds = [...list.querySelectorAll('.clinical-print-item:checked')].map(el => String(el.dataset.serviceId));
+                if (!selectedIds.length) {
+                    alert('Vui lòng chọn ít nhất 1 chỉ định để in.');
+                    return;
+                }
+                closeClinicalPrintSelectModal();
+                await printClinicalForm(apptId, selectedIds);
+            };
+        }
         document.querySelectorAll('input[name="service-type"]').forEach(r=>r.onchange=()=>filterServices(r.value));
             // Auto refresh periodically and on focus
             const startPolling = () => {
@@ -1398,62 +1612,98 @@
             startPolling();
             document.addEventListener('visibilitychange', () => { if (!document.hidden) loadAppointments(); });
             const fd = document.getElementById('filter-date');
+            const pastBtn = document.getElementById('btn-past');
             const todayBtn = document.getElementById('btn-today');
-            if (fd) fd.onchange = () => { state.lastAppointmentsData = null; loadAppointments(); };
-            if (todayBtn) todayBtn.onclick = () => { const t = new Date().toISOString().split('T')[0]; fd.value = t; state.lastAppointmentsData = null; loadAppointments(); };
-            
-            // Search input: allow search by patient name or registered phone number
-            const searchInput = document.getElementById('search-patient');
-            
-            // Reset cache when search changes
-            if (searchInput) {
-                let searchTimeout;
-                searchInput.addEventListener('input', () => {
-                    clearTimeout(searchTimeout);
-                    searchTimeout = setTimeout(() => {
-                        state.lastAppointmentsData = null;
-                        loadAppointments();
-                    }, 300);
-                });
+            const allBtn = document.getElementById('btn-all'); // Chờ khám
+            const headerBtn = document.getElementById('btn-exams-from-today');
+
+            function setExamMode(mode) {
+                appointmentsMode = mode;
+                const setBtnState = (btn, isActive) => {
+                    if (!btn) return;
+                    btn.classList.toggle('active', !!isActive);
+                    btn.classList.toggle('inactive', !isActive);
+                };
+                setBtnState(headerBtn, mode === 'today_future');
+                setBtnState(pastBtn, mode === 'past');
+                setBtnState(todayBtn, mode === 'today');
+                setBtnState(allBtn, mode === 'future');
             }
-            const suggestionsDiv = document.getElementById('search-suggestions');
-            let allAppointments = []; // Cache for suggestions
+
+            // Initialize UI state based on default mode
+            setExamMode(appointmentsMode);
+
+            if (fd) fd.onchange = () => {
+                setExamMode('today');
+                state.lastAppointmentsData = null;
+                loadAppointments();
+            };
+            if (todayBtn) todayBtn.onclick = () => {
+                const t = new Date().toISOString().split('T')[0];
+                if (fd) fd.value = t;
+                setExamMode('today');
+                state.lastAppointmentsData = null;
+                loadAppointments();
+            };
+            if (allBtn) allBtn.onclick = () => {
+                setExamMode('future');
+                if (fd) {
+                    const tm = new Date();
+                    tm.setDate(tm.getDate() + 1);
+                    fd.value = tm.toISOString().split('T')[0];
+                }
+                state.lastAppointmentsData = null;
+                loadAppointments();
+            };
+            if (pastBtn) pastBtn.onclick = () => {
+                setExamMode('past');
+                if (fd) fd.value = '';
+                state.lastAppointmentsData = null;
+                loadAppointments();
+            };
+            if (headerBtn) headerBtn.onclick = () => {
+                setExamMode('today_future');
+                if (fd) fd.value = '';
+                state.lastAppointmentsData = null;
+                loadAppointments();
+            };
             
-            // Load all appointments for suggestions
+            // Search filters: name / pid / phone / status (server-side)
+            const searchNameInput = document.getElementById('search-name');
+            const searchPidInput = document.getElementById('search-pid');
+            const searchPhoneInput = document.getElementById('search-phone');
+            const statusSelect = document.getElementById('filter-status');
+            const suggestionsDiv = document.getElementById('search-suggestions');
+
+            // Load all appointments for local suggestions (does NOT include search filters)
             async function loadAllAppointmentsForSuggestions() {
                 try {
                     const dateInput = document.getElementById('filter-date');
                     const selected = dateInput && dateInput.value ? dateInput.value : null;
-                    let url;
-                    if (selected) {
-                        url = `/api/appointments/by-date?date=${encodeURIComponent(selected)}`;
-                    } else {
-                        url = `/api/appointments/today`;
-                    }
-                    allAppointments = await api.get(url);
+                    allAppointments = await fetchAppointmentsData(selected, {});
                 } catch (error) {
                     console.error('Error loading appointments for suggestions:', error);
                     allAppointments = [];
                 }
             }
             
-            // Show search suggestions
+            // Show search suggestions only for name input
             function showSuggestions(query) {
                 if (!query || query.length < 2) {
-                    suggestionsDiv.style.display = 'none';
+                    if (suggestionsDiv) suggestionsDiv.style.display = 'none';
                     return;
                 }
-                
-                const filtered = allAppointments.filter(apt => 
-                    (apt.patient_name && apt.patient_name.toLowerCase().includes(query.toLowerCase())) ||
-                    (apt.patient_phone && apt.patient_phone.includes(query))
+                if (!suggestionsDiv) return;
+
+                const filtered = allAppointments.filter(apt =>
+                    (apt.patient_name && apt.patient_name.toLowerCase().includes(query.toLowerCase()))
                 );
-                
+
                 if (filtered.length === 0) {
                     suggestionsDiv.style.display = 'none';
                     return;
                 }
-                
+
                 suggestionsDiv.innerHTML = filtered.slice(0, 5).map(apt => `
                     <div class="suggestion-item" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;" 
                          onclick="selectSuggestion('${apt.patient_name}', '${apt.patient_phone}')">
@@ -1464,45 +1714,52 @@
                 
                 suggestionsDiv.style.display = 'block';
             }
-            
+
             // Select suggestion
             window.selectSuggestion = function(name, phone) {
-                searchInput.value = name;
-                suggestionsDiv.style.display = 'none';
-                loadAppointments();
+                if (searchNameInput) searchNameInput.value = name || '';
+                if (searchPhoneInput) searchPhoneInput.value = phone || '';
+                if (searchPidInput) searchPidInput.value = '';
+                if (suggestionsDiv) suggestionsDiv.style.display = 'none';
+                loadAppointments().catch(()=>{});
             };
             
-            // Debounced server-side search: typing triggers loadAppointments() which passes q to API
-            if (searchInput) {
-                let searchDebounce = null;
-                searchInput.addEventListener('input', () => {
-                    const query = searchInput.value.trim();
-                    
-                    // Show suggestions
-                    showSuggestions(query);
-                    
-                    // Debounced search
-                    if (searchDebounce) clearTimeout(searchDebounce);
-                    searchDebounce = setTimeout(() => {
-                        loadAppointments().catch(()=>{});
-                        searchDebounce = null;
-                    }, 350);
+            let searchDebounce = null;
+            function triggerSearch() {
+                if (searchDebounce) clearTimeout(searchDebounce);
+                searchDebounce = setTimeout(() => {
+                    loadAppointments().catch(()=>{});
+                    searchDebounce = null;
+                }, 350);
+            }
+
+            // Name input: suggestions + server-side search
+            if (searchNameInput) {
+                searchNameInput.addEventListener('input', () => {
+                    showSuggestions((searchNameInput.value || '').trim());
+                    triggerSearch();
                 });
-                
-                // Hide suggestions when clicking outside
-                document.addEventListener('click', (e) => {
-                    if (!searchInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
-                        suggestionsDiv.style.display = 'none';
-                    }
-                });
-                
-                // Load suggestions on focus
-                searchInput.addEventListener('focus', () => {
-                    if (allAppointments.length === 0) {
-                        loadAllAppointmentsForSuggestions();
-                    }
+
+                searchNameInput.addEventListener('focus', () => {
+                    if (allAppointments.length === 0) loadAllAppointmentsForSuggestions();
                 });
             }
+
+            // Other inputs: trigger server-side search
+            [searchPidInput, searchPhoneInput].forEach(el => {
+                if (!el) return;
+                el.addEventListener('input', () => triggerSearch());
+            });
+
+            if (statusSelect) statusSelect.addEventListener('change', () => triggerSearch());
+
+            // Hide suggestions when clicking outside
+            document.addEventListener('click', (e) => {
+                const inName = searchNameInput && searchNameInput.contains(e.target);
+                if (!inName && suggestionsDiv && !suggestionsDiv.contains(e.target)) {
+                    suggestionsDiv.style.display = 'none';
+                }
+            });
         
         // Khởi tạo cài đặt âm thanh thông báo
         initializeAnnouncementSettings();
@@ -1525,9 +1782,6 @@
         const FREQUENCY_KEY = 'examination_announce_frequency_v2';
         const DURATION_KEY = 'examination_announce_duration_v2';
         const REPEAT_KEY = 'examination_announce_repeat_v2';
-        const VOLUSON_SYNC_KEY = 'voluson_sync_enabled_v1';
-        const VOLUSON_IP_KEY = 'voluson_ip_v1';
-        const VOLUSON_PORT_KEY = 'voluson_port_v1';
 
         function getDefaultTemplate() {
             return 'Mời khách hàng {name}, phiếu khám số {queue}, vào phòng khám.';
@@ -1598,20 +1852,8 @@
             document.getElementById('sound-duration').value = savedDuration;
             document.getElementById('sound-repeat').value = savedRepeat;
             
-            // Voluson settings
-            const savedVolusonSync = localStorage.getItem(VOLUSON_SYNC_KEY) === 'true';
-            const savedVolusonIP = localStorage.getItem(VOLUSON_IP_KEY) || '10.17.2.1';
-            const savedVolusonPort = localStorage.getItem(VOLUSON_PORT_KEY) || '104';
-            
-            document.getElementById('voluson-sync-enabled').checked = savedVolusonSync;
-            document.getElementById('voluson-ip').value = savedVolusonIP;
-            document.getElementById('voluson-port').value = savedVolusonPort;
-            
             // Update display values
             updateRangeValues();
-            
-            // Load ultrasound services
-            loadUltrasoundServices();
             
             // Load voices
             populateVoices();
@@ -1870,15 +2112,6 @@
             localStorage.setItem(DURATION_KEY, String(duration));
             localStorage.setItem(REPEAT_KEY, String(repeat));
             
-            // Voluson settings
-            const volusonSync = document.getElementById('voluson-sync-enabled').checked;
-            const volusonIP = document.getElementById('voluson-ip').value || '10.17.2.1';
-            const volusonPort = document.getElementById('voluson-port').value || '104';
-            
-            localStorage.setItem(VOLUSON_SYNC_KEY, String(volusonSync));
-            localStorage.setItem(VOLUSON_IP_KEY, volusonIP);
-            localStorage.setItem(VOLUSON_PORT_KEY, volusonPort);
-            
             closeAnnouncementSettings();
         }
 
@@ -1937,64 +2170,6 @@
             playNotificationSound();
         }
         
-        // Voluson functions
-        async function loadUltrasoundServices() {
-            try {
-                const response = await fetch('/api/clinical-services');
-                const services = await response.json();
-                
-                const ultrasoundServices = services.filter(s => 
-                    s.service_group && s.service_group.toLowerCase().includes('siêu âm')
-                );
-                
-                const container = document.getElementById('ultrasound-services');
-                if (ultrasoundServices.length > 0) {
-                    container.innerHTML = ultrasoundServices.map(s => `
-                        <div style="padding:0.3rem; border-bottom:1px solid #eee; font-size:0.9rem;">
-                            <strong>${s.name}</strong> - ${s.service_group}
-                        </div>
-                    `).join('');
-                } else {
-                    container.innerHTML = '<div style="font-style:italic; color:#888;">Không có dịch vụ siêu âm nào</div>';
-                }
-            } catch (error) {
-                console.error('Error loading ultrasound services:', error);
-                document.getElementById('ultrasound-services').innerHTML = '<div style="color:red;">Lỗi tải danh sách dịch vụ</div>';
-            }
-        }
-        
-        async function testVolusonConnection() {
-            const statusDiv = document.getElementById('voluson-status');
-            const statusText = document.getElementById('voluson-status-text');
-            
-            statusText.textContent = 'Đang kiểm tra...';
-            statusDiv.style.background = '#fff3cd';
-            
-            try {
-                const ip = document.getElementById('voluson-ip').value;
-                const port = document.getElementById('voluson-port').value;
-                
-                const response = await fetch('/api/test-voluson-connection', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ip: ip, port: parseInt(port) })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    statusText.textContent = 'Kết nối thành công';
-                    statusDiv.style.background = '#d4edda';
-                } else {
-                    statusText.textContent = `Lỗi: ${result.error}`;
-                    statusDiv.style.background = '#f8d7da';
-                }
-            } catch (error) {
-                statusText.textContent = `Lỗi kết nối: ${error.message}`;
-                statusDiv.style.background = '#f8d7da';
-            }
-        }
-
         function buildAnnouncement(name, queue, time = null, doctor = null) {
             const tmpl = localStorage.getItem(ANNOUNCE_KEY) || getDefaultTemplate();
             const currentTime = time || new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -2235,6 +2410,48 @@
             speakAnnouncement(name, queue);
         }
 
+        function showExamListCopyToast(message) {
+            let el = document.getElementById('exam-list-copy-toast');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'exam-list-copy-toast';
+                el.setAttribute('role', 'status');
+                el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 18px;border-radius:8px;z-index:99999;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,.25);opacity:0;transition:opacity .2s ease;pointer-events:none;max-width:90vw;text-align:center;';
+                document.body.appendChild(el);
+            }
+            el.textContent = message;
+            el.style.opacity = '1';
+            clearTimeout(showExamListCopyToast._hide);
+            showExamListCopyToast._hide = setTimeout(function() { el.style.opacity = '0'; }, 2000);
+        }
+
+        async function examListCopyPhoneToClipboard(text) {
+            const t = (text || '').trim();
+            if (!t) {
+                showExamListCopyToast('Chưa có số điện thoại');
+                return;
+            }
+            try {
+                if (navigator.clipboard && window.isSecureContext && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(t);
+                } else {
+                    const ta = document.createElement('textarea');
+                    ta.value = t;
+                    ta.style.position = 'fixed';
+                    ta.style.left = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.focus();
+                    ta.select();
+                    document.execCommand('copy');
+                    ta.remove();
+                }
+                showExamListCopyToast('Đã sao chép số điện thoại');
+            } catch (err) {
+                console.error(err);
+                showExamListCopyToast('Không sao chép được — thử chọn số thủ công');
+            }
+        }
+
         // Delegate click on speak buttons
         document.addEventListener('click', function(e) {
             const btn = e.target.closest('.speak-btn');
@@ -2243,6 +2460,28 @@
                 const queue = btn.getAttribute('data-queue');
                 speakAnnouncement(name, queue);
             }
+        });
+
+        document.addEventListener('click', function(e) {
+            const el = e.target.closest('.copy-phone');
+            if (!el) return;
+            e.stopPropagation();
+            let raw = '';
+            try {
+                raw = decodeURIComponent(el.getAttribute('data-phone') || '');
+            } catch (err) {
+                raw = el.getAttribute('data-phone') || '';
+            }
+            examListCopyPhoneToClipboard(raw);
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter') return;
+            const el = e.target.closest('.copy-phone');
+            if (!el) return;
+            e.preventDefault();
+            e.stopPropagation();
+            el.click();
         });
 
         // Delegate click on Zalo buttons
@@ -2456,7 +2695,7 @@
         }
 
         // Clinical form print functionality
-        async function printClinicalForm(appointmentId) {
+        async function printClinicalForm(appointmentId, selectedServiceIds = null) {
             try {
                 // Get full appointment data including diagnosis and clinical services
                 const appointmentResponse = await fetch(`/api/appointments/${appointmentId}/full-info`);
@@ -2484,11 +2723,21 @@
                 const headerResponse = await fetch('/api/clinical-form-header');
                 const headerData = await headerResponse.json();
                 
+                // Create forms for selected clinical services
+                const sourceServices = appointment.clinical_services || [];
+                const filteredServices = Array.isArray(selectedServiceIds) && selectedServiceIds.length
+                    ? sourceServices.filter(s => selectedServiceIds.includes(String(s.service_id)))
+                    : sourceServices;
+                if (!filteredServices.length) {
+                    alert('Vui lòng chọn ít nhất 1 chỉ định để in.');
+                    return;
+                }
+
                 // Create forms for each clinical service
                 const forms = [];
-                console.log(`Tạo ${appointment.clinical_services.length} phiếu chỉ định cho ${appointment.clinical_services.length} dịch vụ`);
+                console.log(`Tạo ${filteredServices.length} phiếu chỉ định`);
                 
-                for (const service of appointment.clinical_services) {
+                for (const service of filteredServices) {
                     console.log(`Tạo phiếu cho dịch vụ: ${service.name}`);
                     const filledTemplate = fillClinicalFormTemplate(templateData.template, appointment, service);
                     const fullContent = headerData.header + filledTemplate;
@@ -2844,12 +3093,18 @@
 
         // Event listeners for clinical form and per-service buttons (delete/print)
         document.addEventListener('click', function(e) {
-            // Print examination form (pregnancy or gynecology)
+            // Open patient edit modal from row action
             if (e.target.closest('.print-examination-btn')) {
                 const btn = e.target.closest('.print-examination-btn');
                 const appointmentId = btn.getAttribute('data-appointment-id');
-                const serviceType = btn.getAttribute('data-service-type') || '';
-                printExaminationForm(appointmentId, serviceType);
+                if (!appointmentId) return;
+                state.currentAppointmentId = String(appointmentId);
+                const headerEditBtn = document.getElementById('header-edit-btn');
+                if (headerEditBtn && typeof headerEditBtn.onclick === 'function') {
+                    headerEditBtn.onclick({ stopPropagation: () => {} });
+                } else {
+                    alert('Không thể mở modal sửa. Vui lòng chọn bệnh nhân rồi bấm nút Sửa ở header.');
+                }
                 return;
             }
             
@@ -2866,26 +3121,68 @@
                 const appointmentId = delBtn.getAttribute('data-appointment-id');
                 const serviceId = delBtn.getAttribute('data-service-id');
                 if (!confirm('Bạn có chắc chắn muốn xóa dịch vụ này?')) return;
+                if (delBtn.dataset.deleting === '1') return;
+                delBtn.dataset.deleting = '1';
+                delBtn.disabled = true;
+                const serviceItem = delBtn.closest('.service-item');
+                const removedPrice = Number(serviceItem?.dataset?.price || 0);
+                if (serviceItem) serviceItem.style.opacity = '0.5';
+
                 fetch(`/api/appointments/${appointmentId}/clinical-services/${serviceId}`, { method: 'DELETE' })
                     .then(async r => {
-                        if (!r.ok) {
-                            const txt = await r.text().catch(()=>null);
-                            throw new Error(txt || 'Lỗi khi xóa dịch vụ');
+                        const body = await r.text().catch(() => '');
+                        let payload = null;
+                        try { payload = body ? JSON.parse(body) : null; } catch (_) { payload = null; }
+
+                        // Nếu backend trả 404 nghĩa là dịch vụ đã bị xóa trước đó -> coi như thành công để đồng bộ lại UI
+                        if (!r.ok && r.status !== 404) {
+                            const message = (payload && payload.message) ? payload.message : (body || `Lỗi khi xóa dịch vụ (${r.status})`);
+                            throw new Error(message);
                         }
-                        return r.json().catch(()=>({}));
+                        return payload || {};
                     })
                     .then(async ()=>{
-                        // Reload services and appointments
-                        if (state.currentAppointmentId == appointmentId) loadPatientClinicalServices(appointmentId);
-                        loadAppointments();
-                        
+                        // Cập nhật UI ngay lập tức để người dùng thấy phản hồi tức thời
+                        if (serviceItem) serviceItem.remove();
+                        const selectedList = document.getElementById('selected-services-list');
+                        const selectedItem = selectedList ? selectedList.querySelector(`.selected-service-item[data-service-id="${serviceId}"]`) : null;
+                        if (selectedItem) selectedItem.remove();
+                        if (selectedList && !selectedList.querySelector('.selected-service-item')) {
+                            selectedList.innerHTML = '<i>Chưa chọn dịch vụ nào.</i>';
+                        }
+                        const totalEl = document.getElementById('total-amount');
+                        if (totalEl) {
+                            const currentTotalText = (totalEl.textContent || '0').replace(/[^\d]/g, '');
+                            const currentTotal = Number(currentTotalText || 0);
+                            const nextTotal = Math.max(0, currentTotal - removedPrice);
+                            totalEl.textContent = formatCurrency(nextTotal);
+                        }
+                        const printBtn = document.getElementById('print-clinical-service');
+                        if (printBtn && selectedList) {
+                            printBtn.disabled = !selectedList.querySelector('.selected-service-item');
+                        }
+
+                        // Luôn refresh danh sách dịch vụ hiện tại để tránh hiển thị stale
+                        if (state.currentAppointmentId == appointmentId) {
+                            await loadPatientClinicalServices(appointmentId);
+                        }
+                        await loadAppointments();
+
                         // Tự động đồng bộ sang lab-tests.html và lab-tests-dai-anh.html
                         await syncToLabTestsPages(appointmentId);
-                        
+
                         // Tự động đồng bộ sang các trang xem kết quả cận lâm sàng
                         notifyClinicalResultsPages(appointmentId);
                     })
-                    .catch(err=>{ alert('Lỗi: ' + (err.message || err)); console.error(err); });
+                    .catch(err=>{
+                        if (serviceItem) serviceItem.style.opacity = '1';
+                        alert('Lỗi: ' + (err.message || err));
+                        console.error(err);
+                    })
+                    .finally(() => {
+                        delBtn.dataset.deleting = '0';
+                        delBtn.disabled = false;
+                    });
                 return;
             }
 

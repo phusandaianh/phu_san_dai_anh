@@ -1,0 +1,326 @@
+[-03-2026 11:41 CH] Starting MWL Server... 
+DEBUG:pynetdicom.events:Request Parameters:
+DEBUG:pynetdicom.events:======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+DEBUG:pynetdicom.events:Their Implementation Class UID:      1.2.826.0.1.3680043.9.3811.1.5.7
+DEBUG:pynetdicom.events:Their Implementation Version Name:   PYNETDICOM_157
+DEBUG:pynetdicom.events:Application Context Name:    1.2.840.10008.3.1.1.1
+DEBUG:pynetdicom.events:Calling Application Name:    MWL_SCP         
+DEBUG:pynetdicom.events:Called Application Name:     CLINIC_SYSTEM   
+DEBUG:pynetdicom.events:Their Max PDU Receive Size:  16382
+DEBUG:pynetdicom.events:Presentation Context:
+DEBUG:pynetdicom.events:  Context ID:        1 (Proposed)
+DEBUG:pynetdicom.events:    Abstract Syntax: =Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:    Proposed SCP/SCU Role: Default
+DEBUG:pynetdicom.events:    Proposed Transfer Syntaxes:
+DEBUG:pynetdicom.events:      =Implicit VR Little Endian
+DEBUG:pynetdicom.events:      =Explicit VR Little Endian
+DEBUG:pynetdicom.events:      =Deflated Explicit VR Little Endian
+DEBUG:pynetdicom.events:      =Explicit VR Big Endian
+DEBUG:pynetdicom.events:Requested Extended Negotiation: None
+DEBUG:pynetdicom.events:Requested Common Extended Negotiation: None
+DEBUG:pynetdicom.events:Requested Asynchronous Operations Window Negotiation: None
+DEBUG:pynetdicom.events:Requested User Identity Negotiation: None
+DEBUG:pynetdicom.events:========================== END A-ASSOCIATE-RQ PDU ==========================
+INFO:pynetdicom.acse:Accepting Association
+DEBUG:pynetdicom.events:Accept Parameters:
+DEBUG:pynetdicom.events:======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+DEBUG:pynetdicom.events:Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.1.5.7
+DEBUG:pynetdicom.events:Our Implementation Version Name:   PYNETDICOM_157
+DEBUG:pynetdicom.events:Application Context Name:    1.2.840.10008.3.1.1.1
+DEBUG:pynetdicom.events:Responding Application Name: resp. AE Title
+DEBUG:pynetdicom.events:Our Max PDU Receive Size:    16382
+DEBUG:pynetdicom.events:Presentation Contexts:
+DEBUG:pynetdicom.events:  Context ID:        1 (Accepted)
+DEBUG:pynetdicom.events:    Abstract Syntax: =Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:    Accepted SCP/SCU Role: Default
+DEBUG:pynetdicom.events:    Accepted Transfer Syntax: =Implicit VR Little Endian
+DEBUG:pynetdicom.events:Accepted Extended Negotiation: None
+DEBUG:pynetdicom.events:Accepted Asynchronous Operations Window Negotiation: None
+DEBUG:pynetdicom.events:User Identity Negotiation Response: None
+DEBUG:pynetdicom.events:========================== END A-ASSOCIATE-AC PDU ==========================
+DEBUG:pynetdicom.dsutils:pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+DEBUG:pynetdicom.events:========================== INCOMING DIMSE MESSAGE ==========================
+DEBUG:pynetdicom.events:Message Type                  : C-FIND RQ
+DEBUG:pynetdicom.events:Message ID                    : 1
+DEBUG:pynetdicom.events:Affected SOP Class UID        : Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:Identifier                    : Present
+DEBUG:pynetdicom.events:Priority                      : Low
+DEBUG:pynetdicom.events:============================ END DIMSE MESSAGE =============================
+DEBUG:pynetdicom.dsutils:pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+INFO:pynetdicom.service-c:Find SCP Request Identifier:
+INFO:pynetdicom.service-c:
+INFO:pynetdicom.service-c:# DICOM Dataset
+INFO:pynetdicom.service-c:(0008,0052) CS [PATIENT]                                # 1 QueryRetrieveLevel
+INFO:pynetdicom.service-c:(0010,0010) PN (no value available)                     # 0 PatientName
+INFO:pynetdicom.service-c:(0040,0100) SQ (Sequence with 1 item)                   # 1 ScheduledProcedureStepSequence
+INFO:pynetdicom.service-c:  (Sequence item #1)
+INFO:pynetdicom.service-c:    (0008,0060) CS [US]                                     # 1 Modality
+INFO:pynetdicom.service-c:
+DEBUG:pynetdicom.dsutils:pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+WARNING:pydicom:'Dataset.is_little_endian' will be removed in v4.0, set the Transfer Syntax UID or use the 'little_endian' argument with Dataset.save_as() or dcmwrite() instead
+WARNING:pydicom:'Dataset.is_implicit_VR' will be removed in v4.0, set the Transfer Syntax UID or use the 'implicit_vr' argument with Dataset.save_as() or dcmwrite() instead
+ERROR:pynetdicom.service-c:Exception in handler bound to 'evt.EVT_C_FIND'
+ERROR:pynetdicom.service-c:
+Traceback (most recent call last):
+  File "C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\service_class.py", line 1339, in _wrap_handler
+    for result in handler:
+  File "J:\DU_AN_AI\Phong_kham_dai_anh\mwl_server.py", line 164, in handle_find
+    print(f"Nh\u1eadn \u0111\u01b0\u1ee3c C-FIND request t\u1eeb {remote_ae}:")
+  File "C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u1ead' in position 2: character maps to <undefined>
+INFO:pynetdicom.service-c:Find SCP Response 1: 0xC311 (Failure - Unable to Process)
+DEBUG:pynetdicom.events:========================== OUTGOING DIMSE MESSAGE ==========================
+DEBUG:pynetdicom.events:Message Type                  : C-FIND RSP
+DEBUG:pynetdicom.events:Message ID Being Responded To : 1
+DEBUG:pynetdicom.events:Affected SOP Class UID        : Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:Identifier                    : None
+DEBUG:pynetdicom.events:Status                        : 0xC311
+DEBUG:pynetdicom.events:============================ END DIMSE MESSAGE =============================
+INFO:pynetdicom.assoc:Association Released
+DEBUG:pynetdicom.events:Request Parameters:
+DEBUG:pynetdicom.events:======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+DEBUG:pynetdicom.events:Their Implementation Class UID:      1.2.826.0.1.3680043.9.3811.1.5.7
+DEBUG:pynetdicom.events:Their Implementation Version Name:   PYNETDICOM_157
+DEBUG:pynetdicom.events:Application Context Name:    1.2.840.10008.3.1.1.1
+DEBUG:pynetdicom.events:Calling Application Name:    MWL_SCP         
+DEBUG:pynetdicom.events:Called Application Name:     CLINIC_SYSTEM   
+DEBUG:pynetdicom.events:Their Max PDU Receive Size:  16382
+DEBUG:pynetdicom.events:Presentation Context:
+DEBUG:pynetdicom.events:  Context ID:        1 (Proposed)
+DEBUG:pynetdicom.events:    Abstract Syntax: =Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:    Proposed SCP/SCU Role: Default
+DEBUG:pynetdicom.events:    Proposed Transfer Syntaxes:
+DEBUG:pynetdicom.events:      =Implicit VR Little Endian
+DEBUG:pynetdicom.events:      =Explicit VR Little Endian
+DEBUG:pynetdicom.events:      =Deflated Explicit VR Little Endian
+DEBUG:pynetdicom.events:      =Explicit VR Big Endian
+DEBUG:pynetdicom.events:Requested Extended Negotiation: None
+DEBUG:pynetdicom.events:Requested Common Extended Negotiation: None
+DEBUG:pynetdicom.events:Requested Asynchronous Operations Window Negotiation: None
+DEBUG:pynetdicom.events:Requested User Identity Negotiation: None
+DEBUG:pynetdicom.events:========================== END A-ASSOCIATE-RQ PDU ==========================
+INFO:pynetdicom.acse:Accepting Association
+DEBUG:pynetdicom.events:Accept Parameters:
+DEBUG:pynetdicom.events:======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+DEBUG:pynetdicom.events:Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.1.5.7
+DEBUG:pynetdicom.events:Our Implementation Version Name:   PYNETDICOM_157
+DEBUG:pynetdicom.events:Application Context Name:    1.2.840.10008.3.1.1.1
+DEBUG:pynetdicom.events:Responding Application Name: resp. AE Title
+DEBUG:pynetdicom.events:Our Max PDU Receive Size:    16382
+DEBUG:pynetdicom.events:Presentation Contexts:
+DEBUG:pynetdicom.events:  Context ID:        1 (Accepted)
+DEBUG:pynetdicom.events:    Abstract Syntax: =Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:    Accepted SCP/SCU Role: Default
+DEBUG:pynetdicom.events:    Accepted Transfer Syntax: =Implicit VR Little Endian
+DEBUG:pynetdicom.events:Accepted Extended Negotiation: None
+DEBUG:pynetdicom.events:Accepted Asynchronous Operations Window Negotiation: None
+DEBUG:pynetdicom.events:User Identity Negotiation Response: None
+DEBUG:pynetdicom.events:========================== END A-ASSOCIATE-AC PDU ==========================
+DEBUG:pynetdicom.dsutils:pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+DEBUG:pynetdicom.events:========================== INCOMING DIMSE MESSAGE ==========================
+DEBUG:pynetdicom.events:Message Type                  : C-FIND RQ
+DEBUG:pynetdicom.events:Message ID                    : 1
+DEBUG:pynetdicom.events:Affected SOP Class UID        : Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:Identifier                    : Present
+DEBUG:pynetdicom.events:Priority                      : Low
+DEBUG:pynetdicom.events:============================ END DIMSE MESSAGE =============================
+DEBUG:pynetdicom.dsutils:pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+INFO:pynetdicom.service-c:Find SCP Request Identifier:
+INFO:pynetdicom.service-c:
+INFO:pynetdicom.service-c:# DICOM Dataset
+INFO:pynetdicom.service-c:(0008,0052) CS [PATIENT]                                # 1 QueryRetrieveLevel
+INFO:pynetdicom.service-c:(0010,0010) PN (no value available)                     # 0 PatientName
+INFO:pynetdicom.service-c:(0040,0100) SQ (Sequence with 1 item)                   # 1 ScheduledProcedureStepSequence
+INFO:pynetdicom.service-c:  (Sequence item #1)
+INFO:pynetdicom.service-c:    (0008,0060) CS [US]                                     # 1 Modality
+INFO:pynetdicom.service-c:
+DEBUG:pynetdicom.dsutils:pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+WARNING:pydicom:'Dataset.is_little_endian' will be removed in v4.0, set the Transfer Syntax UID or use the 'little_endian' argument with Dataset.save_as() or dcmwrite() instead
+WARNING:pydicom:'Dataset.is_implicit_VR' will be removed in v4.0, set the Transfer Syntax UID or use the 'implicit_vr' argument with Dataset.save_as() or dcmwrite() instead
+ERROR:pynetdicom.service-c:Exception in handler bound to 'evt.EVT_C_FIND'
+ERROR:pynetdicom.service-c:
+Traceback (most recent call last):
+  File "C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\service_class.py", line 1339, in _wrap_handler
+    for result in handler:
+  File "J:\DU_AN_AI\Phong_kham_dai_anh\mwl_server.py", line 164, in handle_find
+    print(f"Started auto-sync scheduler (every {interval_minutes} minutes)")
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u1ead' in position 2: character maps to <undefined>
+INFO:pynetdicom.service-c:Find SCP Response 1: 0xC311 (Failure - Unable to Process)
+DEBUG:pynetdicom.events:========================== OUTGOING DIMSE MESSAGE ==========================
+DEBUG:pynetdicom.events:Message Type                  : C-FIND RSP
+DEBUG:pynetdicom.events:Message ID Being Responded To : 1
+DEBUG:pynetdicom.events:Affected SOP Class UID        : Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:Identifier                    : None
+DEBUG:pynetdicom.events:Status                        : 0xC311
+DEBUG:pynetdicom.events:============================ END DIMSE MESSAGE =============================
+INFO:pynetdicom.assoc:Association Released
+DEBUG:pynetdicom.events:Request Parameters:
+DEBUG:pynetdicom.events:======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+DEBUG:pynetdicom.events:Their Implementation Class UID:      1.2.826.0.1.3680043.9.3811.1.5.7
+DEBUG:pynetdicom.events:Their Implementation Version Name:   PYNETDICOM_157
+DEBUG:pynetdicom.events:Application Context Name:    1.2.840.10008.3.1.1.1
+DEBUG:pynetdicom.events:Calling Application Name:    MWL_SCP         
+DEBUG:pynetdicom.events:Called Application Name:     CLINIC_SYSTEM   
+DEBUG:pynetdicom.events:Their Max PDU Receive Size:  16382
+DEBUG:pynetdicom.events:Presentation Context:
+DEBUG:pynetdicom.events:  Context ID:        1 (Proposed)
+DEBUG:pynetdicom.events:    Abstract Syntax: =Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:    Proposed SCP/SCU Role: Default
+DEBUG:pynetdicom.events:    Proposed Transfer Syntaxes:
+DEBUG:pynetdicom.events:      =Implicit VR Little Endian
+DEBUG:pynetdicom.events:      =Explicit VR Little Endian
+DEBUG:pynetdicom.events:      =Deflated Explicit VR Little Endian
+DEBUG:pynetdicom.events:      =Explicit VR Big Endian
+DEBUG:pynetdicom.events:Requested Extended Negotiation: None
+DEBUG:pynetdicom.events:Requested Common Extended Negotiation: None
+DEBUG:pynetdicom.events:Requested Asynchronous Operations Window Negotiation: None
+DEBUG:pynetdicom.events:Requested User Identity Negotiation: None
+DEBUG:pynetdicom.events:========================== END A-ASSOCIATE-RQ PDU ==========================
+INFO:pynetdicom.acse:Accepting Association
+DEBUG:pynetdicom.events:Accept Parameters:
+DEBUG:pynetdicom.events:======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+DEBUG:pynetdicom.events:Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.1.5.7
+DEBUG:pynetdicom.events:Our Implementation Version Name:   PYNETDICOM_157
+DEBUG:pynetdicom.events:Application Context Name:    1.2.840.10008.3.1.1.1
+DEBUG:pynetdicom.events:Responding Application Name: resp. AE Title
+DEBUG:pynetdicom.events:Our Max PDU Receive Size:    16382
+DEBUG:pynetdicom.events:Presentation Contexts:
+DEBUG:pynetdicom.events:  Context ID:        1 (Accepted)
+DEBUG:pynetdicom.events:    Abstract Syntax: =Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:    Accepted SCP/SCU Role: Default
+DEBUG:pynetdicom.events:    Accepted Transfer Syntax: =Implicit VR Little Endian
+DEBUG:pynetdicom.events:Accepted Extended Negotiation: None
+DEBUG:pynetdicom.events:Accepted Asynchronous Operations Window Negotiation: None
+DEBUG:pynetdicom.events:User Identity Negotiation Response: None
+DEBUG:pynetdicom.events:========================== END A-ASSOCIATE-AC PDU ==========================
+DEBUG:pynetdicom.dsutils:pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+DEBUG:pynetdicom.events:========================== INCOMING DIMSE MESSAGE ==========================
+DEBUG:pynetdicom.events:Message Type                  : C-FIND RQ
+DEBUG:pynetdicom.events:Message ID                    : 1
+DEBUG:pynetdicom.events:Affected SOP Class UID        : Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:Identifier                    : Present
+DEBUG:pynetdicom.events:Priority                      : Low
+DEBUG:pynetdicom.events:============================ END DIMSE MESSAGE =============================
+DEBUG:pynetdicom.dsutils:pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+INFO:pynetdicom.service-c:Find SCP Request Identifier:
+INFO:pynetdicom.service-c:
+INFO:pynetdicom.service-c:# DICOM Dataset
+INFO:pynetdicom.service-c:(0008,0052) CS [PATIENT]                                # 1 QueryRetrieveLevel
+INFO:pynetdicom.service-c:(0010,0010) PN (no value available)                     # 0 PatientName
+INFO:pynetdicom.service-c:(0040,0100) SQ (Sequence with 1 item)                   # 1 ScheduledProcedureStepSequence
+INFO:pynetdicom.service-c:  (Sequence item #1)
+INFO:pynetdicom.service-c:    (0008,0060) CS [US]                                     # 1 Modality
+INFO:pynetdicom.service-c:
+DEBUG:pynetdicom.dsutils:pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+WARNING:pydicom:'Dataset.is_little_endian' will be removed in v4.0, set the Transfer Syntax UID or use the 'little_endian' argument with Dataset.save_as() or dcmwrite() instead
+WARNING:pydicom:'Dataset.is_implicit_VR' will be removed in v4.0, set the Transfer Syntax UID or use the 'implicit_vr' argument with Dataset.save_as() or dcmwrite() instead
+ERROR:pynetdicom.service-c:Exception in handler bound to 'evt.EVT_C_FIND'
+ERROR:pynetdicom.service-c:
+Traceback (most recent call last):
+  File "C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\service_class.py", line 1339, in _wrap_handler
+    for result in handler:
+  File "J:\DU_AN_AI\Phong_kham_dai_anh\mwl_server.py", line 164, in handle_find
+    print(f"Started auto-sync scheduler (every {interval_minutes} minutes)")
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u1ead' in position 2: character maps to <undefined>
+INFO:pynetdicom.service-c:Find SCP Response 1: 0xC311 (Failure - Unable to Process)
+DEBUG:pynetdicom.events:========================== OUTGOING DIMSE MESSAGE ==========================
+DEBUG:pynetdicom.events:Message Type                  : C-FIND RSP
+DEBUG:pynetdicom.events:Message ID Being Responded To : 1
+DEBUG:pynetdicom.events:Affected SOP Class UID        : Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:Identifier                    : None
+DEBUG:pynetdicom.events:Status                        : 0xC311
+DEBUG:pynetdicom.events:============================ END DIMSE MESSAGE =============================
+INFO:pynetdicom.assoc:Association Released
+DEBUG:pynetdicom.events:Request Parameters:
+DEBUG:pynetdicom.events:======================= INCOMING A-ASSOCIATE-RQ PDU ========================
+DEBUG:pynetdicom.events:Their Implementation Class UID:      1.2.826.0.1.3680043.9.3811.1.5.7
+DEBUG:pynetdicom.events:Their Implementation Version Name:   PYNETDICOM_157
+DEBUG:pynetdicom.events:Application Context Name:    1.2.840.10008.3.1.1.1
+DEBUG:pynetdicom.events:Calling Application Name:    MWL_SCP         
+DEBUG:pynetdicom.events:Called Application Name:     CLINIC_SYSTEM   
+DEBUG:pynetdicom.events:Their Max PDU Receive Size:  16382
+DEBUG:pynetdicom.events:Presentation Context:
+DEBUG:pynetdicom.events:  Context ID:        1 (Proposed)
+DEBUG:pynetdicom.events:    Abstract Syntax: =Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:    Proposed SCP/SCU Role: Default
+DEBUG:pynetdicom.events:    Proposed Transfer Syntaxes:
+DEBUG:pynetdicom.events:      =Implicit VR Little Endian
+DEBUG:pynetdicom.events:      =Explicit VR Little Endian
+DEBUG:pynetdicom.events:      =Deflated Explicit VR Little Endian
+DEBUG:pynetdicom.events:      =Explicit VR Big Endian
+DEBUG:pynetdicom.events:Requested Extended Negotiation: None
+DEBUG:pynetdicom.events:Requested Common Extended Negotiation: None
+DEBUG:pynetdicom.events:Requested Asynchronous Operations Window Negotiation: None
+DEBUG:pynetdicom.events:Requested User Identity Negotiation: None
+DEBUG:pynetdicom.events:========================== END A-ASSOCIATE-RQ PDU ==========================
+INFO:pynetdicom.acse:Accepting Association
+DEBUG:pynetdicom.events:Accept Parameters:
+DEBUG:pynetdicom.events:======================= OUTGOING A-ASSOCIATE-AC PDU ========================
+DEBUG:pynetdicom.events:Our Implementation Class UID:      1.2.826.0.1.3680043.9.3811.1.5.7
+DEBUG:pynetdicom.events:Our Implementation Version Name:   PYNETDICOM_157
+DEBUG:pynetdicom.events:Application Context Name:    1.2.840.10008.3.1.1.1
+DEBUG:pynetdicom.events:Responding Application Name: resp. AE Title
+DEBUG:pynetdicom.events:Our Max PDU Receive Size:    16382
+DEBUG:pynetdicom.events:Presentation Contexts:
+DEBUG:pynetdicom.events:  Context ID:        1 (Accepted)
+DEBUG:pynetdicom.events:    Abstract Syntax: =Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:    Accepted SCP/SCU Role: Default
+DEBUG:pynetdicom.events:    Accepted Transfer Syntax: =Implicit VR Little Endian
+DEBUG:pynetdicom.events:Accepted Extended Negotiation: None
+DEBUG:pynetdicom.events:Accepted Asynchronous Operations Window Negotiation: None
+DEBUG:pynetdicom.events:User Identity Negotiation Response: None
+DEBUG:pynetdicom.events:========================== END A-ASSOCIATE-AC PDU ==========================
+DEBUG:pynetdicom.dsutils:pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+DEBUG:pynetdicom.events:========================== INCOMING DIMSE MESSAGE ==========================
+DEBUG:pynetdicom.events:Message Type                  : C-FIND RQ
+DEBUG:pynetdicom.events:Message ID                    : 1
+DEBUG:pynetdicom.events:Affected SOP Class UID        : Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:Identifier                    : Present
+DEBUG:pynetdicom.events:Priority                      : Low
+DEBUG:pynetdicom.events:============================ END DIMSE MESSAGE =============================
+DEBUG:pynetdicom.dsutils:pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+INFO:pynetdicom.service-c:Find SCP Request Identifier:
+INFO:pynetdicom.service-c:
+INFO:pynetdicom.service-c:# DICOM Dataset
+INFO:pynetdicom.service-c:(0008,0052) CS [PATIENT]                                # 1 QueryRetrieveLevel
+INFO:pynetdicom.service-c:(0010,0010) PN (no value available)                     # 0 PatientName
+INFO:pynetdicom.service-c:(0040,0100) SQ (Sequence with 1 item)                   # 1 ScheduledProcedureStepSequence
+INFO:pynetdicom.service-c:  (Sequence item #1)
+INFO:pynetdicom.service-c:    (0008,0060) CS [US]                                     # 1 Modality
+INFO:pynetdicom.service-c:
+DEBUG:pynetdicom.dsutils:pydicom.read_dataset() TransferSyntax="Little Endian Implicit"
+WARNING:pydicom:'Dataset.is_little_endian' will be removed in v4.0, set the Transfer Syntax UID or use the 'little_endian' argument with Dataset.save_as() or dcmwrite() instead
+WARNING:pydicom:'Dataset.is_implicit_VR' will be removed in v4.0, set the Transfer Syntax UID or use the 'implicit_vr' argument with Dataset.save_as() or dcmwrite() instead
+ERROR:pynetdicom.service-c:Exception in handler bound to 'evt.EVT_C_FIND'
+ERROR:pynetdicom.service-c:
+Traceback (most recent call last):
+  File "C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\Lib\site-packages\pynetdicom\service_class.py", line 1339, in _wrap_handler
+    for result in handler:
+  File "J:\DU_AN_AI\Phong_kham_dai_anh\mwl_server.py", line 164, in handle_find
+    print(f"Started auto-sync scheduler (every {interval_minutes} minutes)")
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u1ead' in position 2: character maps to <undefined>
+INFO:pynetdicom.service-c:Find SCP Response 1: 0xC311 (Failure - Unable to Process)
+DEBUG:pynetdicom.events:========================== OUTGOING DIMSE MESSAGE ==========================
+DEBUG:pynetdicom.events:Message Type                  : C-FIND RSP
+DEBUG:pynetdicom.events:Message ID Being Responded To : 1
+DEBUG:pynetdicom.events:Affected SOP Class UID        : Modality Worklist Information Model - FIND
+DEBUG:pynetdicom.events:Identifier                    : None
+DEBUG:pynetdicom.events:Status                        : 0xC311
+DEBUG:pynetdicom.events:============================ END DIMSE MESSAGE =============================
+INFO:pynetdicom.assoc:Association Released
+^C[-03-2026 07:54 SA] Starting MWL Server... 
+^C

@@ -27,11 +27,11 @@ def get_patient(patient_id):
 @patients_bp.route('/<int:patient_id>', methods=['PUT'])
 def update_patient(patient_id):
     """PUT /api/patients/<id> - Cập nhật bệnh nhân"""
-    from app import db, Patient, _get_or_404
+    from app import db, Patient, _get_or_404, normalize_patient_display_name
     
     data = request.json or {}
     p = _get_or_404(Patient, patient_id)
-    name = (data.get('name') or '').strip()
+    name = normalize_patient_display_name(data.get('name') or '')
     phone = (data.get('phone') or '').strip()
     address = (data.get('address') or '').strip()
     dob = (data.get('date_of_birth') or '').strip()
@@ -55,22 +55,41 @@ def update_patient(patient_id):
 
 @patients_bp.route('/by-phone', methods=['GET'])
 def get_by_phone():
-    """GET /api/patients/by-phone?phone=xxx - Tìm bệnh nhân theo SĐT"""
+    """GET /api/patients/by-phone?phone=xxx — Tất cả hồ sơ Patient gắn SĐT (có thể nhiều người)."""
     from app import Patient
-    
+
     phone = (request.args.get('phone') or '').strip()
     if not phone:
         return jsonify({'message': 'Thiếu tham số phone'}), 400
-    
-    patient = Patient.query.filter_by(phone=phone).first()
-    if not patient:
-        return jsonify({'found': False})
-    
+
+    rows = (
+        Patient.query.filter_by(phone=phone)
+        .order_by(Patient.id.desc())
+        .all()
+    )
+    if not rows:
+        return jsonify({'found': False, 'patients': [], 'count': 0})
+
+    def row_dict(p):
+        return {
+            'id': p.id,
+            'patient_pid': p.patient_id or '',
+            'name': p.name,
+            'phone': p.phone,
+            'address': p.address,
+            'date_of_birth': p.date_of_birth.strftime('%Y-%m-%d') if p.date_of_birth else None,
+        }
+
+    patients = [row_dict(p) for p in rows]
+    first = patients[0]
     return jsonify({
         'found': True,
-        'id': patient.id,
-        'name': patient.name,
-        'phone': patient.phone,
-        'address': patient.address,
-        'date_of_birth': patient.date_of_birth.strftime('%Y-%m-%d') if patient.date_of_birth else None
+        'count': len(patients),
+        'patients': patients,
+        'id': first['id'],
+        'patient_pid': first['patient_pid'],
+        'name': first['name'],
+        'phone': first['phone'],
+        'address': first['address'],
+        'date_of_birth': first['date_of_birth'],
     })

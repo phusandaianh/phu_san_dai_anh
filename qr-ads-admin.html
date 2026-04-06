@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý quảng cáo TV - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        html, body { overflow-x: hidden; }
+        body {
+            margin: 0;
+            font-family: 'Roboto', Arial, sans-serif;
+            background: #f8fafc;
+        }
+        .header {
+            background: #0f172a;
+            color: white;
+            padding: 0.9rem 0;
+            box-shadow: 0 2px 10px rgba(15,23,42,0.5);
+            /* Tránh bị styles.css set fixed đè lên nội dung */
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        .header .container {
+            width: calc(100% - 24px);
+            max-width: none;
+            margin: 0 12px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h1 {
+            font-size: 1.25rem;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .back-btn {
+            background: #e53935;
+            color: #fff;
+            border: none;
+            border-radius: 999px;
+            padding: 0.45rem 1rem;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.9rem;
+        }
+        .back-btn:hover {
+            background: #c62828;
+        }
+        .main {
+            width: min(1100px, calc(100% - 24px));
+            margin: 1.5rem 12px 2rem;
+            padding: 0;
+        }
+        .card {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 6px 24px rgba(15,23,42,0.08);
+            padding: 1.5rem 1.75rem;
+        }
+
+        @media (max-width: 700px) {
+            .header .container { padding: 0 12px; }
+            .main { width: calc(100% - 24px); }
+            .card { padding: 1.1rem 1rem; }
+            .inline-row { grid-template-columns: 1fr; }
+        }
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.4rem;
+            color: #111827;
+        }
+        .form-group textarea {
+            width: 100%;
+            min-height: 80px;
+            max-height: 200px;
+            padding: 0.7rem;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            resize: vertical;
+            font-size: 0.95rem;
+        }
+        .inline-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 0.75rem;
+            align-items: end;
+        }
+
+        .color-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        input[type="color"] {
+            width: 48px;
+            height: 36px;
+            padding: 0;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            background: #fff;
+        }
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 0.5rem 0.6rem;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            font-size: 0.95rem;
+        }
+        .btn {
+            border: none;
+            border-radius: 999px;
+            padding: 0.55rem 1.4rem;
+            font-size: 0.95rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .btn-primary {
+            background: #0f766e;
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background: #115e59;
+        }
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #111827;
+        }
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+        .actions {
+            margin-top: 1.1rem;
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+        .status {
+            margin-top: 0.7rem;
+            font-size: 0.9rem;
+        }
+        .status.success {
+            color: #15803d;
+        }
+        .status.error {
+            color: #b91c1c;
+        }
+        .preview {
+            background: #0f172a;
+            border-radius: 12px;
+            padding: 1.1rem 1.4rem;
+            color: #e5e7eb;
+            overflow: hidden;
+        }
+        .preview-label {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: #9ca3af;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+        }
+        .preview-ticker {
+            border-radius: 999px;
+            border: 1px solid rgba(56,189,248,0.4);
+            background: radial-gradient(circle at top, rgba(15,23,42,0.96), rgba(15,23,42,0.98));
+            padding: 0.55rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.9rem;
+            overflow: hidden;
+        }
+        .preview-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            border-radius: 999px;
+            padding: 0.25rem 0.7rem;
+            background: rgba(56,189,248,0.16);
+            color: #38bdf8;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            flex-shrink: 0;
+        }
+        .preview-text {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1><i class="fas fa-bullhorn"></i> Quản lý quảng cáo màn hình TV</h1>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <a href="tv-display-launcher.html" target="_blank" class="back-btn" style="background: #0ea5e9;">
+                    <i class="fas fa-tv"></i> Phản chiếu lên TV
+                </a>
+                <a href="admin.html" class="back-btn">
+                    <i class="fas fa-arrow-left"></i> Quay lại Admin
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="card">
+            <div class="card-title">
+                <i class="fas fa-pen-nib"></i>
+                Nội dung chạy chữ bên dưới màn hình `QR Display (TV)`
+            </div>
+            <div class="form-grid">
+                <div>
+                    <div class="preview">
+                        <div class="preview-label">
+                            <i class="fas fa-tv"></i> Xem trước trên màn hình QR Display (TV)
+                        </div>
+                        <div class="preview-ticker">
+                            <div class="preview-tag" id="previewTag">
+                                <i class="fas fa-star"></i> DỊCH VỤ NỔI BẬT
+                            </div>
+                            <div class="preview-text" id="previewText">Nội dung quảng cáo sẽ hiển thị ở đây...</div>
+                        </div>
+                        <div style="margin-top: 0.9rem;">
+                            <div class="preview-label" style="margin-bottom: 0.5rem;">
+                                <i class="fas fa-sparkles"></i> Xem trước "DỊCH VỤ MỚI" (góc phải trên TV)
+                            </div>
+                            <div class="preview-ticker">
+                                <div class="preview-tag" id="previewNewServiceTag">
+                                    <i class="fas fa-sparkles"></i> DỊCH VỤ MỚI
+                                </div>
+                                <div class="preview-text" id="previewNewServiceText">Nội dung dịch vụ mới sẽ hiển thị ở đây...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <!-- Font, kích thước, màu chữ -->
+                    <div class="inline-row">
+                        <div class="form-group">
+                            <label for="adFontFamily">Font chữ</label>
+                            <select id="adFontFamily">
+                                <option value="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">Mặc định (TV)</option>
+                                <option value="'Roboto', Arial, sans-serif">Roboto</option>
+                                <option value="Arial, Helvetica, sans-serif">Arial</option>
+                                <option value="'Segoe UI', Tahoma, Geneva, Verdana, sans-serif">Segoe UI</option>
+                                <option value="'Times New Roman', Times, serif">Times New Roman</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="adFontSize">Kích thước chữ (px)</label>
+                            <input type="number" id="adFontSize" min="14" max="42" step="1" value="20">
+                        </div>
+                        <div class="form-group" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+                            <label style="display:flex; gap:8px; align-items:center; user-select:none;">
+                                <input type="checkbox" id="adFontBold" style="width:18px;height:18px;">
+                                <i class="fas fa-bold"></i> In đậm
+                            </label>
+                            <label style="display:flex; gap:8px; align-items:center; user-select:none;">
+                                <input type="checkbox" id="adFontItalic" style="width:18px;height:18px;">
+                                <i class="fas fa-italic"></i> In nghiêng
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="adColor">Màu chữ nội dung quảng cáo</label>
+                            <div class="color-row">
+                                <input type="color" id="adColor" value="#fbbf24" style="max-width:52px;">
+                                <input type="text" id="adColorText" value="#fbbf24" style="flex:1; min-width:120px; font-size:0.9rem;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Nội dung quảng cáo -->
+                    <div class="form-group">
+                        <label for="adText">Nội dung quảng cáo</label>
+                        <textarea id="adText" placeholder="Nhập nội dung quảng cáo dịch vụ phòng khám, ví dụ: Khám thai, siêu âm 5D, sàng lọc dị tật, khám phụ khoa, tư vấn vô sinh hiếm muộn..."></textarea>
+                    </div>
+
+                    <!-- Màu chữ label -->
+                    <div class="form-group">
+                        <label for="adLabelText">Nội dung chữ \"DỊCH VỤ NỔI BẬT\"</label>
+                        <input type="text" id="adLabelText" value="DỊCH VỤ NỔI BẬT">
+                    </div>
+                    <div class="form-group">
+                        <label for="adLabelColor">Màu chữ "DỊCH VỤ NỔI BẬT"</label>
+                        <div class="color-row">
+                            <input type="color" id="adLabelColor" value="#38bdf8" style="max-width:52px;">
+                            <input type="text" id="adLabelColorText" value="#38bdf8" style="flex:1; min-width:120px; font-size:0.9rem;">
+                        </div>
+                    </div>
+
+                    <div style="height: 1px; background: #e5e7eb; margin: 1.2rem 0;"></div>
+
+                    <div class="card-title" style="margin: 0 0 0.8rem 0; font-size: 1.05rem;">
+                        <i class="fas fa-sparkles"></i> Dịch vụ mới (hiển thị góc phải trên TV)
+                    </div>
+
+                    <div class="inline-row">
+                        <div class="form-group">
+                            <label for="newServiceFontFamily">Font chữ</label>
+                            <select id="newServiceFontFamily">
+                                <option value="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">Mặc định (TV)</option>
+                                <option value="'Roboto', Arial, sans-serif">Roboto</option>
+                                <option value="Arial, Helvetica, sans-serif">Arial</option>
+                                <option value="'Segoe UI', Tahoma, Geneva, Verdana, sans-serif">Segoe UI</option>
+                                <option value="'Times New Roman', Times, serif">Times New Roman</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="newServiceFontSize">Kích thước chữ (px)</label>
+                            <input type="number" id="newServiceFontSize" min="14" max="32" step="1" value="18">
+                        </div>
+                        <div class="form-group" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+                            <label style="display:flex; gap:8px; align-items:center; user-select:none;">
+                                <input type="checkbox" id="newServiceFontBold" style="width:18px;height:18px;">
+                                <i class="fas fa-bold"></i> In đậm
+                            </label>
+                            <label style="display:flex; gap:8px; align-items:center; user-select:none;">
+                                <input type="checkbox" id="newServiceFontItalic" style="width:18px;height:18px;">
+                                <i class="fas fa-italic"></i> In nghiêng
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="newServiceColor">Màu chữ nội dung</label>
+                            <div class="color-row">
+                                <input type="color" id="newServiceColor" value="#e5e7eb" style="max-width:52px;">
+                                <input type="text" id="newServiceColorText" value="#e5e7eb" style="flex:1; min-width:120px; font-size:0.9rem;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newServiceText">Nội dung dịch vụ mới</label>
+                        <textarea id="newServiceText" placeholder="Ví dụ: Dịch vụ mới: Siêu âm tim thai chuyên sâu, tầm soát tiền sản giật..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newServiceLabelText">Nội dung chữ \"DỊCH VỤ MỚI\"</label>
+                        <input type="text" id="newServiceLabelText" value="DỊCH VỤ MỚI">
+                    </div>
+                    <div class="form-group">
+                        <label for="newServiceLabelColor">Màu chữ \"DỊCH VỤ MỚI\"</label>
+                        <div class="color-row">
+                            <input type="color" id="newServiceLabelColor" value="#38bdf8" style="max-width:52px;">
+                            <input type="text" id="newServiceLabelColorText" value="#38bdf8" style="flex:1; min-width:120px; font-size:0.9rem;">
+                        </div>
+                    </div>
+
+                    <div class="actions">
+                        <button class="btn btn-primary" id="saveBtn">
+                            <i class="fas fa-save"></i> Lưu chạy chữ & dịch vụ mới
+                        </button>
+                        <button class="btn btn-secondary" id="resetBtn">
+                            <i class="fas fa-undo"></i> Khôi phục mặc định
+                        </button>
+                    </div>
+                    <div class="status" id="statusMessage"></div>
+
+                    <div style="height: 1px; background: #e5e7eb; margin: 1.2rem 0;"></div>
+
+                    <div class="card-title" style="margin: 0 0 0.8rem 0; font-size: 1.05rem;">
+                        <i class="fas fa-image"></i> Overlay quảng cáo toàn màn hình (khi TV idle)
+                </div>
+
+                    <div class="inline-row">
+                        <div class="form-group">
+                            <label style="display:flex; gap:10px; align-items:center; user-select:none;">
+                                <input type="checkbox" id="idleAdsEnabled" checked style="width:18px;height:18px;">
+                                Bật overlay quảng cáo khi không có bệnh nhân đang khám
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label style="display:flex; gap:10px; align-items:center; user-select:none;">
+                                <input type="checkbox" id="adsAlwaysOn" style="width:18px;height:18px;">
+                                Overlay quảng cáo luôn luôn bật
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="idleSeconds">Thời gian idle để bật (giây)</label>
+                            <input type="number" id="idleSeconds" min="30" step="10" value="300">
+                            <small style="display:block; color:#6b7280; margin-top:6px;">Mặc định: 300 giây (5 phút)</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="slideIntervalSeconds">Thời gian đổi slide (giây)</label>
+                            <input type="number" id="slideIntervalSeconds" min="3" step="1" value="10">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="adsSlides">Danh sách ảnh/video slideshow (mỗi dòng 1 URL hoặc đường dẫn)</label>
+                        <textarea id="adsSlides" placeholder="Ví dụ:\n/qr-ads-media/slide1.jpg\n/qr-ads-media/slide2.mp4\nhttps://.../slide3.png"></textarea>
+                        <small style="display:block; color:#6b7280; margin-top:6px;">Nếu để trống: overlay vẫn hiện thông tin nhưng không chạy slideshow.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Tải ảnh/video lên thư mục dự án (dùng cho slideshow)</label>
+                        <div class="inline-row">
+                            <div class="form-group" style="margin:0;">
+                                <input type="file" id="adsMediaFile" accept="image/*,video/mp4,video/webm" multiple>
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <button type="button" class="btn btn-secondary" id="uploadAdsMediaBtn">
+                                    <i class="fas fa-upload"></i> Tải lên & chèn vào danh sách
+                                </button>
+                            </div>
+                        </div>
+                        <small style="display:block; color:#6b7280; margin-top:6px;">
+                            File sẽ được lưu trong dự án và tự tạo link dạng <code>/qr-ads-media/ten-file</code> để dán vào danh sách.
+                        </small>
+                        <div id="adsMediaUploadStatus" class="status" style="margin-top:8px;"></div>
+                        <div class="form-group" style="margin-top:1rem;">
+                            <label>File đã tải (có thể xóa)</label>
+                            <div id="adsMediaFileList" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="adsServicesText">Nội dung dịch vụ (hiển thị trên overlay)</label>
+                        <textarea id="adsServicesText" placeholder="Ví dụ: Siêu âm 5D • Sàng lọc dị tật • Khám phụ khoa • NIPT • Tư vấn vô sinh hiếm muộn"></textarea>
+                    </div>
+
+                    <div class="actions" style="margin-top: 0.5rem;">
+                        <button class="btn btn-primary" type="button" id="saveOverlayBtn">
+                            <i class="fas fa-save"></i> Lưu overlay quảng cáo
+                        </button>
+                    </div>
+
+                    <div class="inline-row">
+                        <small style="display:block; color:#6b7280;">
+                            Hotline/địa chỉ/QR Zalo sẽ tự động lấy theo mục <b>Thông tin liên hệ</b> ở trang <code>home-content.html</code>.
+                        </small>
+                    </div>
+
+                    <div style="height: 1px; background: #e5e7eb; margin: 1.2rem 0;"></div>
+
+                    <div class="card-title" style="margin: 0 0 0.8rem 0; font-size: 1.05rem;">
+                        <i class="fas fa-user-md"></i> Ảnh bác sĩ đang khám (QR Display)
+                    </div>
+                    <p style="color:#6b7280; font-size:0.9rem; margin-bottom:1rem;">Mỗi bác sĩ có thể tải 1 ảnh đại diện. Khi có 2 hoặc nhiều bác sĩ khám cùng lúc, dùng ảnh chung.</p>
+
+                    <div class="form-group">
+                        <label>Ảnh từng bác sĩ (danh sách bác sĩ phòng khám)</label>
+                        <div id="doctor-photos-list" style="display:grid; gap:10px;">
+                            <p style="color:#9ca3af;">Đang tải danh sách...</p>
+                        </div>
+                    </div>
+
+                    <div style="height:1px; background:#e5e7eb; margin:1rem 0;"></div>
+
+                    <div class="form-group">
+                        <label>Ảnh chung khi có 2 hoặc nhiều bác sĩ khám</label>
+                        <div class="inline-row" style="align-items:flex-end;">
+                            <div class="form-group" style="margin:0;">
+                                <input type="file" id="doctorMultipleImageFile" accept="image/*">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <button type="button" class="btn btn-secondary" id="uploadDoctorMultipleImageBtn">
+                                    <i class="fas fa-upload"></i> Tải lên ảnh chung
+                                </button>
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <button type="button" class="btn btn-secondary" id="deleteDoctorMultipleImageBtn" style="background:#dc2626; color:white;">
+                                    <i class="fas fa-trash"></i> Xóa ảnh chung
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="status" id="doctorUploadStatus" style="margin-top:6px;"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function getAuthHeaders(withJson = false) {
+            const token = localStorage.getItem('authToken') || '';
+            const headers = {};
+            if (withJson) headers['Content-Type'] = 'application/json';
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            return headers;
+        }
+
+        const DEFAULTS = {
+            qrAdText: 'Phòng khám chuyên khoa Phụ Sản Đại Anh - Khám thai, siêu âm 5D, sàng lọc dị tật, khám phụ khoa, tư vấn vô sinh hiếm muộn...',
+            qrAdColor: '#fbbf24',
+            qrAdLabelText: 'DỊCH VỤ NỔI BẬT',
+            qrAdLabelColor: '#38bdf8',
+            qrAdFontSize: '20',
+            qrAdFontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+            qrAdFontWeight: 'normal',
+            qrAdFontStyle: 'normal',
+            qrNewServiceText: 'Siêu âm 5D - Tầm soát dị tật thai - Sàng lọc NIPT - Khám phụ khoa - Nam khoa - Vô sinh hiếm muộn',
+            qrNewServiceColor: '#e5e7eb',
+            qrNewServiceLabelText: 'DỊCH VỤ MỚI',
+            qrNewServiceLabelColor: '#38bdf8',
+            qrNewServiceFontSize: '18',
+            qrNewServiceFontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+            qrNewServiceFontWeight: 'normal',
+            qrNewServiceFontStyle: 'normal',
+
+            // Idle Ads Overlay defaults
+            qrIdleAdsEnabled: 'true',
+            qrAdsAlwaysOn: 'false',
+            qrIdleSeconds: '300', // 5 phút
+            qrAdsSlideIntervalSeconds: '10',
+            qrAdsSlides: '',
+            qrAdsServicesText: 'Siêu âm 5D • Sàng lọc dị tật • Khám phụ khoa • Tư vấn vô sinh hiếm muộn • Xét nghiệm NIPT'
+        };
+
+        const TEXT_KEY = 'qrAdText';
+        const COLOR_KEY = 'qrAdColor';
+        const LABEL_TEXT_KEY = 'qrAdLabelText';
+        const LABEL_COLOR_KEY = 'qrAdLabelColor';
+        const FONT_SIZE_KEY = 'qrAdFontSize';
+        const FONT_FAMILY_KEY = 'qrAdFontFamily';
+        const NEW_TEXT_KEY = 'qrNewServiceText';
+        const NEW_COLOR_KEY = 'qrNewServiceColor';
+        const NEW_LABEL_TEXT_KEY = 'qrNewServiceLabelText';
+        const NEW_LABEL_COLOR_KEY = 'qrNewServiceLabelColor';
+        const NEW_FONT_SIZE_KEY = 'qrNewServiceFontSize';
+        const NEW_FONT_FAMILY_KEY = 'qrNewServiceFontFamily';
+
+        let clinicDoctors = [];
+
+        async function loadClinicDoctors() {
+            try {
+                const res = await fetch('/api/clinic-doctors');
+                if (res.ok) {
+                    clinicDoctors = await res.json();
+                }
+            } catch (e) {
+                console.warn('Không tải được danh sách bác sĩ:', e);
+            }
+        }
+
+        function getDoctorDisplayName(d) {
+            return (d.degree ? d.degree + ' ' + d.name : d.name || '').trim() || 'Bác sĩ';
+        }
+
+        async function uploadDoctorImage(doctorKey, file, statusEl) {
+            const token = localStorage.getItem('authToken') || '';
+            const form = new FormData();
+            form.append('doctorKey', doctorKey);
+            form.append('image', file, file.name);
+            const res = await fetch('/api/qr-ads-doctor-images/upload', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: form
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
+            return data;
+        }
+
+        function renderDoctorPhotosList() {
+            const listEl = document.getElementById('doctor-photos-list');
+            if (!listEl) return;
+            if (!clinicDoctors.length) {
+                listEl.innerHTML = '<p style="color:#9ca3af;">Chưa có bác sĩ. Vui lòng thêm trong <a href="doctor-schedule.html">Danh sách bác sĩ phòng khám</a>.</p>';
+                return;
+            }
+            listEl.innerHTML = clinicDoctors.map((d) => {
+                const displayName = getDoctorDisplayName(d);
+                const safeKey = displayName.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+                return `
+                    <div style="display:flex; align-items:center; gap:12px; padding:10px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa;">
+                        <div style="flex:1; min-width:0;">
+                            <strong>${displayName.replace(/</g, '&lt;')}</strong>
+                        </div>
+                        <input type="file" accept="image/*" style="max-width:180px;">
+                        <button type="button" class="btn btn-secondary btn-small" data-doctor-key="${safeKey}">
+                            <i class="fas fa-upload"></i> Tải lên
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-small doctor-delete-btn" data-doctor-key="${safeKey}" title="Xóa ảnh" style="background:#dc2626; color:white;">
+                            <i class="fas fa-trash"></i> Xóa
+                        </button>
+                        <span class="doctor-item-status" style="font-size:0.85rem; color:#15803d;"></span>
+                    </div>
+                `;
+            }).join('');
+
+            listEl.querySelectorAll('button[data-doctor-key]:not(.doctor-delete-btn)').forEach((btn) => {
+                btn.addEventListener('click', async () => {
+                    const doctorKey = btn.getAttribute('data-doctor-key');
+                    const row = btn.closest('div');
+                    const fileInput = row.querySelector('input[type="file"]');
+                    const statusEl = row.querySelector('.doctor-item-status');
+                    const file = fileInput && fileInput.files && fileInput.files[0];
+                    if (!file) {
+                        if (statusEl) { statusEl.textContent = 'Chọn ảnh trước'; statusEl.style.color = '#b91c1c'; }
+                        return;
+                    }
+                    try {
+                        if (statusEl) { statusEl.textContent = 'Đang tải...'; statusEl.style.color = '#6b7280'; }
+                        await uploadDoctorImage(doctorKey, file, statusEl);
+                        if (fileInput) fileInput.value = '';
+                        if (statusEl) { statusEl.textContent = 'Đã tải'; statusEl.style.color = '#15803d'; }
+                        showDoctorUploadStatus('Đã tải ảnh bác sĩ thành công.', 'success');
+                    } catch (e) {
+                        if (statusEl) { statusEl.textContent = 'Lỗi'; statusEl.style.color = '#b91c1c'; }
+                        showDoctorUploadStatus(`Lỗi: ${e.message || e}`, 'error');
+                    }
+                });
+            });
+
+            listEl.querySelectorAll('.doctor-delete-btn').forEach((btn) => {
+                btn.addEventListener('click', async () => {
+                    const doctorKey = btn.getAttribute('data-doctor-key');
+                    if (!confirm('Xóa ảnh bác sĩ này?')) return;
+                    const row = btn.closest('div');
+                    const statusEl = row ? row.querySelector('.doctor-item-status') : null;
+                    try {
+                        if (statusEl) { statusEl.textContent = 'Đang xóa...'; statusEl.style.color = '#6b7280'; }
+                        await deleteDoctorImage(doctorKey);
+                        if (statusEl) { statusEl.textContent = 'Đã xóa'; statusEl.style.color = '#15803d'; }
+                        showDoctorUploadStatus('Đã xóa ảnh bác sĩ.', 'success');
+                    } catch (e) {
+                        if (statusEl) { statusEl.textContent = ''; }
+                        showDoctorUploadStatus(`Lỗi: ${e.message || e}`, 'error');
+                    }
+                });
+            });
+        }
+
+        async function loadSettings() {
+            let s = { ...DEFAULTS };
+            let loadedFromServer = false;
+            try {
+                const res = await fetch('/api/qr-display-settings');
+                const data = await res.json();
+                if (res.ok && data && data.success && data.settings) {
+                    s = { ...s, ...data.settings };
+                    loadedFromServer = true;
+                }
+            } catch (e) {
+                // ignore, sẽ fallback xuống localStorage
+            }
+
+            if (!loadedFromServer) {
+                try {
+                    const raw = localStorage.getItem('qrDisplaySettings');
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (parsed && typeof parsed === 'object') {
+                            s = { ...s, ...parsed };
+                        }
+                    }
+                } catch (e) {
+                    // bỏ qua nếu JSON lỗi
+                }
+            }
+
+            document.getElementById('adText').value = s.qrAdText || DEFAULTS.qrAdText;
+            document.getElementById('adColor').value = s.qrAdColor || DEFAULTS.qrAdColor;
+            document.getElementById('adColorText').value = s.qrAdColor || DEFAULTS.qrAdColor;
+            document.getElementById('adLabelText').value = s.qrAdLabelText || DEFAULTS.qrAdLabelText;
+            document.getElementById('adLabelColor').value = s.qrAdLabelColor || DEFAULTS.qrAdLabelColor;
+            document.getElementById('adLabelColorText').value = s.qrAdLabelColor || DEFAULTS.qrAdLabelColor;
+            document.getElementById('adFontSize').value = parseInt(s.qrAdFontSize || DEFAULTS.qrAdFontSize, 10) || 20;
+            document.getElementById('adFontFamily').value = s.qrAdFontFamily || DEFAULTS.qrAdFontFamily;
+            document.getElementById('adFontBold').checked = (s.qrAdFontWeight || 'normal') === 'bold';
+            document.getElementById('adFontItalic').checked = (s.qrAdFontStyle || 'normal') === 'italic';
+            document.getElementById('newServiceText').value = s.qrNewServiceText || DEFAULTS.qrNewServiceText;
+            document.getElementById('newServiceColor').value = s.qrNewServiceColor || DEFAULTS.qrNewServiceColor;
+            document.getElementById('newServiceColorText').value = s.qrNewServiceColor || DEFAULTS.qrNewServiceColor;
+            document.getElementById('newServiceLabelText').value = s.qrNewServiceLabelText || DEFAULTS.qrNewServiceLabelText;
+            document.getElementById('newServiceLabelColor').value = s.qrNewServiceLabelColor || DEFAULTS.qrNewServiceLabelColor;
+            document.getElementById('newServiceLabelColorText').value = s.qrNewServiceLabelColor || DEFAULTS.qrNewServiceLabelColor;
+            document.getElementById('newServiceFontSize').value = parseInt(s.qrNewServiceFontSize || DEFAULTS.qrNewServiceFontSize, 10) || 18;
+            document.getElementById('newServiceFontFamily').value = s.qrNewServiceFontFamily || DEFAULTS.qrNewServiceFontFamily;
+            document.getElementById('newServiceFontBold').checked = (s.qrNewServiceFontWeight || 'normal') === 'bold';
+            document.getElementById('newServiceFontItalic').checked = (s.qrNewServiceFontStyle || 'normal') === 'italic';
+
+            // Idle ads overlay
+            const idleEnabled = String(s.qrIdleAdsEnabled ?? DEFAULTS.qrIdleAdsEnabled).toLowerCase() === 'true';
+            document.getElementById('idleAdsEnabled').checked = idleEnabled;
+            const alwaysOn = String(s.qrAdsAlwaysOn ?? DEFAULTS.qrAdsAlwaysOn).toLowerCase() === 'true';
+            document.getElementById('adsAlwaysOn').checked = alwaysOn;
+            document.getElementById('idleSeconds').value = parseInt(s.qrIdleSeconds || DEFAULTS.qrIdleSeconds, 10) || 300;
+            document.getElementById('slideIntervalSeconds').value = parseInt(s.qrAdsSlideIntervalSeconds || DEFAULTS.qrAdsSlideIntervalSeconds, 10) || 10;
+            document.getElementById('adsSlides').value = s.qrAdsSlides || DEFAULTS.qrAdsSlides;
+            document.getElementById('adsServicesText').value = s.qrAdsServicesText || DEFAULTS.qrAdsServicesText;
+
+            applyPreview();
+        }
+
+        function applyPreview() {
+            const text = document.getElementById('adText').value.trim();
+            const color = document.getElementById('adColor').value || '#fbbf24';
+            const labelColor = document.getElementById('adLabelColor').value || '#38bdf8';
+            const fontSize = parseInt(document.getElementById('adFontSize').value || '20', 10);
+            const fontFamily = document.getElementById('adFontFamily').value;
+            const fontWeight = document.getElementById('adFontBold').checked ? 'bold' : 'normal';
+            const fontStyle = document.getElementById('adFontItalic').checked ? 'italic' : 'normal';
+
+            const preview = document.getElementById('previewText');
+            preview.textContent = text || 'Phòng khám chuyên khoa Phụ Sản Đại Anh - Khám thai, siêu âm 5D, sàng lọc dị tật, khám phụ khoa, tư vấn vô sinh hiếm muộn...';
+            preview.style.color = color;
+            preview.style.fontSize = (fontSize || 20) + 'px';
+            preview.style.fontFamily = fontFamily;
+            preview.style.fontWeight = fontWeight;
+            preview.style.fontStyle = fontStyle;
+
+            const previewTag = document.getElementById('previewTag');
+            if (previewTag) {
+                previewTag.style.color = labelColor;
+                const labelText = (document.getElementById('adLabelText').value || '').trim() || 'DỊCH VỤ NỔI BẬT';
+                previewTag.innerHTML = `<i class="fas fa-star"></i> ${labelText}`;
+            }
+
+            // Preview "Dịch vụ mới"
+            const nsText = document.getElementById('newServiceText').value.trim();
+            const nsColor = document.getElementById('newServiceColor').value || '#e5e7eb';
+            const nsLabelColor = document.getElementById('newServiceLabelColor').value || '#38bdf8';
+            const nsFontSize = parseInt(document.getElementById('newServiceFontSize').value || '18', 10);
+            const nsFontFamily = document.getElementById('newServiceFontFamily').value;
+            const nsFontWeight = document.getElementById('newServiceFontBold').checked ? 'bold' : 'normal';
+            const nsFontStyle = document.getElementById('newServiceFontItalic').checked ? 'italic' : 'normal';
+            const nsPreviewText = document.getElementById('previewNewServiceText');
+            const nsPreviewTag = document.getElementById('previewNewServiceTag');
+            if (nsPreviewText) {
+                nsPreviewText.textContent = nsText || 'Siêu âm 5D - Tầm soát dị tật thai - Sàng lọc NIPT - Khám phụ khoa - Nam khoa - Vô sinh hiếm muộn';
+                nsPreviewText.style.color = nsColor;
+                nsPreviewText.style.fontSize = (nsFontSize || 18) + 'px';
+                nsPreviewText.style.fontFamily = nsFontFamily;
+                nsPreviewText.style.fontWeight = nsFontWeight;
+                nsPreviewText.style.fontStyle = nsFontStyle;
+            }
+            if (nsPreviewTag) {
+                nsPreviewTag.style.color = nsLabelColor;
+                const nsLabelText = (document.getElementById('newServiceLabelText').value || '').trim() || 'DỊCH VỤ MỚI';
+                nsPreviewTag.innerHTML = `<i class="fas fa-sparkles"></i> ${nsLabelText}`;
+            }
+        }
+
+        function showStatus(msg, type) {
+            const el = document.getElementById('statusMessage');
+            el.textContent = msg;
+            el.className = 'status ' + (type === 'error' ? 'error' : 'success');
+            setTimeout(() => {
+                el.textContent = '';
+                el.className = 'status';
+            }, 3000);
+        }
+
+        function showUploadStatus(msg, type) {
+            const el = document.getElementById('adsMediaUploadStatus');
+            if (!el) return;
+            el.textContent = msg;
+            el.className = 'status ' + (type === 'error' ? 'error' : 'success');
+            if (msg) {
+                setTimeout(() => {
+                    el.textContent = '';
+                    el.className = 'status';
+                }, 3500);
+            }
+        }
+
+        function showDoctorUploadStatus(msg, type) {
+            const el = document.getElementById('doctorUploadStatus');
+            if (!el) return;
+            el.textContent = msg;
+            el.className = 'status ' + (type === 'error' ? 'error' : 'success');
+            if (msg) {
+                setTimeout(() => {
+                    el.textContent = '';
+                    el.className = 'status';
+                }, 3500);
+            }
+        }
+
+        async function uploadAdsMediaFiles(files) {
+            const token = localStorage.getItem('authToken') || '';
+            if (!token) {
+                showUploadStatus('Bạn cần đăng nhập admin để tải lên.', 'error');
+                return [];
+            }
+            const form = new FormData();
+            for (const f of Array.from(files || [])) {
+                form.append('files', f, f.name);
+            }
+            const res = await fetch('/api/qr-ads-media/upload', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: form
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data || !data.success) {
+                throw new Error(data.error || `HTTP ${res.status}`);
+            }
+            return Array.isArray(data.files) ? data.files : [];
+        }
+
+        function appendSlideUrls(urls) {
+            const ta = document.getElementById('adsSlides');
+            if (!ta) return;
+            const existing = (ta.value || '').trim();
+            const add = (urls || []).map((u) => String(u || '').trim()).filter(Boolean).join('\n');
+            if (!add) return;
+            ta.value = existing ? (existing + '\n' + add) : add;
+        }
+
+        async function loadAdsMediaFileList() {
+            const listEl = document.getElementById('adsMediaFileList');
+            if (!listEl) return;
+            try {
+                const token = localStorage.getItem('authToken') || '';
+                const res = await fetch('/api/qr-ads-media/list', {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.success) {
+                    listEl.innerHTML = '';
+                    return;
+                }
+                const files = data.files || [];
+                if (!files.length) {
+                    listEl.innerHTML = '<span style="color:#9ca3af;">Chưa có file nào.</span>';
+                    return;
+                }
+                listEl.innerHTML = files.map((f) => {
+                    const fn = (f.filename || f.url || '').split('/').pop();
+                    return `
+                        <div style="display:flex; align-items:center; gap:6px; padding:6px 10px; background:#f1f5f9; border-radius:8px;">
+                            <span style="font-size:0.9rem;">${fn.replace(/</g, '&lt;')}</span>
+                            <button type="button" class="btn btn-secondary btn-small delete-ads-media-btn" data-filename="${fn.replace(/"/g, '&quot;')}" style="padding:4px 8px; background:#dc2626; color:white;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+                listEl.querySelectorAll('.delete-ads-media-btn').forEach((btn) => {
+                    btn.addEventListener('click', async () => {
+                        const filename = btn.getAttribute('data-filename');
+                        if (!filename || !confirm(`Xóa file "${filename}"?`)) return;
+                        try {
+                            const token = localStorage.getItem('authToken') || '';
+                            const res = await fetch('/api/qr-ads-media/delete', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                body: JSON.stringify({ filename })
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (res.ok && data.success) {
+                                const ta = document.getElementById('adsSlides');
+                                if (ta) {
+                                    const urlToRemove = '/qr-ads-media/' + filename;
+                                    ta.value = (ta.value || '').split('\n').filter((line) => !line.trim().includes(filename)).join('\n').trim();
+                                }
+                                await loadAdsMediaFileList();
+                                showUploadStatus('Đã xóa file.', 'success');
+                            } else {
+                                showUploadStatus(data.error || 'Không xóa được.', 'error');
+                            }
+                        } catch (e) {
+                            showUploadStatus('Lỗi: ' + (e.message || e), 'error');
+                        }
+                    });
+                });
+            } catch (e) {
+                listEl.innerHTML = '<span style="color:#dc2626;">Không tải được danh sách.</span>';
+            }
+        }
+
+        async function deleteDoctorImage(doctorKey) {
+            const token = localStorage.getItem('authToken') || '';
+            const res = await fetch('/api/qr-ads-doctor-images/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ doctorKey })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.success) throw new Error(data.error || 'Không xóa được.');
+            return data;
+        }
+
+        async function saveSettings() {
+            const text = document.getElementById('adText').value.trim();
+            const color = document.getElementById('adColor').value || '#fbbf24';
+            const labelText = document.getElementById('adLabelText').value.trim() || 'DỊCH VỤ NỔI BẬT';
+            const labelColor = document.getElementById('adLabelColor').value || '#38bdf8';
+            const fontSize = parseInt(document.getElementById('adFontSize').value || '20', 10);
+            const fontFamily = document.getElementById('adFontFamily').value;
+            const fontWeight = document.getElementById('adFontBold').checked ? 'bold' : 'normal';
+            const fontStyle = document.getElementById('adFontItalic').checked ? 'italic' : 'normal';
+            const nsText = document.getElementById('newServiceText').value.trim();
+            const nsColor = document.getElementById('newServiceColor').value || '#e5e7eb';
+            const nsLabelText = document.getElementById('newServiceLabelText').value.trim() || 'DỊCH VỤ MỚI';
+            const nsLabelColor = document.getElementById('newServiceLabelColor').value || '#38bdf8';
+            const nsFontSize = parseInt(document.getElementById('newServiceFontSize').value || '18', 10);
+            const nsFontFamily = document.getElementById('newServiceFontFamily').value;
+            const nsFontWeight = document.getElementById('newServiceFontBold').checked ? 'bold' : 'normal';
+            const nsFontStyle = document.getElementById('newServiceFontItalic').checked ? 'italic' : 'normal';
+
+            const idleAdsEnabled = document.getElementById('idleAdsEnabled').checked;
+            const adsAlwaysOn = document.getElementById('adsAlwaysOn').checked;
+            const idleSeconds = parseInt(document.getElementById('idleSeconds').value || '300', 10) || 300;
+            const slideIntervalSeconds = parseInt(document.getElementById('slideIntervalSeconds').value || '10', 10) || 10;
+            const adsSlides = (document.getElementById('adsSlides').value || '').trim();
+            const adsServicesText = (document.getElementById('adsServicesText').value || '').trim();
+
+            const payloadSettings = {
+                qrAdText: text,
+                qrAdColor: color,
+                qrAdLabelText: labelText,
+                qrAdLabelColor: labelColor,
+                qrAdFontSize: String(fontSize || 20),
+                qrAdFontFamily: fontFamily,
+                qrAdFontWeight: fontWeight,
+                qrAdFontStyle: fontStyle,
+                qrNewServiceText: nsText,
+                qrNewServiceColor: nsColor,
+                qrNewServiceLabelText: nsLabelText,
+                qrNewServiceLabelColor: nsLabelColor,
+                qrNewServiceFontSize: String(nsFontSize || 18),
+                qrNewServiceFontFamily: nsFontFamily,
+                qrNewServiceFontWeight: nsFontWeight,
+                qrNewServiceFontStyle: nsFontStyle,
+
+                qrIdleAdsEnabled: String(!!idleAdsEnabled),
+                qrAdsAlwaysOn: String(!!adsAlwaysOn),
+                qrIdleSeconds: String(idleSeconds),
+                qrAdsSlideIntervalSeconds: String(slideIntervalSeconds),
+                qrAdsSlides: adsSlides,
+                qrAdsServicesText: adsServicesText
+            };
+
+            // Lưu localStorage để nếu server lỗi vẫn không mất ngay trên reload
+            try {
+                localStorage.setItem('qrDisplaySettings', JSON.stringify(payloadSettings));
+            } catch (e) {
+                // ignore quota/local errors
+            }
+
+            const res = await fetch('/api/qr-display-settings', {
+                method: 'POST',
+                headers: getAuthHeaders(true),
+                body: JSON.stringify({
+                    settings: payloadSettings
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data || !data.success) {
+                throw new Error(data.error || `HTTP ${res.status}`);
+            }
+            applyPreview();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+
+            document.getElementById('adText').addEventListener('input', applyPreview);
+            document.getElementById('adLabelText').addEventListener('input', applyPreview);
+            document.getElementById('adFontSize').addEventListener('input', applyPreview);
+            document.getElementById('adFontFamily').addEventListener('change', applyPreview);
+            document.getElementById('adFontBold').addEventListener('change', applyPreview);
+            document.getElementById('adFontItalic').addEventListener('change', applyPreview);
+            document.getElementById('newServiceText').addEventListener('input', applyPreview);
+            document.getElementById('newServiceLabelText').addEventListener('input', applyPreview);
+            document.getElementById('newServiceFontSize').addEventListener('input', applyPreview);
+            document.getElementById('newServiceFontFamily').addEventListener('change', applyPreview);
+            document.getElementById('newServiceFontBold').addEventListener('change', applyPreview);
+            document.getElementById('newServiceFontItalic').addEventListener('change', applyPreview);
+
+            const colorInput = document.getElementById('adColor');
+            const colorText = document.getElementById('adColorText');
+
+            colorInput.addEventListener('input', () => {
+                colorText.value = colorInput.value;
+                applyPreview();
+            });
+
+            colorText.addEventListener('input', () => {
+                const v = colorText.value.trim();
+                if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+                    colorInput.value = v;
+                    applyPreview();
+                }
+            });
+
+            const labelColorInput = document.getElementById('adLabelColor');
+            const labelColorText = document.getElementById('adLabelColorText');
+            labelColorInput.addEventListener('input', () => {
+                labelColorText.value = labelColorInput.value;
+                applyPreview();
+            });
+            labelColorText.addEventListener('input', () => {
+                const v = labelColorText.value.trim();
+                if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+                    labelColorInput.value = v;
+                    applyPreview();
+                }
+            });
+
+            const nsColorInput = document.getElementById('newServiceColor');
+            const nsColorText = document.getElementById('newServiceColorText');
+            nsColorInput.addEventListener('input', () => {
+                nsColorText.value = nsColorInput.value;
+                applyPreview();
+            });
+            nsColorText.addEventListener('input', () => {
+                const v = nsColorText.value.trim();
+                if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+                    nsColorInput.value = v;
+                    applyPreview();
+                }
+            });
+
+            const nsLabelColorInput = document.getElementById('newServiceLabelColor');
+            const nsLabelColorText = document.getElementById('newServiceLabelColorText');
+            nsLabelColorInput.addEventListener('input', () => {
+                nsLabelColorText.value = nsLabelColorInput.value;
+                applyPreview();
+            });
+            nsLabelColorText.addEventListener('input', () => {
+                const v = nsLabelColorText.value.trim();
+                if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+                    nsLabelColorInput.value = v;
+                    applyPreview();
+                }
+            });
+
+            document.getElementById('uploadAdsMediaBtn').addEventListener('click', async () => {
+                const fileInput = document.getElementById('adsMediaFile');
+                const files = fileInput && fileInput.files ? fileInput.files : null;
+                if (!files || !files.length) {
+                    showUploadStatus('Chọn ít nhất 1 file ảnh/video để tải lên.', 'error');
+                    return;
+                }
+                try {
+                    showUploadStatus('Đang tải lên...', 'success');
+                    const uploaded = await uploadAdsMediaFiles(files);
+                    const urls = uploaded.map((x) => x && x.url ? x.url : '').filter(Boolean);
+                    appendSlideUrls(urls);
+                    if (fileInput) fileInput.value = '';
+                    try {
+                        await saveSettings();
+                        await loadAdsMediaFileList();
+                        showUploadStatus(`Đã tải lên ${urls.length} file, chèn link và lưu lên server.`, 'success');
+                    } catch (e) {
+                        showUploadStatus(`Đã chèn link nhưng không lưu được lên server: ${e.message || e}`, 'error');
+                    }
+                } catch (e) {
+                    showUploadStatus(`Không thể tải lên: ${e.message || e}`, 'error');
+                }
+            });
+
+            document.getElementById('uploadDoctorMultipleImageBtn').addEventListener('click', async () => {
+                const fileInput = document.getElementById('doctorMultipleImageFile');
+                const file = fileInput && fileInput.files && fileInput.files[0];
+                if (!file) {
+                    showDoctorUploadStatus('Vui lòng chọn ảnh.', 'error');
+                    return;
+                }
+                try {
+                    showDoctorUploadStatus('Đang tải lên...', 'success');
+                    await uploadDoctorImage('multiple', file);
+                    if (fileInput) fileInput.value = '';
+                    showDoctorUploadStatus('Đã tải ảnh chung thành công.', 'success');
+                } catch (e) {
+                    showDoctorUploadStatus(`Lỗi: ${e.message || e}`, 'error');
+                }
+            });
+
+            document.getElementById('deleteDoctorMultipleImageBtn').addEventListener('click', async () => {
+                if (!confirm('Xóa ảnh chung (khi có 2+ bác sĩ)?')) return;
+                try {
+                    await deleteDoctorImage('multiple');
+                    showDoctorUploadStatus('Đã xóa ảnh chung.', 'success');
+                } catch (e) {
+                    showDoctorUploadStatus(`Lỗi: ${e.message || e}`, 'error');
+                }
+            });
+
+            (async () => {
+                await loadClinicDoctors();
+                renderDoctorPhotosList();
+                await loadAdsMediaFileList();
+            })();
+
+            document.getElementById('saveBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                try {
+                    await saveSettings();
+                    showStatus('Đã lưu lên server. Đổi trình duyệt không mất dữ liệu.', 'success');
+                } catch (err) {
+                    console.error('Lỗi lưu quảng cáo:', err);
+                    showStatus('Không thể lưu cài đặt. Vui lòng thử lại.', 'error');
+                }
+            });
+
+            const saveOverlayBtn = document.getElementById('saveOverlayBtn');
+            if (saveOverlayBtn) {
+                saveOverlayBtn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    try {
+                        await saveSettings();
+                        showStatus('Đã lưu overlay quảng cáo lên server. Đổi trình duyệt không mất dữ liệu.', 'success');
+                    } catch (err) {
+                        console.error('Lỗi lưu overlay:', err);
+                        showStatus('Không thể lưu overlay. Vui lòng thử lại.', 'error');
+                    }
+                });
+            }
+
+            document.getElementById('resetBtn').addEventListener('click', (e) => {
+                e.preventDefault();
+                fetch('/api/qr-display-settings', {
+                    method: 'POST',
+                    headers: getAuthHeaders(true),
+                    body: JSON.stringify({ settings: { ...DEFAULTS } })
+                }).then(async (res) => {
+                    const data = await res.json().catch(() => ({}));
+                    if (res.ok && data && data.success) {
+                        loadSettings();
+                        showStatus('Đã khôi phục mặc định (lưu lên server).', 'success');
+                    } else {
+                        showStatus(data.error || 'Không thể khôi phục. Vui lòng đăng nhập admin.', 'error');
+                    }
+                }).catch(() => {
+                    showStatus('Không thể khôi phục. Vui lòng kiểm tra kết nối.', 'error');
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+

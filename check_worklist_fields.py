@@ -227,8 +227,8 @@ def check_missing_fields():
    - PatientSex: Thiếu (không ảnh hưởng lắm)
    - AdmittingDiagnosesDescription: Thiếu (không bắt buộc)
 
-🎯 KẾT LUẬN: CSDL HIỆN TẠI ĐÃ ĐỦ ĐỂ GỬI WORKLIST TỚI VOLUSON E10!
-   Phần còn lại là cấu hình Voluson E10 để query MWL server.
+🎯 KẾT LUẬN: CSDL HIỆN TẠI ĐÃ ĐỦ ĐỂ GỬI WORKLIST TỚI MÁY SIÊU ÂM!
+   Phần còn lại là cấu hình máy siêu âm để query MWL server.
     """)
 
 if __name__ == "__main__":

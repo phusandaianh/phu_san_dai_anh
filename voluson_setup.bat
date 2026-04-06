@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo    VOLUSON E10 AUTO SETUP SCRIPT
+echo    Maysieuam AUTO SETUP SCRIPT
 echo ========================================
 echo.
 
@@ -37,33 +37,33 @@ pip install flask-sqlalchemy==2.5.1
 
 echo.
 echo 🔧 Cấu hình Windows Firewall...
-netsh advfirewall firewall add rule name="Voluson DICOM" dir=in action=allow protocol=TCP localport=104
-netsh advfirewall firewall add rule name="Voluson DICOM Out" dir=out action=allow protocol=TCP remoteport=104
+netsh advfirewall firewall add rule name="Maysieuam DICOM" dir=in action=allow protocol=TCP localport=104
+netsh advfirewall firewall add rule name="Maysieuam DICOM Out" dir=out action=allow protocol=TCP remoteport=104
 
 echo.
 echo 📝 Tạo file cấu hình...
-echo {> voluson_config.json
-echo   "sync_enabled": true,>> voluson_config.json
-echo   "voluson_ip": "10.17.2.1",>> voluson_config.json
-echo   "voluson_port": 104,>> voluson_config.json
-echo   "ae_title": "CLINIC_SYSTEM",>> voluson_config.json
-echo   "voluson_ae_title": "VOLUSON_E10",>> voluson_config.json
-echo   "sync_interval": 30,>> voluson_config.json
-echo   "retry_attempts": 3,>> voluson_config.json
-echo   "retry_delay": 10,>> voluson_config.json
-echo   "log_level": "INFO">> voluson_config.json
-echo }>> voluson_config.json
+echo {> Maysieuam_config.json
+echo   "sync_enabled": true,>> Maysieuam_config.json
+echo   "Maysieuam_ip": "10.17.2.1",>> Maysieuam_config.json
+echo   "Maysieuam_port": 104,>> Maysieuam_config.json
+echo   "ae_title": "CLINIC_SYSTEM",>> Maysieuam_config.json
+echo   "Maysieuam_ae_title": "Maysieuam_E10",>> Maysieuam_config.json
+echo   "sync_interval": 30,>> Maysieuam_config.json
+echo   "retry_attempts": 3,>> Maysieuam_config.json
+echo   "retry_delay": 10,>> Maysieuam_config.json
+echo   "log_level": "INFO">> Maysieuam_config.json
+echo }>> Maysieuam_config.json
 
 echo.
 echo 🌐 Kiểm tra kết nối mạng...
 ping -n 1 10.17.2.1 >nul 2>&1
 if %errorLevel% == 0 (
-    echo ✅ Có thể kết nối đến máy Voluson E10
+    echo ✅ Có thể kết nối đến máy Maysieuam E10
 ) else (
-    echo ⚠️ Không thể kết nối đến máy Voluson E10
+    echo ⚠️ Không thể kết nối đến máy Maysieuam E10
     echo Vui lòng kiểm tra:
-    echo - IP máy Voluson có đúng không
-    echo - Máy Voluson có bật không
+    echo - IP máy Maysieuam có đúng không
+    echo - Máy Maysieuam có bật không
     echo - Cáp mạng có kết nối không
 )
 
@@ -98,14 +98,14 @@ echo    - File cấu hình đã tạo
 echo    - Kết nối mạng đã kiểm tra
 echo.
 echo 📋 Bước tiếp theo:
-echo    1. Cấu hình máy Voluson E10 (xem VOLUSON_MACHINE_SETUP.md)
+echo    1. Cấu hình máy Maysieuam (xem Maysieuam_MACHINE_SETUP.md)
 echo    2. Khởi động ứng dụng: python app.py
 echo    3. Truy cập: http://127.0.0.1:5000/examination-list.html
-echo    4. Cấu hình trong tab 'Voluson'
+echo    4. Cấu hình trong tab 'Maysieuam'
 echo.
 echo 📖 Tài liệu:
-echo    - VOLUSON_SETUP_GUIDE.md: Hướng dẫn chi tiết
-echo    - VOLUSON_MACHINE_SETUP.md: Cấu hình máy Voluson
+echo    - Maysieuam_SETUP_GUIDE.md: Hướng dẫn chi tiết
+echo    - Maysieuam_MACHINE_SETUP.md: Cấu hình máy Maysieuam
 echo    - setup_report.txt: Báo cáo cài đặt
 echo.
 pause

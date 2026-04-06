@@ -44,7 +44,7 @@ New-Service `
     -DisplayName "Modality Worklist Server (MWL)" `
     -BinaryPathName $batchPath `
     -StartupType Automatic `
-    -Description "DICOM Modality Worklist Server for Voluson E10" | Out-Null
+    -Description "DICOM Modality Worklist Server for Maysieuam E10" | Out-Null
 
 Write-Host "Starting service..." -ForegroundColor Yellow
 Start-Service -Name $serviceName

@@ -72,7 +72,7 @@ New-Service `
     -DisplayName $displayName `
     -BinaryPathName $batchPath `
     -StartupType Automatic `
-    -Description "DICOM Modality Worklist Server for Voluson E10 Ultrasound Machine" | Out-Null
+    -Description "DICOM Modality Worklist Server for Maysieuam Ultrasound Machine" | Out-Null
 
 Write-Host "Service created successfully!" -ForegroundColor Green
 

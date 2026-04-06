@@ -1,7 +1,7 @@
 # 🎯 HUONG DAN CHAY DICOM SERVER
 
 ## ⚠️ VAN DE:
-- **Verify: Failed** tren may Voluson
+- **Verify: Failed** tren may Maysieuam
 - He thong phong kham chua co DICOM server de nhan ket noi
 
 ## 🔧 GIAI PHAP:
@@ -27,7 +27,7 @@ Listening for connections...
 ============================================================
 ```
 
-### Buoc 3: Test lai tren may Voluson
+### Buoc 3: Test lai tren may Maysieuam
 
 - Vao DICOM Configuration
 - Nhan **Test Connection**
@@ -37,7 +37,7 @@ Listening for connections...
 ### Buoc 4: Sau do test dong bo worklist
 
 Quay lai trang `examination-list.html` va them dich vu sieu am
-- Data se tu dong dong bo len may Voluson!
+- Data se tu dong dong bo len may Maysieuam!
 
 ## 🎯 LƯU Y:
 
@@ -45,7 +45,7 @@ Quay lai trang `examination-list.html` va them dich vu sieu am
   1. Terminal 1: chay `python app.py` (web server)
   2. Terminal 2: chay `python dicom_server.py` (DICOM server)
 
-**Neu chi chay app.py thi Voluson khong the ket noi!**
+**Neu chi chay app.py thi Maysieuam khong the ket noi!**
 
 ## 📋 TONG KET:
 
@@ -54,9 +54,9 @@ Quay lai trang `examination-list.html` va them dich vu sieu am
    - Web Server: app.py (port 5000)
    - DICOM Server: dicom_server.py (port 104)
    
-✅ VOLUSON E10:
+✅ Maysieuam E10:
    - IP: 10.17.2.1
-   - AE Title: VOLUSON_E10
+   - AE Title: Maysieuam_E10
    - Port Passthrough: 104
    
 ✅ MAY TINH PHONG KHAM:

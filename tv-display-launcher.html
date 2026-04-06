@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phản chiếu bảng gọi khám lên TV - Phòng khám Đại Anh</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .launcher-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            transition: opacity 0.4s ease, visibility 0.4s ease;
+        }
+        .launcher-overlay.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .launcher-content {
+            text-align: center;
+            padding: 2rem;
+            max-width: 520px;
+        }
+        .launcher-content h1 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: #38bdf8;
+        }
+        .launcher-content p {
+            color: #94a3b8;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+        }
+        .btn-mirror {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 28px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #0f172a;
+            background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(56, 189, 248, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-mirror:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(56, 189, 248, 0.5);
+        }
+        .btn-mirror:active {
+            transform: translateY(0);
+        }
+        .url-box {
+            margin-top: 1.5rem;
+            padding: 12px 16px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 10px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #38bdf8;
+            word-break: break-all;
+        }
+        .url-label {
+            display: block;
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .hint {
+            margin-top: 1rem;
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        .iframe-container {
+            position: fixed;
+            inset: 0;
+            z-index: 1;
+            background: #020617;
+        }
+        .iframe-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+        .exit-fullscreen-btn {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 50;
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            background: rgba(15, 23, 42, 0.9);
+            color: #94a3b8;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 8px;
+            cursor: pointer;
+            display: none;
+            transition: opacity 0.2s;
+        }
+        .exit-fullscreen-btn.show {
+            display: block;
+        }
+        .exit-fullscreen-btn:hover {
+            color: #e2e8f0;
+            border-color: rgba(56, 189, 248, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="launcher-overlay" id="launcherOverlay">
+        <div class="launcher-content">
+            <h1><i class="fas fa-tv"></i> Phản chiếu lên TV</h1>
+            <p>Mở trang này trên thiết bị đã kết nối TV (HDMI, Chromecast, Smart TV...). Nhấn nút bên dưới để phản chiếu bảng gọi khám toàn màn hình.</p>
+            <button class="btn-mirror" id="btnMirror" type="button">
+                <i class="fas fa-expand"></i> Phản chiếu lên màn hình TV
+            </button>
+            <div class="url-box">
+                <span class="url-label">Địa chỉ mở trực tiếp trên TV (Smart TV / trình duyệt):</span>
+                <span id="displayUrl"></span>
+            </div>
+            <p class="hint">Hoặc truy cập trực tiếp <code>qr-display.html</code> nếu TV có trình duyệt web.</p>
+        </div>
+    </div>
+
+    <button class="exit-fullscreen-btn" id="exitFullscreenBtn" type="button" title="Thoát chế độ toàn màn hình">
+        <i class="fas fa-compress"></i> Thoát toàn màn hình
+    </button>
+
+    <div class="iframe-container">
+        <iframe id="tvFrame" src="qr-display.html" title="Bảng gọi khám"></iframe>
+    </div>
+
+    <script>
+        (function () {
+            const displayUrl = location.origin + '/qr-display.html';
+            document.getElementById('displayUrl').textContent = displayUrl;
+
+            const overlay = document.getElementById('launcherOverlay');
+            const btnMirror = document.getElementById('btnMirror');
+            const exitBtn = document.getElementById('exitFullscreenBtn');
+            const tvFrame = document.getElementById('tvFrame');
+
+            let wakeLock = null;
+
+            async function requestWakeLock() {
+                try {
+                    if ('wakeLock' in navigator) {
+                        wakeLock = await navigator.wakeLock.request('screen');
+                        wakeLock.addEventListener('release', () => { wakeLock = null; });
+                    }
+                } catch (e) {
+                    console.warn('Wake Lock không khả dụng:', e);
+                }
+            }
+
+            function releaseWakeLock() {
+                if (wakeLock) {
+                    wakeLock.release().catch(() => {});
+                    wakeLock = null;
+                }
+            }
+
+            function enterFullscreen() {
+                const doc = document.documentElement;
+                if (doc.requestFullscreen) {
+                    doc.requestFullscreen().catch(() => {});
+                }
+            }
+
+            function exitFullscreen() {
+                if (document.fullscreenElement) {
+                    document.exitFullscreen().catch(() => {});
+                }
+            }
+
+            function startMirror() {
+                overlay.classList.add('hidden');
+                enterFullscreen();
+                requestWakeLock();
+                exitBtn.classList.add('show');
+            }
+
+            function stopMirror() {
+                overlay.classList.remove('hidden');
+                exitFullscreen();
+                releaseWakeLock();
+                exitBtn.classList.remove('show');
+            }
+
+            btnMirror.addEventListener('click', startMirror);
+
+            exitBtn.addEventListener('click', stopMirror);
+
+            document.addEventListener('fullscreenchange', () => {
+                if (!document.fullscreenElement) {
+                    overlay.classList.remove('hidden');
+                    releaseWakeLock();
+                    exitBtn.classList.remove('show');
+                }
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && document.fullscreenElement) {
+                    exitFullscreen();
+                }
+            });
+
+            const params = new URLSearchParams(location.search);
+            if (params.get('fullscreen') === '1' || params.get('direct') === '1') {
+                startMirror();
+            }
+        })();
+    </script>
+</body>
+</html>

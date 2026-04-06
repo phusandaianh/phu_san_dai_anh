@@ -3,20 +3,79 @@ import os
 import time
 import threading
 import subprocess
-from datetime import datetime
+import json
+import sys
+from datetime import datetime, timedelta
 from pydicom.dataset import Dataset
 from pynetdicom import AE, evt
-from pynetdicom.sop_class import ModalityWorklistInformationFind
+from pynetdicom.sop_class import ModalityWorklistInformationFind, VerificationSOPClass
 
-# Cấu hình MWL server như trong máy siêu âm (CLINIC_PC)
-MWL_AE_TITLE = b'CLINIC_SYSTEM'
-MWL_PORT = 104
-SERVER_IP = '10.17.2.2'  # IP của server này phải là 10.17.2.2
 
-# Cấu hình máy siêu âm Voluson
-VOLUSON_HOST = '10.17.2.1'
-VOLUSON_PORT = 104
-VOLUSON_AE_TITLE = b'VOLUSON_E10'
+def _load_runtime_config():
+    """Load MWL runtime config from voluson_config.json (best-effort)."""
+    cfg = {
+        'mwl_server_ae_title': 'CLINIC_SYSTEM',
+        'mwl_server_port': 104,
+        'mwl_server_ip': '10.17.2.2',
+        'modality_station_ae_title': 'MAY_SIEU_AM',
+        'modality_station_name': 'US1',
+        'require_called_aet': False,
+        'allowed_calling_ae_titles': [],
+    }
+    try:
+        user_cfg = None
+        if os.path.exists('voluson_config.json'):
+            with open('voluson_config.json', 'r', encoding='utf-8') as f:
+                user_cfg = json.load(f) or {}
+        elif os.path.exists('Maysieuam_config.json'):
+            # legacy name (best-effort)
+            with open('Maysieuam_config.json', 'r', encoding='utf-8') as f:
+                user_cfg = json.load(f) or {}
+        if user_cfg is None:
+            user_cfg = {}
+        for k in list(cfg.keys()):
+            if k in user_cfg and user_cfg[k] not in (None, ''):
+                cfg[k] = user_cfg[k]
+    except Exception as e:
+        print(f"Could not load MWL server config: {e}")
+    return cfg
+
+
+_CFG = _load_runtime_config()
+
+# Ensure stdout/stderr can write safely in Windows service/task contexts
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+
+def _safe_print(msg: str) -> None:
+    """Avoid UnicodeEncodeError on Windows consoles (cp1252) when logs contain Vietnamese."""
+    try:
+        print(msg)
+    except UnicodeEncodeError:
+        try:
+            if getattr(sys.stdout, "buffer", None):
+                sys.stdout.buffer.write((msg + "\n").encode("utf-8", errors="replace"))
+                sys.stdout.buffer.flush()
+            else:
+                print(msg.encode("ascii", errors="replace").decode("ascii"))
+        except Exception:
+            pass
+
+
+# Cấu hình MWL server (SCP)
+MWL_AE_TITLE = str(_CFG.get('mwl_server_ae_title', 'CLINIC_SYSTEM')).encode('ascii', errors='ignore') or b'CLINIC_SYSTEM'
+MWL_PORT = int(_CFG.get('mwl_server_port', 104) or 104)
+SERVER_IP = str(_CFG.get('mwl_server_ip', '10.17.2.2') or '10.17.2.2')
+
+# Station/Modality info returned in MWL entries
+STATION_AE_TITLE = str(_CFG.get('modality_station_ae_title', 'MAY_SIEU_AM')).encode('ascii', errors='ignore') or b'MAY_SIEU_AM'
+STATION_NAME = str(_CFG.get('modality_station_name', 'US1') or 'US1')
 
 # Danh sách worklist entries
 worklist_entries = []
@@ -40,6 +99,24 @@ def load_worklist_from_db():
             ds.ScheduledProcedureStepStartDate = item.get('ScheduledProcedureStepStartDate')
             ds.ScheduledProcedureStepStartTime = item.get('ScheduledProcedureStepStartTime')
             ds.AccessionNumber = item.get('AccessionNumber')
+            expected_delivery_date = (item.get('ExpectedDeliveryDate') or '').strip()
+            if expected_delivery_date:
+                # Compatibility mode: populate multiple common text fields so
+                # different modalities can pick at least one for UI display.
+                base_desc = (item.get('StudyDescription') or 'Sieu am')
+                edd_text = f"EDD {expected_delivery_date}"
+                merged_desc = base_desc if edd_text.lower() in base_desc.lower() else f"{base_desc} | {edd_text}"
+                ds.StudyDescription = merged_desc
+                ds.RequestedProcedureDescription = merged_desc
+                ds.RequestedProcedureComments = edd_text
+                ds.AdmittingDiagnosesDescription = merged_desc
+                # OB-compatible field: derive LMP from EDD (~280 days)
+                try:
+                    edd = datetime.strptime(expected_delivery_date[:10], '%Y-%m-%d').date()
+                    lmp = edd - timedelta(days=280)
+                    ds.LastMenstrualDate = lmp.strftime('%Y%m%d')
+                except Exception:
+                    pass
             entries.append(ds)
         return entries
     except Exception as e:
@@ -52,21 +129,46 @@ def start_worklist_watcher(interval=10):
     def watcher():
         global worklist_entries
         last_mtime = None
+        pending_mwl_reload_at = None
+        pending_mwl_mtime = None
+        pending_json_reload_at = None
+        pending_json_mtime = None
         while True:
             try:
                 # Prefer loading from DB (mwl.db) if available
                 if os.path.exists('mwl.db'):
                     mtime = os.path.getmtime('mwl.db')
-                    if last_mtime is None or mtime != last_mtime:
+                    now_ts = time.time()
+                    if last_mtime is None:
+                        # first load immediately
                         worklist_entries = load_worklist_from_db()
                         print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {len(worklist_entries)} worklist entries from mwl.db")
                         last_mtime = mtime
+                        pending_mwl_reload_at = None
+                        pending_mwl_mtime = None
+                    elif mtime != last_mtime:
+                        # debounce: wait a bit for sync process to finish writing all rows
+                        pending_mwl_reload_at = now_ts + 1.2
+                        pending_mwl_mtime = mtime
+                    elif pending_mwl_reload_at and now_ts >= pending_mwl_reload_at:
+                        # only reload when mtime remains stable at pending value
+                        current_mtime = os.path.getmtime('mwl.db')
+                        if pending_mwl_mtime is None or current_mtime == pending_mwl_mtime:
+                            worklist_entries = load_worklist_from_db()
+                            print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {len(worklist_entries)} worklist entries from mwl.db")
+                            last_mtime = current_mtime
+                            pending_mwl_reload_at = None
+                            pending_mwl_mtime = None
+                        else:
+                            pending_mwl_reload_at = time.time() + 1.2
+                            pending_mwl_mtime = current_mtime
                 else:
                     # fallback to JSON if present
                     if os.path.exists(WORKLIST_JSON):
                         mtime = os.path.getmtime(WORKLIST_JSON)
-                        if last_mtime is None or mtime != last_mtime:
-                            # load json entries
+                        now_ts = time.time()
+                        if last_mtime is None:
+                            # load json entries immediately on first run
                             import json
                             data = []
                             try:
@@ -74,7 +176,6 @@ def start_worklist_watcher(interval=10):
                                     data = json.load(f)
                             except Exception:
                                 data = []
-                            # convert
                             tmp = []
                             from pydicom.dataset import Dataset
                             for item in data:
@@ -91,8 +192,45 @@ def start_worklist_watcher(interval=10):
                             worklist_entries = tmp
                             print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {len(worklist_entries)} worklist entries from {WORKLIST_JSON}")
                             last_mtime = mtime
-                # Ensure empty list if no file
-                if not os.path.exists(WORKLIST_JSON) and worklist_entries:
+                            pending_json_reload_at = None
+                            pending_json_mtime = None
+                        elif mtime != last_mtime:
+                            pending_json_reload_at = now_ts + 1.2
+                            pending_json_mtime = mtime
+                        elif pending_json_reload_at and now_ts >= pending_json_reload_at:
+                            current_mtime = os.path.getmtime(WORKLIST_JSON)
+                            if pending_json_mtime is None or current_mtime == pending_json_mtime:
+                                import json
+                                data = []
+                                try:
+                                    with open(WORKLIST_JSON, 'r', encoding='utf-8') as f:
+                                        data = json.load(f)
+                                except Exception:
+                                    data = []
+                                tmp = []
+                                from pydicom.dataset import Dataset
+                                for item in data:
+                                    ds = Dataset()
+                                    ds.PatientName = item.get('PatientName')
+                                    ds.PatientID = item.get('PatientID')
+                                    ds.PatientBirthDate = item.get('PatientBirthDate')
+                                    ds.StudyDescription = item.get('StudyDescription')
+                                    ds.Modality = item.get('Modality')
+                                    ds.ScheduledProcedureStepStartDate = item.get('ScheduledProcedureStepStartDate')
+                                    ds.ScheduledProcedureStepStartTime = item.get('ScheduledProcedureStepStartTime')
+                                    ds.AccessionNumber = item.get('AccessionNumber')
+                                    tmp.append(ds)
+                                worklist_entries = tmp
+                                print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {len(worklist_entries)} worklist entries from {WORKLIST_JSON}")
+                                last_mtime = current_mtime
+                                pending_json_reload_at = None
+                                pending_json_mtime = None
+                            else:
+                                pending_json_reload_at = time.time() + 1.2
+                                pending_json_mtime = current_mtime
+                # Chỉ fallback rỗng khi dùng JSON mode và file JSON không tồn tại.
+                # Nếu đang dùng mwl.db thì không được xóa danh sách vừa load từ DB.
+                if (not os.path.exists('mwl.db')) and (not os.path.exists(WORKLIST_JSON)) and worklist_entries:
                     worklist_entries = []
                 time.sleep(interval)
             except Exception as e:
@@ -102,19 +240,27 @@ def start_worklist_watcher(interval=10):
     t = threading.Thread(target=watcher, daemon=True)
     t.start()
 
-def start_auto_sync_scheduler(interval_minutes=5):
+def start_auto_sync_scheduler(interval_minutes=3):
     """Tự động đồng bộ worklist từ clinic.db mỗi N phút"""
     def sync_scheduler():
+        last_clinic_mtime = None
         while True:
             try:
                 time.sleep(interval_minutes * 60)
+                clinic_db = 'clinic.db'
+                if os.path.exists(clinic_db):
+                    current_mtime = os.path.getmtime(clinic_db)
+                    if last_clinic_mtime is not None and current_mtime == last_clinic_mtime:
+                        print(f"[{datetime.now().strftime('%H:%M:%S')}] No clinic.db change -> skip auto-sync")
+                        continue
+                    last_clinic_mtime = current_mtime
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] Auto-syncing worklist from clinic.db...")
                 result = subprocess.run(['python', 'mwl_sync.py'], 
                                       capture_output=True, text=True, timeout=30)
                 if result.returncode == 0:
-                    print(f"[{datetime.now().strftime('%H:%M:%S')}] ✓ Auto-sync completed successfully")
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Auto-sync completed successfully")
                 else:
-                    print(f"[{datetime.now().strftime('%H:%M:%S')}] ✗ Auto-sync failed: {result.stderr}")
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Auto-sync failed: {result.stderr}")
             except Exception as e:
                 print(f"Auto-sync error: {e}")
     
@@ -127,37 +273,78 @@ def handle_find(event):
     ds = event.identifier
     remote_ae = event.assoc.remote['ae_title']
     
-    # In thông tin request để debug
-    print(f"Nhận được C-FIND request từ {remote_ae}:")
-    print(f"Query dataset: {ds}")
+    _safe_print(f"Received C-FIND request from {remote_ae}:")
+    _safe_print(f"Query dataset: {ds}")
     
-    # Thêm các trường bắt buộc cho Worklist entry theo chuẩn DICOM
+    req_modality = ''
+    req_date = ''
+    try:
+        spsq = getattr(ds, 'ScheduledProcedureStepSequence', None)
+        if spsq and len(spsq) > 0:
+            req_modality = str(getattr(spsq[0], 'Modality', '') or '').strip().upper()
+            req_date = str(getattr(spsq[0], 'ScheduledProcedureStepStartDate', '') or '').strip()
+    except Exception:
+        pass
+
+    def _norm_dicom_date(value: str) -> str:
+        d = (value or '').strip().replace('-', '')
+        return d[:8] if len(d) >= 8 else d
+
+    def _date_match(entry_date: str, query_date: str) -> bool:
+        q_raw = (query_date or '').strip()
+        if not q_raw:
+            return True
+        e = _norm_dicom_date(entry_date)
+        # DICOM MWL date range: exactly YYYYMMDD-YYYYMMDD
+        if len(q_raw) == 17 and q_raw[8] == '-':
+            start_n, end_n = q_raw[:8], q_raw[9:17]
+            if start_n.isdigit() and end_n.isdigit():
+                if e < start_n:
+                    return False
+                if e > end_n:
+                    return False
+                return True
+        return e == _norm_dicom_date(q_raw)
+
+    # Trả đúng cấu trúc MWL với ScheduledProcedureStepSequence
     for entry in worklist_entries:
-        # Patient Level
-        entry.SpecificCharacterSet = 'ISO_IR 192'
-        entry.QueryRetrieveLevel = 'PATIENT'
-        if not hasattr(entry, 'PatientName'):
-            entry.PatientName = ''
-        if not hasattr(entry, 'PatientID'):
-            entry.PatientID = ''
-            
-        # Study Level
-        if not hasattr(entry, 'StudyInstanceUID'):
-            entry.StudyInstanceUID = '1.2.3'  # Dummy UID
-        if not hasattr(entry, 'StudyID'):
-            entry.StudyID = '1'
-        
-        # Procedure Level    
-        entry.Modality = 'US'
-        entry.ScheduledStationAETitle = b'VOLUSON_E10'
-        entry.ScheduledStationName = 'US1'
-        entry.ScheduledProcedureStepStartDate = getattr(entry, 'ScheduledProcedureStepStartDate', '')
-        entry.ScheduledProcedureStepStartTime = getattr(entry, 'ScheduledProcedureStepStartTime', '')
-        
-        yield (0xFF00, entry)
+        try:
+            entry_modality = str(getattr(entry, 'Modality', 'US') or 'US').strip().upper()
+            entry_date = str(getattr(entry, 'ScheduledProcedureStepStartDate', '') or '').strip()
+            if req_modality and entry_modality and req_modality != entry_modality:
+                continue
+            if not _date_match(entry_date, req_date):
+                continue
+
+            rsp = Dataset()
+            rsp.SpecificCharacterSet = 'ISO_IR 192'
+            rsp.QueryRetrieveLevel = 'PATIENT'
+            rsp.PatientName = getattr(entry, 'PatientName', '') or ''
+            rsp.PatientID = getattr(entry, 'PatientID', '') or ''
+            rsp.PatientBirthDate = getattr(entry, 'PatientBirthDate', '') or ''
+            rsp.AccessionNumber = getattr(entry, 'AccessionNumber', '') or ''
+            rsp.RequestedProcedureDescription = getattr(entry, 'StudyDescription', '') or 'Sieu am'
+
+            sps = Dataset()
+            sps.Modality = entry_modality or 'US'
+            sps.ScheduledStationAETitle = STATION_AE_TITLE
+            sps.ScheduledStationName = STATION_NAME
+            sps.ScheduledProcedureStepStartDate = entry_date
+            sps.ScheduledProcedureStepStartTime = str(getattr(entry, 'ScheduledProcedureStepStartTime', '') or '').strip()
+            sps.ScheduledProcedureStepDescription = getattr(entry, 'StudyDescription', '') or 'Sieu am'
+            sps.ScheduledProcedureStepID = str(getattr(entry, 'AccessionNumber', '') or '')
+            rsp.ScheduledProcedureStepSequence = [sps]
+
+            yield (0xFF00, rsp)
+        except Exception as e:
+            _safe_print(f"Skip invalid MWL entry: {e}")
     
     # Báo success khi hoàn tất
     yield (0x0000, None)
+
+def handle_echo(_event):
+    """Handle C-ECHO (DICOM Verification) requests."""
+    return 0x0000
 
 def main():
     # Enable debug logging for pynetdicom
@@ -167,23 +354,30 @@ def main():
     # Khởi tạo Application Entity
     ae = AE(ae_title=MWL_AE_TITLE)
     
-    # Thêm presentation context cho Modality Worklist
+    # Thêm presentation context cho Modality Worklist + Verification (C-ECHO)
     ae.add_supported_context(ModalityWorklistInformationFind)
+    ae.add_supported_context(VerificationSOPClass)
     
-    # Cấu hình chấp nhận kết nối từ Voluson
-    ae.require_calling_aet = []  # Empty list = chấp nhận mọi AE title
-    ae.require_called_aet = False  # Chấp nhận mọi Called AE title
+    # Cấu hình chấp nhận kết nối từ máy siêu âm
+    allowed_calling = _CFG.get('allowed_calling_ae_titles', [])
+    if isinstance(allowed_calling, str):
+        allowed_calling = [x.strip() for x in allowed_calling.split(',') if x.strip()]
+    ae.require_calling_aet = [x.encode('ascii', errors='ignore') for x in allowed_calling if x] if allowed_calling else []
+    ae.require_called_aet = bool(_CFG.get('require_called_aet', False))
     
     # Support all common transfer syntaxes
     for cx in ae.supported_contexts:
         cx.transfer_syntax = ['1.2.840.10008.1.2']  # Chỉ dùng Implicit VR Little Endian
     
     # Bind các handlers cho các events
-    handlers = [(evt.EVT_C_FIND, handle_find)]
+    handlers = [
+        (evt.EVT_C_FIND, handle_find),
+        (evt.EVT_C_ECHO, handle_echo),
+    ]
     
     # Thêm handler cho association events để debug
     def handle_assoc(event):
-        print(f"New association from {event.assoc.remote['ae_title']}")
+        _safe_print(f"New association from {event.assoc.remote['ae_title']}")
         return 0x0000  # Success
         
     handlers.append((evt.EVT_ACCEPTED, handle_assoc))
@@ -191,15 +385,14 @@ def main():
     # Start background watcher to reload worklist.json
     start_worklist_watcher(interval=5)
     
-    # Start auto-sync scheduler (every 5 minutes)
-    start_auto_sync_scheduler(interval_minutes=5)
+    # Start auto-sync scheduler (every 3 minutes)
+    start_auto_sync_scheduler(interval_minutes=3)
 
     # Khởi động server
     print(f"Starting Modality Worklist SCP on 0.0.0.0:{MWL_PORT}")
     ae.start_server(("0.0.0.0", MWL_PORT), block=True, evt_handlers=handlers)
 
-    # Thực hiện ping đến máy Voluson để kiểm tra kết nối
-    os.system("ping -c 4 " + VOLUSON_HOST)
+    # Note: ping modality host removed (Windows compatibility + modality may vary)
 
 if __name__ == "__main__":
     main()

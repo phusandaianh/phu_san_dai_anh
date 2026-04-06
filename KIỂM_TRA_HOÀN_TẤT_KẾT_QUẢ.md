@@ -137,7 +137,7 @@ python check_mwl_services.py
 
 ## 💼 BUSINESS IMPACT
 
-✅ **Ready for Voluson E10 integration**  
+✅ **Ready for Maysieuam integration**  
 ✅ **Can accept DICOM queries 24/7**  
 ✅ **Auto-sync ensures data freshness**  
 ✅ **No downtime expected**  
@@ -189,7 +189,7 @@ Overall: 🟢 PRODUCTION READY
 ✅ Documentation: Complete
 ✅ Scripts: Functional
 ✅ Troubleshooting: Documented
-✅ Voluson Ready: Yes
+✅ Maysieuam Ready: Yes
 
 ✅ ALL ITEMS CHECKED - APPROVED FOR GO-LIVE
 ```
@@ -204,13 +204,13 @@ Overall: 🟢 PRODUCTION READY
 
 ---
 
-## 🎯 CẤU HÌNH VOLUSON E10
+## 🎯 CẤU HÌNH Maysieuam E10
 
-Khi đã sẵn sàng, cấu hình Voluson như sau:
+Khi đã sẵn sàng, cấu hình Maysieuam như sau:
 - **IP Server:** 10.17.2.2 (hoặc IP của clinic server)
 - **Port:** 104
 - **AE Title:** CLINIC_SYSTEM
-- **Test:** Voluson sẽ hiển thị danh sách bệnh nhân
+- **Test:** Maysieuam sẽ hiển thị danh sách bệnh nhân
 
 ---
 
@@ -220,7 +220,7 @@ Khi đã sẵn sàng, cấu hình Voluson như sau:
 - ✅ Đang hoạt động bình thường
 - ✅ Tất cả kiểm tra đã thành công
 - ✅ Sẵn sàng cho triển khai ngay
-- ✅ Có thể kết nối Voluson E10
+- ✅ Có thể kết nối Maysieuam E10
 - ✅ Có thể chạy 24/7 liên tục
 
 ---

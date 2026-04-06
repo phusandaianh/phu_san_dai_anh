@@ -323,6 +323,26 @@
 				</table>
 			</div>
             <small style="display:block; margin-top:8px; color:#666;">Lưu ý: Phân quyền được lưu cục bộ và có thể tích hợp backend sau.</small>
+
+            <!-- Permission -> Pages (server-side) -->
+            <div style="margin-top: 18px; padding-top: 14px; border-top: 1px dashed #ddd;">
+                <h3 style="margin: 0 0 10px; font-size: 1rem;">Quyền → Trang (lưu server)</h3>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom: 10px;">
+                    <label style="font-weight:600;">Chọn quyền:</label>
+                    <select id="permPagesSelect" style="min-width: 260px; padding: 8px; border: 1px solid #ddd; border-radius: 6px;"></select>
+                    <button type="button" class="btn secondary-btn" onclick="loadPermissionPagesUI()">
+                        <i class="fas fa-sync-alt"></i> Làm mới
+                    </button>
+                    <button type="button" class="btn primary-btn" onclick="savePermissionPagesUI()">
+                        <i class="fas fa-save"></i> Lưu trang theo quyền
+                    </button>
+                </div>
+                <div id="permPagesHint" style="color:#666; font-size:0.9rem; margin-bottom: 8px;"></div>
+                <div id="permPagesList" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px;"></div>
+                <small style="display:block; margin-top:8px; color:#666;">
+                    Các trang trong danh sách này sẽ được phép truy cập nếu user có quyền tương ứng. (Trang public vẫn truy cập bình thường.)
+                </small>
+            </div>
         </div>
 
         <!-- Quản lý phiên đăng nhập và IP -->
@@ -381,9 +401,30 @@
         <div id="backupSection" style="display: none; margin-top: 20px;">
             <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
                 <h2 style="margin:0; font-size: 1.2rem;">Sao lưu &amp; Khôi phục dữ liệu</h2>
-                <button type="button" class="btn primary-btn" onclick="downloadBackup()">
-                    <i class="fas fa-download"></i> Tải file sao lưu
-                </button>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button type="button" class="btn primary-btn" onclick="downloadBackup()">
+                        <i class="fas fa-download"></i> Tải backup
+                    </button>
+                    <button type="button" class="btn secondary-btn" onclick="loadBackupFileList()">
+                        <i class="fas fa-sync-alt"></i> Làm mới danh sách
+                    </button>
+                </div>
+            </div>
+            <p id="backupDirHint" style="font-size: 0.9rem; color: #555; margin: 0 0 10px 0;"></p>
+            <div class="table-container" style="margin-bottom: 16px;">
+                <table class="user-table">
+                    <thead>
+                        <tr>
+                            <th>Tên file</th>
+                            <th>Kích thước</th>
+                            <th>Cập nhật (UTC)</th>
+                            <th>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="backupFilesTableBody">
+                        <tr><td colspan="4" style="text-align:center; color:#888;">Đang tải...</td></tr>
+                    </tbody>
+                </table>
             </div>
             <div style="background:#fff3cd; border:1px solid #ffeeba; padding:12px; border-radius:8px; margin-bottom: 12px;">
                 <strong>Lưu ý quan trọng:</strong> Khôi phục dữ liệu sẽ thay thế toàn bộ CSDL hiện tại và hệ thống sẽ tự khởi động lại.
@@ -576,7 +617,9 @@
             isLoggedIn: false,
             rolePermissions: {},
             loginTempToken: null,
-            resendCooldown: 30
+            resendCooldown: 30,
+            myPermissions: [],
+            allowedPages: []
         };
 
         // Hàm đăng nhập
@@ -622,7 +665,7 @@
                             openChangePasswordModal(true);
                             if (isAdmin()) await loadUsers();
                         } else {
-                            window.location.href = '/examination-list.html';
+                            window.location.href = '/admin.html';
                         }
                     }
                 } else {
@@ -702,7 +745,7 @@
                         openChangePasswordModal(true);
                         if (isAdmin()) await loadUsers();
                     } else {
-                        window.location.href = '/examination-list.html';
+                        window.location.href = '/admin.html';
                     }
                 } else {
                     alert(data.error || 'Mã OTP không đúng.');
@@ -763,6 +806,10 @@
             return state.currentUser && (state.currentUser.roles || []).includes('admin');
         }
 
+        function hasPerm(key) {
+            return isAdmin() || (state.myPermissions || []).includes(key);
+        }
+
         // Cập nhật thông tin người dùng trên header
         function updateUserInfoHeader() {
             const header = document.getElementById('usersPageHeader');
@@ -791,19 +838,27 @@
             const sessionsSection = document.getElementById('sessionsSection');
             const backupSection = document.getElementById('backupSection');
             if (!adminActions) return;
-            if (isAdmin()) {
-                adminActions.style.display = 'flex';
-                if (userTable) userTable.style.display = 'block';
-                if (permSection) permSection.style.display = 'none';
-                if (sessionsSection) sessionsSection.style.display = 'none';
-                if (backupSection) backupSection.style.display = 'none';
-            } else {
-                adminActions.style.display = 'none';
-                if (userTable) userTable.style.display = 'none';
-                if (permSection) permSection.style.display = 'none';
-                if (sessionsSection) sessionsSection.style.display = 'none';
-                if (backupSection) backupSection.style.display = 'none';
-            }
+            // Menu/tab permissions (UX): dựa trên permission, backend vẫn là nguồn bảo mật chính
+            const canManageUsers = hasPerm('manage_users');
+            const canSystemConfig = hasPerm('system_config');
+
+            adminActions.style.display = (canManageUsers || canSystemConfig) ? 'flex' : 'none';
+            if (userTable) userTable.style.display = canManageUsers ? 'block' : 'none';
+            if (permSection) permSection.style.display = 'none';
+            if (sessionsSection) sessionsSection.style.display = 'none';
+            if (backupSection) backupSection.style.display = 'none';
+
+            // Ẩn/hiện các nút tab tương ứng
+            const tabUsers = document.getElementById('tabUsers');
+            const tabAdd = document.getElementById('tabAddUser');
+            const tabPerm = document.getElementById('tabPermissions');
+            const tabSessions = document.getElementById('tabSessions');
+            const tabBackup = document.getElementById('tabBackup');
+            if (tabUsers) tabUsers.style.display = canManageUsers ? '' : 'none';
+            if (tabAdd) tabAdd.style.display = canManageUsers ? '' : 'none';
+            if (tabPerm) tabPerm.style.display = canSystemConfig ? '' : 'none';
+            if (tabSessions) tabSessions.style.display = canManageUsers ? '' : 'none';
+            if (tabBackup) tabBackup.style.display = canManageUsers ? '' : 'none';
         }
 
         // Kiểm tra đăng nhập khi tải trang
@@ -819,7 +874,10 @@
                     // Ẩn form đăng nhập, hiện phần quản lý
                     document.getElementById('loginSection').style.display = 'none';
                     document.getElementById('userManagementSection').style.display = 'block';
-                    updateUIForRole();
+                    // Load permission của user để ẩn/hiện menu chính xác
+                    loadMyPermissions().finally(() => {
+                        updateUIForRole();
+                    });
                     updateUserInfoHeader();
                     
                     // Load danh sách người dùng (chỉ admin)
@@ -828,6 +886,20 @@
                     console.error('Lỗi khi kiểm tra đăng nhập:', error);
                     logout();
                 }
+            }
+        }
+
+        async function loadMyPermissions() {
+            try {
+                const token = localStorage.getItem('authToken') || '';
+                if (!token) return;
+                const res = await fetch('/api/me', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!res.ok) return;
+                const data = await res.json();
+                state.myPermissions = Array.isArray(data.permissions) ? data.permissions : [];
+                state.allowedPages = Array.isArray(data.allowedPages) ? data.allowedPages : [];
+            } catch (e) {
+                // ignore
             }
         }
 
@@ -998,7 +1070,7 @@ Trân trọng,
             'manage_diagnosis': 'Quản lý chẩn đoán',
             'view_reports': 'Xem báo cáo',
             'system_config': 'Cấu hình hệ thống',
-            'manage_voluson_sync': 'Đồng bộ Voluson'
+            'manage_Maysieuam_sync': 'Đồng bộ Maysieuam'
         };
 
         const ROLES = ['admin','doctor','nurse','receptionist'];
@@ -1089,6 +1161,90 @@ Trân trọng,
             document.getElementById('permissionsSection').style.display = 'block';
             await loadPermissionsFromStorage();
             await renderPermissionsTable();
+            await loadPermissionPagesUI();
+        }
+
+        // ===== Permission -> Pages UI (server-side) =====
+        let permissionPagesState = { mapping: {}, availablePages: [] };
+
+        async function loadPermissionPagesUI() {
+            try {
+                if (!hasPerm('system_config')) return;
+                const token = localStorage.getItem('authToken') || '';
+                const res = await fetch('/api/permission-pages', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!res.ok) throw new Error('LOAD_FAILED');
+                const data = await res.json();
+                permissionPagesState.mapping = (data && data.mapping) || {};
+                permissionPagesState.availablePages = (data && data.availablePages) || [];
+
+                // Load permission list
+                if (DYNAMIC_PERMISSIONS.length === 0) {
+                    try {
+                        const r = await fetch('/api/permissions');
+                        const d = await r.json();
+                        DYNAMIC_PERMISSIONS = d.permissions || [];
+                    } catch (e) {}
+                }
+                const sel = document.getElementById('permPagesSelect');
+                if (!sel) return;
+                sel.innerHTML = DYNAMIC_PERMISSIONS.map(k => {
+                    const label = PERMISSION_LABELS[k] || k;
+                    return `<option value="${k}">${label} (${k})</option>`;
+                }).join('');
+                sel.onchange = renderPermissionPagesCheckboxes;
+                renderPermissionPagesCheckboxes();
+                const hint = document.getElementById('permPagesHint');
+                if (hint) hint.textContent = 'Chọn các trang mà quyền này được phép truy cập.';
+            } catch (e) {
+                const hint = document.getElementById('permPagesHint');
+                if (hint) hint.textContent = 'Không tải được cấu hình trang theo quyền. (Cần quyền system_config)';
+            }
+        }
+
+        function renderPermissionPagesCheckboxes() {
+            const sel = document.getElementById('permPagesSelect');
+            const box = document.getElementById('permPagesList');
+            if (!sel || !box) return;
+            const permKey = sel.value;
+            const selected = new Set((permissionPagesState.mapping && permissionPagesState.mapping[permKey]) || []);
+            const pages = Array.isArray(permissionPagesState.availablePages) ? permissionPagesState.availablePages : [];
+            box.innerHTML = pages.map(p => `
+                <label style="display:flex; align-items:center; gap:8px; padding:8px; border:1px solid #eee; border-radius:6px; background:#fafafa;">
+                    <input type="checkbox" data-page="${p}" ${selected.has(p) ? 'checked' : ''}>
+                    <span style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">${p}</span>
+                </label>
+            `).join('');
+        }
+
+        async function savePermissionPagesUI() {
+            try {
+                if (!hasPerm('system_config')) {
+                    alert('Bạn không có quyền system_config để chỉnh trang theo quyền.');
+                    return;
+                }
+                const sel = document.getElementById('permPagesSelect');
+                const box = document.getElementById('permPagesList');
+                if (!sel || !box) return;
+                const permKey = sel.value;
+                const checked = Array.from(box.querySelectorAll('input[type="checkbox"]'))
+                    .filter(i => i.checked)
+                    .map(i => i.dataset.page);
+                permissionPagesState.mapping = permissionPagesState.mapping || {};
+                permissionPagesState.mapping[permKey] = checked;
+
+                const token = localStorage.getItem('authToken') || '';
+                const res = await fetch('/api/permission-pages', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ mapping: permissionPagesState.mapping })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'SAVE_FAILED');
+                permissionPagesState.mapping = data.mapping || permissionPagesState.mapping;
+                alert('Đã lưu trang theo quyền (server).');
+            } catch (e) {
+                alert('Không thể lưu trang theo quyền. Vui lòng thử lại.');
+            }
         }
 
         function showUsersTab() {
@@ -1135,6 +1291,151 @@ Trân trọng,
                 if (backupSection) backupSection.style.display = 'block';
                 tabBackup && tabBackup.classList.remove('secondary-btn');
                 tabBackup && tabBackup.classList.add('primary-btn');
+                loadBackupFileList();
+            }
+        }
+
+        function formatBackupSize(bytes) {
+            if (bytes == null || isNaN(bytes)) return '—';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        async function loadBackupFileList() {
+            const tbody = document.getElementById('backupFilesTableBody');
+            const hint = document.getElementById('backupDirHint');
+            if (!tbody) return;
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#888;">Đang tải...</td></tr>';
+            try {
+                const res = await fetch('/api/backup/list', { headers: { ...getAuthHeaders() } });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#c00;">${data.error || 'Không tải được danh sách'}</td></tr>`;
+                    if (hint) hint.textContent = '';
+                    return;
+                }
+                if (hint && data.directory) {
+                    hint.textContent = 'Thư mục backup trên server: ' + data.directory;
+                }
+                const files = Array.isArray(data.files) ? data.files : [];
+                if (files.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#888;">Chưa có file backup-*.zip trong thư mục.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = files.map(f => {
+                    const raw = String(f.name || '');
+                    const enc = encodeURIComponent(raw);
+                    const esc = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+                    return `
+                        <tr>
+                            <td><code>${esc}</code></td>
+                            <td>${formatBackupSize(f.size)}</td>
+                            <td>${f.modified_at || '—'}</td>
+                            <td style="vertical-align:middle;">
+                                <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                                    <button type="button" class="btn danger-btn" style="padding:6px 10px; font-size:0.9rem;" data-backup-name="${enc}" onclick="deleteBackupFileFromBtn(this)" title="Xóa file trên server">
+                                        <i class="fas fa-trash-alt"></i> Xóa
+                                    </button>
+                                    <button type="button" class="btn primary-btn" style="padding:6px 10px; font-size:0.9rem;" data-backup-name="${enc}" onclick="downloadBackupFileFromBtn(this)" title="Tải về máy">
+                                        <i class="fas fa-download"></i> Tải
+                                    </button>
+                                    <button type="button" class="btn secondary-btn" style="padding:6px 10px; font-size:0.9rem; background:#c2410c; color:#fff; border-color:#9a3412;" data-backup-name="${enc}" onclick="restoreBackupFileFromBtn(this)" title="Khôi phục CSDL từ file này">
+                                        <i class="fas fa-undo"></i> Khôi phục
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>`;
+                }).join('');
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#c00;">Lỗi mạng khi tải danh sách.</td></tr>';
+            }
+        }
+
+        function downloadBackupFileFromBtn(btn) {
+            const enc = btn && btn.getAttribute('data-backup-name');
+            if (!enc) return;
+            try {
+                downloadBackupFile(decodeURIComponent(enc));
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function deleteBackupFileFromBtn(btn) {
+            const enc = btn && btn.getAttribute('data-backup-name');
+            if (!enc) return;
+            let name;
+            try { name = decodeURIComponent(enc); } catch (e) { console.error(e); return; }
+            if (!confirm('Xóa vĩnh viễn file backup trên server: ' + name + ' ?')) return;
+            try {
+                const res = await fetch('/api/backup/file/' + enc, {
+                    method: 'DELETE',
+                    headers: { ...getAuthHeaders() }
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    alert(data.error || 'Không xóa được file.');
+                    return;
+                }
+                loadBackupFileList();
+            } catch (e) {
+                console.error(e);
+                alert('Không xóa được file.');
+            }
+        }
+
+        async function restoreBackupFileFromBtn(btn) {
+            const enc = btn && btn.getAttribute('data-backup-name');
+            if (!enc) return;
+            let name;
+            try { name = decodeURIComponent(enc); } catch (e) { console.error(e); return; }
+            if (!confirm('Khôi phục dữ liệu từ file: ' + name + ' ?\n\nToàn bộ CSDL hiện tại sẽ bị thay thế và hệ thống sẽ tự khởi động lại.')) return;
+            try {
+                const res = await fetch('/api/restore/from-backup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...getAuthHeaders()
+                    },
+                    body: JSON.stringify({ filename: name })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    alert(data.error || 'Khôi phục thất bại.');
+                    return;
+                }
+                alert(data.message || 'Đã gửi yêu cầu khôi phục. Hệ thống sẽ khởi động lại.');
+                setTimeout(() => logout(), 1500);
+            } catch (e) {
+                console.error(e);
+                alert('Không thể khôi phục. Vui lòng thử lại.');
+            }
+        }
+
+        async function downloadBackupFile(filename) {
+            if (!filename) return;
+            try {
+                const enc = encodeURIComponent(filename);
+                const res = await fetch('/api/backup/file/' + enc, { headers: { ...getAuthHeaders() } });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    alert(data.error || 'Không tải được file.');
+                    return;
+                }
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (e) {
+                console.error(e);
+                alert('Không tải được file backup.');
             }
         }
 
@@ -1383,14 +1684,18 @@ Trân trọng,
                     body: JSON.stringify(formData)
                 });
 
-                if (!response.ok) throw new Error('Failed to save user');
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    const msg = data.error || data.message || `HTTP ${response.status}`;
+                    throw new Error(msg);
+                }
                 
                 await loadUsers();
                 closeUserModal();
                 alert(userId ? 'Cập nhật thành công!' : 'Thêm người dùng thành công!');
             } catch (error) {
                 console.error('Error saving user:', error);
-                alert('Có lỗi xảy ra. Vui lòng thử lại.');
+                alert(error && error.message ? error.message : 'Có lỗi xảy ra. Vui lòng thử lại.');
             }
         }
 

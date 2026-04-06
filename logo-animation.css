@@ -1,8 +1,8 @@
-/* Logo Animation Styles */
+/* Logo Animation Styles - quay nhẹ nhàng từ phải sang trái */
 .clinic-logo {
     position: relative;
-    animation: logoFlip 10s infinite;
-    transform-style: preserve-3d;
+    animation: logoRotate 20s linear infinite;
+    transform-origin: center center;
 }
 
 /* Glowing halo effect */
@@ -37,22 +37,10 @@
     }
 }
 
-@keyframes logoFlip {
-    0%, 100% {
-        transform: perspective(800px) rotateY(0) rotateX(0);
-    }
-    20% {
-        transform: perspective(800px) rotateY(15deg) rotateX(0);
-    }
-    40% {
-        transform: perspective(800px) rotateY(0) rotateX(15deg);
-    }
-    60% {
-        transform: perspective(800px) rotateY(-15deg) rotateX(0);
-    }
-    80% {
-        transform: perspective(800px) rotateY(0) rotateX(-15deg);
-    }
+/* Quay nhẹ nhàng từ phải sang trái (chiều ngược kim đồng hồ) */
+@keyframes logoRotate {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(-360deg); }
 }
 
 /* Add hover effect */

@@ -674,8 +674,8 @@
             });
         }
 
-        // Analyze CTG data
-        function analyzeCTG() {
+        // Analyze CTG data (CTG điện toán - dùng backend tính toán)
+        async function analyzeCTG() {
             const baselineHR = parseInt(document.getElementById('baseline-hr').value);
             const variability = parseInt(document.getElementById('variability').value);
             const accelerations = parseInt(document.getElementById('accelerations').value);
@@ -683,19 +683,71 @@
             const contractions = parseInt(document.getElementById('contractions').value);
             const recordingTime = parseInt(document.getElementById('recording-time').value);
 
-            if (!baselineHR || !variability || !recordingTime) {
+            // Use more robust validation (variability có thể bằng 0)
+            if (Number.isNaN(baselineHR) || Number.isNaN(variability) || Number.isNaN(recordingTime)) {
                 alert('Vui lòng nhập đầy đủ dữ liệu CTG cơ bản');
                 return;
             }
 
-            // Generate synthetic CTG data for visualization
+            // Visualization (chart) - vẫn dùng dữ liệu tổng hợp từ input
             generateCTGData(baselineHR, variability, accelerations, decelerations, contractions, recordingTime);
-            
-            // Perform analysis
-            const analysis = performCTGAnalysis(baselineHR, variability, accelerations, decelerations, contractions);
-            
-            // Display results
-            displayAnalysisResults(analysis);
+
+            const patientId = document.getElementById('patient-select').value;
+            const examDate = document.getElementById('exam-date-input').value;
+
+            // Fallback: thuật toán cũ (trường hợp server lỗi)
+            const fallbackAnalysis = performCTGAnalysis(baselineHR, variability, accelerations, decelerations, contractions);
+
+            if (!patientId) {
+                alert('Vui lòng chọn bệnh nhân để phân tích theo CTG điện toán.');
+                displayAnalysisResults(fallbackAnalysis);
+                return;
+            }
+            if (!examDate) {
+                alert('Vui lòng nhập ngày khám.');
+                displayAnalysisResults(fallbackAnalysis);
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/ctg-results', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        patient_id: patientId,
+                        exam_date: examDate,
+                        baseline_hr: baselineHR,
+                        variability: variability,
+                        accelerations: accelerations,
+                        decelerations: decelerations,
+                        contractions: contractions,
+                        recording_time: recordingTime
+                    })
+                });
+
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data?.message || data?.error || `HTTP ${response.status}`);
+                }
+
+                const serverAnalysis = data?.analysis || {};
+                const analysis = {
+                    score: serverAnalysis.score ?? fallbackAnalysis.score,
+                    maxScore: serverAnalysis.max_score ?? fallbackAnalysis.maxScore,
+                    status: serverAnalysis.status ?? fallbackAnalysis.status,
+                    recommendations: Array.isArray(serverAnalysis.recommendations) ? serverAnalysis.recommendations : fallbackAnalysis.recommendations,
+                    baseline: baselineHR,
+                    variability: variability,
+                    accelerations: accelerations,
+                    decelerations: decelerations
+                };
+
+                displayAnalysisResults(analysis);
+            } catch (e) {
+                console.error('CTG điện toán analysis failed:', e);
+                alert('Không thể phân tích CTG theo CTG điện toán. Hệ thống sẽ dùng phân tích tạm thời.');
+                displayAnalysisResults(fallbackAnalysis);
+            }
         }
 
         // Generate synthetic CTG data

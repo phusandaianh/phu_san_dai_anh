@@ -230,6 +230,74 @@
             color: #666;
         }
         
+        .btn-capture {
+            margin-top: 12px;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #ee5a24 0%, #ff6b6b 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+        .btn-capture:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(238,90,36,0.4);
+        }
+        
+        /* Camera capture modal */
+        .camera-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+        .camera-modal-overlay.active {
+            display: flex;
+        }
+        .camera-modal {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow: auto;
+        }
+        .camera-modal h4 {
+            margin: 0 0 16px 0;
+            color: #ff6b6b;
+        }
+        .camera-video-wrap {
+            position: relative;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+        .camera-video-wrap video {
+            width: 100%;
+            max-height: 400px;
+            display: block;
+        }
+        .camera-controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .camera-controls select {
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 2px solid #e1e5e9;
+        }
+        
         .uploaded-image-container {
             background: white;
             border-radius: 12px;
@@ -249,12 +317,22 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
         
-        .image-preview button {
+        .image-preview-actions {
             position: absolute;
             top: 10px;
             right: 10px;
+            display: flex;
+            gap: 8px;
+        }
+        .image-preview-actions .btn {
             padding: 8px 12px;
             font-size: 12px;
+        }
+        .btn-capture-small {
+            background: linear-gradient(135deg, #ee5a24 0%, #ff6b6b 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
         }
         
         .analysis-controls {
@@ -523,15 +601,23 @@
                         <i class="fas fa-cloud-upload-alt"></i>
                         <p>Kéo thả ảnh soi cổ tử cung vào đây hoặc click để chọn file</p>
                         <p class="upload-hint">Hỗ trợ: JPG, PNG, PDF (tối đa 10MB)</p>
+                        <button type="button" class="btn btn-capture" onclick="event.stopPropagation(); openCameraCapture()" title="Chụp ảnh trực tiếp từ máy soi cổ tử cung">
+                            <i class="fas fa-camera"></i> Chụp ảnh từ máy soi
+                        </button>
                     </div>
                     <input type="file" id="cervical-image-input" accept="image/*,.pdf" style="display: none;">
                 </div>
                 <div class="uploaded-image-container" id="uploaded-image-container" style="display: none;">
                     <div class="image-preview">
                         <img id="cervical-image-preview" alt="Ảnh soi cổ tử cung">
-                        <button type="button" class="btn btn-danger" onclick="removeUploadedImage()">
-                            <i class="fas fa-trash"></i> Xóa ảnh
-                        </button>
+                        <div class="image-preview-actions">
+                            <button type="button" class="btn btn-capture-small" onclick="openCameraCapture()" title="Chụp ảnh mới từ máy soi">
+                                <i class="fas fa-camera"></i> Chụp mới
+                            </button>
+                            <button type="button" class="btn btn-danger" onclick="removeUploadedImage()">
+                                <i class="fas fa-trash"></i> Xóa ảnh
+                            </button>
+                        </div>
                     </div>
                     <div class="analysis-controls">
                         <button type="button" class="btn" onclick="analyzeCervicalImage()">
@@ -541,6 +627,28 @@
                             <i class="fas fa-eraser"></i> Xóa phân tích
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Camera capture modal -->
+        <div class="camera-modal-overlay" id="camera-modal">
+            <div class="camera-modal">
+                <h4><i class="fas fa-video"></i> Chụp ảnh từ máy soi cổ tử cung</h4>
+                <p style="color:#666; margin-bottom:12px;">Chọn thiết bị camera (máy soi cổ tử cung) rồi bấm Chụp ảnh để chèn vào phiếu.</p>
+                <div class="camera-video-wrap">
+                    <video id="camera-video" autoplay playsinline muted></video>
+                </div>
+                <div class="camera-controls">
+                    <select id="camera-device-select">
+                        <option value="">-- Chọn camera --</option>
+                    </select>
+                    <button type="button" class="btn" onclick="captureFromCamera()">
+                        <i class="fas fa-camera"></i> Chụp ảnh
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeCameraCapture()">
+                        <i class="fas fa-times"></i> Đóng
+                    </button>
                 </div>
             </div>
         </div>
@@ -790,8 +898,10 @@
             const uploadArea = document.getElementById('upload-area');
             const fileInput = document.getElementById('cervical-image-input');
             
-            // Click to upload
-            uploadArea.addEventListener('click', () => fileInput.click());
+            // Click to upload (but not when clicking the capture button)
+            uploadArea.addEventListener('click', (e) => {
+                if (!e.target.closest('.btn-capture')) fileInput.click();
+            });
             
             // File input change
             fileInput.addEventListener('change', handleFileSelect);
@@ -800,6 +910,96 @@
             uploadArea.addEventListener('dragover', handleDragOver);
             uploadArea.addEventListener('dragleave', handleDragLeave);
             uploadArea.addEventListener('drop', handleDrop);
+        }
+        
+        // ============ Camera capture ============
+        let cameraStream = null;
+        
+        async function openCameraCapture() {
+            const modal = document.getElementById('camera-modal');
+            const video = document.getElementById('camera-video');
+            const select = document.getElementById('camera-device-select');
+            
+            modal.classList.add('active');
+            select.innerHTML = '<option value="">-- Đang tải --</option>';
+            
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                select.innerHTML = '<option value="">-- Chọn camera --</option>';
+                videoDevices.forEach((d, i) => {
+                    const opt = document.createElement('option');
+                    opt.value = d.deviceId;
+                    opt.textContent = d.label || 'Camera ' + (i + 1);
+                    select.appendChild(opt);
+                });
+                
+                if (videoDevices.length === 0) {
+                    select.innerHTML = '<option value="">Không tìm thấy camera</option>';
+                    return;
+                }
+                
+                const deviceId = videoDevices[0].deviceId;
+                select.value = deviceId;
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: { deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: false
+                });
+                video.srcObject = cameraStream;
+                
+                select.addEventListener('change', onCameraDeviceChange);
+            } catch (err) {
+                console.error('Camera error:', err);
+                alert('Không thể truy cập camera. Vui lòng kiểm tra quyền trình duyệt hoặc kết nối máy soi cổ tử cung.');
+            }
+        }
+        
+        async function onCameraDeviceChange() {
+            const select = document.getElementById('camera-device-select');
+            const video = document.getElementById('camera-video');
+            if (!select.value || !cameraStream) return;
+            if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: { deviceId: { exact: select.value } },
+                    audio: false
+                });
+                video.srcObject = cameraStream;
+            } catch (e) {
+                alert('Không thể chuyển camera.');
+            }
+        }
+        
+        function closeCameraCapture() {
+            const modal = document.getElementById('camera-modal');
+            const select = document.getElementById('camera-device-select');
+            select.removeEventListener('change', onCameraDeviceChange);
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+            }
+            document.getElementById('camera-video').srcObject = null;
+            modal.classList.remove('active');
+        }
+        
+        function captureFromCamera() {
+            const video = document.getElementById('camera-video');
+            if (!video.srcObject || !video.videoWidth) {
+                alert('Vui lòng đợi camera sẵn sàng rồi chụp lại.');
+                return;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            canvas.toBlob(function(blob) {
+                if (!blob) return;
+                const file = new File([blob], 'cervical-capture-' + Date.now() + '.jpg', { type: 'image/jpeg' });
+                displayImagePreview(URL.createObjectURL(blob), file);
+                closeCameraCapture();
+            }, 'image/jpeg', 0.9);
         }
         
         // Handle drag over

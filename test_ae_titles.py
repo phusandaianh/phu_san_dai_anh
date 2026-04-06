@@ -35,11 +35,11 @@ def test_ae_titles():
     """Test nhiều AE Title phổ biến"""
     print("\n🔍 Test các AE Title phổ biến...")
     
-    # Danh sách AE Title phổ biến cho GE Voluson
+    # Danh sách AE Title phổ biến cho máy siêu âm (tham khảo)
     ae_titles = [
-        'VOLUSON_E10',
-        'GE_VOLUSON',
-        'VOLUSON',
+        'Maysieuam_E10',
+        'GE_Maysieuam',
+        'ULTRASOUND',
         'GE',
         'DICOM', 
         'WORKLIST',
@@ -71,7 +71,7 @@ def test_ae_titles():
     return None
 
 if __name__ == "__main__":
-    print("🏥 KIỂM TRA CẤU HÌNH VOLUSON E10")
+    print("🏥 KIỂM TRA CẤU HÌNH MÁY SIÊU ÂM")
     print("=" * 60)
     
     if not test_connection():
@@ -83,12 +83,12 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     if correct_ae:
         print(f"✅ Tìm thấy AE Title đúng: '{correct_ae}'")
-        print("\n🔧 Hãy cập nhật voluson_config.json với AE Title này!")
+        print("\n🔧 Hãy cập nhật file cấu hình máy siêu âm với AE Title này!")
     else:
         print("❌ Không tìm thấy AE Title đúng")
         print("\n🔧 Cần kiểm tra:")
-        print("   1. DICOM service đã được bật trên máy Voluson chưa?")
-        print("   2. AE Title trên máy Voluson là gì?")
+        print("   1. DICOM service đã được bật trên máy siêu âm chưa?")
+        print("   2. AE Title trên máy siêu âm là gì?")
         print("   3. Có thể chụp ảnh màn hình cấu hình DICOM không?")
     
     sys.exit(0 if correct_ae else 1)

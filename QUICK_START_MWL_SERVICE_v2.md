@@ -73,16 +73,16 @@ http://localhost:5000/admin.html
 
 ---
 
-## 🩺 Testing MWL with Voluson E10
+## 🩺 Testing MWL with Maysieuam E10
 
 ### Prerequisites
-- Voluson IP: 10.17.2.1
+- Maysieuam IP: 10.17.2.1
 - Server IP: 10.17.2.2 (or your clinic server IP)
 - Network cable connected between devices
 - MWL Server running (port 104)
 
 ### Steps
-1. On Voluson, go to: **Setup → Network → DICOM Services**
+1. On Maysieuam, go to: **Setup → Network → DICOM Services**
 2. Configure:
    - Server IP: 10.17.2.2
    - Port: 104
@@ -142,7 +142,7 @@ Remove-Item -Recurse -Force .\__pycache__
 python app.py
 ```
 
-### No worklist entries on Voluson
+### No worklist entries on Maysieuam
 1. Verify appointments exist: http://localhost:5000/examination-list.html
 2. Check appointment has "siêu âm" service type
 3. Run manual sync: POST to http://localhost:5000/api/mwl-sync
@@ -184,7 +184,7 @@ sc delete "PK_DaiAnh_MWL"
 
 **Config File Issues:** Check `clinic.db` location
 **Port Conflicts:** Use `netstat` to find what's using ports 5000, 104
-**DICOM Issues:** Verify Voluson AE Title = CLINIC_SYSTEM
+**DICOM Issues:** Verify Maysieuam AE Title = CLINIC_SYSTEM
 **Database Issues:** Backup `clinic.db` and `mwl.db` before troubleshooting
 
 ---

@@ -92,6 +92,83 @@
         .shift-row.locked {
             background: #f5f5f5;
         }
+        .doctor-multi-select {
+            position: relative;
+            flex: 1;
+            min-width: 180px;
+        }
+        .doctor-select-display {
+            padding: 6px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            min-height: 34px;
+            cursor: pointer;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            align-items: center;
+            background: white;
+        }
+        .doctor-select-display:focus {
+            outline: none;
+            border-color: #2196f3;
+        }
+        .doctor-multi-select .placeholder {
+            color: #999;
+            font-size: 0.9rem;
+        }
+        .doctor-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            background: #e3f2fd;
+            color: #1565c0;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+        .doctor-chip .remove-chip {
+            cursor: pointer;
+            padding: 0 2px;
+            color: #666;
+        }
+        .doctor-chip .remove-chip:hover {
+            color: #c62828;
+        }
+        .doctor-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 2px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            max-height: 220px;
+            overflow-y: auto;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .doctor-dropdown.show {
+            display: block;
+        }
+        .doctor-dropdown label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            cursor: pointer;
+            margin: 0;
+            font-weight: normal;
+        }
+        .doctor-dropdown label:hover {
+            background: #f5f5f5;
+        }
+        .doctor-dropdown input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+        }
         .add-shift-btn {
             background: #4caf50;
             color: white;
@@ -243,6 +320,23 @@
                     <button id="init-default-templates-btn" class="btn secondary-btn" style="background:#ff9800;">
                         <i class="fas fa-magic"></i> Tạo mẫu mặc định
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Doctor Picker Modal (for shift templates) -->
+        <div id="doctor-picker-modal" class="modal hidden" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.4);display:none;align-items:center;justify-content:center;z-index:3500;">
+            <div class="modal-content" style="background:#fff;padding:1.5rem;border-radius:12px;min-width:360px;max-width:95vw;max-height:70vh;overflow:hidden;display:flex;flex-direction:column;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+                    <h4 style="margin:0;">Chọn bác sĩ (1 hoặc nhiều)</h4>
+                    <button id="close-doctor-picker" style="background:none;border:none;font-size:1.3rem;cursor:pointer;">&times;</button>
+                </div>
+                <div id="doctor-picker-list" style="overflow-y:auto;flex:1;max-height:280px;border:1px solid #ddd;border-radius:8px;padding:8px;">
+                    <!-- Checkboxes populated by JS -->
+                </div>
+                <div style="display:flex;gap:8px;margin-top:1rem;justify-content:flex-end;">
+                    <button id="doctor-picker-cancel" class="btn secondary-btn">Hủy</button>
+                    <button id="doctor-picker-ok" class="btn primary-btn">OK</button>
                 </div>
             </div>
         </div>
@@ -535,6 +629,34 @@
             }
         }
 
+        function syncDoctorMultiSelect(row) {
+            const container = row.querySelector('.doctor-multi-select');
+            if (!container) return;
+            const hiddenInput = container.querySelector('.doctor-value');
+            const chipsDiv = container.querySelector('.doctor-chips');
+            const placeholder = container.querySelector('.placeholder');
+            const checkboxes = container.querySelectorAll('.doctor-dropdown input[type="checkbox"]');
+            const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+            const valueStr = selected.join(' + ');
+            if (hiddenInput) hiddenInput.value = valueStr;
+            if (chipsDiv) {
+                chipsDiv.innerHTML = selected.map(name => 
+                    '<span class="doctor-chip">' + name.replace(/</g, '&lt;') + 
+                    '<span class="remove-chip" data-name="' + name.replace(/"/g, '&quot;') + '">&times;</span></span>'
+                ).join('');
+                chipsDiv.querySelectorAll('.remove-chip').forEach(span => {
+                    span.onclick = (e) => {
+                        e.stopPropagation();
+                        const name = span.dataset.name;
+                        const cb = Array.from(checkboxes).find(c => c.value === name);
+                        if (cb) cb.checked = false;
+                        syncDoctorMultiSelect(row);
+                    };
+                });
+            }
+            if (placeholder) placeholder.style.display = selected.length ? 'none' : 'inline';
+        }
+
         function createShiftRow(date, shift = null) {
             const row = document.createElement('div');
             row.className = 'shift-row';
@@ -549,11 +671,18 @@
             row.innerHTML = `
                 <input type="time" class="start-time" value="${shift ? shift.start_time : ''}" required ${shift && shift.is_locked ? 'disabled' : ''}>
                 <input type="time" class="end-time" value="${shift ? shift.end_time : ''}" required ${shift && shift.is_locked ? 'disabled' : ''}>
-                <div class="doctor-select-container" style="position: relative; width: 100%;">
-                    <input type="text" class="doctor-select" placeholder="Nhập tên bác sĩ" list="doctor-list" ${shift && shift.is_locked ? 'disabled' : ''}>
-                    <datalist id="doctor-list">
-                        ${doctorTemplates.map(template => `<option value="${template}">`).join('')}
-                    </datalist>
+                <div class="doctor-multi-select">
+                    <input type="hidden" class="doctor-select doctor-value" value="">
+                    <div class="doctor-select-display" ${shift && shift.is_locked ? 'style="pointer-events:none;background:#f5f5f5;"' : ''} tabindex="0">
+                        <span class="placeholder">Chọn bác sĩ...</span>
+                        <div class="doctor-chips"></div>
+                    </div>
+                    <div class="doctor-dropdown">
+                        ${(clinicDoctors || []).length ? (clinicDoctors || []).map(d => {
+                            const displayName = (d.degree ? d.degree + ' ' + d.name : d.name || '').trim() || 'Bác sĩ';
+                            return '<label><input type="checkbox" value="' + displayName.replace(/"/g, '&quot;') + '"> ' + displayName.replace(/</g, '&lt;') + '</label>';
+                        }).join('') : '<div style="padding:12px;color:#666;font-size:0.9rem;">Chưa có bác sĩ. Vui lòng thêm trong Danh sách bác sĩ phòng khám.</div>'}
+                    </div>
                 </div>
                 <select class="slot-minutes" ${shift && shift.is_locked ? 'disabled' : ''}>
                     <option value="5">5 phút</option>
@@ -578,8 +707,70 @@
                 </div>
             `;
 
-            if (shift && shift.doctor_name) {
-                row.querySelector('.doctor-select').value = shift.doctor_name;
+            // Init doctor multi-select: parse existing doctor_name (format "A + B") and sync
+            const doctorMultiSelect = row.querySelector('.doctor-multi-select');
+            if (doctorMultiSelect && shift && shift.doctor_name) {
+                const names = String(shift.doctor_name).split(/\s*\+\s*/).map(s => s.trim()).filter(Boolean);
+                const checkboxes = doctorMultiSelect.querySelectorAll('.doctor-dropdown input[type="checkbox"]');
+                let anyMatched = false;
+                checkboxes.forEach(cb => {
+                    const matched = names.includes(cb.value);
+                    cb.checked = matched;
+                    if (matched) anyMatched = true;
+                });
+                if (!anyMatched && names.length) {
+                    const hiddenInput = doctorMultiSelect.querySelector('.doctor-value');
+                    if (hiddenInput) hiddenInput.value = shift.doctor_name;
+                    const chipsDiv = doctorMultiSelect.querySelector('.doctor-chips');
+                    const placeholder = doctorMultiSelect.querySelector('.placeholder');
+                    if (chipsDiv) chipsDiv.innerHTML = '<span class="doctor-chip">' + String(shift.doctor_name).replace(/</g, '&lt;') + '</span>';
+                    if (placeholder) placeholder.style.display = 'none';
+                } else {
+                    syncDoctorMultiSelect(row);
+                }
+            } else {
+                syncDoctorMultiSelect(row);
+            }
+            if (doctorMultiSelect) {
+                const display = doctorMultiSelect.querySelector('.doctor-select-display');
+                const dropdown = doctorMultiSelect.querySelector('.doctor-dropdown');
+                if (display && dropdown && !(shift && shift.is_locked)) {
+                    function refreshDropdownIfNeeded() {
+                        const hasCheckboxes = dropdown.querySelector('input[type="checkbox"]');
+                        if (!hasCheckboxes && (clinicDoctors || []).length > 0) {
+                            const currentValue = (doctorMultiSelect.querySelector('.doctor-value') || {}).value || '';
+                            const names = currentValue ? currentValue.split(/\s*\+\s*/).map(s => s.trim()).filter(Boolean) : [];
+                            dropdown.innerHTML = (clinicDoctors || []).map(d => {
+                                const displayName = (d.degree ? d.degree + ' ' + d.name : d.name || '').trim() || 'Bác sĩ';
+                                return '<label><input type="checkbox" value="' + displayName.replace(/"/g, '&quot;') + '"> ' + displayName.replace(/</g, '&lt;') + '</label>';
+                            }).join('');
+                            dropdown.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                                cb.checked = names.includes(cb.value);
+                                cb.addEventListener('change', () => syncDoctorMultiSelect(row));
+                            });
+                            syncDoctorMultiSelect(row);
+                        }
+                    }
+                    display.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const isShow = dropdown.classList.toggle('show');
+                        if (isShow) {
+                            refreshDropdownIfNeeded();
+                            setTimeout(() => {
+                                const closeHandler = (ev) => {
+                                    if (!doctorMultiSelect.contains(ev.target)) {
+                                        dropdown.classList.remove('show');
+                                        document.removeEventListener('click', closeHandler);
+                                    }
+                                };
+                                document.addEventListener('click', closeHandler);
+                            }, 0);
+                        }
+                    });
+                    doctorMultiSelect.querySelectorAll('.doctor-dropdown input[type="checkbox"]').forEach(cb => {
+                        cb.addEventListener('change', () => syncDoctorMultiSelect(row));
+                    });
+                }
             }
             const slotSelect = row.querySelector('.slot-minutes');
             if (shift && typeof shift.slot_minutes !== 'undefined') {
@@ -640,7 +831,11 @@
                     editBtn.style.display = 'none';
                     saveBtn.style.display = 'inline-block';
                     inputs.forEach(input => input.disabled = false);
-                    
+                    const doctorDisplay = row.querySelector('.doctor-select-display');
+                    if (doctorDisplay) {
+                        doctorDisplay.style.pointerEvents = '';
+                        doctorDisplay.style.background = '';
+                    }
                     // Cập nhật nút khóa: màu xanh, biểu tượng khóa mở
                     const lockBtn = row.querySelector('.lock-btn');
                     if (lockBtn) {
@@ -670,6 +865,13 @@
                         if (newLocked) {
                             row.classList.add('locked');
                             inputs.forEach(input => input.disabled = true);
+                            const doctorDisplay = row.querySelector('.doctor-select-display');
+                            if (doctorDisplay) {
+                                doctorDisplay.style.pointerEvents = 'none';
+                                doctorDisplay.style.background = '#f5f5f5';
+                            }
+                            const doctorDropdown = row.querySelector('.doctor-dropdown');
+                            if (doctorDropdown) doctorDropdown.classList.remove('show');
                             saveBtn.style.display = 'none';
                             editBtn.style.display = 'inline-block';
                             // Cập nhật nút khóa: màu vàng, biểu tượng khóa đóng
@@ -678,6 +880,11 @@
                         } else {
                             row.classList.remove('locked');
                             inputs.forEach(input => input.disabled = false);
+                            const doctorDisplay = row.querySelector('.doctor-select-display');
+                            if (doctorDisplay) {
+                                doctorDisplay.style.pointerEvents = '';
+                                doctorDisplay.style.background = '';
+                            }
                             saveBtn.style.display = 'inline-block';
                             editBtn.style.display = 'none';
                             // Cập nhật nút khóa: màu xanh, biểu tượng khóa mở
@@ -903,7 +1110,14 @@
                 container.innerHTML = '<p>Chưa có bác sĩ nào.</p>';
                 return;
             }
-            container.innerHTML = clinicDoctors.map(doctor => `
+            const headerRow = `
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:600;color:#333;font-size:0.9rem;">
+                    <div style="width:140px;">Học vị học hàm</div>
+                    <div style="flex:1;">Họ tên bác sĩ</div>
+                    <div style="width:40px;"></div>
+                </div>
+            `;
+            container.innerHTML = headerRow + clinicDoctors.map(doctor => `
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
                     <input type="text" value="${doctor.degree}" style="width:140px;padding:6px;border-radius:4px;border:1px solid #ccc;" onchange="updateDoctorDegree(${doctor.id}, this.value)">
                     <input type="text" value="${doctor.name}" style="flex:1;padding:6px;border-radius:4px;border:1px solid #ccc;" onchange="updateDoctorName(${doctor.id}, this.value)">
@@ -1041,6 +1255,48 @@
 
         // Shift Templates Management
         let shiftTemplates = [];
+
+        function openDoctorPickerModal(initialDoctorName, onConfirm) {
+            const modal = document.getElementById('doctor-picker-modal');
+            const listEl = document.getElementById('doctor-picker-list');
+            if (!modal || !listEl) return;
+
+            const names = initialDoctorName
+                ? String(initialDoctorName).split(/\s*\+\s*/).map((s) => s.trim()).filter(Boolean)
+                : [];
+
+            listEl.innerHTML = clinicDoctors.length
+                ? clinicDoctors.map((d) => {
+                    const displayName = (d.degree ? d.degree + ' ' + d.name : d.name || '').trim() || 'Bác sĩ';
+                    const checked = names.includes(displayName);
+                    return '<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;margin:0;"><input type="checkbox" value="' + displayName.replace(/"/g, '&quot;') + '"' + (checked ? ' checked' : '') + '> ' + displayName.replace(/</g, '&lt;') + '</label>';
+                }).join('')
+                : '<p style="color:#666;padding:12px;">Chưa có bác sĩ. Vui lòng thêm trong Danh sách bác sĩ phòng khám.</p>';
+
+            modal.style.display = 'flex';
+            modal.classList.remove('hidden');
+
+            const close = () => {
+                modal.style.display = 'none';
+                modal.classList.add('hidden');
+            };
+
+            const doOk = () => {
+                const checkboxes = listEl.querySelectorAll('input[type="checkbox"]:checked');
+                const selected = Array.from(checkboxes).map((cb) => cb.value);
+                if (!selected.length) {
+                    alert('Vui lòng chọn ít nhất 1 bác sĩ.');
+                    return;
+                }
+                const value = selected.join(' + ');
+                close();
+                if (onConfirm) onConfirm(value);
+            };
+
+            document.getElementById('close-doctor-picker').onclick = close;
+            document.getElementById('doctor-picker-cancel').onclick = close;
+            document.getElementById('doctor-picker-ok').onclick = doOk;
+        }
 
         // Helper function to check time conflicts
         function checkTimeConflict(startTime, endTime, existingShifts, excludeRow = null) {
@@ -1182,43 +1438,45 @@
             
             const name = prompt('Tên ca khám mẫu:', template.name);
             if (name === null) return;
-            
+
             const startTime = prompt('Giờ bắt đầu (HH:MM):', template.start_time);
             if (startTime === null) return;
-            
+
             const endTime = prompt('Giờ kết thúc (HH:MM):', template.end_time);
             if (endTime === null) return;
-            
-            const doctorName = prompt('Tên bác sĩ:', template.doctor_name);
-            if (doctorName === null) return;
-            
-            const slotMinutes = prompt('Số phút/slot:', template.slot_minutes);
-            if (slotMinutes === null) return;
-            
-            try {
-                const response = await fetch(`/api/shift-templates/${id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name: name.trim(),
-                        start_time: startTime.trim(),
-                        end_time: endTime.trim(),
-                        doctor_name: doctorName.trim(),
-                        slot_minutes: parseInt(slotMinutes) || 10
-                    })
-                });
-                if (response.ok) {
-                    await loadShiftTemplates();
-                    renderShiftTemplates();
-                    updateTemplateSelects();
-                    alert('Đã cập nhật ca khám mẫu!');
-                } else {
-                    alert('Lỗi cập nhật ca khám mẫu!');
-                }
-            } catch (error) {
-                console.error('Lỗi cập nhật ca khám mẫu:', error);
-                alert('Lỗi cập nhật ca khám mẫu!');
-            }
+
+            openDoctorPickerModal(template.doctor_name || '', (doctorName) => {
+                if (doctorName === null || doctorName === undefined) return;
+                const slotMinutes = prompt('Số phút/slot:', template.slot_minutes);
+                if (slotMinutes === null) return;
+
+                (async () => {
+                    try {
+                        const response = await fetch(`/api/shift-templates/${id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                name: name.trim(),
+                                start_time: startTime.trim(),
+                                end_time: endTime.trim(),
+                                doctor_name: (doctorName || '').trim(),
+                                slot_minutes: parseInt(slotMinutes) || 10
+                            })
+                        });
+                        if (response.ok) {
+                            await loadShiftTemplates();
+                            renderShiftTemplates();
+                            updateTemplateSelects();
+                            alert('Đã cập nhật ca khám mẫu!');
+                        } else {
+                            alert('Lỗi cập nhật ca khám mẫu!');
+                        }
+                    } catch (error) {
+                        console.error('Lỗi cập nhật ca khám mẫu:', error);
+                        alert('Lỗi cập nhật ca khám mẫu!');
+                    }
+                })();
+            });
         };
 
         window.deleteShiftTemplate = async function(id) {
@@ -1242,12 +1500,10 @@
 
         // Template modal handlers
         document.getElementById('manage-templates-btn').onclick = async function() {
-            console.log('Manage templates button clicked');
             const modal = document.getElementById('shift-templates-modal');
-            console.log('Modal element:', modal);
             modal.style.display = 'flex';
             modal.classList.remove('hidden');
-            console.log('Modal classes after remove hidden:', modal.className);
+            await loadClinicDoctors();
             await loadShiftTemplates();
             renderShiftTemplates();
         };
@@ -1261,24 +1517,23 @@
         document.getElementById('add-shift-template-btn').onclick = function() {
             const name = prompt('Tên ca khám mẫu:');
             if (!name || !name.trim()) return;
-            
+
             const startTime = prompt('Giờ bắt đầu (HH:MM):');
             if (!startTime || !startTime.trim()) return;
-            
+
             const endTime = prompt('Giờ kết thúc (HH:MM):');
             if (!endTime || !endTime.trim()) return;
-            
-            const doctorName = prompt('Tên bác sĩ:');
-            if (!doctorName || !doctorName.trim()) return;
-            
-            const slotMinutes = prompt('Số phút/slot (mặc định 10):', '10');
-            
-            createShiftTemplate({
-                name: name.trim(),
-                start_time: startTime.trim(),
-                end_time: endTime.trim(),
-                doctor_name: doctorName.trim(),
-                slot_minutes: parseInt(slotMinutes) || 10
+
+            openDoctorPickerModal('', (doctorName) => {
+                if (!doctorName || !doctorName.trim()) return;
+                const slotMinutes = prompt('Số phút/slot (mặc định 10):', '10');
+                createShiftTemplate({
+                    name: name.trim(),
+                    start_time: startTime.trim(),
+                    end_time: endTime.trim(),
+                    doctor_name: doctorName.trim(),
+                    slot_minutes: parseInt(slotMinutes) || 10
+                });
             });
         };
 
@@ -1508,6 +1763,9 @@
                 console.warn('Không thể tải số phút mặc định từ máy chủ:', error);
             }
 
+            // Load clinicDoctors TRƯỚC renderSchedule để dropdown ô bác sĩ luôn có dữ liệu
+            await loadClinicDoctors();
+            
             renderSchedule();
             
             // Load doctor templates from database

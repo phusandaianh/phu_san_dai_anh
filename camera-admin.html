@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý camera - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f8fafc;
+            color: #0f172a;
+        }
+        .camera-page-header {
+            background: linear-gradient(135deg, #0c4a6e 0%, #0369a1 50%, #0ea5e9 100%);
+            color: #fff;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(15, 23, 42, 0.25);
+        }
+        .camera-page-header h1 {
+            margin: 0;
+            font-size: 1.15rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .back-btn {
+            background: rgba(255, 255, 255, 0.18);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            color: #fff;
+            text-decoration: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .container {
+            width: min(1100px, calc(100% - 28px));
+            margin: 22px auto 24px;
+        }
+        .intro {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 12px;
+            color: #334155;
+        }
+        .add-camera-panel {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .add-camera-panel h2 {
+            margin: 0 0 10px;
+            font-size: 1rem;
+        }
+        .add-camera-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 8px;
+        }
+        .add-camera-form label {
+            display: grid;
+            gap: 4px;
+            font-size: 0.85rem;
+            color: #334155;
+        }
+        .add-camera-form input {
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 0.9rem;
+        }
+        .add-camera-actions {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .camera-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 12px;
+        }
+        .camera-card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 14px;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+        }
+        .camera-card h2 {
+            margin: 0 0 8px;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .camera-card p {
+            margin: 6px 0;
+            color: #334155;
+            font-size: 0.92rem;
+        }
+        .camera-tag {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+        .camera-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+        .btn {
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #0f172a;
+            border-radius: 8px;
+            padding: 8px 10px;
+            cursor: pointer;
+            font-size: 0.88rem;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn:hover { filter: brightness(0.97); }
+        .btn.primary {
+            background: #0ea5e9;
+            border-color: #0ea5e9;
+            color: #fff;
+        }
+        .btn.danger {
+            background: #ef4444;
+            border-color: #ef4444;
+            color: #fff;
+        }
+        .camera-form {
+            margin-top: 10px;
+            display: grid;
+            gap: 8px;
+        }
+        .camera-form label {
+            display: grid;
+            gap: 4px;
+            font-size: 0.85rem;
+            color: #334155;
+        }
+        .camera-form input {
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 0.9rem;
+        }
+        .status {
+            margin-top: 6px;
+            min-height: 18px;
+            font-size: 0.84rem;
+            color: #0f766e;
+        }
+    </style>
+</head>
+<body>
+    <header class="camera-page-header">
+        <h1><i class="fas fa-video"></i> Quản lý camera phòng khám</h1>
+        <a href="admin.html" class="back-btn"><i class="fas fa-arrow-left"></i> Quay lại Quản trị</a>
+    </header>
+
+    <main class="container">
+        <div class="intro">
+            Quản lý nhanh từng nhóm camera, mở ứng dụng liên quan và lưu thông tin <strong>IP / khu vực lắp đặt</strong> cho từng loại thiết bị.
+        </div>
+        <section class="add-camera-panel">
+            <h2><i class="fas fa-plus-circle"></i> Thêm camera mới</h2>
+            <div class="add-camera-form">
+                <label>Tên camera
+                    <input type="text" id="newCameraName" placeholder="VD: Camera Ezviz ngoài cổng">
+                </label>
+                <label>Phần mềm
+                    <input type="text" id="newCameraApp" placeholder="VD: Ezviz">
+                </label>
+                <label>Mô tả
+                    <input type="text" id="newCameraDesc" placeholder="VD: Theo dõi cổng ra vào">
+                </label>
+                <label>Nhãn
+                    <input type="text" id="newCameraTag" placeholder="VD: Outdoor">
+                </label>
+                <label>Link web (tuỳ chọn)
+                    <input type="text" id="newCameraWeb" placeholder="https://...">
+                </label>
+            </div>
+            <div class="add-camera-actions">
+                <button type="button" id="addCameraBtn" class="btn primary"><i class="fas fa-plus"></i> Thêm camera</button>
+                <span id="addCameraStatus" class="status"></span>
+            </div>
+        </section>
+
+        <div class="camera-grid" id="cameraGrid">
+        </div>
+    </main>
+    <script>
+        const DEFAULT_CAMERAS = [
+            { id: 'xiaomi', icon: 'fa-wifi', name: 'Camera không dây Xiaomi', app: 'Xiaomi Home', desc: 'Quản lý camera wifi của phòng khám trên ứng dụng Xiaomi Home.', tag: 'Wireless', web: 'https://home.mi.com' },
+            { id: 'dahua', icon: 'fa-plug', name: 'Camera có dây Dahua', app: 'DMSS', desc: 'Quản lý hệ thống camera Dahua có dây và theo dõi đầu ghi qua DMSS.', tag: 'Wired', web: 'https://www.dahuasecurity.com' },
+            { id: 'imcam', icon: 'fa-camera-retro', name: 'Camera IM Cam', app: 'IM Cam', desc: 'Giám sát các camera đang vận hành bằng phần mềm IM Cam.', tag: 'IM Cam', web: 'https://www.imou.com' },
+            { id: 'hikvision', icon: 'fa-shield-alt', name: 'Camera Hikvision', app: 'Hik-Connect / iVMS-4200', desc: 'Theo dõi thêm camera Hikvision hoặc camera tương thích ONVIF trong phòng khám.', tag: 'Additional', web: 'https://www.hikvision.com' }
+        ];
+        const CUSTOM_CAMERAS_KEY = 'clinic_custom_cameras';
+        const DELETED_CAMERAS_KEY = 'clinic_deleted_camera_ids';
+
+        function getCameraStorageKey(id) {
+            return `clinic_camera_info_${id}`;
+        }
+
+        function getCustomCameras() {
+            const raw = localStorage.getItem(CUSTOM_CAMERAS_KEY) || '[]';
+            try {
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_) {
+                return [];
+            }
+        }
+
+        function setCustomCameras(list) {
+            localStorage.setItem(CUSTOM_CAMERAS_KEY, JSON.stringify(list || []));
+        }
+
+        function getDeletedCameraIds() {
+            const raw = localStorage.getItem(DELETED_CAMERAS_KEY) || '[]';
+            try {
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_) {
+                return [];
+            }
+        }
+
+        function setDeletedCameraIds(ids) {
+            localStorage.setItem(DELETED_CAMERAS_KEY, JSON.stringify(ids || []));
+        }
+
+        function getCameraInfo(id) {
+            const raw = localStorage.getItem(getCameraStorageKey(id));
+            if (!raw) return { ip: '', zone: '' };
+            try {
+                const data = JSON.parse(raw);
+                return { ip: data.ip || '', zone: data.zone || '' };
+            } catch (_) {
+                return { ip: '', zone: '' };
+            }
+        }
+
+        function saveCameraInfo(card) {
+            const id = card.getAttribute('data-camera-id') || '';
+            if (!id) return;
+            const ipInput = card.querySelector('input[name="ip"]');
+            const zoneInput = card.querySelector('input[name="zone"]');
+            const status = card.querySelector('.status');
+            localStorage.setItem(getCameraStorageKey(id), JSON.stringify({
+                ip: (ipInput && ipInput.value || '').trim(),
+                zone: (zoneInput && zoneInput.value || '').trim(),
+                updated_at: new Date().toISOString()
+            }));
+            if (status) status.textContent = 'Da luu thong tin camera.';
+        }
+
+        function clearCameraInfo(card) {
+            const id = card.getAttribute('data-camera-id') || '';
+            if (!id) return;
+            const ok = confirm('Ban co chac chan muon xoa thong tin IP/khu vuc cua camera nay khong?');
+            if (!ok) return;
+            localStorage.removeItem(getCameraStorageKey(id));
+            const ipInput = card.querySelector('input[name="ip"]');
+            const zoneInput = card.querySelector('input[name="zone"]');
+            const status = card.querySelector('.status');
+            if (ipInput) ipInput.value = '';
+            if (zoneInput) zoneInput.value = '';
+            if (status) status.textContent = 'Da xoa thong tin camera.';
+        }
+
+        function removeCamera(card) {
+            const id = card.getAttribute('data-camera-id') || '';
+            if (!id) return;
+            const ok = confirm('Ban co chac chan muon xoa camera nay khong?');
+            if (!ok) return;
+            const isCustom = card.getAttribute('data-custom') === '1';
+            if (isCustom) {
+                const remain = getCustomCameras().filter((c) => c.id !== id);
+                setCustomCameras(remain);
+            } else {
+                const deleted = new Set(getDeletedCameraIds());
+                deleted.add(id);
+                setDeletedCameraIds([...deleted]);
+            }
+            localStorage.removeItem(getCameraStorageKey(id));
+            card.remove();
+        }
+
+        function renderCameraCard(camera, custom) {
+            const info = getCameraInfo(camera.id);
+            const webBtn = camera.web
+                ? `<a class="btn" href="${camera.web}" target="_blank" rel="noopener"><i class="fas fa-globe"></i> Trang web</a>`
+                : '';
+            return `
+                <section class="camera-card" data-camera-id="${camera.id}" data-custom="${custom ? '1' : '0'}">
+                    <h2><i class="fas ${camera.icon || 'fa-video'}"></i> ${camera.name}</h2>
+                    <p><strong>Phan mem:</strong> ${camera.app}</p>
+                    <p>${camera.desc || ''}</p>
+                    <div class="camera-actions">
+                        <button type="button" class="btn primary open-app-btn" data-app="${camera.app}"><i class="fas fa-mobile-alt"></i> Mo ${camera.app}</button>
+                        ${webBtn}
+                    </div>
+                    <form class="camera-form">
+                        <label>IP camera
+                            <input type="text" name="ip" placeholder="VD: 192.168.1.50" value="${info.ip}">
+                        </label>
+                        <label>Khu vuc lap dat
+                            <input type="text" name="zone" placeholder="VD: Sanh le tan" value="${info.zone}">
+                        </label>
+                        <div class="camera-actions">
+                            <button type="button" class="btn save-camera-btn"><i class="fas fa-save"></i> Luu thong tin</button>
+                            <button type="button" class="btn clear-info-btn"><i class="fas fa-eraser"></i> Xoa thong tin</button>
+                            <button type="button" class="btn danger delete-camera-btn"><i class="fas fa-trash"></i> Xoa camera</button>
+                        </div>
+                        <div class="status"></div>
+                    </form>
+                    <span class="camera-tag">${camera.tag || 'Camera'}</span>
+                </section>
+            `;
+        }
+
+        function renderAllCameras() {
+            const grid = document.getElementById('cameraGrid');
+            if (!grid) return;
+            const deleted = new Set(getDeletedCameraIds());
+            const base = DEFAULT_CAMERAS.filter((c) => !deleted.has(c.id));
+            const custom = getCustomCameras();
+            const all = [...base, ...custom];
+            grid.innerHTML = all.map((camera) => renderCameraCard(camera, !DEFAULT_CAMERAS.some((d) => d.id === camera.id))).join('');
+        }
+
+        function addNewCamera() {
+            const nameEl = document.getElementById('newCameraName');
+            const appEl = document.getElementById('newCameraApp');
+            const descEl = document.getElementById('newCameraDesc');
+            const tagEl = document.getElementById('newCameraTag');
+            const webEl = document.getElementById('newCameraWeb');
+            const status = document.getElementById('addCameraStatus');
+            const name = (nameEl && nameEl.value || '').trim();
+            const app = (appEl && appEl.value || '').trim();
+            if (!name || !app) {
+                if (status) status.textContent = 'Can nhap toi thieu Ten camera va Phan mem.';
+                return;
+            }
+            const custom = getCustomCameras();
+            const id = `custom_${Date.now()}`;
+            custom.push({
+                id,
+                icon: 'fa-video',
+                name,
+                app,
+                desc: (descEl && descEl.value || '').trim(),
+                tag: (tagEl && tagEl.value || '').trim() || 'Custom',
+                web: (webEl && webEl.value || '').trim()
+            });
+            setCustomCameras(custom);
+            if (nameEl) nameEl.value = '';
+            if (appEl) appEl.value = '';
+            if (descEl) descEl.value = '';
+            if (tagEl) tagEl.value = '';
+            if (webEl) webEl.value = '';
+            if (status) status.textContent = 'Da them camera moi.';
+            renderAllCameras();
+        }
+
+        function bindCameraActions() {
+            const addBtn = document.getElementById('addCameraBtn');
+            if (addBtn) addBtn.addEventListener('click', addNewCamera);
+
+            const grid = document.getElementById('cameraGrid');
+            if (!grid) return;
+            grid.addEventListener('click', (event) => {
+                const target = event.target.closest('button');
+                if (!target) return;
+                const card = target.closest('.camera-card');
+                if (!card) return;
+                if (target.classList.contains('save-camera-btn')) {
+                    saveCameraInfo(card);
+                    return;
+                }
+                if (target.classList.contains('clear-info-btn')) {
+                    clearCameraInfo(card);
+                    return;
+                }
+                if (target.classList.contains('delete-camera-btn')) {
+                    removeCamera(card);
+                    return;
+                }
+                if (target.classList.contains('open-app-btn')) {
+                    const appName = target.getAttribute('data-app') || 'ung dung camera';
+                    alert(`Vui long mo ${appName} tren may tinh/dien thoai da cai dat. Ban co the bam "Trang web" de truy cap nhanh.`);
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderAllCameras();
+            bindCameraActions();
+        });
+    </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 """
-Service đồng bộ dữ liệu bệnh nhân với máy siêu âm Voluson E10
+Service đồng bộ dữ liệu bệnh nhân với máy siêu âm
 Sử dụng DICOM Worklist để gửi thông tin bệnh nhân đến máy siêu âm
 """
 
@@ -21,8 +21,8 @@ import os
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class VolusonSyncService:
-    """Service đồng bộ với máy siêu âm Voluson E10"""
+class MaysieuamSyncService:
+    """Service đồng bộ với máy siêu âm (DICOM)"""
     
     def __init__(self, config_file: str = "voluson_config.json"):
         """
@@ -34,10 +34,16 @@ class VolusonSyncService:
         self.config = self._load_config(config_file)
         self.db_path = self.config.get('database_path', 'clinic.db')
         self.sync_enabled = self.config.get('sync_enabled', True)
-        self.voluson_ip = self.config.get('voluson_ip', '192.168.1.100')
-        self.voluson_port = self.config.get('voluson_port', 104)
+        # Support both legacy keys (Maysieuam_*) and new keys (voluson_*)
+        self.voluson_ip = self.config.get('voluson_ip', self.config.get('Maysieuam_ip', '192.168.1.100'))
+        self.voluson_port = int(self.config.get('voluson_port', self.config.get('Maysieuam_port', 104)) or 104)
         self.ae_title = self.config.get('ae_title', 'CLINIC_SYSTEM')
-        self.voluson_ae_title = self.config.get('voluson_ae_title', 'VOLUSON_E10')
+        self.voluson_ae_title = self.config.get('voluson_ae_title', self.config.get('Maysieuam_ae_title', 'VOLUSON_E10'))
+
+        # Backward-compatible attribute names
+        self.Maysieuam_ip = self.voluson_ip
+        self.Maysieuam_port = self.voluson_port
+        self.Maysieuam_ae_title = self.voluson_ae_title
         
         # Thread cho đồng bộ định kỳ
         self.sync_thread = None
@@ -51,8 +57,18 @@ class VolusonSyncService:
             "voluson_port": 104,
             "ae_title": "CLINIC_SYSTEM",
             "voluson_ae_title": "VOLUSON_E10",
+            # MWL Server (SCP) settings - used by mwl_server.py and UI
+            "mwl_server_ip": "10.17.2.2",
+            "mwl_server_port": 104,
+            "mwl_server_ae_title": "CLINIC_SYSTEM",
+            "require_called_aet": False,
+            "allowed_calling_ae_titles": [],
+            # Station/Modality info returned in MWL entries
+            "modality_station_ae_title": "MAY_SIEU_AM",
+            "modality_station_name": "US1",
+            "integration_mode": "mwl_query_only",
             "database_path": "clinic.db",
-            "sync_interval": 300,  # 5 phút
+            "sync_interval": 180,  # 3 phút
             "retry_attempts": 3,
             "retry_delay": 10
         }
@@ -75,7 +91,7 @@ class VolusonSyncService:
     def start_sync_service(self):
         """Khởi động service đồng bộ định kỳ"""
         if not self.sync_enabled:
-            logger.info("Đồng bộ với Voluson E10 đã bị tắt")
+            logger.info("Đồng bộ máy siêu âm đã bị tắt")
             return
             
         if self.sync_thread and self.sync_thread.is_alive():
@@ -85,27 +101,27 @@ class VolusonSyncService:
         self.sync_running = True
         self.sync_thread = threading.Thread(target=self._sync_loop, daemon=True)
         self.sync_thread.start()
-        logger.info("Đã khởi động service đồng bộ với Voluson E10")
+        logger.info("Đã khởi động service đồng bộ với máy siêu âm")
     
     def stop_sync_service(self):
         """Dừng service đồng bộ"""
         self.sync_running = False
         if self.sync_thread:
             self.sync_thread.join(timeout=5)
-        logger.info("Đã dừng service đồng bộ với Voluson E10")
+        logger.info("Đã dừng service đồng bộ với máy siêu âm")
     
     def _sync_loop(self):
         """Vòng lặp đồng bộ định kỳ"""
         while self.sync_running:
             try:
                 self.sync_pending_appointments()
-                time.sleep(self.config.get('sync_interval', 300))
+                time.sleep(self.config.get('sync_interval', 180))
             except Exception as e:
                 logger.error(f"Lỗi trong vòng lặp đồng bộ: {e}")
                 time.sleep(60)  # Chờ 1 phút trước khi thử lại
     
     def sync_pending_appointments(self):
-        """Đồng bộ các cuộc hẹn chưa được gửi đến Voluson"""
+        """Đồng bộ các cuộc hẹn chưa được gửi đến máy siêu âm"""
         try:
             # Lấy danh sách cuộc hẹn chưa đồng bộ
             appointments = self._get_pending_appointments()
@@ -116,10 +132,10 @@ class VolusonSyncService:
                 
             logger.info(f"Tìm thấy {len(appointments)} cuộc hẹn cần đồng bộ")
             
-            # Gửi từng cuộc hẹn đến Voluson
+            # Gửi từng cuộc hẹn đến máy siêu âm
             for appointment in appointments:
                 try:
-                    self._send_appointment_to_voluson(appointment)
+                    self._send_appointment_to_Maysieuam(appointment)
                     self._mark_appointment_synced(appointment['id'])
                     logger.info(f"Đã đồng bộ cuộc hẹn ID {appointment['id']}")
                 except Exception as e:
@@ -149,7 +165,7 @@ class VolusonSyncService:
             JOIN patient p ON a.patient_id = p.id
             WHERE a.appointment_date >= datetime('now')
             AND a.appointment_date <= datetime('now', '+7 days')
-            AND a.voluson_synced = 0
+            AND a.Maysieuam_synced = 0
             ORDER BY a.appointment_date
             """
             
@@ -176,36 +192,36 @@ class VolusonSyncService:
             logger.error(f"Lỗi khi lấy danh sách cuộc hẹn: {e}")
             return []
     
-    def _send_appointment_to_voluson(self, appointment: Dict):
-        """Gửi thông tin cuộc hẹn đến máy siêu âm Voluson E10"""
+    def _send_appointment_to_Maysieuam(self, appointment: Dict):
+        """Gửi thông tin cuộc hẹn đến máy siêu âm"""
         try:
             # Tạo DICOM dataset cho worklist
             dataset = self._create_worklist_dataset(appointment)
             
-            # Kết nối và gửi đến Voluson
+            # Kết nối và gửi đến máy siêu âm
             ae = AE(ae_title=self.ae_title)
             ae.add_requested_context(MWLFind)
             
-            # Kết nối đến Voluson E10
+            # Kết nối đến máy siêu âm
             assoc = ae.associate(self.voluson_ip, self.voluson_port, ae_title=self.voluson_ae_title)
             
             if assoc.is_established:
-                logger.info(f"Đã kết nối đến Voluson E10 tại {self.voluson_ip}:{self.voluson_port}")
+                logger.info(f"Đã kết nối đến máy siêu âm tại {self.voluson_ip}:{self.voluson_port}")
                 
                 # Gửi worklist item
                 response = assoc.send_c_find(dataset, MWLFind)
                 
                 if response.Status == 0x0000:  # Success
-                    logger.info(f"Đã gửi thành công cuộc hẹn {appointment['id']} đến Voluson")
+                    logger.info(f"Đã gửi thành công cuộc hẹn {appointment['id']} đến máy siêu âm")
                 else:
-                    logger.warning(f"Voluson trả về status: {response.Status}")
+                    logger.warning(f"Máy siêu âm trả về status: {response.Status}")
                 
                 assoc.release()
             else:
-                logger.error(f"Không thể kết nối đến Voluson E10: {assoc.is_established}")
+                logger.error(f"Không thể kết nối đến máy siêu âm: {assoc.is_established}")
                 
         except Exception as e:
-            logger.error(f"Lỗi khi gửi cuộc hẹn đến Voluson: {e}")
+            logger.error(f"Lỗi khi gửi cuộc hẹn đến máy siêu âm: {e}")
             raise
     
     def _create_worklist_dataset(self, appointment: Dict) -> Dataset:
@@ -245,7 +261,7 @@ class VolusonSyncService:
     def add_appointment_to_worklist(self, appointment_id: int, service_name: str, modality: str = 'US'):
         """
         Đánh dấu appointment đã sẵn sàng trong worklist
-        (Voluson sẽ tự động query worklist từ DICOM MWL Server)
+        (máy siêu âm sẽ tự động query worklist từ DICOM MWL Server)
         
         Args:
             appointment_id: ID của appointment
@@ -257,9 +273,9 @@ class VolusonSyncService:
         """
         try:
             # Chỉ cần đánh dấu appointment đã sẵn sàng trong worklist
-            # Voluson sẽ tự động query từ DICOM MWL Server
+            # máy siêu âm sẽ tự động query từ DICOM MWL Server
             self._mark_appointment_synced(appointment_id)
-            logger.info(f"Da danh dau appointment {appointment_id} san sang trong worklist (Voluson se tu dong query)")
+            logger.info(f"Da danh dau appointment {appointment_id} san sang trong worklist (máy siêu âm sẽ tự động query)")
             return True
                 
         except Exception as e:
@@ -268,11 +284,11 @@ class VolusonSyncService:
 
     def test_connection(self, ip: str = None, port: int = None):
         """
-        Test kết nối với máy Voluson E10
+        Test kết nối với máy siêu âm
         
         Args:
-            ip: IP address của máy Voluson (optional)
-            port: Port của máy Voluson (optional)
+            ip: IP address của máy siêu âm (optional)
+            port: Port của máy siêu âm (optional)
         
         Returns:
             bool: True nếu kết nối thành công, False nếu thất bại
@@ -281,7 +297,7 @@ class VolusonSyncService:
             test_ip = ip or self.voluson_ip
             test_port = port or self.voluson_port
             
-            logger.info(f"Testing connection to Voluson E10 at {test_ip}:{test_port}")
+            logger.info(f"Testing connection to ultrasound machine at {test_ip}:{test_port}")
             
             # Tạo AE để test kết nối
             ae = AE(ae_title=self.ae_title)
@@ -308,20 +324,20 @@ class VolusonSyncService:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            # Kiểm tra xem cột voluson_synced đã tồn tại chưa
+            # Kiểm tra xem cột Maysieuam_synced đã tồn tại chưa
             cursor.execute("PRAGMA table_info(appointment)")
             columns = [row[1] for row in cursor.fetchall()]
             
-            if 'voluson_synced' not in columns:
-                # Thêm cột voluson_synced nếu chưa có
+            if 'Maysieuam_synced' not in columns:
+                # Thêm cột Maysieuam_synced nếu chưa có
                 cursor.execute("""
-                    ALTER TABLE appointment ADD COLUMN voluson_synced INTEGER DEFAULT 0
+                    ALTER TABLE appointment ADD COLUMN Maysieuam_synced INTEGER DEFAULT 0
                 """)
             
             # Cập nhật trạng thái đồng bộ
             cursor.execute("""
                 UPDATE appointment 
-                SET voluson_synced = 1, voluson_sync_time = datetime('now')
+                SET Maysieuam_synced = 1, Maysieuam_sync_time = datetime('now')
                 WHERE id = ?
             """, (appointment_id,))
             
@@ -372,8 +388,8 @@ class VolusonSyncService:
                 'patient_address': row[7]
             }
             
-            # Gửi đến Voluson
-            self._send_appointment_to_voluson(appointment)
+            # Gửi đến máy siêu âm
+            self._send_appointment_to_Maysieuam(appointment)
             self._mark_appointment_synced(appointment_id)
             
             logger.info(f"Đã đồng bộ thành công cuộc hẹn ID {appointment_id}")
@@ -393,8 +409,8 @@ class VolusonSyncService:
             cursor.execute("""
                 SELECT 
                     COUNT(*) as total,
-                    SUM(CASE WHEN voluson_synced = 1 THEN 1 ELSE 0 END) as synced,
-                    SUM(CASE WHEN voluson_synced = 0 THEN 1 ELSE 0 END) as pending
+                    SUM(CASE WHEN Maysieuam_synced = 1 THEN 1 ELSE 0 END) as synced,
+                    SUM(CASE WHEN Maysieuam_synced = 0 THEN 1 ELSE 0 END) as pending
                 FROM appointment 
                 WHERE appointment_date >= datetime('now')
                 AND appointment_date <= datetime('now', '+7 days')
@@ -405,8 +421,8 @@ class VolusonSyncService:
             
             return {
                 'sync_enabled': self.sync_enabled,
-                'voluson_ip': self.voluson_ip,
-                'voluson_port': self.voluson_port,
+                'Maysieuam_ip': self.Maysieuam_ip,
+                'Maysieuam_port': self.Maysieuam_port,
                 'total_appointments': stats[0] or 0,
                 'synced_appointments': stats[1] or 0,
                 'pending_appointments': stats[2] or 0,
@@ -418,11 +434,16 @@ class VolusonSyncService:
             return {'error': str(e)}
 
 # Singleton instance
-_voluson_sync_service = None
+_Maysieuam_sync_service = None
 
-def get_voluson_sync_service() -> VolusonSyncService:
-    """Lấy instance singleton của VolusonSyncService"""
-    global _voluson_sync_service
-    if _voluson_sync_service is None:
-        _voluson_sync_service = VolusonSyncService()
-    return _voluson_sync_service
+def get_Maysieuam_sync_service() -> MaysieuamSyncService:
+    """Lấy instance singleton của MaysieuamSyncService"""
+    global _Maysieuam_sync_service
+    if _Maysieuam_sync_service is None:
+        _Maysieuam_sync_service = MaysieuamSyncService()
+    return _Maysieuam_sync_service
+
+
+# Compatibility aliases (old code expects these names)
+VolusonSyncService = MaysieuamSyncService
+get_voluson_sync_service = get_Maysieuam_sync_service

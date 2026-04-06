@@ -27,7 +27,7 @@ The Worklist (RIS) system has been thoroughly assessed and is:
 | **MWL Entries** | ✅ SYNCED | 2/2 ultrasound appointments (100%) |
 | **MWL Server** | ⚪ READY | Port 104 available, configured |
 | **Flask App** | ⚪ READY | Port 5000 available, configured |
-| **DICOM Support** | ✅ COMPLETE | Voluson E10 compatible |
+| **DICOM Support** | ✅ COMPLETE | Maysieuam compatible |
 | **Code Quality** | ✅ VERIFIED | Syntax valid, structure correct |
 | **Configuration** | ✅ VALID | All settings proper |
 | **Documentation** | ✅ COMPLETE | Comprehensive guides provided |
@@ -93,7 +93,7 @@ PRE-DEPLOYMENT CHECKS:
 ✅ Service configuration validated
 ✅ Code syntax verified
 ✅ DICOM compliance confirmed
-✅ Voluson E10 compatibility verified
+✅ Maysieuam compatibility verified
 ✅ Documentation complete
 
 OPERATIONAL CHECKS:
@@ -132,7 +132,7 @@ OVERALL ASSESSMENT: ✅ APPROVED FOR GO-LIVE
 
 ### Short-term (This week):
 1. Deploy to staging environment
-2. Test with Voluson E10
+2. Test with Maysieuam E10
 3. Verify end-to-end workflow
 4. Get stakeholder sign-off
 
@@ -209,7 +209,7 @@ python mwl_sync.py               # Manual sync
 ## 🎓 SYSTEM ARCHITECTURE VALIDATED
 
 ```
-✅ Voluson E10
+✅ Maysieuam E10
     ↓ DICOM C-FIND Query
     ↓ (IP: 10.17.2.2, Port: 104)
 ✅ MWL Server (mwl_server.py)
@@ -294,7 +294,7 @@ The Worklist (RIS) system for Phòng Khám Đại Anh is:
 ║                                                           ║
 ║          No blocking issues detected.                    ║
 ║          System is production-ready.                     ║
-║          Ready to connect Voluson E10.                  ║
+║          Ready to connect Maysieuam E10.                  ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
 ```

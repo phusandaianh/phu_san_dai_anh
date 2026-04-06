@@ -10,5 +10,7 @@ from api.v1 import patients, appointments
 api_v1_bp = Blueprint('api_v1', __name__)
 
 # Không đăng ký auth - login/logout trong app.py
-api_v1_bp.register_blueprint(patients.patients_bp, url_prefix='')
-api_v1_bp.register_blueprint(appointments.appointments_bp, url_prefix='')
+# Prefix con để giữ đúng URL như frontend đang gọi:
+# /api/patients/... và /api/appointments/...
+api_v1_bp.register_blueprint(patients.patients_bp, url_prefix='/patients')
+api_v1_bp.register_blueprint(appointments.appointments_bp, url_prefix='/appointments')

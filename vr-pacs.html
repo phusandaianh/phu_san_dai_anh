@@ -261,6 +261,60 @@
             padding: 5px;
         }
 
+        .autofill-badge {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            z-index: 3;
+            background: rgba(0, 0, 0, 0.65);
+            color: #fff;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 3px 7px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .autofill-badge.clickable {
+            cursor: pointer;
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.15) inset;
+        }
+
+        .autofill-badge.status-autofilled {
+            background: rgba(32, 136, 61, 0.9);
+        }
+
+        .autofill-badge.status-failed {
+            background: rgba(170, 32, 32, 0.9);
+        }
+
+        .autofill-badge.status-received,
+        .autofill-badge.status-not_found {
+            background: rgba(80, 80, 80, 0.85);
+        }
+
+        .orthanc-badge {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            z-index: 3;
+            color: #fff;
+            font-size: 0.68rem;
+            font-weight: 600;
+            padding: 3px 7px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(80, 80, 80, 0.85);
+        }
+
+        .orthanc-badge.linked {
+            background: rgba(8, 126, 164, 0.9);
+        }
+
+        .orthanc-badge.unlinked {
+            background: rgba(94, 94, 94, 0.85);
+        }
+
         .image-thumb:hover .overlay {
             opacity: 1;
         }
@@ -397,6 +451,49 @@
             justify-content: center;
         }
 
+        .viewer-measure-actions {
+            padding: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(0, 0, 0, 0.25);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .measure-import-btn {
+            background: #16a34a;
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 9px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            transition: transform 0.1s ease, background 0.2s ease;
+        }
+
+        .measure-import-btn:hover {
+            background: #15803d;
+            transform: translateY(-1px);
+        }
+
+        .orthanc-open-btn {
+            background: #0f766e;
+        }
+
+        .orthanc-open-btn:hover {
+            background: #115e59;
+        }
+
+        .measure-import-note {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.85rem;
+            line-height: 1.35;
+            max-width: 520px;
+            text-align: center;
+        }
+
         .toolbar-btn {
             background: #374151;
             color: #e5e7eb;
@@ -512,6 +609,17 @@
                 <button class="modal-close" onclick="closeViewer()">&times;</button>
             </div>
             <div class="viewer-toolbar"></div>
+            <div class="viewer-measure-actions">
+                <button type="button" class="measure-import-btn" onclick="importAnnotationsToUltrasoundAnalysisAuto()">
+                    <i class="fas fa-magic"></i> Gửi sang phân tích (tự động)
+                </button>
+                <button type="button" class="measure-import-btn orthanc-open-btn" id="openOrthancBtn" style="display:none;">
+                    <i class="fas fa-external-link-alt"></i> Mở trên Orthanc
+                </button>
+                <div class="measure-import-note">
+                    Gợi ý: dùng <b>Đo độ dài</b> cho BPD/FL, <b>ROI Ellipse</b> cho HC và <b>ROI Hình chữ nhật</b> cho AC.
+                </div>
+            </div>
             <div class="modal-body">
                 <div id="dicomViewport"></div>
             </div>
@@ -521,12 +629,54 @@
     <!-- Cornerstone Libraries - Load local copies to avoid CORB -->
     <script>
         // Load libraries strictly from local /static/vendor to avoid CORB / firewall issues
+            // Flask static_url_path đang là '/.' do app.py set static_folder='.'
+            // (xem: app.app.static_url_path). Vì vậy /static/... sẽ 404.
+            const VENDOR_BASE = '/./vr-pacs-viewer/static/vendor';
         const libraryList = [
-            { name: 'cornerstone-core', urls: ['/static/vendor/cornerstone.js'] },
-            { name: 'dicom-parser', urls: ['/static/vendor/dicomParser.js'] },
-            { name: 'cornerstone-wado-image-loader', urls: ['/static/vendor/cornerstoneWADOImageLoader.js'] },
-            { name: 'cornerstone-math', urls: ['/static/vendor/cornerstoneMath.js'] },
-            { name: 'cornerstone-tools', urls: ['/static/vendor/cornerstoneTools.js'] }
+            {
+                name: 'hammerjs',
+                urls: [
+                    // cornerstone-tools (v4+) sử dụng Hammer để nhận pointer events.
+                    // Nếu không load Hammer hoặc không gán cornerstoneTools.external.Hammer
+                    // sẽ lỗi kiểu: Cannot read properties of undefined (reading 'SUPPORT_POINTER_EVENTS')
+                    'https://unpkg.com/hammerjs@2.0.8/hammer.min.js'
+                ]
+            },
+            {
+                name: 'cornerstone-core',
+                urls: [
+                    `${VENDOR_BASE}/cornerstone.js`,
+                    'https://unpkg.com/cornerstone-core@2.6.1/dist/cornerstone.js'
+                ]
+            },
+            {
+                name: 'dicom-parser',
+                urls: [
+                    `${VENDOR_BASE}/dicomParser.js`,
+                    'https://unpkg.com/dicom-parser@1.8.21/dist/dicomParser.js'
+                ]
+            },
+            {
+                name: 'cornerstone-wado-image-loader',
+                urls: [
+                    `${VENDOR_BASE}/cornerstoneWADOImageLoader.js`,
+                    'https://unpkg.com/cornerstone-wado-image-loader@4.13.2/dist/cornerstoneWADOImageLoader.js'
+                ]
+            },
+            {
+                name: 'cornerstone-math',
+                urls: [
+                    `${VENDOR_BASE}/cornerstoneMath.js`,
+                    'https://unpkg.com/cornerstone-math@0.1.10/dist/cornerstoneMath.js'
+                ]
+            },
+            {
+                name: 'cornerstone-tools',
+                urls: [
+                    `${VENDOR_BASE}/cornerstoneTools.js`,
+                    'https://unpkg.com/cornerstone-tools@4.22.1/dist/cornerstoneTools.js'
+                ]
+            }
         ];
 
         function loadScriptUrl(src) {
@@ -563,7 +713,9 @@
             console.log('Attempting to load DICOM viewer libraries (CDN primary, fallback)...');
             const results = [];
             const failed = [];
-            for (const lib of libraryList) {
+
+            // Load in parallel to reduce initial page wait time.
+            await Promise.all(libraryList.map(async (lib) => {
                 try {
                     const res = await tryLoadLibrary(lib);
                     results.push(res);
@@ -571,7 +723,7 @@
                     console.error(err.message);
                     failed.push(lib.name);
                 }
-            }
+            }));
 
             if (failed.length > 0) {
                 console.error('Libraries failed to load:', failed);
@@ -592,10 +744,15 @@
         let patientsData = [];
         let filteredPatients = [];
         let currentImageId = null;
+        let currentOrthancStudyUrl = '';
         let viewerElement = null;
         let isViewerInitialized = false;
         let isWadoWorkerInitialized = false;
         let TOOL_DEFINITIONS = [];
+        let AUTO_IMPORT_DONE_FOR_IMAGE_ID = null;
+        let AUTO_IMPORT_DEBOUNCE_TIMER = null;
+        // Build toolbar only once; rebuilding on every open causes noticeable lag.
+        let isToolbarBuilt = false;
 
         const lengthConfigFactory = () => ({
             getTextCallback: function(data) {
@@ -829,6 +986,13 @@
         document.addEventListener('DOMContentLoaded', function() {
             buildToolbar();
             loadPatients();
+            const openOrthancBtn = document.getElementById('openOrthancBtn');
+            if (openOrthancBtn) {
+                openOrthancBtn.addEventListener('click', function() {
+                    if (!currentOrthancStudyUrl) return;
+                    window.open(currentOrthancStudyUrl, '_blank');
+                });
+            }
             // Libraries will be loaded by the script loader above
             // If they're already loaded, initialize immediately
             if (checkLibrariesLoaded()) {
@@ -854,27 +1018,57 @@
                 cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
                 cornerstoneTools.external.cornerstone = cornerstone;
                 cornerstoneTools.external.cornerstoneMath = cornerstoneMath;
+                // cornerstone-tools cần Hammer để support pointer/touch events
+                if (typeof window.Hammer === 'undefined') {
+                    throw new Error('Hammer.js is not loaded (window.Hammer is undefined)');
+                }
+                cornerstoneTools.external.Hammer = window.Hammer;
 
                 if (!isWadoWorkerInitialized) {
-                    try {
-                        const localWorker = window.location.origin + '/static/vendor/cornerstoneWADOImageLoaderWebWorker.js';
-                        const localCodecs = window.location.origin + '/static/vendor/cornerstoneWADOImageLoaderCodecs.js';
-                        cornerstoneWADOImageLoader.webWorkerManager.initialize({
-                            maxWebWorkers: 2,
-                            startWebWorkersOnDemand: true,
-                            webWorkerPath: localWorker,
-                            taskConfiguration: {
-                                decodeTask: {
-                                    codecsPath: localCodecs
+                    const workerCandidates = [
+                        {
+                            workerPath: window.location.origin + `${VENDOR_BASE}/cornerstoneWADOImageLoaderWebWorker.js`,
+                            codecsPath: window.location.origin + `${VENDOR_BASE}/cornerstoneWADOImageLoaderCodecs.js`,
+                            label: 'local'
+                        },
+                        {
+                            workerPath: 'https://unpkg.com/cornerstone-wado-image-loader@4.13.2/dist/cornerstoneWADOImageLoaderWebWorker.js',
+                            codecsPath: 'https://unpkg.com/cornerstone-wado-image-loader@4.13.2/dist/cornerstoneWADOImageLoaderCodecs.js',
+                            label: 'cdn'
+                        }
+                    ];
+                    let lastWorkerError = null;
+                    for (const candidate of workerCandidates) {
+                        try {
+                            cornerstoneWADOImageLoader.webWorkerManager.initialize({
+                                // Giảm số worker để giảm overhead khởi tạo trên máy yếu.
+                                maxWebWorkers: 1,
+                                startWebWorkersOnDemand: true,
+                                webWorkerPath: candidate.workerPath,
+                                taskConfiguration: {
+                                    decodeTask: {
+                                        codecsPath: candidate.codecsPath
+                                    }
                                 }
-                            }
-                        });
-                        isWadoWorkerInitialized = true;
-                        console.log('Cornerstone WADO web worker initialized (local assets).');
-                    } catch (e) {
-                        console.error('Failed to initialize webWorkerManager with local paths.', e);
-                        alert('Không thể tải web worker DICOM từ /static/vendor. Vui lòng kiểm tra các file cornerstoneWADOImageLoaderWebWorker.js và cornerstoneWADOImageLoaderCodecs.js');
-                        throw e;
+                            });
+                            isWadoWorkerInitialized = true;
+                            console.log(`Cornerstone WADO web worker initialized (${candidate.label} assets).`);
+                            break;
+                        } catch (e) {
+                            lastWorkerError = e;
+                            console.warn(`Failed to initialize web worker (${candidate.label}).`, e);
+                        }
+                    }
+                    if (!isWadoWorkerInitialized) {
+                        alert('Không thể khởi tạo web worker DICOM (local + CDN). Hệ thống sẽ thử giải mã không dùng worker.');
+                        try {
+                            cornerstoneWADOImageLoader.configure({ useWebWorkers: false });
+                        } catch (cfgErr) {
+                            console.warn('Cannot disable web workers explicitly:', cfgErr);
+                        }
+                        if (lastWorkerError) {
+                            console.warn('Last worker init error:', lastWorkerError);
+                        }
                     }
                 } else {
                     console.log('Cornerstone WADO web worker already initialized, skipping re-init.');
@@ -932,6 +1126,12 @@
                 const imagesHtml = patient.images.length > 0
                     ? patient.images.map((img, idx) => `
                         <div class="image-thumb" onclick="viewDicom('${patient.name}', '${img.filename}')">
+                            <div class="autofill-badge status-not_found"
+                                 data-patient-name="${escapeHtml(patient.name)}"
+                                 data-filename="${escapeHtml(img.filename)}">Đang kiểm tra...</div>
+                            <div class="orthanc-badge unlinked"
+                                 data-patient-name="${escapeHtml(patient.name)}"
+                                 data-filename="${escapeHtml(img.filename)}">Orthanc: ...</div>
                             <img src="/api/vr-pacs/preview/${encodeURIComponent(patient.name)}/${encodeURIComponent(img.filename)}" 
                                  alt="${img.filename}"
                                  onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27%3E%3Crect fill=%27%23f0f0f0%27 width=%27100%27 height=%27100%27/%3E%3Ctext x=%2750%27 y=%2750%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27%3EDICOM%3C/text%3E%3C/svg%3E'">
@@ -970,7 +1170,80 @@
                     </div>
                 `;
             }).join('');
+
+            refreshAutofillBadges();
+            refreshOrthancBadges();
         }
+
+        async function refreshAutofillBadges() {
+            const badges = Array.from(document.querySelectorAll('.autofill-badge[data-patient-name][data-filename]'));
+            await Promise.all(badges.map(async (badge) => {
+                const patientName = badge.getAttribute('data-patient-name') || '';
+                const filename = badge.getAttribute('data-filename') || '';
+                if (!filename) return;
+                try {
+                    const qs = new URLSearchParams({
+                        patient_name: patientName,
+                        filename: filename
+                    });
+                    const resp = await fetch(`/api/pacs/autofill-status?${qs.toString()}`);
+                    const data = await resp.json();
+                    const status = data && data.success ? (data.status || 'not_found') : 'not_found';
+                    const label = data && data.success ? (data.label || 'Chưa autofill') : 'Chưa autofill';
+                    badge.classList.remove('status-autofilled', 'status-failed', 'status-received', 'status-not_found');
+                    badge.classList.add(`status-${status}`);
+                    badge.textContent = label;
+                    badge.classList.remove('clickable');
+                    badge.removeAttribute('title');
+                    if (status === 'autofilled' && data.ultrasound_result_id) {
+                        badge.classList.add('clickable');
+                        badge.setAttribute('data-result-id', String(data.ultrasound_result_id));
+                        badge.setAttribute('title', 'Mở phiếu kết quả đã tự điền');
+                    } else {
+                        badge.removeAttribute('data-result-id');
+                    }
+                } catch (e) {
+                    badge.classList.remove('status-autofilled', 'status-failed', 'status-received', 'status-not_found');
+                    badge.classList.add('status-not_found');
+                    badge.textContent = 'Chưa autofill';
+                    badge.classList.remove('clickable');
+                    badge.removeAttribute('data-result-id');
+                }
+            }));
+        }
+
+        async function refreshOrthancBadges() {
+            const badges = Array.from(document.querySelectorAll('.orthanc-badge[data-patient-name][data-filename]'));
+            await Promise.all(badges.map(async (badge) => {
+                const patientName = badge.getAttribute('data-patient-name') || '';
+                const filename = badge.getAttribute('data-filename') || '';
+                if (!filename) return;
+                try {
+                    const url = `/api/vr-pacs/orthanc-link/${encodeURIComponent(patientName)}/${encodeURIComponent(filename)}`;
+                    const resp = await fetch(url);
+                    const data = await resp.json();
+                    const linked = !!(resp.ok && data && data.success && data.orthanc_study_url);
+                    badge.classList.remove('linked', 'unlinked');
+                    badge.classList.add(linked ? 'linked' : 'unlinked');
+                    badge.textContent = linked ? 'Orthanc: linked' : 'Orthanc: chưa linked';
+                } catch (e) {
+                    badge.classList.remove('linked');
+                    badge.classList.add('unlinked');
+                    badge.textContent = 'Orthanc: chưa linked';
+                }
+            }));
+        }
+
+        document.addEventListener('click', function(evt) {
+            const badge = evt.target && evt.target.closest ? evt.target.closest('.autofill-badge.clickable') : null;
+            if (!badge) return;
+            evt.preventDefault();
+            evt.stopPropagation();
+            const resultId = badge.getAttribute('data-result-id');
+            if (!resultId) return;
+            const targetUrl = `/ultrasound-analysis.html?result_id=${encodeURIComponent(resultId)}`;
+            window.open(targetUrl, '_blank');
+        });
 
         // Update statistics
         function updateStats(stats) {
@@ -1000,6 +1273,74 @@
             displayPatients(filteredPatients);
         }
 
+        function withTimeout(promise, timeoutMs, timeoutMessage) {
+            return Promise.race([
+                promise,
+                new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error(timeoutMessage || 'DICOM load timeout')), timeoutMs);
+                })
+            ]);
+        }
+
+        async function loadDicomImageWithFallback(primaryImageId, dicomUrl) {
+            // Cornerstone/WADO load có thể treo khi worker/codec gặp vấn đề.
+            // Giảm timeout để UI không bị kẹt lâu.
+            const loadTimeoutMs = 12000;
+            try {
+                return await withTimeout(
+                    cornerstone.loadAndCacheImage(primaryImageId),
+                    loadTimeoutMs,
+                    'Tải ảnh quá lâu (timeout).'
+                );
+            } catch (primaryError) {
+                console.warn('Primary wadouri load failed, switching to blob fallback:', primaryError);
+
+                // Thử decode không dùng worker ngay khi primary fail/timeout.
+                // Tránh trường hợp worker đã khởi tạo nhưng codec không load được.
+                try {
+                    cornerstoneWADOImageLoader.configure({ useWebWorkers: false });
+                } catch (e) {
+                    // ignore
+                }
+
+                const fallbackResp = await fetch(dicomUrl, { cache: 'no-store' });
+                if (!fallbackResp.ok) {
+                    let details = '';
+                    try {
+                        details = (await fallbackResp.text()).slice(0, 300);
+                    } catch (_) {}
+                    throw new Error(`Không tải được file DICOM (${fallbackResp.status}). ${details}`.trim());
+                }
+
+                const dicomBlob = await fallbackResp.blob();
+                if (!cornerstoneWADOImageLoader?.wadouri?.fileManager) {
+                    throw primaryError;
+                }
+
+                const blobImageId = cornerstoneWADOImageLoader.wadouri.fileManager.add(dicomBlob);
+                try {
+                    return await withTimeout(
+                        cornerstone.loadAndCacheImage(blobImageId),
+                        loadTimeoutMs,
+                        'Fallback tải ảnh cũng bị timeout.'
+                    );
+                } catch (blobError) {
+                    // Final attempt: disable web workers and decode in main thread.
+                    // Some machines/browser policies block worker codecs unexpectedly.
+                    try {
+                        cornerstoneWADOImageLoader.configure({ useWebWorkers: false });
+                    } catch (e) {
+                        // ignore
+                    }
+                    return await withTimeout(
+                        cornerstone.loadAndCacheImage(blobImageId),
+                        loadTimeoutMs,
+                        'Không thể giải mã ảnh DICOM.'
+                    );
+                }
+            }
+        }
+
         // View single DICOM image
         async function viewDicom(patientName, filename) {
             // Check if libraries are loaded
@@ -1012,9 +1353,11 @@
             document.getElementById('modalPatientName').textContent = patientName;
             document.getElementById('modalFileName').textContent = filename;
             document.getElementById('viewerModal').style.display = 'block';
+            setupOrthancOpenButton(patientName, filename);
             
             viewerElement = document.getElementById('dicomViewport');
-            buildToolbar();
+            // Toolbar đã được build khi trang load; chỉ cần reset active states khi mở ảnh.
+            document.querySelectorAll('.viewer-toolbar .toolbar-btn').forEach(btn => btn.classList.remove('active'));
             
             // Disable and clear previous content if exists
             try {
@@ -1148,7 +1491,8 @@
             }
 
             // Load image
-            const imageId = `wadouri:${window.location.origin}/api/vr-pacs/dicom/${encodeURIComponent(patientName)}/${encodeURIComponent(filename)}`;
+            const dicomUrl = `${window.location.origin}/api/vr-pacs/dicom/${encodeURIComponent(patientName)}/${encodeURIComponent(filename)}`;
+            const imageId = `wadouri:${dicomUrl}`;
             currentImageId = imageId;
 
             try {
@@ -1167,7 +1511,7 @@
                     loadingDiv.style.display = 'block';
                 }
                 
-                const image = await cornerstone.loadAndCacheImage(imageId);
+                const image = await loadDicomImageWithFallback(imageId, dicomUrl);
                 console.log('Image loaded successfully:', image);
                 
                 // Remove loading indicator
@@ -1190,6 +1534,24 @@
                         canvas.style.display = '';
                         canvas.style.pointerEvents = 'auto';
                         console.log('✓ Canvas setup for tools');
+
+                        // Auto-import when user finishes drawing ROI/Length.
+                        // We trigger on mouseup/touchend and then inspect tool state (debounced).
+                        if (!canvas.__autoImportAnnotationListenerAttached) {
+                            canvas.__autoImportAnnotationListenerAttached = true;
+                            const onCanvasInteraction = () => {
+                                // Debounce: allow tool to commit state after the interaction
+                                if (AUTO_IMPORT_DEBOUNCE_TIMER) {
+                                    clearTimeout(AUTO_IMPORT_DEBOUNCE_TIMER);
+                                }
+                                AUTO_IMPORT_DEBOUNCE_TIMER = setTimeout(() => {
+                                    maybeAutoImportFromAnnotations();
+                                }, 450);
+                            };
+                            canvas.addEventListener('mouseup', onCanvasInteraction);
+                            canvas.addEventListener('touchend', onCanvasInteraction);
+                            console.log('✓ Auto-import listener attached to canvas');
+                        }
                     }
                 } catch (e) {
                     console.warn('Could not setup canvas:', e);
@@ -1295,18 +1657,42 @@
                 }, 300);
                 
                 // Add keyboard shortcuts
-                setupKeyboardShortcuts();
-                
+                // Keyboard shortcuts already initialized globally on page load.
                 console.log('DICOM image displayed successfully');
             } catch (error) {
                 console.error('Error loading DICOM:', error);
                 console.error('Error details:', error.stack);
                 const viewport = document.getElementById('dicomViewport');
-                viewport.innerHTML = `<div style="color: white; text-align: center; padding-top: 40%;">
+                const previewUrl = `/api/vr-pacs/preview/${encodeURIComponent(patientName)}/${encodeURIComponent(filename)}`;
+                viewport.innerHTML = `<div style="color: white; text-align: center; padding-top: 8%; padding-left: 20px; padding-right: 20px;">
                     <h3>Lỗi khi tải ảnh DICOM</h3>
                     <p>${error.message || 'Không xác định được lỗi'}</p>
+                    <p style="opacity: 0.8; margin-top: 8px;">Đã chuyển sang ảnh preview để vẫn xem được nội dung.</p>
+                    <img src="${previewUrl}" alt="DICOM preview fallback" style="max-width: 85%; max-height: 55vh; margin-top: 12px; border-radius: 8px; border: 1px solid #666;" />
                     <button onclick="viewDicom('${patientName}', '${filename}')" style="margin-top: 20px; padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer;">Thử lại</button>
                 </div>`;
+            }
+        }
+
+        async function setupOrthancOpenButton(patientName, filename) {
+            const btn = document.getElementById('openOrthancBtn');
+            if (!btn) return;
+            currentOrthancStudyUrl = '';
+            btn.style.display = 'none';
+            btn.disabled = true;
+            btn.title = '';
+            try {
+                const url = `/api/vr-pacs/orthanc-link/${encodeURIComponent(patientName)}/${encodeURIComponent(filename)}`;
+                const resp = await fetch(url);
+                const data = await resp.json();
+                if (resp.ok && data && data.success && data.orthanc_study_url) {
+                    currentOrthancStudyUrl = data.orthanc_study_url;
+                    btn.style.display = 'inline-flex';
+                    btn.disabled = false;
+                    btn.title = 'Mở study này trong Orthanc Viewer';
+                }
+            } catch (e) {
+                console.warn('setupOrthancOpenButton failed:', e);
             }
         }
 
@@ -1568,8 +1954,284 @@
         }
 
         // Close viewer
+        const ULTRASOUND_ANNOT_IMPORT_KEY = 'ultrasound_annotation_import_v1';
+
+        function maybeAutoImportFromAnnotations() {
+            try {
+                if (!viewerElement || !currentImageId) return;
+                if (AUTO_IMPORT_DONE_FOR_IMAGE_ID === currentImageId) return;
+
+                const pixelSpacing = getPixelSpacingMmFromViewer();
+                if (!pixelSpacing) return;
+
+                const toolStateManager = cornerstoneTools && cornerstoneTools.globalImageIdSpecificToolStateManager;
+                const toolState = toolStateManager && toolStateManager.toolState ? toolStateManager.toolState : null;
+                const stateForImage = toolState && toolState[currentImageId] ? toolState[currentImageId] : {};
+
+                const allLengthsMm = extractAllLengthsMm(stateForImage, pixelSpacing).sort((a, b) => b - a);
+                let fl = null;
+                let bpd = null;
+                if (allLengthsMm.length >= 2) {
+                    fl = allLengthsMm[0];      // longest
+                    bpd = allLengthsMm[1];     // second longest
+                } else if (allLengthsMm.length === 1) {
+                    bpd = allLengthsMm[0];
+                }
+
+                const allEllipseCircMm = extractRoiCircumferenceMm(stateForImage, 'EllipticalRoi', pixelSpacing);
+                const hc = allEllipseCircMm.length ? Math.max(...allEllipseCircMm) : null;
+                const allRectCircMm = extractRoiCircumferenceMm(stateForImage, 'RectangleRoi', pixelSpacing);
+                const ac = allRectCircMm.length ? Math.max(...allRectCircMm) : null;
+
+                // Only redirect when we have đủ BPD/HC/AC/FL.
+                // This prevents auto-navigation after the user has only drawn one tool.
+                const hasAll = (bpd != null && hc != null && ac != null && fl != null);
+                if (!hasAll) {
+                    return;
+                }
+
+                AUTO_IMPORT_DONE_FOR_IMAGE_ID = currentImageId;
+                importAnnotationsToUltrasoundAnalysisAuto({ bpd, hc, ac, fl }).catch(err => {
+                    console.error('Auto import failed:', err);
+                    AUTO_IMPORT_DONE_FOR_IMAGE_ID = null;
+                });
+            } catch (e) {
+                console.warn('maybeAutoImportFromAnnotations error:', e);
+            }
+        }
+
+        function stripDiacritics(str) {
+            try {
+                return (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+            } catch (e) {
+                return (str || '').toLowerCase().trim();
+            }
+        }
+
+        function getPixelSpacingMmFromViewer() {
+            try {
+                if (!viewerElement || typeof cornerstone === 'undefined') return null;
+                const enabled = cornerstone.getEnabledElement(viewerElement);
+                const image = enabled && enabled.image ? enabled.image : null;
+                if (!image) return null;
+                const row = image.rowPixelSpacing;
+                const col = image.columnPixelSpacing;
+                const rowVal = Array.isArray(row) ? row[0] : row;
+                const colVal = Array.isArray(col) ? col[0] : col;
+                const r = parseFloat(rowVal);
+                const c = parseFloat(colVal);
+                if (!isFinite(r) || !isFinite(c)) return null;
+                return (r + c) / 2;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function getToolEntriesForImage(stateForImage, toolKey) {
+            const t = stateForImage ? stateForImage[toolKey] : null;
+            if (!t) return [];
+            if (Array.isArray(t)) return t;
+            if (Array.isArray(t.data)) return t.data;
+            // Some tool states can be wrapped; fallback
+            if (t.data && Array.isArray(t.data.data)) return t.data.data;
+            return [];
+        }
+
+        function extractLatestLengthMm(stateForImage, pixelSpacing) {
+            if (!pixelSpacing || pixelSpacing <= 0) return null;
+            const entries = [
+                ...getToolEntriesForImage(stateForImage, 'Length'),
+                ...getToolEntriesForImage(stateForImage, 'DistanceLength'),
+            ];
+            if (!entries.length) return null;
+
+            // Take the longest (likely FL/BPD in a single tool workflow)
+            let best = null;
+            entries.forEach(entry => {
+                const handles = entry && entry.handles ? entry.handles : null;
+                const start = handles && handles.start ? handles.start : null;
+                const end = handles && handles.end ? handles.end : null;
+                if (!start || !end) return;
+                const distPx = cornerstoneMath.point.distance(start, end);
+                const distMm = distPx * pixelSpacing;
+                if (!best || distMm > best.distMm) best = { distMm };
+            });
+            return best ? best.distMm : null;
+        }
+
+        function extractAllLengthsMm(stateForImage, pixelSpacing) {
+            if (!pixelSpacing || pixelSpacing <= 0) return [];
+            const entries = [
+                ...getToolEntriesForImage(stateForImage, 'Length'),
+                ...getToolEntriesForImage(stateForImage, 'DistanceLength'),
+            ];
+            const values = [];
+            entries.forEach(entry => {
+                const handles = entry && entry.handles ? entry.handles : null;
+                const start = handles && handles.start ? handles.start : null;
+                const end = handles && handles.end ? handles.end : null;
+                if (!start || !end) return;
+                const distPx = cornerstoneMath.point.distance(start, end);
+                const distMm = distPx * pixelSpacing;
+                if (isFinite(distMm)) values.push(distMm);
+            });
+            return values;
+        }
+
+        function ellipseCircumferenceRamanujan(a, b) {
+            // Ramanujan approximation for ellipse perimeter
+            return Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
+        }
+
+        function extractRoiCircumferenceMm(stateForImage, toolKey, pixelSpacing) {
+            if (!pixelSpacing || pixelSpacing <= 0) return [];
+            const entries = getToolEntriesForImage(stateForImage, toolKey);
+            const values = [];
+            entries.forEach(entry => {
+                const handles = entry && entry.handles ? entry.handles : null;
+                const start = handles && handles.start ? handles.start : null;
+                const end = handles && handles.end ? handles.end : null;
+                if (!start || !end) return;
+
+                const widthPx = Math.abs(end.x - start.x);
+                const heightPx = Math.abs(end.y - start.y);
+                const aMm = (widthPx * pixelSpacing) / 2;
+                const bMm = (heightPx * pixelSpacing) / 2;
+                if (!isFinite(aMm) || !isFinite(bMm)) return;
+
+                const c = ellipseCircumferenceRamanujan(aMm, bMm);
+                if (isFinite(c) && c > 0) values.push(c);
+            });
+            return values;
+        }
+
+        async function importAnnotationsToUltrasoundAnalysisAuto(prefilledMetrics) {
+            try {
+                if (typeof cornerstoneTools === 'undefined' || typeof cornerstone === 'undefined' || typeof cornerstoneMath === 'undefined') {
+                    alert('Cornerstone chưa sẵn sàng. Vui lòng tải lại trang.');
+                    return;
+                }
+                if (!viewerElement || !currentImageId) {
+                    alert('Chưa có ảnh DICOM đang mở để lấy đo đạc.');
+                    return;
+                }
+
+                const pixelSpacing = getPixelSpacingMmFromViewer();
+                if (!pixelSpacing && !prefilledMetrics) {
+                    alert('Không lấy được pixel spacing từ ảnh DICOM, không thể quy đổi sang mm để suy ra BPD/HC/AC/FL.');
+                    return;
+                }
+
+                const toolStateManager = cornerstoneTools.globalImageIdSpecificToolStateManager;
+                const toolState = toolStateManager && toolStateManager.toolState ? toolStateManager.toolState : null;
+                const stateForImage = toolState && toolState[currentImageId] ? toolState[currentImageId] : {};
+
+                let fl = prefilledMetrics && prefilledMetrics.fl != null ? prefilledMetrics.fl : null;
+                let bpd = prefilledMetrics && prefilledMetrics.bpd != null ? prefilledMetrics.bpd : null;
+
+                // ROI ellipse/rectangle -> HC/AC (circumference approximation)
+                let hc = prefilledMetrics && prefilledMetrics.hc != null ? prefilledMetrics.hc : null;
+                let ac = prefilledMetrics && prefilledMetrics.ac != null ? prefilledMetrics.ac : null;
+
+                if (!hc || !ac) {
+                    // Only compute ROI-derived metrics if not prefilled
+                    const safePixelSpacing = pixelSpacing || getPixelSpacingMmFromViewer();
+                    if (safePixelSpacing && (!hc || !ac)) {
+                        const allEllipseCircMm = extractRoiCircumferenceMm(stateForImage, 'EllipticalRoi', safePixelSpacing);
+                        hc = hc || (allEllipseCircMm.length ? Math.max(...allEllipseCircMm) : null);
+                        const allRectCircMm = extractRoiCircumferenceMm(stateForImage, 'RectangleRoi', safePixelSpacing);
+                        ac = ac || (allRectCircMm.length ? Math.max(...allRectCircMm) : null);
+                    }
+                }
+
+                if (!fl || !bpd) {
+                    const safePixelSpacing = pixelSpacing || getPixelSpacingMmFromViewer();
+                    if (safePixelSpacing) {
+                        const allLengthsMm = extractAllLengthsMm(stateForImage, safePixelSpacing).sort((a, b) => b - a);
+                        if (allLengthsMm.length >= 2) {
+                            fl = fl || allLengthsMm[0];
+                            bpd = bpd || allLengthsMm[1];
+                        } else if (allLengthsMm.length === 1) {
+                            bpd = bpd || allLengthsMm[0];
+                        }
+                    }
+                }
+
+                if (!bpd && !hc && !ac && !fl) {
+                    alert('Chưa phát hiện đo đạc phù hợp (Length/EllipticalRoi/RectangleRoi) trong ảnh hiện tại.');
+                    return;
+                }
+
+                const missing = [];
+                if (!bpd) missing.push('BPD (Length tool)');
+                if (!hc) missing.push('HC (ROI Ellipse)');
+                if (!ac) missing.push('AC (ROI Hình chữ nhật)');
+                if (!fl) missing.push('FL (Length tool)');
+                // Only hard-block if nothing at all; otherwise continue and let backend decide scoring
+                if (missing.length >= 3) {
+                    alert('Thiếu dữ liệu đo để suy ra đầy đủ: ' + missing.join(', ') + '. Hệ thống vẫn sẽ tạo khuyến nghị dựa trên đo hiện có.');
+                }
+
+                // Try resolve patient_id by DICOM PatientName
+                const patientNameFromModal = document.getElementById('modalPatientName') ? document.getElementById('modalPatientName').textContent : '';
+                let patient_id = null;
+                try {
+                    const res = await fetch('/api/patients');
+                    if (res.ok) {
+                        const list = await res.json();
+                        const match = Array.isArray(list) ? list.find(p => stripDiacritics(p.name) === stripDiacritics(patientNameFromModal)) : null;
+                        patient_id = match && match.id ? match.id : null;
+                    }
+                } catch (e) {
+                    // OK: vẫn có thể import để user chọn patient sau
+                }
+
+                const analysisRes = await fetch('/api/analyze-ultrasound-measurements', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        patient_id: patient_id,
+                        bpd: bpd,
+                        hc: hc,
+                        ac: ac,
+                        fl: fl
+                    })
+                });
+
+                if (!analysisRes.ok) {
+                    const txt = await analysisRes.text();
+                    alert('Không phân tích được đo từ annotation. ' + (txt || analysisRes.statusText));
+                    return;
+                }
+
+                const analysis = await analysisRes.json();
+
+                const payload = {
+                    patient_id: patient_id,
+                    bpd: analysis.bpd,
+                    hc: analysis.hc,
+                    ac: analysis.ac,
+                    fl: analysis.fl,
+                    analysis: analysis
+                };
+
+                localStorage.setItem(ULTRASOUND_ANNOT_IMPORT_KEY, JSON.stringify(payload));
+                window.location.href = '/ultrasound-analysis.html';
+            } catch (e) {
+                console.error('importAnnotationsToUltrasoundAnalysisAuto error:', e);
+                alert('Lỗi khi import đo tự động: ' + (e && e.message ? e.message : String(e)));
+            }
+        }
+
         function closeViewer() {
             document.getElementById('viewerModal').style.display = 'none';
+            currentOrthancStudyUrl = '';
+            const btn = document.getElementById('openOrthancBtn');
+            if (btn) {
+                btn.style.display = 'none';
+                btn.disabled = true;
+                btn.title = '';
+            }
             if (viewerElement && typeof cornerstone !== 'undefined') {
                 try {
                     if (typeof cornerstone.disable === 'function') {

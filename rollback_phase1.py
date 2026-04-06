@@ -96,7 +96,7 @@ class Phase1Rollback:
         """Rollback configuration files"""
         self.log("🔄 Rolling back configuration files...")
         
-        files_to_restore = ['app.py', 'requirements.txt', 'voluson_config.json']
+        files_to_restore = ['app.py', 'requirements.txt', 'voluson_config.json', 'Maysieuam_config.json']
         
         for file in files_to_restore:
             if os.path.exists(f'{backup_dir}/{file}'):
@@ -113,7 +113,10 @@ class Phase1Rollback:
                     self.log(f"❌ Failed to restore {file}: {str(e)}")
                     return False
             else:
-                self.log(f"⚠️  {file} not found in backup")
+                if file == 'Maysieuam_config.json':
+                    self.log("⚠️  Maysieuam_config.json not found in backup (legacy fallback)")
+                else:
+                    self.log(f"⚠️  {file} not found in backup")
         
         return True
     

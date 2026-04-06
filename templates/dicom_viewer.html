@@ -73,23 +73,47 @@
     cornerstone.enable(element);
 
     // Bật các annotation tool
-    const { PanTool, ZoomTool, WindowLevelTool, LengthTool, AngleTool, EllipticalRoiTool, RectangleRoiTool, ProbeTool } = cornerstoneTools;
+    const { PanTool, ZoomTool, WwwcTool, LengthTool, AngleTool, EllipticalRoiTool, RectangleRoiTool, ProbeTool } = cornerstoneTools;
     cornerstoneTools.init();
     cornerstoneTools.addTool(PanTool);
     cornerstoneTools.addTool(ZoomTool, { configuration: { invert: false } });
-    cornerstoneTools.addTool(WindowLevelTool);
+    cornerstoneTools.addTool(WwwcTool);
     cornerstoneTools.addTool(LengthTool);
     cornerstoneTools.addTool(AngleTool);
     cornerstoneTools.addTool(EllipticalRoiTool);
     cornerstoneTools.addTool(RectangleRoiTool);
     cornerstoneTools.addTool(ProbeTool);
 
-    function setActiveTool(name) {
+    const TOOL_MAP = {
+      Window: 'Wwwc',
+      Pan: 'Pan',
+      Zoom: 'Zoom',
+      Length: 'Length',
+      Angle: 'Angle',
+      Elliptical: 'EllipticalRoi',
+      Rectangle: 'RectangleRoi',
+      Probe: 'Probe'
+    };
+
+    function setActiveTool(key) {
+      const toolName = TOOL_MAP[key];
+      if (!toolName) return;
       // Clear active
       document.querySelectorAll('.topbar button').forEach(b => b.classList.remove('active'));
-      // Activate
-      cornerstoneTools.setToolActive(name + 'Tool', { mouseButtonMask: 1 });
-      const id = 'btn' + (name === 'Window' ? 'Window' : name);
+      // Reset all tools to passive then activate one
+      Object.values(TOOL_MAP).forEach((t) => {
+        if (typeof cornerstoneTools.setToolPassiveForElement === 'function') {
+          cornerstoneTools.setToolPassiveForElement(element, t);
+        } else if (typeof cornerstoneTools.setToolPassive === 'function') {
+          cornerstoneTools.setToolPassive(t);
+        }
+      });
+      if (typeof cornerstoneTools.setToolActiveForElement === 'function') {
+        cornerstoneTools.setToolActiveForElement(element, toolName, { mouseButtonMask: 1 });
+      } else {
+        cornerstoneTools.setToolActive(toolName, { mouseButtonMask: 1 });
+      }
+      const id = 'btn' + key;
       const btn = document.getElementById(id);
       if (btn) btn.classList.add('active');
     }

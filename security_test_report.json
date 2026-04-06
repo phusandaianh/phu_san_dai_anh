@@ -15,8 +15,8 @@
     {
       "type": "AUTHENTICATION_BYPASS",
       "severity": "CRITICAL",
-      "endpoint": "/api/voluson/config",
-      "description": "Endpoint /api/voluson/config accessible without authentication"
+      "endpoint": "/api/Maysieuam/config",
+      "description": "Endpoint /api/Maysieuam/config accessible without authentication"
     },
     {
       "type": "AUTHENTICATION_BYPASS",

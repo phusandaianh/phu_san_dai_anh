@@ -121,6 +121,38 @@
         .modal.hidden {
             display: none !important;
         }
+        /* Wheel picker ngày sinh */
+        .dob-picker-wrap { margin-bottom: 8px; }
+        .dob-picker {
+            display: flex; align-items: center; justify-content: center; gap: 4px;
+            background: #f5f5f5; border-radius: 10px; padding: 12px 8px;
+            min-height: 130px;
+        }
+        .dob-wheel {
+            flex: 1; max-width: 70px; height: 108px; overflow-y: auto;
+            scroll-snap-type: y mandatory; -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; -ms-overflow-style: none;
+            mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+            -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+        }
+        .dob-wheel::-webkit-scrollbar { display: none; }
+        .dob-wheel-inner {
+            padding: 36px 0; display: flex; flex-direction: column; gap: 0;
+        }
+        .dob-wheel-item {
+            height: 36px; min-height: 36px; display: flex; align-items: center; justify-content: center;
+            font-size: 0.95rem; color: #aaa; scroll-snap-align: center; transition: all 0.15s ease;
+            flex-shrink: 0;
+        }
+        .dob-wheel-item.selected {
+            font-size: 1.35rem; font-weight: bold; color: #000;
+        }
+        .dob-sep {
+            font-size: 1.2rem; font-weight: bold; color: #333; flex-shrink: 0;
+        }
+        .dob-manual-row { margin-top: 8px; }
+        .dob-manual-input.hidden { display: none !important; }
+        .dob-picker-wrap.dob-readonly { pointer-events: none; opacity: 0.9; }
     </style>
 </head>
 <body>
@@ -128,12 +160,12 @@
         <div class="container" style="display: flex; align-items: flex-start; gap: 1.5rem; padding: 2rem 1rem 1.5rem 1rem;">
             <img src="logo_phu_san_dai_anh.PNG" alt="Logo Phòng khám Đại Anh" class="clinic-logo" style="height:60px; margin-top: 0; margin-bottom: 0; display: block;">
             <div class="logo-text">
-                <h1 class="logo">Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                <h1 class="logo" id="clinic-name">Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
                 <div class="clinic-subtitle" id="clinic-summary" style="text-align:center;color:#0000FF;font-size:1rem;margin:4px 0;">Siêu âm 5D, sàng lọc dị tật, khám phụ khoa, vô sinh</div>
                 <p class="slogan" style="color: #e53935; text-align: center; font-weight: bold;">Uy Tín - Chất Lượng</p>
                 <div style="text-align: center; margin-top: 10px;">
                     <div style="font-size: 0.9rem; color: #0000FF; line-height: 1.4;">
-                        TDP Quán Trắng - Tân An - Bắc Ninh - ĐT: 0858.838.616
+                        <span id="clinic-address">TDP Quán Trắng - Tân An - Bắc Ninh</span> - ĐT: <span id="clinic-phone">0858.838.616</span>
                     </div>
                     <div style="text-align:center; margin-top:8px;">
                         <span style="display:inline-block; background:#e53935; color:#fff; padding:6px 12px; border-radius:8px; font-weight:bold;">
@@ -157,13 +189,47 @@
       window.addEventListener('resize', adjustSpacer);
     })();
     </script>
+    <script>
+    (function(){
+      var params = new URLSearchParams(window.location.search || '');
+      var internal = params.get('internal') === '1' || params.get('noi') === '1' || params.get('k') === 'local';
+      var el = document.getElementById('booking-context-banner');
+      if (!el) return;
+      el.style.display = 'block';
+      if (internal) {
+        el.style.background = '#fff8e1';
+        el.style.color = '#5d4037';
+        el.style.border = '1px solid #ffe082';
+        el.innerHTML = '<strong>Đăng ký nội bộ</strong> — dùng trong mạng phòng khám / máy tiếp tân. Cùng cách đăng ký với bệnh nhân trực tuyến.';
+      } else {
+        el.style.background = '#e3f2fd';
+        el.style.color = '#0d47a1';
+        el.style.border = '1px solid #90caf9';
+        el.innerHTML = '<strong>Đăng ký trực tuyến</strong> — bệnh nhân có thể dùng link này từ điện thoại hoặc máy tính.';
+      }
+      fetch('/api/public-config', { cache: 'no-store' }).then(function(r){ return r.json(); }).then(function(cfg){
+        if (!cfg || !cfg.public_booking_url) return;
+        var canonical = cfg.public_booking_url.replace(/\/$/, '') + (cfg.booking_path || '/booking.html');
+        try {
+          var cur = window.location.origin + window.location.pathname;
+          if (canonical.replace(/\/$/, '') !== cur.replace(/\/$/, '') && !internal) {
+            var span = document.createElement('div');
+            span.style.marginTop = '6px';
+            span.style.fontSize = '0.85rem';
+            span.innerHTML = 'Link đặt lịch công khai: <a href="' + canonical.replace(/"/g, '&quot;') + '" style="color:#1565c0;word-break:break-all;">' + canonical + '</a>';
+            el.appendChild(span);
+          }
+        } catch (e) {}
+      }).catch(function(){});
+    })();
+    </script>
     <section class="work-schedule-section">
         <div class="schedule-list" id="schedule-list"></div>
     </section>
     <!-- Popup đăng ký khám -->
     <div id="register-modal" class="modal hidden" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;z-index:1000;">
       <div class="modal-content" style="background:#fff;padding:2rem 1.5rem;border-radius:14px;min-width:320px;max-width:95vw;position:relative;">
-        <button id="close-modal-btn" style="position:absolute;top:10px;right:10px;font-size:1.2rem;background:none;border:none;cursor:pointer;">&times;</button>
+        <button id="close-modal-btn" aria-label="Đóng" style="position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:50%;background:#d32f2f;color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;line-height:1;">&times;</button>
         <h2 style="margin-top:0">Đăng ký khám</h2>
         <form id="register-form">
           <div id="register-type-group" style="display:flex;margin-bottom:16px;">
@@ -175,9 +241,29 @@
           <div><b id="modal-doctor"></b></div>
           <div style="margin:10px 0 0 0;">
             <input type="text" id="patient-name" placeholder="Họ và tên" required style="width:100%;margin-bottom:8px;padding:7px;border-radius:6px;border:1px solid #ccc;">
-            <input type="date" id="patient-dob" placeholder="Ngày sinh (dd/mm/yyyy)" title="Gợi ý: Chọn ngày, tháng, năm sinh theo định dạng dd/mm/yyyy" required style="width:100%;margin-bottom:4px;padding:7px;border-radius:6px;border:1px solid #ccc;">
-            <div style="font-size:0.85rem;color:#666;margin:0 0 8px 2px;">Gợi ý: chọn ngày, tháng, năm sinh (ví dụ: 31/12/1990)</div>
+            <div id="dob-picker-wrap" class="dob-picker-wrap">
+            <label style="display:block;font-size:0.9rem;color:#555;margin-bottom:6px;">Ngày sinh:</label>
+              <div class="dob-picker" id="dob-picker">
+                <div class="dob-wheel" id="dob-day" data-type="day"><div class="dob-wheel-inner"></div></div>
+                <span class="dob-sep">/</span>
+                <div class="dob-wheel" id="dob-month" data-type="month"><div class="dob-wheel-inner"></div></div>
+                <span class="dob-sep">/</span>
+                <div class="dob-wheel" id="dob-year" data-type="year"><div class="dob-wheel-inner"></div></div>
+              </div>
+              <input type="hidden" id="patient-dob" required>
+              <div class="dob-manual-row">
+                <a href="#" id="dob-toggle-manual" style="font-size:0.85rem;color:#2196f3;">hoặc nhập trực tiếp</a>
+                <input type="text" id="patient-dob-manual" placeholder="dd/mm/yyyy" class="dob-manual-input hidden" style="width:100%;margin-top:6px;padding:7px;border-radius:6px;border:1px solid #ccc;">
+              </div>
+            </div>
             <input type="tel" id="patient-phone" placeholder="Số điện thoại" required style="width:100%;margin-bottom:8px;padding:7px;border-radius:6px;border:1px solid #ccc;">
+            <input type="hidden" id="booking-patient-id" value="">
+            <div id="patient-profile-row" style="display:none;margin-bottom:8px;">
+              <label for="patient-profile-select" style="display:block;font-size:0.9rem;color:#555;margin-bottom:6px;">Nhiều người cùng SĐT — chọn hồ sơ hoặc để trống để tạo hồ sơ mới</label>
+              <select id="patient-profile-select" style="width:100%;padding:7px;border-radius:6px;border:1px solid #ccc;">
+                <option value="">— Người mới / nhập tay —</option>
+              </select>
+            </div>
             <input type="text" id="patient-address" placeholder="Địa chỉ" required style="width:100%;margin-bottom:8px;padding:7px;border-radius:6px;border:1px solid #ccc;">
             <input type="text" id="patient-reason" placeholder="Lý do khám/Dịch vụ" list="reasons-list" style="width:100%;margin-bottom:8px;padding:7px;border-radius:6px;border:1px solid #ccc;">
             <datalist id="reasons-list"></datalist>
@@ -274,7 +360,9 @@
             ${shift.is_locked ? `
               <button class='register-btn' disabled style='opacity:1;background:#9e9e9e;cursor:not-allowed;'>Phòng khám đã đầy lịch khám. Không nhận đăng kí khám mới</button>
             ` : (hetGio ? `
-              <div style='color:#e53935;font-weight:bold;'>Hết giờ khám ca này</div>
+              <button class='register-btn' disabled style='opacity:1;background:#ffcccc;color:#c62828;cursor:not-allowed;white-space:normal;line-height:1.4;'>
+                Đã hết giờ khám. Quý khách vui lòng đăng ký khám vào buổi khám tiếp theo. Trân trọng cảm ơn!
+              </button>
             ` : `
               <button class='register-btn' data-date='${day.date}' data-start='${shift.start_time}' data-end='${shift.end_time}' data-doctor='${shift.doctor_name}'>Đăng ký khám</button>
             `)}
@@ -331,6 +419,9 @@
       } catch (e) {
         console.error('Không tải được slot:', e);
       }
+      if (typeof window.__bookingRefreshLookupIfRepeat === 'function') {
+        window.__bookingRefreshLookupIfRepeat();
+      }
     };
   });
 
@@ -379,13 +470,165 @@
       loadClinicSummary(); // Load clinic summary from API
       startClinicSummaryRefresh(); // Start auto-refresh
       setupSuccessTicket(); // Khởi tạo modal phiếu xác nhận
-      const dob = document.getElementById('patient-dob');
-      const today = new Date().toISOString().split('T')[0];
-      dob.max = today;
-      
+      initDobWheelPicker();
       // Kiểm tra và áp dụng trạng thái ẩn/hiện nút đăng ký
       checkRegisterButtonsVisibility();
     });
+
+    function initDobWheelPicker() {
+      const dayWheel = document.getElementById('dob-day');
+      const monthWheel = document.getElementById('dob-month');
+      const yearWheel = document.getElementById('dob-year');
+      const hiddenInput = document.getElementById('patient-dob');
+      const manualInput = document.getElementById('patient-dob-manual');
+      const toggleLink = document.getElementById('dob-toggle-manual');
+      const ITEM_H = 36;
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      const months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+
+      function buildWheel(innerEl, items, val) {
+        innerEl.innerHTML = items.map(v => '<div class="dob-wheel-item" data-value="'+v+'">'+v+'</div>').join('');
+        const idx = items.indexOf(val);
+        if (idx >= 0) {
+          const wheel = innerEl.parentElement;
+          // Với padding-top/bottom = ITEM_H và item height = ITEM_H:
+          // để item index=idx nằm đúng dòng GIỮA, chỉ cần scrollTop = idx * ITEM_H.
+          wheel.scrollTop = Math.max(0, idx * ITEM_H);
+        }
+      }
+      function getDaysInMonth(y, m) {
+        const d = new Date(y, m, 0);
+        return d.getDate();
+      }
+      function syncHidden() {
+        const d = dayWheel.querySelector('.dob-wheel-item.selected');
+        const m = monthWheel.querySelector('.dob-wheel-item.selected');
+        const y = yearWheel.querySelector('.dob-wheel-item.selected');
+        if (d && m && y) {
+          hiddenInput.value = y.dataset.value + '-' + m.dataset.value + '-' + d.dataset.value;
+        }
+      }
+      function updateSelected(wheelEl) {
+        const inner = wheelEl.querySelector('.dob-wheel-inner');
+        if (!inner) return;
+        const items = inner.querySelectorAll('.dob-wheel-item');
+        // Đã căn giữa bằng công thức scrollTop = idx * ITEM_H
+        // => idx đang chọn = round(scrollTop / ITEM_H)
+        let bestIdx = Math.round(wheelEl.scrollTop / ITEM_H);
+        bestIdx = Math.max(0, Math.min(bestIdx, items.length - 1));
+        items.forEach((el, i) => el.classList.toggle('selected', i === bestIdx));
+        syncHidden();
+      }
+      function snapAndUpdate(wheelEl) {
+        const inner = wheelEl.querySelector('.dob-wheel-inner');
+        if (!inner) return;
+        const items = inner.querySelectorAll('.dob-wheel-item');
+        let bestIdx = Math.round(wheelEl.scrollTop / ITEM_H);
+        bestIdx = Math.max(0, Math.min(bestIdx, items.length - 1));
+        wheelEl.scrollTop = Math.max(0, bestIdx * ITEM_H);
+        updateSelected(wheelEl);
+        if (wheelEl.dataset.type === 'year') {
+          const y = parseInt(items[bestIdx].dataset.value, 10);
+          const mVal = monthWheel.querySelector('.dob-wheel-item.selected');
+          const m = mVal ? parseInt(mVal.dataset.value, 10) : 1;
+          const days = getDaysInMonth(y, m);
+          const dayInner = dayWheel.querySelector('.dob-wheel-inner');
+          const dayItems = Array.from({length: days}, (_, i) => String(i + 1).padStart(2,'0'));
+          buildWheel(dayInner, dayItems, Math.min(parseInt(dayWheel.querySelector('.dob-wheel-item.selected')?.dataset.value||1,10), days).toString().padStart(2,'0'));
+          updateSelected(dayWheel);
+        } else if (wheelEl.dataset.type === 'month') {
+          const m = parseInt(monthWheel.querySelector('.dob-wheel-item.selected')?.dataset.value||1, 10);
+          const yEl = yearWheel.querySelector('.dob-wheel-item.selected');
+          const y = yEl ? parseInt(yEl.dataset.value, 10) : currentYear;
+          const days = getDaysInMonth(y, m);
+          const dayInner = dayWheel.querySelector('.dob-wheel-inner');
+          const dayItems = Array.from({length: days}, (_, i) => String(i + 1).padStart(2,'0'));
+          const curDay = parseInt(dayWheel.querySelector('.dob-wheel-item.selected')?.dataset.value||1, 10);
+          buildWheel(dayInner, dayItems, String(Math.min(curDay, days)).padStart(2,'0'));
+          updateSelected(dayWheel);
+        }
+      }
+
+      const years = Array.from({length: currentYear - 1940 + 1}, (_, i) => String(currentYear - i));
+      const defaultDate = new Date(currentYear - 25, 5, 15);
+      const defY = defaultDate.getFullYear();
+      const defM = String(defaultDate.getMonth() + 1).padStart(2,'0');
+      const defD = String(defaultDate.getDate()).padStart(2,'0');
+
+      buildWheel(dayWheel.querySelector('.dob-wheel-inner'), Array.from({length: 31}, (_, i) => String(i+1).padStart(2,'0')), defD);
+      buildWheel(monthWheel.querySelector('.dob-wheel-inner'), months, defM);
+      buildWheel(yearWheel.querySelector('.dob-wheel-inner'), years, String(defY));
+      [dayWheel, monthWheel, yearWheel].forEach(w => { updateSelected(w); });
+
+      function onWheelScroll(wheel) {
+        let t;
+        return function() {
+          clearTimeout(t);
+          t = setTimeout(() => updateSelected(wheel), 100);
+        };
+      }
+      [dayWheel, monthWheel, yearWheel].forEach(wheel => {
+        const handler = onWheelScroll(wheel);
+        wheel.addEventListener('scroll', handler);
+        wheel.addEventListener('click', (e) => {
+          const item = e.target.closest('.dob-wheel-item');
+          if (!item) return;
+          const items = Array.from(wheel.querySelectorAll('.dob-wheel-item'));
+          const idx = items.indexOf(item);
+          if (idx >= 0) {
+            // Đưa item được click về đúng dòng GIỮA
+            wheel.scrollTop = Math.max(0, idx * ITEM_H);
+            updateSelected(wheel);
+          }
+        });
+      });
+
+      toggleLink.onclick = function(e) {
+        e.preventDefault();
+        manualInput.classList.toggle('hidden');
+        if (!manualInput.classList.contains('hidden')) {
+          manualInput.focus();
+          const v = hiddenInput.value;
+          if (v) {
+            const [y,m,d] = v.split('-');
+            manualInput.value = d + '/' + m + '/' + y;
+          }
+        }
+      };
+      manualInput.addEventListener('blur', function() {
+        const s = manualInput.value.trim();
+        if (!s) return;
+        const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (m) {
+          const d = m[1].padStart(2,'0');
+          const mo = m[2].padStart(2,'0');
+          const y = m[3];
+          const daysInMonth = getDaysInMonth(parseInt(y,10), parseInt(mo,10));
+          const yr = parseInt(y,10);
+          if (parseInt(d,10) >= 1 && parseInt(d,10) <= daysInMonth && parseInt(mo,10) >= 1 && parseInt(mo,10) <= 12 && yr >= 1940 && yr <= currentYear) {
+            hiddenInput.value = y + '-' + mo + '-' + d;
+            buildWheel(dayWheel.querySelector('.dob-wheel-inner'), Array.from({length: daysInMonth}, (_, i) => String(i+1).padStart(2,'0')), d);
+            buildWheel(monthWheel.querySelector('.dob-wheel-inner'), months, mo);
+            buildWheel(yearWheel.querySelector('.dob-wheel-inner'), years, y);
+            [dayWheel, monthWheel, yearWheel].forEach(w => { updateSelected(w); });
+            manualInput.classList.add('hidden');
+          } else { alert('Ngày sinh không hợp lệ.'); }
+        } else { alert('Định dạng: dd/mm/yyyy (ví dụ: 15/06/1999)'); }
+      });
+      window.setDobValue = function(val) {
+        if (!val) return;
+        const [y, mo, d] = val.split('-');
+        if (!y || !mo || !d) return;
+        const daysInMonth = getDaysInMonth(parseInt(y,10), parseInt(mo,10));
+        const dayItems = Array.from({length: daysInMonth}, (_, i) => String(i+1).padStart(2,'0'));
+        buildWheel(dayWheel.querySelector('.dob-wheel-inner'), dayItems, d);
+        buildWheel(monthWheel.querySelector('.dob-wheel-inner'), months, mo);
+        buildWheel(yearWheel.querySelector('.dob-wheel-inner'), years, y);
+        [dayWheel, monthWheel, yearWheel].forEach(w => updateSelected(w));
+        hiddenInput.value = val;
+      };
+    }
 
     // Hàm kiểm tra và áp dụng trạng thái ẩn/hiện nút đăng ký
     function checkRegisterButtonsVisibility() {
@@ -439,29 +682,35 @@
       const end = this.dataset.end;
       const doctor = this.dataset.doctor;
       if (!dob) { alert('Vui lòng chọn ngày sinh!'); return; }
-      // Gửi về API /api/appointments (bạn có thể mở rộng backend để nhận thêm trường giờ, bác sĩ)
+      const bookingPidRaw = (document.getElementById('booking-patient-id').value || '').trim();
+      const bookingPatientIdNum = bookingPidRaw ? parseInt(bookingPidRaw, 10) : NaN;
+      const payload = {
+        name,
+        phone,
+        date_of_birth: dob,
+        address,
+        service_type: reason,
+        appointment_date: date,
+        appointment_time: time,
+        doctor_name: doctor
+      };
+      if (bookingPidRaw && !Number.isNaN(bookingPatientIdNum)) {
+        payload.patient_id = bookingPatientIdNum;
+      }
       const res = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          phone,
-          date_of_birth: dob,
-          address,
-          service_type: reason,
-          appointment_date: date,
-          appointment_time: time,
-          doctor_name: doctor
-        })
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         const dataRes = await res.json();
+        const nameDisplay = name.trim().toUpperCase();
         console.log('Đăng ký khám thành công, hiển thị popup...');
         // Hiển thị phiếu đăng ký thành công
         if (window.showSuccessTicket) {
           console.log('Gọi hàm showSuccessTicket...');
           window.showSuccessTicket({
-            name,
+            name: nameDisplay,
             phone,
             date,
             time,
@@ -470,7 +719,7 @@
           });
         } else {
           console.log('Hàm showSuccessTicket không tồn tại, hiển thị alert...');
-          alert('Đăng ký thành công! Tên: ' + name + ', SĐT: ' + phone + ', Ngày: ' + date + ', Giờ: ' + time + ', Bác sĩ: ' + doctor);
+          alert('Đăng ký thành công! Tên: ' + nameDisplay + ', SĐT: ' + phone + ', Ngày: ' + date + ', Giờ: ' + time + ', Bác sĩ: ' + doctor);
         }
       } else {
         const data = await res.json();
@@ -484,65 +733,145 @@
       const btnRepeat = document.getElementById('register-type-repeat');
       const nameEl = document.getElementById('patient-name');
       const dobEl = document.getElementById('patient-dob');
+      const dobWrap = document.getElementById('dob-picker-wrap');
       const phoneEl = document.getElementById('patient-phone');
       const addrEl = document.getElementById('patient-address');
       const reasonEl = document.getElementById('patient-reason');
       const timeEl = document.getElementById('appointment-time');
-      const timeWrap = timeEl.parentElement; // contains label + select + hint
-      const dobHint = dobEl.nextElementSibling; // small hint line under DOB
+      const timeWrap = timeEl.parentElement;
       const submitBtn = document.querySelector('#register-form .register-btn');
+      let registerMode = 'first';
+      let lookupDebounce = null;
+      let lookupBound = false;
+      let profilesCache = [];
+      const bookingPatientIdEl = document.getElementById('booking-patient-id');
+      const profileRow = document.getElementById('patient-profile-row');
+      const profileSelect = document.getElementById('patient-profile-select');
+
+      function resetProfilePicker() {
+        profilesCache = [];
+        if (bookingPatientIdEl) bookingPatientIdEl.value = '';
+        if (profileRow) profileRow.style.display = 'none';
+        if (profileSelect) {
+          profileSelect.innerHTML = '<option value="">— Người mới / nhập tay —</option>';
+        }
+      }
 
       function setReadonlyPersonal(readonly) {
         nameEl.readOnly = readonly;
-        phoneEl.readOnly = false; // always allow editing phone
+        phoneEl.readOnly = false;
         addrEl.readOnly = readonly;
         dobEl.disabled = readonly;
+        if (dobWrap) dobWrap.classList.toggle('dob-readonly', readonly);
       }
       function setFieldsVisible(visible) {
         const display = visible ? '' : 'none';
-        // Keep phone ALWAYS visible
         phoneEl.style.display = '';
-        // Toggle only the following fields
         nameEl.style.display = display;
-        dobEl.style.display = display;
-        if (dobHint && dobHint.tagName === 'DIV') dobHint.style.display = display;
+        if (dobWrap) dobWrap.style.display = display;
         addrEl.style.display = display;
         reasonEl.style.display = display;
         timeWrap.style.display = display;
         if (submitBtn) submitBtn.style.display = display;
       }
       function activateFirst() {
+        registerMode = 'first';
         btnFirst.style.filter = 'brightness(1)';
         btnRepeat.style.filter = 'brightness(0.8)';
         setReadonlyPersonal(false);
+        resetProfilePicker();
         nameEl.value = '';
-        dobEl.value = '';
         addrEl.value = '';
-        // Show all fields for first-time registration
+        const defDate = new Date();
+        defDate.setFullYear(defDate.getFullYear() - 25);
+        const d = defDate.toISOString().split('T')[0];
+        if (window.setDobValue) window.setDobValue(d);
+        else dobEl.value = d;
         setFieldsVisible(true);
+      }
+      function applyFoundPatient(data) {
+        if (!data) return;
+        if (data.name) nameEl.value = data.name;
+        if (data.date_of_birth) {
+          dobEl.value = data.date_of_birth;
+          if (window.setDobValue) window.setDobValue(data.date_of_birth);
+        }
+        if (data.phone) phoneEl.value = data.phone;
+        if (data.address) addrEl.value = data.address;
+      }
+      function applyProfileById(internalId) {
+        const idStr = String(internalId || '');
+        const p = profilesCache.find(x => String(x.id) === idStr);
+        if (p) {
+          applyFoundPatient(p);
+          if (bookingPatientIdEl) bookingPatientIdEl.value = idStr;
+        }
+      }
+      function onProfileSelectChange() {
+        const v = (profileSelect && profileSelect.value) || '';
+        if (!v) {
+          if (bookingPatientIdEl) bookingPatientIdEl.value = '';
+          nameEl.value = '';
+          addrEl.value = '';
+          const d = new Date();
+          d.setFullYear(d.getFullYear() - 25);
+          const defDob = d.toISOString().split('T')[0];
+          if (window.setDobValue) window.setDobValue(defDob);
+          else dobEl.value = defDob;
+          return;
+        }
+        applyProfileById(v);
       }
       async function lookupByPhone(){
         const phone = phoneEl.value.trim();
         if (!/^\d{10,11}$/.test(phone)) return;
         try {
-          const res = await fetch(`/api/patients/by-phone?phone=${encodeURIComponent(phone)}`);
+          const res = await fetch(`/api/patients/by-phone?phone=${encodeURIComponent(phone)}`, { cache: 'no-store' });
           const data = await res.json();
-          if (data && data.found) {
-            if (data.name) nameEl.value = data.name;
-            if (data.date_of_birth) dobEl.value = data.date_of_birth;
-            if (data.phone) phoneEl.value = data.phone;
-            if (data.address) addrEl.value = data.address;
-            setReadonlyPersonal(true);
-            // Reveal fields cho bệnh nhân cũ để chọn lý do khám / giờ khám
-            setFieldsVisible(true);
-          } else {
-            // Không tìm thấy số ĐT: cho phép đăng ký như lần đầu với SĐT đã nhập
-            alert('Không tìm thấy bệnh nhân với số điện thoại này. Bạn có thể nhập thông tin để đăng ký lần đầu.');
-            nameEl.value = '';
-            dobEl.value = '';
-            addrEl.value = '';
+          const list = (data && data.patients) || (data && data.found && data.id ? [data] : []);
+          if (data && data.found && list.length) {
+            profilesCache = list;
+            if (list.length === 1) {
+              if (profileRow) profileRow.style.display = 'none';
+              if (profileSelect) profileSelect.innerHTML = '<option value="">— Người mới / nhập tay —</option>';
+              applyFoundPatient(list[0]);
+              /* Không gán patient_id: nếu đổi tên/NS (người khác cùng SĐT) server sẽ tạo hồ sơ mới; trùng tên+NS thì gộp đúng bản ghi. */
+              if (bookingPatientIdEl) bookingPatientIdEl.value = '';
+            } else {
+              if (profileRow) profileRow.style.display = '';
+              if (bookingPatientIdEl) bookingPatientIdEl.value = '';
+              if (profileSelect) {
+                profileSelect.innerHTML = '<option value="">— Người mới / nhập tay —</option>';
+                list.forEach(p => {
+                  const o = document.createElement('option');
+                  o.value = String(p.id);
+                  const pid = p.patient_pid ? p.patient_pid + ' — ' : '';
+                  o.textContent = pid + (p.name || '') + (p.date_of_birth ? ' (' + p.date_of_birth + ')' : '');
+                  profileSelect.appendChild(o);
+                });
+              }
+              nameEl.value = '';
+              addrEl.value = '';
+              const d = new Date();
+              d.setFullYear(d.getFullYear() - 25);
+              const defDob = d.toISOString().split('T')[0];
+              if (window.setDobValue) window.setDobValue(defDob);
+              else dobEl.value = defDob;
+            }
             setReadonlyPersonal(false);
             setFieldsVisible(true);
+          } else {
+            resetProfilePicker();
+            // Không tìm thấy: giữ chế độ nhập mới, không hiện alert để tránh làm phiền.
+            if (registerMode === 'repeat') {
+              nameEl.value = '';
+              addrEl.value = '';
+              const d = new Date(); d.setFullYear(d.getFullYear() - 25);
+              const defDob = d.toISOString().split('T')[0];
+              if (window.setDobValue) window.setDobValue(defDob); else dobEl.value = defDob;
+              setReadonlyPersonal(false);
+              setFieldsVisible(true);
+            }
           }
         } catch (e) {
           console.warn('lookup phone failed', e);
@@ -551,19 +880,34 @@
           setFieldsVisible(true);
         }
       }
+      function bindLookupEventsOnce() {
+        if (lookupBound) return;
+        lookupBound = true;
+        phoneEl.addEventListener('blur', lookupByPhone);
+        phoneEl.addEventListener('input', () => {
+          clearTimeout(lookupDebounce);
+          lookupDebounce = setTimeout(lookupByPhone, 350);
+        });
+        if (profileSelect) profileSelect.addEventListener('change', onProfileSelectChange);
+      }
       function activateRepeat() {
+        registerMode = 'repeat';
         btnRepeat.style.filter = 'brightness(1)';
         btnFirst.style.filter = 'brightness(0.8)';
-        // Lock personal fields after lookup; phone remains editable for search
-        setReadonlyPersonal(true);
+        setReadonlyPersonal(false);
+        resetProfilePicker();
         // Hide all fields except phone until a successful lookup
         setFieldsVisible(false);
         phoneEl.readOnly = false;
-        phoneEl.removeEventListener('change', lookupByPhone);
-        phoneEl.removeEventListener('blur', lookupByPhone);
-        phoneEl.addEventListener('change', lookupByPhone);
-        phoneEl.addEventListener('blur', lookupByPhone);
+        bindLookupEventsOnce();
       }
+      /** Mở lại modal đăng ký: nếu đang chế độ khám lại và đã có SĐT, tải lại hồ sơ từ server (sau khi sửa ở danh sách khám). */
+      window.__bookingRefreshLookupIfRepeat = function () {
+        if (registerMode !== 'repeat') return;
+        const phone = phoneEl.value.trim();
+        if (/^\d{10,11}$/.test(phone)) lookupByPhone();
+      };
+      bindLookupEventsOnce();
       btnFirst.onclick = activateFirst;
       btnRepeat.onclick = activateRepeat;
     })();
@@ -765,13 +1109,8 @@
           <div id="ticket-body" style="background:#fafafa;border:2px solid #e0e0e0;border-radius:8px;padding:15px;margin-bottom:20px;"></div>
           
           <!-- Nút chức năng -->
-          <div style="margin-top:15px;">
-            <button id="edit-booking-btn" class="register-btn" style="width:100%;background:#2196f3;color:white;border:none;padding:12px;border-radius:8px;font-size:1rem;cursor:pointer;">Sửa thông tin đăng ký khám</button>
-          </div>
-          <div id="edit-time-wrap" style="display:none;margin-top:15px;padding:15px;background:#f5f5f5;border-radius:8px;">
-            <label style="display:block;margin-bottom:8px;color:#555;font-weight:600;">Chọn giờ mới:</label>
-            <select id="edit-time-select" style="width:100%;padding:10px;border-radius:6px;border:1px solid #ccc;font-size:1rem;"></select>
-            <button id="save-new-time" class="register-btn" style="width:100%;margin-top:10px;background:#4caf50;color:white;border:none;padding:10px;border-radius:6px;cursor:pointer;">Lưu giờ mới</button>
+          <div style="margin-top:10px;">
+            <button id="cancel-booking-btn" class="register-btn" style="width:100%;background:#dc3545;color:white;border:none;padding:12px;border-radius:8px;font-size:1rem;cursor:pointer;">Hủy đăng ký khám</button>
           </div>
         </div>
       `;
@@ -889,43 +1228,48 @@
         modal.classList.remove('hidden');
         console.log('Modal đã được hiển thị');
 
-        // Setup edit action
-        const btnEdit = document.getElementById('edit-booking-btn');
+        // Setup cancel action
+        const btnCancel = document.getElementById('cancel-booking-btn');
         const closeBtn = document.getElementById('close-success-ticket');
-        const editWrap = document.getElementById('edit-time-wrap');
-        const editSelect = document.getElementById('edit-time-select');
-        const saveBtn = document.getElementById('save-new-time');
         closeBtn.onclick = () => { modal.classList.add('hidden'); };
-        btnEdit.onclick = async () => {
-          editWrap.style.display = '';
-          // Lấy slot trống của cùng ca để chỉnh
+
+        // Reset UI state mỗi lần mở phiếu
+        if (btnCancel) {
+          btnCancel.style.display = '';
+          btnCancel.disabled = false;
+        }
+
+        btnCancel.onclick = async () => {
+          if (!confirm('Bạn có chắc chắn muốn HỦY đăng ký khám này không?')) return;
           try {
-            const wsRes = await fetch(`/api/admin/work-schedule?date=${date}`);
-            const shifts = await wsRes.json();
-            const matched = shifts.find(s => s.doctor_name === doctor && s.start_time <= time && time < s.end_time);
-            const slotMinutes = matched && matched.slot_minutes ? matched.slot_minutes : 10;
-            const r = await fetch(`/api/available-slots?date=${date}&start=${matched.start_time}&end=${matched.end_time}&slot_minutes=${slotMinutes}&exclude_appointment_id=${appointmentId}`);
-            const data = await r.json();
-            editSelect.innerHTML = '';
-            const cur = document.createElement('option');
-            cur.value = time; cur.textContent = `${time} (hiện tại)`;
-            editSelect.appendChild(cur);
-            (data.slots||[]).forEach(h => { const o = document.createElement('option'); o.value=h; o.textContent=h; editSelect.appendChild(o); });
-            editSelect.value = time;
-          } catch (e) { console.warn('load edit slots failed', e); }
-        };
-        saveBtn.onclick = async () => {
-          const newTime = editSelect.value;
-          if (!newTime) return;
-          try {
-            const resp = await fetch(`/api/appointments/${appointmentId}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ appointment_date: date, appointment_time: newTime }) });
-            if (!resp.ok) { const d = await resp.json(); alert(d.message||'Không lưu được giờ mới'); return; }
-            // Cập nhật hiển thị
-            const tds = ticket.querySelectorAll('td');
-            // row 4 value cell (order above) contains time
-            tds[7].textContent = newTime;
-            alert('Đã cập nhật giờ khám');
-          } catch (e) { alert('Lỗi khi cập nhật giờ'); }
+            const phone = document.getElementById('patient-phone')?.value || '';
+            const dob = document.getElementById('patient-dob')?.value || '';
+            const resp = await fetch(`/api/appointments/${appointmentId}/cancel`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ phone, date_of_birth: dob })
+            });
+            const d = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+              alert(d.message || 'Không hủy được đăng ký. Vui lòng thử lại.');
+              return;
+            }
+            alert(d.message || 'Đã hủy đăng ký khám.');
+
+            // Hiển thị rõ trạng thái ĐÃ HỦY trên phiếu
+            const banner = document.createElement('div');
+            banner.textContent = '✖ ĐÃ HỦY ĐĂNG KÝ';
+            banner.style.cssText = 'margin:0 0 12px 0;padding:10px 12px;border-radius:8px;background:#ffebee;border:2px solid #e53935;color:#b71c1c;font-weight:800;text-align:center;font-size:1.15rem;letter-spacing:0.5px;';
+            ticket.prepend(banner);
+
+            // Ẩn/disable nút hủy để tránh thao tác tiếp
+            if (btnCancel) {
+              btnCancel.disabled = true;
+              btnCancel.style.display = 'none';
+            }
+          } catch (e) {
+            alert('Không hủy được đăng ký. Vui lòng thử lại.');
+          }
         };
       };
     }

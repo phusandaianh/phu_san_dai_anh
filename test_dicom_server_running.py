@@ -36,6 +36,6 @@ if __name__ == "__main__":
     time.sleep(2)
     
     if test_dicom_server():
-        print("\nServer is running! Now test on Voluson machine.")
+        print("\nServer is running! Now test on ultrasound machine.")
     else:
         print("\nServer is not running yet. Please check dicom_server.py")

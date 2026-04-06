@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script tự động kiểm tra và cài đặt đồng bộ Voluson E10
+Script tự động kiểm tra và cài đặt đồng bộ máy siêu âm
 Chạy script này để kiểm tra tất cả các yêu cầu và cài đặt tự động
 """
 
@@ -66,7 +66,7 @@ def test_dicom_imports():
     return True
 
 def check_network_connectivity(ip="10.17.2.1", port=104):
-    """Kiểm tra kết nối mạng đến máy Voluson"""
+    """Kiểm tra kết nối mạng đến máy siêu âm"""
     print(f"\n🌐 Kiểm tra kết nối mạng đến {ip}:{port}...")
     
     try:
@@ -97,7 +97,7 @@ def check_network_connectivity(ip="10.17.2.1", port=104):
         return False
 
 def create_config_file():
-    """Tạo file cấu hình voluson_config.json"""
+    """Tạo file cấu hình máy siêu âm"""
     print("\n📝 Tạo file cấu hình...")
     
     config = {
@@ -105,7 +105,7 @@ def create_config_file():
         "voluson_ip": "10.17.2.1",
         "voluson_port": 104,
         "ae_title": "CLINIC_SYSTEM",
-        "voluson_ae_title": "VOLUSON_E10",
+        "voluson_ae_title": "MAY_SIEU_AM",
         "sync_interval": 30,
         "retry_attempts": 3,
         "retry_delay": 10,
@@ -121,9 +121,9 @@ def create_config_file():
         print(f"   ❌ Lỗi tạo config: {e}")
         return False
 
-def test_voluson_connection():
-    """Test kết nối DICOM đến Voluson"""
-    print("\n🔗 Test kết nối DICOM đến Voluson...")
+def test_ultrasound_connection():
+    """Test kết nối DICOM đến máy siêu âm"""
+    print("\n🔗 Test kết nối DICOM đến máy siêu âm...")
     
     try:
         from pynetdicom import AE, VerificationPresentationContexts
@@ -133,7 +133,7 @@ def test_voluson_connection():
         ae.add_requested_context(VerificationPresentationContexts)
         
         # Test kết nối
-        assoc = ae.associate('10.17.2.1', 104, ae_title='VOLUSON_E10')
+        assoc = ae.associate('10.17.2.1', 104, ae_title='MAY_SIEU_AM')
         
         if assoc.is_established:
             print("   ✅ DICOM Association - Thành công")
@@ -172,15 +172,15 @@ def create_setup_report():
             "dicom_imports": test_dicom_imports(),
             "network_connectivity": check_network_connectivity(),
             "config_file": create_config_file(),
-            "dicom_connection": test_voluson_connection(),
+            "dicom_connection": test_ultrasound_connection(),
             "database": check_database()
         }
     }
     
     try:
-        with open('voluson_setup_report.json', 'w', encoding='utf-8') as f:
+        with open('ultrasound_setup_report.json', 'w', encoding='utf-8') as f:
             json.dump(report, f, indent=2, ensure_ascii=False)
-        print("   ✅ Báo cáo đã lưu: voluson_setup_report.json")
+        print("   ✅ Báo cáo đã lưu: ultrasound_setup_report.json")
         return True
     except Exception as e:
         print(f"   ❌ Lỗi tạo báo cáo: {e}")
@@ -188,7 +188,7 @@ def create_setup_report():
 
 def main():
     """Hàm chính"""
-    print("🏥 VOLUSON E10 SETUP SCRIPT")
+    print("🏥 ULTRASOUND SETUP SCRIPT")
     print("=" * 50)
     
     # Chạy tất cả các kiểm tra
@@ -198,7 +198,7 @@ def main():
         ("DICOM Imports", test_dicom_imports),
         ("Network Connectivity", lambda: check_network_connectivity()),
         ("Config File", create_config_file),
-        ("DICOM Connection", test_voluson_connection),
+        ("DICOM Connection", test_ultrasound_connection),
         ("Database", check_database),
         ("Setup Report", create_setup_report)
     ]
@@ -227,15 +227,15 @@ def main():
     
     if passed == total:
         print("\n🎉 CÀI ĐẶT THÀNH CÔNG!")
-        print("Hệ thống đồng bộ Voluson E10 đã sẵn sàng.")
+        print("Hệ thống đồng bộ máy siêu âm đã sẵn sàng.")
         print("\nBước tiếp theo:")
         print("1. Khởi động ứng dụng: python app.py")
         print("2. Truy cập: http://127.0.0.1:5000/examination-list.html")
-        print("3. Cấu hình trong tab 'Voluson'")
+        print("3. Cấu hình tại: http://127.0.0.1:5000/worklist-center.html")
     else:
         print("\n⚠️ CÀI ĐẶT CHƯA HOÀN THÀNH")
         print("Vui lòng kiểm tra các lỗi trên và thử lại.")
-        print("\nHướng dẫn chi tiết: VOLUSON_SETUP_GUIDE.md")
+        print("\nHướng dẫn chi tiết: README_DOCUMENTATION_INDEX.md")
 
 if __name__ == "__main__":
     main()

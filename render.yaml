@@ -1,5 +1,13 @@
 # Render Blueprint - Phòng khám Phụ Sản Đại Anh
 # https://render.com/docs/blueprint-spec
+#
+# Đặt lịch công khai + đồng bộ về nội bộ:
+# - PUBLIC_BOOKING_URL = https://<service-name>.onrender.com
+# - SYNC_ROLE = online
+# - SYNC_TOKEN = <chuoi-bi-mat-dong-bo>
+# (không có / cuối). booking.html sẽ hiển thị link đầy đủ cho bệnh nhân / QR.
+# Link nội bộ (mạng phòng khám): http://<IP-máy-chủ>:5000/booking.html?internal=1
+#
 services:
   - type: web
     name: phong-kham-dai-anh
@@ -13,3 +21,8 @@ services:
         value: 3.11.9
       - key: FLASK_ENV
         value: production
+      - key: SYNC_ROLE
+        value: online
+      # Thêm thủ công trên Render:
+      # PUBLIC_BOOKING_URL = https://<app>.onrender.com
+      # SYNC_TOKEN = <cung-gia-tri-voi-may-noi-bo>

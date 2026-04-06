@@ -47,4 +47,4 @@
    - Khả năng tự cập nhật danh mục mẫu phiếu siêu âm và mẫu phiếu xét nghiệm
 
 3. **Kết nối máy siêu âm**
-   - Kết nối danh sách bệnh nhân đăng ký khám theo ngày hiện tại vào worklist trên máy siêu âm Voluson E10
+   - Kết nối danh sách bệnh nhân đăng ký khám theo ngày hiện tại vào worklist trên máy siêu âm Maysieuam E10

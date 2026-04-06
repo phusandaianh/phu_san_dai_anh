@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chấm công đi làm - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="utilities.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .page-header {
+            margin: 18px auto 10px auto;
+            padding: 14px 18px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #0c4a6e 0%, #0369a1 55%, #0ea5e9 100%);
+            color: white;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 16px;
+        }
+        @media (max-width: 900px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+        .card {
+            padding: 14px 16px;
+            border-radius: 14px;
+            border: 1px solid rgba(14,165,233,0.25);
+            background: rgba(255,255,255,0.92);
+        }
+        .card h2 {
+            margin: 0 0 10px 0;
+            color: #0c4a6e;
+            font-size: 1.05rem;
+        }
+        .meta {
+            margin: 8px 0 0 0;
+            color: #4b5563;
+            font-weight: 600;
+        }
+        textarea {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            resize: vertical;
+        }
+        input[type="time"], input[type="date"], input[type="number"] {
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+        .row {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .hint {
+            color: #6b7280;
+            font-size: 0.95rem;
+            margin-top: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            overflow: hidden;
+            border-radius: 12px;
+        }
+        th, td {
+            padding: 10px 10px;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background: #f5f5f5;
+            color: #0c4a6e;
+            font-size: 0.95rem;
+        }
+        .result {
+            font-weight: 800;
+            color: #0369a1;
+            margin-top: 6px;
+            font-size: 1.05rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="page-header">
+            <h1><i class="fas fa-clipboard-check"></i> Chấm công đi làm</h1>
+        </div>
+
+        <div class="grid" style="margin-top: 14px;">
+            <div class="card">
+                <h2>Lịch làm việc (theo lịch)</h2>
+                <div id="scheduleMeta" class="meta"></div>
+                <div style="margin-top: 12px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Giờ</th>
+                                <th>Thời lượng</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scheduleTbody"></tbody>
+                    </table>
+                </div>
+                <div id="scheduleEmpty" class="hint" style="display:none;">Chưa có ca làm trong lịch cho nhân viên này.</div>
+            </div>
+
+            <div class="card">
+                <h2>Nhập chấm công</h2>
+                <div id="attMeta" class="meta"></div>
+
+                <div class="row">
+                    <div>
+                        <label class="muted" style="font-weight:700;">Check-in</label>
+                        <input type="time" id="checkInTime">
+                    </div>
+                    <div>
+                        <label class="muted" style="font-weight:700;">Check-out</label>
+                        <input type="time" id="checkOutTime">
+                    </div>
+                </div>
+
+                <div style="margin-top: 10px;">
+                    <label class="muted" style="font-weight:700;">Ghi chú</label>
+                    <textarea id="attendanceNote" rows="3" placeholder="Ghi chú nếu có..."></textarea>
+                </div>
+
+                <div style="margin-top: 12px;">
+                    <div class="hint">Lương theo giờ (cấu hình): <span id="rateMeta">0</span></div>
+                    <div class="result">Tạm tính: <span id="salaryMeta">0 ₫</span></div>
+                    <button id="saveAttendanceBtn" class="btn primary-btn" type="button" style="width:100%; margin-top:12px;">
+                        <i class="fas fa-save"></i> Lưu chấm công
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function parseTimeToMinutes(t) {
+            if (!t || typeof t !== 'string') return null;
+            const parts = t.split(':');
+            if (parts.length !== 2) return null;
+            const hh = parseInt(parts[0], 10);
+            const mm = parseInt(parts[1], 10);
+            if (isNaN(hh) || isNaN(mm)) return null;
+            return hh * 60 + mm;
+        }
+
+        function diffMinutes(startT, endT) {
+            const s = parseTimeToMinutes(startT);
+            const e = parseTimeToMinutes(endT);
+            if (s === null || e === null) return 0;
+            let diff = e - s;
+            if (diff < 0) diff = 0;
+            return diff;
+        }
+
+        function formatMoneyVND(n) {
+            const val = Number(n) || 0;
+            return val.toLocaleString('vi-VN') + ' ₫';
+        }
+
+        async function fetchJson(url, options) {
+            const res = await fetch(url, options || undefined);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const err = data && (data.error || data.message) ? (data.error || data.message) : ('HTTP ' + res.status);
+                throw new Error(err);
+            }
+            return data;
+        }
+
+        function getQueryParam(name) {
+            const params = new URLSearchParams(window.location.search);
+            return params.get(name) || '';
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const staff = decodeURIComponent(getQueryParam('staff'));
+            const date = getQueryParam('date');
+
+            const attMeta = document.getElementById('attMeta');
+            const scheduleMeta = document.getElementById('scheduleMeta');
+            const scheduleTbody = document.getElementById('scheduleTbody');
+            const scheduleEmpty = document.getElementById('scheduleEmpty');
+
+            attMeta.textContent = `Nhân viên: ${staff} | Ngày: ${date}`;
+            scheduleMeta.textContent = `Lịch làm việc: ${staff} | Ngày: ${date}`;
+
+            const checkInEl = document.getElementById('checkInTime');
+            const checkOutEl = document.getElementById('checkOutTime');
+            const noteEl = document.getElementById('attendanceNote');
+            const rateMeta = document.getElementById('rateMeta');
+            const salaryMeta = document.getElementById('salaryMeta');
+
+            let hourlyRate = 0;
+            try {
+                const rateData = await fetchJson('/api/staff-hourly-rate');
+                hourlyRate = Number(rateData.hourly_rate) || 0;
+            } catch (e) {
+                hourlyRate = 0;
+            }
+            rateMeta.textContent = formatMoneyVND(hourlyRate);
+
+            function computeSalary() {
+                const mins = diffMinutes(checkInEl.value, checkOutEl.value);
+                const hours = mins / 60;
+                const salary = hours * hourlyRate;
+                salaryMeta.textContent = formatMoneyVND(salary);
+            }
+
+            checkInEl.addEventListener('input', computeSalary);
+            checkOutEl.addEventListener('input', computeSalary);
+
+            // Load schedule (work schedule)
+            try {
+                const shifts = await fetchJson(`/api/admin/work-schedule?date=${encodeURIComponent(date)}`);
+                const dayShifts = (shifts || []).filter(s => (s.doctor_name || '') === staff);
+
+                scheduleTbody.innerHTML = '';
+                if (!dayShifts.length) {
+                    scheduleEmpty.style.display = 'block';
+                } else {
+                    scheduleEmpty.style.display = 'none';
+                    dayShifts.forEach(s => {
+                        const mins = diffMinutes(s.start_time, s.end_time);
+                        const hours = mins / 60;
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `<td>${s.start_time} - ${s.end_time}</td><td>${hours.toFixed(2)} h</td>`;
+                        scheduleTbody.appendChild(tr);
+                    });
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Lỗi tải lịch làm việc.');
+            }
+
+            // Load existing attendance
+            try {
+                const att = await fetchJson(`/api/staff-attendance?staff=${encodeURIComponent(staff)}&date=${encodeURIComponent(date)}`);
+                const rec = att && att.record ? att.record : null;
+                checkInEl.value = rec && rec.check_in_time ? rec.check_in_time : '';
+                checkOutEl.value = rec && rec.check_out_time ? rec.check_out_time : '';
+                noteEl.value = rec && rec.note ? rec.note : '';
+                computeSalary();
+            } catch (e) {
+                console.error(e);
+            }
+
+            // Save attendance
+            const saveBtn = document.getElementById('saveAttendanceBtn');
+            saveBtn.addEventListener('click', async () => {
+                const payload = {
+                    staff_name: staff,
+                    date: date,
+                    check_in_time: checkInEl.value || '',
+                    check_out_time: checkOutEl.value || '',
+                    note: noteEl.value || ''
+                };
+                if (!payload.date || !payload.staff_name) {
+                    alert('Thiếu staff hoặc date.');
+                    return;
+                }
+
+                try {
+                    await fetchJson('/api/staff-attendance', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    alert('Đã lưu chấm công.');
+                } catch (e) {
+                    console.error(e);
+                    alert('Lỗi khi lưu chấm công.');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+

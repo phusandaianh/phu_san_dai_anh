@@ -13,7 +13,7 @@ echo.
 
 :: Chạy Web Server (REST API)
 echo Đang khởi động Web Server (port 5000)...
-start "Web Server - Port 5000" cmd /k "python run.py"
+start "Web Server - Port 5000" cmd /k "python run_waitress.py"
 
 :: Đợi 3 giây
 timeout /t 3 /nobreak >nul
@@ -27,10 +27,10 @@ echo ========================================================================
 echo ĐÃ KHỞI ĐỘNG CẢ 2 SERVERS!
 echo ========================================================================
 echo.
-echo Web Server: https://127.0.0.1:5000/ (hoặc https://IP_máy_chủ:5000)
+echo Web Server: http://127.0.0.1:5000/ (hoặc http://10.8.126.30:5000/)
 echo DICOM MWL Server: 0.0.0.0:104 (AE Title: CLINIC_SYSTEM)
 echo.
-echo Bây giờ bạn có thể test trên Voluson E10!
+echo Bây giờ bạn có thể test trên Maysieuam E10!
 echo.
 pause
 

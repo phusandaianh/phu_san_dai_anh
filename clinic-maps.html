@@ -437,53 +437,134 @@
             loadSavedAddress();
         });
 
-        // Load saved address from localStorage
-        function loadSavedAddress() {
-            const savedAddress = localStorage.getItem('clinicAddress');
-            if (savedAddress) {
-                const address = JSON.parse(savedAddress);
-                document.getElementById('clinicName').value = address.clinicName || '';
-                document.getElementById('address').value = address.address || '';
-                document.getElementById('phone').value = address.phone || '';
-                document.getElementById('email').value = address.email || '';
-                document.getElementById('coordinates').value = address.coordinates || '';
-                document.getElementById('googleMapsLink').value = address.googleMapsLink || '';
-                
+        // Single source: /api/home-content (contactInfo + heroTitle)
+        async function loadSavedAddress() {
+            try {
+                const res = await fetch('/api/home-content');
+                if (!res.ok) throw new Error('Failed to load home-content');
+                const data = await res.json();
+                const contact = Array.isArray(data.contactInfo) ? data.contactInfo : [];
+                const pick = (re) => {
+                    const f = contact.find(x => re.test(String((x && x.type) || '')));
+                    return f && f.value ? String(f.value) : '';
+                };
+                const clinicName = pick(/tên\s*phòng\s*khám/i) || (data.heroTitle ? String(data.heroTitle) : '');
+                const address = pick(/địa\s*chỉ/i);
+                const phone = pick(/(điện\s*thoại|số\s*điện\s*thoại|hotline)/i);
+                const email = pick(/email/i);
+                const coordinates = pick(/tọa\s*độ|gps|latitude|longitude/i);
+                const googleMapsLink = pick(/google\s*maps|link\s*maps|maps/i);
+
+                if (clinicName) document.getElementById('clinicName').value = clinicName;
+                if (address) document.getElementById('address').value = address;
+                if (phone) document.getElementById('phone').value = phone;
+                if (email) document.getElementById('email').value = email;
+                if (coordinates) document.getElementById('coordinates').value = coordinates;
+                if (googleMapsLink) document.getElementById('googleMapsLink').value = googleMapsLink;
+
                 updateDisplay();
+            } catch (e) {
+                // fallback (cũ): localStorage, tránh trống hoàn toàn
+                const savedAddress = localStorage.getItem('clinicAddress');
+                if (savedAddress) {
+                    const address = JSON.parse(savedAddress);
+                    document.getElementById('clinicName').value = address.clinicName || '';
+                    document.getElementById('address').value = address.address || '';
+                    document.getElementById('phone').value = address.phone || '';
+                    document.getElementById('email').value = address.email || '';
+                    document.getElementById('coordinates').value = address.coordinates || '';
+                    document.getElementById('googleMapsLink').value = address.googleMapsLink || '';
+                    updateDisplay();
+                }
             }
         }
 
         // Save address form
-        document.getElementById('addressForm').addEventListener('submit', function(e) {
+        document.getElementById('addressForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const formData = {
-                clinicName: document.getElementById('clinicName').value,
-                address: document.getElementById('address').value,
-                phone: document.getElementById('phone').value,
-                email: document.getElementById('email').value,
-                coordinates: document.getElementById('coordinates').value,
-                googleMapsLink: document.getElementById('googleMapsLink').value
-            };
-            
-            // Save to localStorage
-            localStorage.setItem('clinicAddress', JSON.stringify(formData));
-            
-            // Update display
-            updateDisplay();
-            
-            // Show success message
-            showMessage('success', 'Địa chỉ đã được cập nhật thành công!');
+            const clinicName = document.getElementById('clinicName').value;
+            const address = document.getElementById('address').value;
+            const phone = document.getElementById('phone').value;
+            const email = document.getElementById('email').value;
+            const coordinates = document.getElementById('coordinates').value;
+            const googleMapsLink = document.getElementById('googleMapsLink').value;
+
+            try {
+                // Lấy dữ liệu hiện tại để merge contactInfo, rồi ghi lại qua /api/home-content
+                const currentRes = await fetch('/api/home-content');
+                const current = await currentRes.json().catch(() => ({}));
+                const contact = Array.isArray(current.contactInfo) ? current.contactInfo.slice() : [];
+
+                function upsert(typeLabel, value) {
+                    const idx = contact.findIndex(x => String((x && x.type) || '').toLowerCase() === String(typeLabel).toLowerCase());
+                    const entry = { type: typeLabel, value: value };
+                    if (idx >= 0) contact[idx] = entry;
+                    else contact.push(entry);
+                }
+
+                // Nguồn duy nhất: lưu vào contactInfo
+                upsert('Tên phòng khám', clinicName);
+                upsert('Địa chỉ', address);
+                upsert('Điện thoại', phone);
+                upsert('Email', email);
+                upsert('Tọa độ GPS (Latitude, Longitude)', coordinates);
+                upsert('Link Google Maps', googleMapsLink);
+
+                const resp = await fetch('/api/home-content', {
+                    method: 'POST',
+                    headers: (function(){
+                        const token = localStorage.getItem('authToken') || '';
+                        const h = { 'Content-Type': 'application/json' };
+                        if (token) h['Authorization'] = `Bearer ${token}`;
+                        return h;
+                    })(),
+                    body: JSON.stringify({ contactInfo: contact })
+                });
+                if (!resp.ok) throw new Error('save failed');
+
+                // Đồng bộ localStorage để tương thích phần khác (không còn là nguồn chính)
+                localStorage.setItem('clinicAddress', JSON.stringify({
+                    clinicName, address, phone, email,
+                    coordinates: (coordinates || ''),
+                    googleMapsLink: (googleMapsLink || '')
+                }));
+                updateDisplay();
+                showMessage('success', 'Đã cập nhật thông tin liên hệ (nguồn duy nhất) lên server!');
+            } catch (err) {
+                showMessage('error', 'Không lưu được lên server. Hãy kiểm tra đăng nhập/quyền hoặc thử lại.');
+            }
         });
 
         // Update display
         function updateDisplay() {
-            const savedAddress = JSON.parse(localStorage.getItem('clinicAddress') || '{}');
-            
-            document.getElementById('displayName').textContent = savedAddress.clinicName || 'Chưa cập nhật';
-            document.getElementById('displayAddress').textContent = savedAddress.address || 'Chưa cập nhật';
-            document.getElementById('displayPhone').textContent = savedAddress.phone || 'Chưa cập nhật';
-            document.getElementById('displayEmail').textContent = savedAddress.email || 'Chưa cập nhật';
+            // Lấy trực tiếp từ form (tránh phụ thuộc localStorage gây sai "địa chỉ hiện tại")
+            const clinicName = (document.getElementById('clinicName').value || '').trim();
+            const address = (document.getElementById('address').value || '').trim();
+            const phone = (document.getElementById('phone').value || '').trim();
+            const email = (document.getElementById('email').value || '').trim();
+            const coordinates = (document.getElementById('coordinates').value || '').trim();
+            const googleMapsLink = (document.getElementById('googleMapsLink').value || '').trim();
+
+            document.getElementById('displayName').textContent = clinicName || 'Chưa cập nhật';
+            document.getElementById('displayAddress').textContent = address || 'Chưa cập nhật';
+            document.getElementById('displayPhone').textContent = phone || 'Chưa cập nhật';
+            document.getElementById('displayEmail').textContent = email || 'Chưa cập nhật';
+
+            // Cập nhật iframe map theo ưu tiên: embed link -> tọa độ -> địa chỉ
+            const iframe = document.getElementById('googleMap');
+            if (iframe) {
+                let src = '';
+                if (googleMapsLink && /google\.com\/maps\/embed\?/i.test(googleMapsLink)) {
+                    src = googleMapsLink;
+                } else if (coordinates && coordinates.includes(',')) {
+                    const [lat, lng] = coordinates.split(',').map(s => s.trim());
+                    if (lat && lng) src = `https://www.google.com/maps?q=${encodeURIComponent(lat + ',' + lng)}&output=embed`;
+                } else if (address) {
+                    src = `https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed`;
+                }
+                if (src) iframe.src = src;
+            }
         }
 
         // Show message
@@ -545,16 +626,18 @@
 
         // Open Google Maps
         function openGoogleMaps() {
-            const savedAddress = JSON.parse(localStorage.getItem('clinicAddress') || '{}');
+            const googleMapsLink = (document.getElementById('googleMapsLink').value || '').trim();
+            const coordinates = (document.getElementById('coordinates').value || '').trim();
+            const address = (document.getElementById('address').value || '').trim();
             
-            if (savedAddress.googleMapsLink) {
-                window.open(savedAddress.googleMapsLink, '_blank');
-            } else if (savedAddress.coordinates) {
-                const [lat, lng] = savedAddress.coordinates.split(',').map(coord => coord.trim());
+            if (googleMapsLink) {
+                window.open(googleMapsLink, '_blank');
+            } else if (coordinates) {
+                const [lat, lng] = coordinates.split(',').map(coord => coord.trim());
                 const url = `https://www.google.com/maps?q=${lat},${lng}`;
                 window.open(url, '_blank');
-            } else if (savedAddress.address) {
-                const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(savedAddress.address)}`;
+            } else if (address) {
+                const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
                 window.open(url, '_blank');
             } else {
                 showMessage('error', 'Vui lòng nhập địa chỉ hoặc tọa độ GPS!');

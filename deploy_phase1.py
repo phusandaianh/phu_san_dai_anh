@@ -211,7 +211,7 @@ encryption = DataEncryption()
             lines = content.split('\n')
             insert_index = 0
             for i, line in enumerate(lines):
-                if line.startswith('from voluson_sync_service import'):
+                if line.startswith('from Maysieuam_sync_service import') or line.startswith('from voluson_sync_service import'):
                     insert_index = i + 1
                     break
             

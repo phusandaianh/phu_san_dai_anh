@@ -498,8 +498,24 @@
             </div>
         </div>
 
+        <!-- Measurement Mode Toggle -->
+        <div class="ultrasound-form" style="margin-bottom: 20px;">
+            <h3><i class="fas fa-sliders-h"></i> Chế độ đo</h3>
+            <div class="btn-group">
+                <button type="button" id="btnModeAuto" class="btn btn-secondary" onclick="setMeasurementMode('auto')">
+                    <i class="fas fa-camera"></i> Tự động (từ ảnh)
+                </button>
+                <button type="button" id="btnModeManual" class="btn btn-secondary" onclick="setMeasurementMode('manual')">
+                    <i class="fas fa-edit"></i> Thủ công (nhập số)
+                </button>
+            </div>
+            <div class="upload-hint" style="margin-top: 10px;">
+                Chọn 1 chế độ để chỉ dùng đúng luồng phân tích tương ứng.
+            </div>
+        </div>
+
         <!-- Ultrasound Image Upload Section -->
-        <div class="ultrasound-form">
+        <div class="ultrasound-form" id="auto-upload-section">
             <h3><i class="fas fa-camera"></i> Upload ảnh báo cáo siêu âm thai</h3>
             <div class="image-upload-section">
                 <div class="upload-area" id="upload-area">
@@ -518,7 +534,7 @@
                         </button>
                     </div>
                     <div class="analysis-controls">
-                        <button type="button" class="btn" onclick="analyzeUltrasoundImage()">
+                        <button type="button" id="btnAutoAnalyze" class="btn" onclick="analyzeUltrasoundImage()">
                             <i class="fas fa-brain"></i> Phân tích ảnh siêu âm
                         </button>
                         <button type="button" class="btn btn-secondary" onclick="clearImageAnalysis()">
@@ -551,7 +567,7 @@
                 </div>
 
                 <!-- Fetal Measurements -->
-                <div class="ultrasound-measurements">
+                <div class="ultrasound-measurements" id="manual-measurements">
                     <h4><i class="fas fa-ruler"></i> Các chỉ số thai nhi</h4>
                     <div class="measurements-grid">
                         <div class="measurement-group">
@@ -652,13 +668,13 @@
                 </div>
 
                 <div class="btn-group">
-                    <button type="button" class="btn" onclick="analyzeUltrasoundData()">
+                    <button type="button" id="btnManualAnalyze" class="btn" onclick="analyzeUltrasoundData()">
                         <i class="fas fa-chart-line"></i> Phân tích dữ liệu
                     </button>
-                    <button type="button" class="btn btn-success" onclick="saveUltrasoundResults()">
+                    <button type="button" id="btnSaveManual" class="btn btn-success" onclick="saveUltrasoundResults()">
                         <i class="fas fa-save"></i> Lưu kết quả
                     </button>
-                    <button type="button" class="btn btn-secondary" onclick="clearForm()">
+                    <button type="button" id="btnClearManual" class="btn btn-secondary" onclick="clearForm()">
                         <i class="fas fa-eraser"></i> Xóa form
                     </button>
                 </div>
@@ -674,13 +690,156 @@
 
     <script>
         let currentPatient = null;
+        let currentEditingResultId = null;
+        const ULTRASOUND_ANNOT_IMPORT_KEY = 'ultrasound_annotation_import_v1';
 
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
-            loadPatients();
+            loadPatients().then(() => {
+                // If vr-pacs đã import đo tự động thì điền sẵn ngay
+                maybeImportAnnotationAutoResult();
+                maybeLoadResultFromQuery();
+            });
             setCurrentDateTime();
             initializeImageUpload();
+            // Default mode: manual to keep current workflow
+            setMeasurementMode('manual');
         });
+
+        function maybeLoadResultFromQuery() {
+            try {
+                const params = new URLSearchParams(window.location.search || '');
+                const resultId = parseInt(params.get('result_id') || '', 10);
+                if (Number.isFinite(resultId) && resultId > 0) {
+                    loadUltrasoundResultForReview(resultId);
+                }
+            } catch (e) {
+                console.warn('maybeLoadResultFromQuery error:', e);
+            }
+        }
+
+        function setFieldValue(id, value) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.value = value == null ? '' : String(value);
+        }
+
+        async function loadUltrasoundResultForReview(resultId) {
+            try {
+                const resp = await fetch(`/api/ultrasound-results/${encodeURIComponent(resultId)}`);
+                if (!resp.ok) {
+                    throw new Error(`HTTP ${resp.status}`);
+                }
+                const row = await resp.json();
+
+                currentEditingResultId = row.id;
+
+                setFieldValue('patient-select', row.patient_id);
+                const patientSelect = document.getElementById('patient-select');
+                if (patientSelect) {
+                    patientSelect.dispatchEvent(new Event('change'));
+                }
+
+                if (row.exam_date) {
+                    const examDate = new Date(row.exam_date);
+                    if (!Number.isNaN(examDate.getTime())) {
+                        const local = new Date(examDate.getTime() - examDate.getTimezoneOffset() * 60000)
+                            .toISOString()
+                            .slice(0, 16);
+                        setFieldValue('exam-date', local);
+                    }
+                }
+
+                setFieldValue('gestational-age', row.gestational_age);
+                setFieldValue('bpd', row.bpd);
+                setFieldValue('hc', row.hc);
+                setFieldValue('ac', row.ac);
+                setFieldValue('fl', row.fl);
+                setFieldValue('ri-umbilical', row.ri_umbilical);
+                setFieldValue('sd-ratio', row.sd_ratio);
+                setFieldValue('mca-pi', row.mca_pi);
+                setFieldValue('cervical-length', row.cervical_length);
+                setFieldValue('afi', row.afi);
+                setFieldValue('estimated-weight', row.estimated_weight);
+                setFieldValue('fetal-position', row.fetal_position);
+                setFieldValue('placenta-position', row.placenta_position);
+                setFieldValue('amniotic-fluid', row.amniotic_fluid);
+                setFieldValue('findings', row.findings);
+                setFieldValue('recommendations', row.recommendations);
+
+                alert(`Đang mở bản kết quả #${row.id} để bác sĩ duyệt/chỉnh sửa.`);
+            } catch (e) {
+                console.error('loadUltrasoundResultForReview error:', e);
+                alert('Không mở được kết quả siêu âm để duyệt.');
+            }
+        }
+
+        function maybeImportAnnotationAutoResult() {
+            try {
+                const raw = localStorage.getItem(ULTRASOUND_ANNOT_IMPORT_KEY);
+                if (!raw) return;
+
+                const payload = JSON.parse(raw);
+                if (!payload || !payload.analysis) return;
+
+                const patientSelect = document.getElementById('patient-select');
+                if (payload.patient_id && patientSelect) {
+                    patientSelect.value = String(payload.patient_id);
+                    patientSelect.dispatchEvent(new Event('change'));
+                }
+
+                const bpdEl = document.getElementById('bpd');
+                const hcEl = document.getElementById('hc');
+                const acEl = document.getElementById('ac');
+                const flEl = document.getElementById('fl');
+                if (bpdEl) bpdEl.value = payload.bpd != null ? payload.bpd : '';
+                if (hcEl) hcEl.value = payload.hc != null ? payload.hc : '';
+                if (acEl) acEl.value = payload.ac != null ? payload.ac : '';
+                if (flEl) flEl.value = payload.fl != null ? payload.fl : '';
+
+                const recEl = document.getElementById('recommendations');
+                if (recEl) {
+                    const recs = payload.analysis.recommendations || [];
+                    recEl.value = Array.isArray(recs) ? recs.join('\n') : String(recs || '');
+                }
+
+                // Hiển thị kết quả phân tích ngay
+                displayAnalysisResults(payload.analysis);
+
+                localStorage.removeItem(ULTRASOUND_ANNOT_IMPORT_KEY);
+            } catch (e) {
+                console.warn('maybeImportAnnotationAutoResult error:', e);
+            }
+        }
+
+        function setMeasurementMode(mode) {
+            const autoSection = document.getElementById('auto-upload-section');
+            const manualMeasurements = document.getElementById('manual-measurements');
+            const btnAutoAnalyze = document.getElementById('btnAutoAnalyze');
+            const btnManualAnalyze = document.getElementById('btnManualAnalyze');
+            const btnSaveManual = document.getElementById('btnSaveManual');
+            const btnClearManual = document.getElementById('btnClearManual');
+            const btnModeAuto = document.getElementById('btnModeAuto');
+            const btnModeManual = document.getElementById('btnModeManual');
+
+            if (!autoSection || !manualMeasurements) return;
+
+            const isAuto = mode === 'auto';
+
+            // Visual
+            autoSection.style.display = isAuto ? 'block' : 'none';
+            manualMeasurements.style.display = isAuto ? 'none' : 'block';
+
+            // Enable/disable actions
+            if (btnAutoAnalyze) btnAutoAnalyze.disabled = !isAuto;
+            if (btnManualAnalyze) btnManualAnalyze.disabled = isAuto;
+            if (btnSaveManual) btnSaveManual.disabled = isAuto;
+            if (btnClearManual) btnClearManual.disabled = isAuto;
+
+            // Highlight mode buttons
+            if (btnModeAuto) btnModeAuto.classList.toggle('btn-primary', isAuto);
+            if (btnModeManual) btnModeManual.classList.toggle('btn-primary', !isAuto);
+        }
 
         // Load patients from database
         async function loadPatients() {
@@ -1046,13 +1205,18 @@
             
             try {
                 const result = JSON.parse(analysisResults);
+                const patientId = document.getElementById('patient-select').value;
+                if (!patientId) {
+                    alert('Vui lòng chọn bệnh nhân trước khi lưu kết quả');
+                    return;
+                }
                 const response = await fetch('/api/ultrasound-results', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        patient_id: result.patient_id,
+                        patient_id: patientId,
                         exam_date: new Date().toISOString().slice(0, 16),
                         gestational_age: result.gestational_age,
                         bpd: result.bpd,
@@ -1223,8 +1387,12 @@
             const formData = getFormData();
             
             try {
-                const response = await fetch('/api/ultrasound-results', {
-                    method: 'POST',
+                const isEdit = Number.isFinite(currentEditingResultId) && currentEditingResultId > 0;
+                const endpoint = isEdit
+                    ? `/api/ultrasound-results/${encodeURIComponent(currentEditingResultId)}`
+                    : '/api/ultrasound-results';
+                const response = await fetch(endpoint, {
+                    method: isEdit ? 'PUT' : 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
@@ -1232,7 +1400,11 @@
                 });
                 
                 if (response.ok) {
-                    alert('Đã lưu kết quả siêu âm thành công!');
+                    const saved = await response.json();
+                    if (!isEdit && saved && saved.id) {
+                        currentEditingResultId = saved.id;
+                    }
+                    alert(isEdit ? 'Đã cập nhật kết quả siêu âm thành công!' : 'Đã lưu kết quả siêu âm thành công!');
                 } else {
                     alert('Lỗi khi lưu kết quả siêu âm');
                 }
@@ -1247,6 +1419,7 @@
             document.getElementById('ultrasound-form').reset();
             document.getElementById('analysis-results').style.display = 'none';
             setCurrentDateTime();
+            currentEditingResultId = null;
         }
     </script>
     

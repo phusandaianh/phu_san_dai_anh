@@ -99,7 +99,7 @@ Ready: ✅ YES - Can start on demand
 **Khả năng:**
 - ✅ DICOM C-FIND queries
 - ✅ Modality Worklist (MWL) support
-- ✅ Supports ultrasound machines (Voluson E10)
+- ✅ Supports ultrasound machines (Maysieuam E10)
 - ✅ Auto-sync data source
 
 **To Start:**
@@ -249,7 +249,7 @@ Max Upload: 100 MB
 - ✅ MWL server code tested
 - ✅ Flask app code tested
 - ✅ DICOM configuration ready
-- ✅ Voluson E10 compatible
+- ✅ Maysieuam compatible
 
 ### 📋 Pre-deployment Checklist:
 - ✅ Database health: GOOD
@@ -283,7 +283,7 @@ cd j:\DU_AN_AI\Phong_kham_dai_anh
 - Run MWL Server on port 104
 - Run auto-sync every 5 minutes
 - Restart on crash
-- Enable Voluson connection
+- Enable Maysieuam connection
 
 ---
 
@@ -313,7 +313,7 @@ cd j:\DU_AN_AI\Phong_kham_dai_anh
 | Port 104 in use | `netstat -ano \| findstr :104` to find process |
 | Port 5000 in use | `netstat -ano \| findstr :5000` to find process |
 | Sync not working | Check `mwl.db` modification time |
-| DICOM connection fails | Verify Voluson settings: IP 10.17.2.2, Port 104 |
+| DICOM connection fails | Verify Maysieuam settings: IP 10.17.2.2, Port 104 |
 | Database corrupt | Restore from backup or rebuild |
 | Python processes stuck | `taskkill /F /IM python.exe` |
 

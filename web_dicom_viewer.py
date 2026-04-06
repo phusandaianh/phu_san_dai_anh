@@ -16,7 +16,7 @@ HTML_TEMPLATE = """
 <html>
 <head>
   <meta charset="utf-8">
-  <title>DICOM Viewer - Voluson E10</title>
+  <title>DICOM Viewer - Máy siêu âm</title>
   <style>
     body { font-family: Arial; background: #f6f8fa; margin: 0; padding: 20px; }
     h1 { color: #2c3e50; }
@@ -26,7 +26,7 @@ HTML_TEMPLATE = """
   </style>
 </head>
 <body>
-  <h1>🩻 DICOM Viewer - Voluson E10</h1>
+  <h1>🩻 DICOM Viewer - Máy siêu âm</h1>
   {% for patient, files in data.items() %}
     <div class="patient">
       <h2>👤 {{ patient }}</h2>
