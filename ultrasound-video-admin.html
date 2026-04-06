@@ -335,9 +335,8 @@
         .rec-indicator.show { display: inline-flex; }
         .rec-time-overlay {
             position: absolute;
-            left: 50%;
-            bottom: 12px;
-            transform: translateX(-50%);
+            right: 12px;
+            bottom: 56px;
             padding: 6px 12px;
             border-radius: 999px;
             background: rgba(15, 23, 42, 0.82);
@@ -1335,7 +1334,7 @@
                 </div>
                 <div class="avatar-frame" id="avatarFrame"></div>
                 <div class="rec-indicator" id="recIndicator"><span class="dot"></span><span id="recText">REC 00:00</span></div>
-                <div class="rec-time-overlay" id="recTimeOverlay">Thời gian ghi: 00:00</div>
+                <div class="rec-time-overlay" id="recTimeOverlay">00:00</div>
                 <div id="previewAdTicker" class="preview-ad-ticker" aria-hidden="true">
                     <div class="preview-ad-ticker-inner">
                         <span class="preview-ad-ticker-label" id="previewAdTickerLabel"></span>
@@ -4326,10 +4325,9 @@
         function updateRecordTimerText(paused) {
             const mm = String(Math.floor(recordSeconds / 60)).padStart(2, '0');
             const ss = String(recordSeconds % 60).padStart(2, '0');
-            const pauseSuffix = paused ? ' (Tạm dừng)' : '';
-            els.recText.textContent = `REC ${mm}:${ss}${pauseSuffix}`;
+            els.recText.textContent = `REC ${mm}:${ss}`;
             if (els.recTimeOverlay) {
-                els.recTimeOverlay.textContent = `Thời gian ghi: ${mm}:${ss}${pauseSuffix}`;
+                els.recTimeOverlay.textContent = `${mm}:${ss}`;
             }
         }
 
