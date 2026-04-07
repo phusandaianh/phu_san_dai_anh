@@ -814,6 +814,16 @@
         if (!text) return '<span style="color:#999;">—</span>';
         return `<div style="white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3;">${escapeHtml(text)}</div>`;
     };
+    /** Ngày hẹn dd/mm/yy và giờ (local) cho cột Giờ hẹn */
+    const formatAppointmentSlotDisplay = (isoOrDate) => {
+        const dt = new Date(isoOrDate);
+        if (Number.isNaN(dt.getTime())) return '—';
+        const dd = String(dt.getDate()).padStart(2, '0');
+        const mm = String(dt.getMonth() + 1).padStart(2, '0');
+        const yy = String(dt.getFullYear()).slice(-2);
+        const time = dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+        return `${dd}/${mm}/${yy} ${time}`;
+    };
     const showError = msg => { console.error(msg); alert(msg); };
 
         const api = {
@@ -1300,7 +1310,7 @@
             return `
             <tr data-appointment-id="${a.id}">
                 <td>${i+1}</td><td>${a.patient_pid || a.patient_phone}</td><td>${a.patient_name}</td><td>${a.patient_dob ? new Date(a.patient_dob).getFullYear() : ''}</td><td><span class="copy-phone" role="button" tabindex="0" title="Nhấn để sao chép số điện thoại" data-phone="${phData}">${phHtml || '—'}</span></td>
-                <td>${new Date(a.appointment_date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false })}</td>
+                <td>${formatAppointmentSlotDisplay(a.appointment_date)}</td>
                 <td>${a.service_type}</td>
                 <td class="diagnosis-cell" data-appointment-id="${a.id}"><i>nhấp để nhập</i></td>
                 <td>${a.status}</td>
