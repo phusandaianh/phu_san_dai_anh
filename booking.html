@@ -1283,8 +1283,21 @@
         </div>
     </footer>
 
-    <!-- AI Assistant - Luôn hiển thị trên mọi trang -->
-    <script src="ai-assistant.js"></script>
+    <!-- AI Assistant: chỉ hiển thị cho nhân viên đã đăng nhập -->
+    <script>
+      (async function loadAIAssistantForAuthenticatedUsers() {
+        try {
+          const resp = await fetch('/api/me', { cache: 'no-store', credentials: 'include' });
+          if (!resp.ok) return; // Bệnh nhân/public: không hiển thị trợ lý AI
+          const s = document.createElement('script');
+          s.src = 'ai-assistant.js';
+          s.defer = true;
+          document.body.appendChild(s);
+        } catch (_) {
+          // Nếu lỗi mạng/API thì mặc định không hiển thị trợ lý AI cho trang public
+        }
+      })();
+    </script>
     <!-- Đồng bộ footer theo cài đặt trung tâm -->
     <script src="footer-loader.js"></script>
 </body>

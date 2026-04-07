@@ -362,6 +362,7 @@
                                     <th>Điện thoại</th>
                                     <th>Giờ hẹn</th>
                                     <th>Lý do khám</th>
+                                    <th>Tuổi thai</th>
                                     <th>Chẩn đoán</th>
                                     <th>Trạng thái</th>
                                     <th>Phiếu khám</th>
@@ -814,14 +815,45 @@
         if (!text) return '<span style="color:#999;">—</span>';
         return `<div style="white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3;">${escapeHtml(text)}</div>`;
     };
+    const startOfLocalDay = (v) => {
+        const d = new Date(v);
+        if (Number.isNaN(d.getTime())) return null;
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    };
+    // Tính tuổi thai từ ngày dự kiến sinh (EDD):
+    // GA(days) = 280 - (EDD - ngày tham chiếu), sau đó đổi ra tuần + ngày.
+    const formatGestationalAgeFromEDD = (eddValue, referenceDateValue) => {
+        if (!eddValue) return '';
+        const edd = startOfLocalDay(eddValue);
+        const ref = startOfLocalDay(referenceDateValue || new Date());
+        if (!edd || !ref) return '';
+        const MS_PER_DAY = 24 * 60 * 60 * 1000;
+        const daysToEDD = Math.round((edd.getTime() - ref.getTime()) / MS_PER_DAY);
+        const gaDays = 280 - daysToEDD;
+        if (gaDays < 0) return '';
+        const weeks = Math.floor(gaDays / 7);
+        const days = gaDays % 7;
+        return `${weeks} tuần ${days} ngày`;
+    };
     /** Ngày hẹn dd/mm/yy và giờ (local) cho cột Giờ hẹn */
     const formatAppointmentSlotDisplay = (isoOrDate) => {
         const dt = new Date(isoOrDate);
         if (Number.isNaN(dt.getTime())) return '—';
+        const time = dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+        // Nếu đang xem lịch hôm nay thì chỉ hiển thị giờ để bảng gọn hơn.
+        const dateInput = document.getElementById('filter-date');
+        const selected = dateInput && dateInput.value ? dateInput.value : '';
+        const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const isTodayView = (
+            appointmentsMode === 'today'
+            || (appointmentsMode === 'today_future' && selected === todayStr)
+            || (appointmentsMode === 'by_date' && selected === todayStr)
+        );
+        if (isTodayView) return time;
+
         const dd = String(dt.getDate()).padStart(2, '0');
         const mm = String(dt.getMonth() + 1).padStart(2, '0');
         const yy = String(dt.getFullYear()).slice(-2);
-        const time = dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
         return `${dd}/${mm}/${yy} ${time}`;
     };
     const showError = msg => { console.error(msg); alert(msg); };
@@ -1288,6 +1320,7 @@
             id: a.id,
             status: a.status,
             service_type: a.service_type,
+            expected_delivery_date: a.expected_delivery_date,
             diagnosis: a.diagnosis,
             notes: a.notes
         })));
@@ -1312,6 +1345,7 @@
                 <td>${i+1}</td><td>${a.patient_pid || a.patient_phone}</td><td>${a.patient_name}</td><td>${a.patient_dob ? new Date(a.patient_dob).getFullYear() : ''}</td><td><span class="copy-phone" role="button" tabindex="0" title="Nhấn để sao chép số điện thoại" data-phone="${phData}">${phHtml || '—'}</span></td>
                 <td>${formatAppointmentSlotDisplay(a.appointment_date)}</td>
                 <td>${a.service_type}</td>
+                <td>${formatGestationalAgeFromEDD(a.expected_delivery_date, a.appointment_date)}</td>
                 <td class="diagnosis-cell" data-appointment-id="${a.id}"><i>nhấp để nhập</i></td>
                 <td>${a.status}</td>
                 <td>

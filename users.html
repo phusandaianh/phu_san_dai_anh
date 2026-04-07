@@ -354,7 +354,7 @@
                 </button>
             </div>
 
-            <h3 style="margin: 16px 0 8px; font-size: 1rem; color: #333;">Phiên đăng nhập hiện tại</h3>
+            <h3 style="margin: 16px 0 8px; font-size: 1rem; color: #333;">Phiên đăng nhập hiện tại (GMT+7)</h3>
             <div class="table-container">
                 <table class="user-table">
                     <thead>
@@ -376,7 +376,7 @@
             </div>
             <small style="display:block; margin-top:8px; color:#666;">Admin có thể ngắt kết nối các phiên đang hoạt động.</small>
 
-            <h3 style="margin: 24px 0 8px; font-size: 1rem; color: #333;">Thiết bị / IP đã từng đăng nhập</h3>
+            <h3 style="margin: 24px 0 8px; font-size: 1rem; color: #333;">Thiết bị / IP đã từng đăng nhập (GMT+7)</h3>
             <div class="table-container">
                 <table class="user-table">
                     <thead>
@@ -388,6 +388,7 @@
                             <th>Ngày tạo</th>
                             <th>Ngày phê duyệt</th>
                             <th>Trạng thái</th>
+                            <th>Thao tác</th>
                         </tr>
                     </thead>
                     <tbody id="deviceHistoryTableBody">
@@ -395,6 +396,20 @@
                 </table>
             </div>
             <small style="display:block; margin-top:8px; color:#666;">Danh sách máy / IP đã đăng nhập hoặc chờ phê duyệt.</small>
+
+            <h3 style="margin: 24px 0 8px; font-size: 1rem; color: #333;">Host tin cậy (bật/tắt yêu cầu phê duyệt)</h3>
+            <div class="table-container">
+                <table class="user-table">
+                    <thead>
+                        <tr>
+                            <th>Host</th>
+                            <th>Yêu cầu phê duyệt máy lạ?</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trustedHostsTableBody"></tbody>
+                </table>
+            </div>
+            <small style="display:block; margin-top:8px; color:#666;">Tắt yêu cầu phê duyệt cho host nội bộ tin cậy; bật lại khi cần siết bảo mật.</small>
         </div>
 
         <!-- Sao lưu & Khôi phục dữ liệu -->
@@ -1547,9 +1562,77 @@ Trân trọng,
                 const devices = await devRes.json();
                 renderSessions(sessions);
                 renderDeviceHistory(devices);
+                await loadLoginApprovalHostRules();
             } catch (error) {
                 console.error('Error loading sessions:', error);
                 alert(error && error.message === 'AUTH' ? 'Vui lòng đăng nhập lại.' : 'Không thể tải danh sách phiên đăng nhập. Vui lòng thử lại sau.');
+            }
+        }
+
+        async function loadLoginApprovalHostRules() {
+            const tbody = document.getElementById('trustedHostsTableBody');
+            if (!tbody) return;
+            try {
+                const response = await fetch('/api/login-approval-host-rules', { headers: getAuthHeaders() });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    tbody.innerHTML = '<tr><td colspan="2">Không tải được cấu hình host tin cậy.</td></tr>';
+                    return;
+                }
+                const items = Array.isArray(data.items) ? data.items : [];
+                if (!items.length) {
+                    tbody.innerHTML = '<tr><td colspan="2">Chưa có host nào.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = items.map(it => `
+                    <tr>
+                        <td><code>${it.host}</code></td>
+                        <td>
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                <input type="checkbox" ${it.require_approval ? 'checked' : ''} onchange="toggleHostApproval('${it.host}', this.checked)">
+                                <span>${it.require_approval ? 'Bật (cần phê duyệt)' : 'Tắt (không cần phê duyệt)'}</span>
+                            </label>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading host approval rules:', error);
+                tbody.innerHTML = '<tr><td colspan="2">Không tải được cấu hình host tin cậy.</td></tr>';
+            }
+        }
+
+        async function toggleHostApproval(host, requireApproval) {
+            try {
+                const response = await fetch('/api/login-approval-host-rules', {
+                    method: 'POST',
+                    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host, require_approval: !!requireApproval })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    alert(data.error || 'Không lưu được cấu hình host.');
+                    await loadLoginApprovalHostRules();
+                    return;
+                }
+                await loadLoginApprovalHostRules();
+            } catch (error) {
+                console.error('Error toggling host approval:', error);
+                alert('Không lưu được cấu hình host.');
+                await loadLoginApprovalHostRules();
+            }
+        }
+
+        function formatDateGMT7(value) {
+            if (!value) return '';
+            try {
+                const d = new Date(value);
+                if (Number.isNaN(d.getTime())) return '';
+                return d.toLocaleString('vi-VN', {
+                    timeZone: 'Asia/Ho_Chi_Minh',
+                    hour12: false
+                });
+            } catch (_) {
+                return '';
             }
         }
 
@@ -1557,7 +1640,7 @@ Trân trọng,
             const tbody = document.getElementById('deviceHistoryTableBody');
             if (!tbody) return;
             if (!Array.isArray(devices) || devices.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7">Chưa có thiết bị nào đăng nhập.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8">Chưa có thiết bị nào đăng nhập.</td></tr>';
                 return;
             }
             tbody.innerHTML = devices.map(d => `
@@ -1566,11 +1649,99 @@ Trân trọng,
                     <td>${d.fullName || ''}</td>
                     <td>${d.ipAddress || ''}</td>
                     <td style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${d.userAgent || ''}">${d.userAgent || ''}</td>
-                    <td>${d.createdAt ? new Date(d.createdAt).toLocaleString('vi-VN') : ''}</td>
-                    <td>${d.approvedAt ? new Date(d.approvedAt).toLocaleString('vi-VN') : '–'}</td>
+                    <td>${d.createdAt ? formatDateGMT7(d.createdAt) : ''}</td>
+                    <td>${d.approvedAt ? formatDateGMT7(d.approvedAt) : '–'}</td>
                     <td>${d.isApproved ? '<span style="color:#28a745;">Đã phê duyệt</span>' : '<span style="color:#ffc107;">Chờ phê duyệt</span>'}</td>
+                    <td>
+                        ${d.isApproved
+                            ? `<button class="btn danger-btn" onclick="denyLoginDevice(${d.id})"><i class="fas fa-ban"></i> Thu hồi</button>`
+                            : `
+                                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                    <button class="btn primary-btn" onclick="approveLoginDevice(${d.id})"><i class="fas fa-check"></i> Phê duyệt</button>
+                                    <button class="btn danger-btn" onclick="cancelLoginDevice(${d.id})"><i class="fas fa-times"></i> Hủy đăng nhập</button>
+                                </div>
+                              `
+                        }
+                    </td>
                 </tr>
             `).join('');
+        }
+
+        async function approveLoginDevice(deviceId) {
+            if (!deviceId) return;
+            if (!confirm('Phê duyệt thiết bị/IP này để cho phép đăng nhập?')) return;
+            try {
+                const response = await fetch(`/api/login-device-history/${deviceId}/approve`, {
+                    method: 'POST',
+                    headers: { ...getAuthHeaders() }
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        // Bản ghi đã bị xóa/không còn hợp lệ ở backend -> tự làm mới để bỏ dòng cũ trên UI
+                        loadSessions();
+                        return;
+                    }
+                    alert(data.error || 'Không thể phê duyệt thiết bị/IP.');
+                    return;
+                }
+                alert(data.message || 'Đã phê duyệt thiết bị/IP.');
+                loadSessions();
+            } catch (error) {
+                console.error('Error approving login device:', error);
+                alert('Không thể phê duyệt thiết bị/IP. Vui lòng thử lại.');
+            }
+        }
+
+        async function denyLoginDevice(deviceId) {
+            if (!deviceId) return;
+            if (!confirm('Thu hồi/Từ chối thiết bị/IP này? Máy này sẽ phải chờ phê duyệt lại khi đăng nhập.')) return;
+            try {
+                const response = await fetch(`/api/login-device-history/${deviceId}/deny`, {
+                    method: 'POST',
+                    headers: { ...getAuthHeaders() }
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        loadSessions();
+                        return;
+                    }
+                    alert(data.error || 'Không thể thu hồi phê duyệt thiết bị/IP.');
+                    return;
+                }
+                alert(data.message || 'Đã thu hồi phê duyệt thiết bị/IP.');
+                loadSessions();
+            } catch (error) {
+                console.error('Error denying login device:', error);
+                alert('Không thể thu hồi phê duyệt thiết bị/IP. Vui lòng thử lại.');
+            }
+        }
+
+        async function cancelLoginDevice(deviceId) {
+            if (!deviceId) return;
+            if (!confirm('Hủy đăng nhập từ thiết bị/IP này? Thiết bị sẽ không đăng nhập được nếu chưa được phê duyệt lại.')) return;
+            try {
+                const response = await fetch(`/api/login-device-history/${deviceId}/cancel-login`, {
+                    method: 'POST',
+                    headers: { ...getAuthHeaders() }
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        loadSessions();
+                        return;
+                    }
+                    alert(data.error || 'Không thể hủy đăng nhập thiết bị/IP.');
+                    return;
+                }
+                const revoked = Number(data.revoked_sessions || 0);
+                alert((data.message || 'Đã hủy đăng nhập thiết bị/IP.') + (revoked > 0 ? ` Đã ngắt ${revoked} phiên.` : ''));
+                loadSessions();
+            } catch (error) {
+                console.error('Error cancelling login device:', error);
+                alert('Không thể hủy đăng nhập thiết bị/IP. Vui lòng thử lại.');
+            }
         }
 
         function renderSessions(sessions) {
@@ -1589,8 +1760,8 @@ Trân trọng,
                     <td style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${sess.userAgent || ''}">
                         ${sess.userAgent || ''}
                     </td>
-                    <td>${sess.createdAt ? new Date(sess.createdAt).toLocaleString('vi-VN') : ''}</td>
-                    <td>${sess.lastSeen ? new Date(sess.lastSeen).toLocaleString('vi-VN') : ''}</td>
+                    <td>${sess.createdAt ? formatDateGMT7(sess.createdAt) : ''}</td>
+                    <td>${sess.lastSeen ? formatDateGMT7(sess.lastSeen) : ''}</td>
                     <td>${sess.isNewDevice ? '<span style="color:#dc3545;font-weight:bold;">Máy lạ</span>' : ''}</td>
                     <td>
                         <button class="btn danger-btn" onclick="revokeSession('${sess.sessionId}')">

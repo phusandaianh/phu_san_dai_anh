@@ -513,6 +513,7 @@
                             <th>PID</th>
                             <th>Tên bệnh nhân</th>
                             <th>Số điện thoại</th>
+                            <th>Địa chỉ</th>
                             <th>Ngày khám</th>
                             <th>Lý do khám</th>
                             <th>Bác sĩ</th>
@@ -874,6 +875,7 @@
                     <td><code>${record.patient_pid || ''}</code></td>
                     <td>${record.patient_name}</td>
                     <td>${record.patient_phone}</td>
+                    <td>${record.patient_address || ''}</td>
                     <td>${formatDateTime(record.appointment_date)}</td>
                     <td>${record.service_type}</td>
                     <td>${record.doctor_name || 'Chưa xác định'}</td>
@@ -2340,6 +2342,20 @@
             });
         }
 
+        let recordsAutoRefreshTimer = null;
+        function startRecordsAutoRefresh() {
+            if (recordsAutoRefreshTimer) clearInterval(recordsAutoRefreshTimer);
+            recordsAutoRefreshTimer = setInterval(async () => {
+                try {
+                    // Chỉ tự làm mới khi tab đang mở để giảm tải
+                    if (document.hidden) return;
+                    await loadRecords();
+                } catch (err) {
+                    console.error('Auto refresh records error:', err);
+                }
+            }, 15000);
+        }
+
         // Initialize
         async function initializePage() {
             try {
@@ -2349,6 +2365,8 @@
                 await loadRecords();
                 // Setup sync listener
                 setupClinicalResultsSyncListener();
+                // Tự đồng bộ danh sách hồ sơ (bao gồm cột địa chỉ) định kỳ
+                startRecordsAutoRefresh();
             } catch (error) {
                 console.error('Lỗi khởi tạo trang:', error);
             }

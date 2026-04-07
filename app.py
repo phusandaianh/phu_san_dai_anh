@@ -192,10 +192,15 @@ def rate_limit(key_prefix=''):
 
 # Simple in-memory token store for auth (non-persistent)
 TOKENS = {}
-TOKEN_TTL_SECONDS = 3600
+TOKEN_TTL_SECONDS = 300 * 60
 _AUTH_SESSION_TABLE_READY = False
 _AUTH_SESSION_CLEANUP_INTERVAL_SECONDS = 600
 _AUTH_SESSION_LAST_CLEANUP_AT = None
+_LOGIN_DEVICE_PENDING_RETENTION_DAYS = 7
+_LOGIN_DEVICE_CLEANUP_INTERVAL_SECONDS = 600
+_LOGIN_DEVICE_LAST_CLEANUP_AT = None
+_DEFAULT_LOGIN_APPROVAL_BYPASS_HOSTS = {'127.0.0.1', 'localhost', '192.168.1.230'}
+LOGIN_APPROVAL_HOST_RULES_KEY = 'login_approval_host_rules'
 
 # Lưu danh sách IP đã từng đăng nhập theo user để phát hiện "máy lạ"
 USER_KNOWN_IPS = defaultdict(set)
@@ -369,6 +374,105 @@ def _maybe_cleanup_auth_sessions(force: bool = False):
     except Exception:
         db.session.rollback()
         return 0
+
+
+def _maybe_cleanup_pending_login_devices(force: bool = False):
+    """Tự dọn bản ghi thiết bị/IP chờ phê duyệt quá hạn."""
+    global _LOGIN_DEVICE_LAST_CLEANUP_AT
+    now = datetime.utcnow()
+    if not force and _LOGIN_DEVICE_LAST_CLEANUP_AT is not None:
+        elapsed = (now - _LOGIN_DEVICE_LAST_CLEANUP_AT).total_seconds()
+        if elapsed < _LOGIN_DEVICE_CLEANUP_INTERVAL_SECONDS:
+            return 0
+    try:
+        cutoff = now - timedelta(days=int(_LOGIN_DEVICE_PENDING_RETENTION_DAYS))
+        deleted = TrustedLoginIP.query.filter(
+            TrustedLoginIP.is_approved == False,  # noqa: E712
+            TrustedLoginIP.created_at < cutoff
+        ).delete(synchronize_session=False)
+        db.session.commit()
+        _LOGIN_DEVICE_LAST_CLEANUP_AT = now
+        return int(deleted or 0)
+    except Exception:
+        db.session.rollback()
+        return 0
+
+
+def _is_login_approval_bypass_request(req, ip_address: str = '') -> bool:
+    """
+    Cho phép bỏ qua phê duyệt máy lạ cho các host nội bộ tin cậy.
+    Mặc định: 127.0.0.1, localhost, 192.168.1.230
+    Có thể override bằng env LOGIN_APPROVAL_BYPASS_HOSTS="host1,host2".
+    """
+    try:
+        rules = _get_login_approval_host_rules()
+        raw = (os.environ.get('LOGIN_APPROVAL_BYPASS_HOSTS') or '').strip()
+        if raw:
+            allowed_hosts = {h.strip().lower() for h in raw.split(',') if h.strip()}
+        else:
+            allowed_hosts = set(_DEFAULT_LOGIN_APPROVAL_BYPASS_HOSTS)
+
+        host_header = (req.host or '').strip().lower()
+        host_only = host_header.split(':', 1)[0] if host_header else ''
+        # Ưu tiên rule do admin cấu hình trên UI
+        if host_only and host_only in rules:
+            return not bool(rules.get(host_only, {}).get('require_approval', True))
+        if host_only and host_only in allowed_hosts:
+            return True
+
+        ip = (ip_address or '').strip()
+        if ip in ('127.0.0.1', '::1') and (('127.0.0.1' in allowed_hosts) or ('localhost' in allowed_hosts)):
+            return True
+        return False
+    except Exception:
+        return False
+
+
+def _normalize_host(raw_host: str) -> str:
+    h = (raw_host or '').strip().lower()
+    h = h.split(':', 1)[0]
+    return h
+
+
+def _get_login_approval_host_rules() -> dict:
+    """
+    Lấy rules theo host:
+    {
+      "127.0.0.1": {"require_approval": false},
+      "192.168.1.230": {"require_approval": true}
+    }
+    """
+    try:
+        raw = AppSetting.get_value(LOGIN_APPROVAL_HOST_RULES_KEY, '') or ''
+        if not raw:
+            return {}
+        obj = json.loads(raw)
+        if not isinstance(obj, dict):
+            return {}
+        cleaned = {}
+        for k, v in obj.items():
+            hk = _normalize_host(k)
+            if not hk:
+                continue
+            req = True
+            if isinstance(v, dict):
+                req = bool(v.get('require_approval', True))
+            elif isinstance(v, bool):
+                req = bool(v)
+            cleaned[hk] = {'require_approval': req}
+        return cleaned
+    except Exception:
+        return {}
+
+
+def _set_login_approval_host_rules(rules: dict) -> None:
+    safe = {}
+    for k, v in (rules or {}).items():
+        hk = _normalize_host(k)
+        if not hk:
+            continue
+        safe[hk] = {'require_approval': bool((v or {}).get('require_approval', True))}
+    AppSetting.set_value(LOGIN_APPROVAL_HOST_RULES_KEY, json.dumps(safe, ensure_ascii=False))
 
 PASSWORD_MIN_LENGTH = 8
 
@@ -677,43 +781,29 @@ def backup_if_db_changed():
         print(f"[BACKUP] backup_if_db_changed error: {e}")
         return False
 
-def run_backup_loop_startup_and_every_2h():
+def maybe_backup_once_per_day(trigger: str = 'manual') -> bool:
     """
-    Khi app bắt đầu chạy:
-    - Nếu chưa backup trong ngày hôm nay -> backup lần đầu.
-    - Sau đó backup mỗi 2 tiếng.
-    - Chỉ backup khi DB có thay đổi (mtime).
+    Chỉ backup tối đa 1 lần/ngày.
+    Trigger dùng để log nguồn kích hoạt: startup / login / manual.
     """
     try:
-        import time as _time
-        with app.app_context():
-            last_day = AppSetting.get_value('backup_last_day_ymd', '') or ''
-            today_ymd = datetime.now().strftime('%Y-%m-%d')
+        today_ymd = datetime.now().strftime('%Y-%m-%d')
+        last_day = AppSetting.get_value('backup_last_day_ymd', '') or ''
+        if last_day == today_ymd:
+            return False
 
-            # Backup lần đầu trong ngày nếu chưa
-            if last_day != today_ymd:
-                if backup_if_db_changed():
-                    AppSetting.set_value('backup_last_day_ymd', today_ymd)
-            else:
-                # Nếu đã backup hôm nay rồi thì không cần chạy lại ngay
-                pass
-
-        interval_sec = int(os.environ.get('BACKUP_EVERY_SECONDS') or app.config.get('BACKUP_EVERY_SECONDS') or (2 * 60 * 60))
-        interval_sec = max(60, interval_sec)
-
-        while True:
-            try:
-                with app.app_context():
-                    # Backup theo chu kỳ 2 tiếng (có điều kiện "DB changed")
-                    changed = backup_if_db_changed()
-                    if changed:
-                        # update day marker (dù vẫn có thể trong ngày)
-                        AppSetting.set_value('backup_last_day_ymd', datetime.now().strftime('%Y-%m-%d'))
-            except Exception as e:
-                print(f"[BACKUP] Loop error: {e}")
-            _time.sleep(interval_sec)
+        # Reuse logic hiện tại (ghi local + optional gdrive).
+        # Nếu DB không đổi thì vẫn skip như hành vi cũ.
+        changed = backup_if_db_changed()
+        if changed:
+            AppSetting.set_value('backup_last_day_ymd', today_ymd)
+            AppSetting.set_value('backup_last_trigger', trigger)
+            print(f"[BACKUP] Daily backup done via trigger={trigger}")
+            return True
+        return False
     except Exception as e:
-        print(f"[BACKUP] run_backup_loop_startup_and_every_2h error: {e}")
+        print(f"[BACKUP] maybe_backup_once_per_day error (trigger={trigger}): {e}")
+        return False
 
 def send_security_email(subject, body, to_email=None):
     """Gửi email cảnh báo bảo mật, fallback sang in-console nếu chưa cấu hình SMTP."""
@@ -911,66 +1001,50 @@ def api_login():
         ip_address = request.remote_addr or ''
         user_agent = request.headers.get('User-Agent', '')
 
-        # Chỉ bắt buộc phê duyệt thiết bị ở môi trường production
-        # VÀ đã cấu hình SMTP để có thể gửi email/OTP.
-        is_production_env = (
-            os.environ.get('FLASK_ENV') == 'production'
-            or app.config.get('ENV') == 'production'
-        )
-        smtp_ok = bool(
-            app.config.get('SMTP_SERVER')
-            and app.config.get('SMTP_USERNAME')
-            and app.config.get('SMTP_PASSWORD')
-        )
-        if is_production_env and smtp_ok:
+        # URL/host nội bộ tin cậy: cho phép đăng nhập không cần phê duyệt máy lạ.
+        if _is_login_approval_bypass_request(request, ip_address):
             trusted = TrustedLoginIP.query.filter_by(user_id=user_id, ip_address=ip_address).first()
-            if trusted is None or not trusted.is_approved:
-                # Máy lạ: yêu cầu OTP gửi tới email người dùng
-                user_email = (email or '').strip()
-                if not user_email:
-                    # Không có email: fallback flow admin phê duyệt
-                    approval_token = __import__('secrets').token_urlsafe(32)
-                    trusted = TrustedLoginIP.query.filter_by(user_id=user_id, ip_address=ip_address).first()
-                    if trusted is None:
-                        trusted = TrustedLoginIP(
-                            user_id=user_id,
-                            ip_address=ip_address,
-                            user_agent=user_agent,
-                            created_at=datetime.utcnow(),
-                            is_approved=False,
-                            approval_token=approval_token
-                        )
-                        db.session.add(trusted)
-                        db.session.commit()
-                    else:
-                        trusted.approval_token = approval_token
-                        db.session.commit()
-                    send_login_approval_request_email(username_db, user_id, ip_address, user_agent, approval_token)
-                    return jsonify({
-                        'error': 'Máy/địa chỉ IP này chưa được phê duyệt. Tài khoản chưa có email, đã gửi yêu cầu tới quản trị viên.',
-                        'code': 'LOGIN_DEVICE_PENDING_APPROVAL'
-                    }), 403
-                # Có email: gửi OTP
-                import random
-                temp_token = __import__('secrets').token_urlsafe(32)
-                otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
-                now = datetime.utcnow()
-                LOGIN_OTP_STORE[temp_token] = {
-                    'user_id': user_id,
-                    'username': username_db,
-                    'ip_address': ip_address,
-                    'user_agent': user_agent,
-                    'otp': otp,
-                    'expires_at': now + timedelta(seconds=OTP_VALID_SECONDS),
-                    'last_sent_at': now,
-                }
-                send_login_otp_email(user_email, otp)
-                return jsonify({
-                    'requires_otp': True,
-                    'temp_token': temp_token,
-                    'message': f'Mã OTP đã gửi đến email {user_email[:3]}***{user_email[-10:] if len(user_email) > 10 else "***"}. Mã có hiệu lực 5 phút.',
-                    'resend_after_seconds': OTP_RESEND_COOLDOWN_SECONDS
-                }), 200
+            if trusted is None:
+                trusted = TrustedLoginIP(
+                    user_id=user_id,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    created_at=datetime.utcnow(),
+                    is_approved=True,
+                    approval_token=__import__('secrets').token_urlsafe(32),
+                    approved_at=datetime.utcnow()
+                )
+                db.session.add(trusted)
+            else:
+                trusted.user_agent = user_agent or trusted.user_agent
+                trusted.is_approved = True
+                trusted.approved_at = datetime.utcnow()
+            db.session.commit()
+
+        # Máy lạ bắt buộc phải được admin phê duyệt trong tab "Phiên đăng nhập / IP"
+        trusted = TrustedLoginIP.query.filter_by(user_id=user_id, ip_address=ip_address).first()
+        if trusted is None or not trusted.is_approved:
+            approval_token = __import__('secrets').token_urlsafe(32)
+            if trusted is None:
+                trusted = TrustedLoginIP(
+                    user_id=user_id,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    created_at=datetime.utcnow(),
+                    is_approved=False,
+                    approval_token=approval_token
+                )
+                db.session.add(trusted)
+            else:
+                trusted.user_agent = user_agent or trusted.user_agent
+                trusted.is_approved = False
+                trusted.approved_at = None
+                trusted.approval_token = approval_token
+            db.session.commit()
+            return jsonify({
+                'error': 'Máy/địa chỉ IP này chưa được phê duyệt. Vui lòng liên hệ admin và phê duyệt ở tab "Phiên đăng nhập / IP".',
+                'code': 'LOGIN_DEVICE_PENDING_APPROVAL'
+            }), 403
 
         now_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         db.session.execute(
@@ -985,6 +1059,10 @@ def api_login():
         roles = [row[0] for row in roles_result]
         token = __import__('secrets').token_urlsafe(32)
         session_id = register_token(token, user_id, ip_address=ip_address, user_agent=user_agent, is_new_device=False)
+        try:
+            maybe_backup_once_per_day(trigger='login')
+        except Exception:
+            pass
         resp = make_response(jsonify({
             'token': token,
             'user': {
@@ -1095,6 +1173,10 @@ def api_login_verify_otp():
     roles = [row[0] for row in roles_result]
     token = __import__('secrets').token_urlsafe(32)
     session_id = register_token(token, user_id, ip_address=ip_address, user_agent=user_agent, is_new_device=False)
+    try:
+        maybe_backup_once_per_day(trigger='login')
+    except Exception:
+        pass
     resp = make_response(jsonify({
         'token': token,
         'user': {
@@ -1266,6 +1348,9 @@ def api_login_device_history():
     if not user_id or not has_permission(user_id, 'manage_users'):
         return jsonify({'error': 'Forbidden'}), 403
 
+    # Dọn bản ghi chờ duyệt quá cũ (mặc định: > 7 ngày)
+    _maybe_cleanup_pending_login_devices()
+
     devices = []
     # SQLite không hỗ trợ "NULLS LAST". Dùng biểu thức (approved_at IS NULL) để tương thích đa DB.
     rows = db.session.execute(
@@ -1302,6 +1387,46 @@ def api_login_device_history():
         })
     return jsonify(devices)
 
+
+@app.route('/api/login-approval-host-rules', methods=['GET'])
+def api_get_login_approval_host_rules():
+    """Lấy danh sách host tin cậy và trạng thái yêu cầu phê duyệt."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    rules = _get_login_approval_host_rules()
+    hosts = sorted(set(_DEFAULT_LOGIN_APPROVAL_BYPASS_HOSTS) | set(rules.keys()))
+    items = []
+    for h in hosts:
+        # Mặc định host trusted nội bộ: không yêu cầu phê duyệt
+        require_approval = bool(rules.get(h, {}).get('require_approval', False))
+        items.append({'host': h, 'require_approval': require_approval})
+    return jsonify({'items': items})
+
+
+@app.route('/api/login-approval-host-rules', methods=['POST'])
+def api_upsert_login_approval_host_rule():
+    """Cập nhật bật/tắt yêu cầu phê duyệt cho 1 host."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    data = request.get_json(silent=True) or {}
+    host = _normalize_host(data.get('host') or '')
+    if not host:
+        return jsonify({'error': 'Host không hợp lệ'}), 400
+    require_approval = bool(data.get('require_approval', True))
+
+    rules = _get_login_approval_host_rules()
+    rules[host] = {'require_approval': require_approval}
+    _set_login_approval_host_rules(rules)
+    return jsonify({'message': 'Đã lưu cấu hình host', 'host': host, 'require_approval': require_approval})
+
 @app.route('/api/active-sessions/<string:session_id>', methods=['DELETE'])
 def api_revoke_session(session_id):
     """Ngắt kết nối một phiên đăng nhập cụ thể (chỉ admin / manage_users)."""
@@ -1316,6 +1441,83 @@ def api_revoke_session(session_id):
     if not ok:
         return jsonify({'error': 'Không tìm thấy phiên hoặc đã hết hạn'}), 404
     return jsonify({'message': 'Đã ngắt kết nối phiên đăng nhập'})
+
+
+@app.route('/api/login-device-history/<int:device_id>/approve', methods=['POST'])
+def api_approve_login_device_by_admin(device_id):
+    """Admin phê duyệt thiết bị/IP chờ duyệt trong tab Phiên đăng nhập / IP."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    rec = TrustedLoginIP.query.get(device_id)
+    if not rec:
+        return jsonify({'error': 'Không tìm thấy thiết bị/IP'}), 404
+
+    rec.is_approved = True
+    rec.approved_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'message': 'Đã phê duyệt thiết bị/IP. Người dùng có thể đăng nhập lại.'})
+
+
+@app.route('/api/login-device-history/<int:device_id>/deny', methods=['POST'])
+def api_deny_login_device_by_admin(device_id):
+    """Admin từ chối/thu hồi phê duyệt thiết bị/IP trong tab Phiên đăng nhập / IP."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    rec = TrustedLoginIP.query.get(device_id)
+    if not rec:
+        return jsonify({'error': 'Không tìm thấy thiết bị/IP'}), 404
+
+    rec.is_approved = False
+    rec.approved_at = None
+    db.session.commit()
+    return jsonify({'message': 'Đã từ chối/thu hồi phê duyệt thiết bị/IP.'})
+
+
+@app.route('/api/login-device-history/<int:device_id>/cancel-login', methods=['POST'])
+def api_cancel_login_device_by_admin(device_id):
+    """Admin hủy đăng nhập từ thiết bị/IP: từ chối phê duyệt và ngắt các phiên cùng user/IP (nếu có)."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    admin_user_id = get_user_from_token(token)
+    if not admin_user_id or not has_permission(admin_user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    rec = TrustedLoginIP.query.get(device_id)
+    if not rec:
+        return jsonify({'error': 'Không tìm thấy thiết bị/IP'}), 404
+
+    rec.is_approved = False
+    rec.approved_at = None
+
+    # Best-effort: ngắt luôn các phiên đang hoạt động cùng user/IP
+    now = datetime.utcnow()
+    revoked_count = 0
+    try:
+        rows = AuthSession.query.filter(
+            AuthSession.user_id == rec.user_id,
+            AuthSession.ip_address == rec.ip_address,
+            AuthSession.revoked == False,  # noqa: E712
+            AuthSession.expires_at >= now
+        ).all()
+        for row in rows:
+            row.revoked = True
+            revoked_count += 1
+    except Exception:
+        pass
+
+    db.session.commit()
+    return jsonify({
+        'message': 'Đã hủy đăng nhập từ thiết bị/IP này.',
+        'revoked_sessions': revoked_count
+    })
 
 @app.route('/api/backup', methods=['GET'])
 def api_backup():
@@ -4258,12 +4460,6 @@ def check_upcoming_appointments():
 def run_scheduler():
     import time as _time
     schedule.every().day.at("08:00").do(check_upcoming_appointments)
-    backup_time = (os.environ.get('GDRIVE_BACKUP_DAILY_AT') or app.config.get('GDRIVE_BACKUP_DAILY_AT') or "02:00").strip()
-    try:
-        schedule.every().day.at(backup_time).do(scheduled_daily_backup)
-        print(f"[BACKUP] Daily backup scheduled at {backup_time}")
-    except Exception as e:
-        print(f"[BACKUP] Cannot schedule daily backup: {e}")
     while True:
         schedule.run_pending()
         _time.sleep(60)
@@ -4273,10 +4469,17 @@ scheduler_thread = threading.Thread(target=run_scheduler)
 scheduler_thread.daemon = True
 scheduler_thread.start()
 
-# Start backup loop: backup lần đầu khi app chạy + mỗi 2 tiếng
-backup_loop_thread = threading.Thread(target=run_backup_loop_startup_and_every_2h)
-backup_loop_thread.daemon = True
-backup_loop_thread.start()
+# Startup trigger: thử backup 1 lần/ngày khi mở server
+def _backup_startup_trigger():
+    try:
+        with app.app_context():
+            maybe_backup_once_per_day(trigger='startup')
+    except Exception as e:
+        print(f"[BACKUP] startup trigger error: {e}")
+
+backup_startup_thread = threading.Thread(target=_backup_startup_trigger)
+backup_startup_thread.daemon = True
+backup_startup_thread.start()
 
 # ===================== SYNC ONLINE <-> LOCAL (Appointment/ChangeRequest) =====================
 def _resolve_patient_from_sync_payload(pt: dict):
@@ -4559,6 +4762,7 @@ def api_sync_push():
 
 def run_sync_loop_local():
     """LOCAL chạy nền: pull từ ONLINE + push event local."""
+    import time as _time
     remote = (os.environ.get('SYNC_REMOTE_URL') or app.config.get('SYNC_REMOTE_URL') or '').rstrip('/')
     token = (os.environ.get('SYNC_TOKEN') or app.config.get('SYNC_TOKEN') or '').strip()
     if not remote or not token:
@@ -4605,7 +4809,7 @@ def run_sync_loop_local():
             print(f"[SYNC] loop error: {e}")
             _sync_state_set(last_error=str(e), last_error_at_utc=_utc_iso_now())
 
-        time.sleep(int(os.environ.get('SYNC_INTERVAL_SECONDS') or 15))
+        _time.sleep(int(os.environ.get('SYNC_INTERVAL_SECONDS') or 15))
 
 
 # ===================== SYNC STATUS (runtime health) =====================
@@ -9831,7 +10035,7 @@ def get_patient_records():
         status = (request.args.get('status') or '').strip()
 
         query = (
-            db.session.query(PatientRecord, Patient.patient_id)
+            db.session.query(PatientRecord, Patient.patient_id, Patient.address)
             .outerjoin(Appointment, Appointment.id == PatientRecord.appointment_id)
             .outerjoin(Patient, Patient.id == Appointment.patient_id)
         )
@@ -9882,6 +10086,7 @@ def get_patient_records():
             'id': record.id,
             'patient_name': record.patient_name,
             'patient_phone': record.patient_phone,
+            'patient_address': (address or ''),
             'appointment_date': record.appointment_date.isoformat(),
             'doctor_name': record.doctor_name,
             'service_type': record.service_type,
@@ -9892,7 +10097,7 @@ def get_patient_records():
             'created_at': record.created_at.isoformat() if record.created_at else None,
             'updated_at': record.updated_at.isoformat() if record.updated_at else None,
             'patient_pid': (pid or None)
-        } for (record, pid) in rows])
+        } for (record, pid, address) in rows])
     except Exception as e:
         return jsonify({'message': f'Lỗi khi lấy danh sách hồ sơ: {str(e)}'}), 500
 
