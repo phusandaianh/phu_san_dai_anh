@@ -4324,6 +4324,31 @@ def _resolve_patient_from_sync_payload(pt: dict):
 def _apply_sync_event(event_type: str, payload_obj: dict) -> None:
     """Áp dụng event vào DB hiện tại. Best-effort, idempotent theo event_id được đảm bảo ở tầng SyncEvent."""
     try:
+        if event_type == 'booking_content.updated':
+            ensure_booking_reasons_column()
+            bc = (payload_obj or {}).get('booking_content') or {}
+            content = BookingPageContent.query.first()
+            if not content:
+                content = BookingPageContent()
+                db.session.add(content)
+            # Best-effort update; keep existing value when missing
+            if bc.get('title') is not None:
+                content.title = bc.get('title')
+            if bc.get('description') is not None:
+                content.description = bc.get('description')
+            if bc.get('services') is not None:
+                content.services = bc.get('services')
+            if bc.get('utilities') is not None:
+                content.utilities = bc.get('utilities')
+            if bc.get('reasons') is not None:
+                content.reasons = bc.get('reasons')
+            if bc.get('schedule') is not None:
+                content.schedule = bc.get('schedule')
+            if bc.get('contact') is not None:
+                content.contact = bc.get('contact')
+            db.session.commit()
+            return
+
         if event_type in ('appointment.created', 'appointment.updated'):
             ap = (payload_obj or {}).get('appointment') or {}
             pt = (payload_obj or {}).get('patient') or {}
@@ -4540,6 +4565,8 @@ def run_sync_loop_local():
         return
 
     headers = {'X-Sync-Token': token}
+    print(f"[SYNC] local loop started. remote={remote}")
+    _sync_state_set(loop_started_at_utc=_utc_iso_now(), last_error=None, last_error_at_utc=None)
 
     while True:
         try:
@@ -4553,6 +4580,8 @@ def run_sync_loop_local():
                     latest2 = _store_and_apply_remote_events(events)
                     if int(latest2) > last_pulled:
                         AppSetting.set_value('sync_last_pulled_seq', str(int(latest2)))
+                    print(f"[SYNC] pulled {len(events)} event(s). latest_seq={latest}")
+                _sync_state_set(last_pull_at_utc=_utc_iso_now(), last_ok_at_utc=_utc_iso_now())
 
             # 2) Push local -> remote
             last_pushed = int(AppSetting.get_value('sync_last_pushed_seq', 0) or 0)
@@ -4570,10 +4599,68 @@ def run_sync_loop_local():
                 code2, resp2 = _http_json('POST', f"{remote}/api/sync/push", headers=headers, body_obj={'events': payload_events}, timeout_s=20)
                 if code2 == 200:
                     AppSetting.set_value('sync_last_pushed_seq', str(to_push[-1].id))
+                    print(f"[SYNC] pushed {len(to_push)} event(s). latest_seq={to_push[-1].id}")
+                    _sync_state_set(last_push_at_utc=_utc_iso_now(), last_ok_at_utc=_utc_iso_now())
         except Exception as e:
             print(f"[SYNC] loop error: {e}")
+            _sync_state_set(last_error=str(e), last_error_at_utc=_utc_iso_now())
 
         time.sleep(int(os.environ.get('SYNC_INTERVAL_SECONDS') or 15))
+
+
+# ===================== SYNC STATUS (runtime health) =====================
+_sync_runtime_state = {
+    'loop_started_at_utc': None,
+    'last_pull_at_utc': None,
+    'last_push_at_utc': None,
+    'last_ok_at_utc': None,
+    'last_error_at_utc': None,
+    'last_error': None,
+}
+
+
+def _utc_iso_now():
+    try:
+        return datetime.utcnow().replace(microsecond=0).isoformat() + 'Z'
+    except Exception:
+        return None
+
+
+def _sync_state_set(**kv):
+    try:
+        _sync_runtime_state.update(kv)
+    except Exception:
+        pass
+
+
+@app.route('/api/sync/status', methods=['GET'])
+@require_auth
+def api_sync_status(**kwargs):
+    """Trạng thái sync để hiển thị cho admin vận hành."""
+    role = (os.environ.get('SYNC_ROLE') or app.config.get('SYNC_ROLE') or '').strip().lower() or 'local'
+    remote = (os.environ.get('SYNC_REMOTE_URL') or app.config.get('SYNC_REMOTE_URL') or '').strip().rstrip('/')
+    token = (os.environ.get('SYNC_TOKEN') or app.config.get('SYNC_TOKEN') or '').strip()
+
+    enabled = bool(role == 'local' and remote and token)
+    # Best-effort read stored progress
+    try:
+        last_pulled_seq = int(AppSetting.get_value('sync_last_pulled_seq', 0) or 0)
+    except Exception:
+        last_pulled_seq = 0
+    try:
+        last_pushed_seq = int(AppSetting.get_value('sync_last_pushed_seq', 0) or 0)
+    except Exception:
+        last_pushed_seq = 0
+
+    return jsonify({
+        'role': role,
+        'enabled': enabled,
+        'remote_url': remote or None,
+        'interval_seconds': int(os.environ.get('SYNC_INTERVAL_SECONDS') or 15),
+        'last_pulled_seq': last_pulled_seq,
+        'last_pushed_seq': last_pushed_seq,
+        'runtime': dict(_sync_runtime_state),
+    })
 
 # Start sync loop on LOCAL
 try:
@@ -6439,6 +6526,23 @@ def update_booking_content(**kwargs):
     content.schedule = data.get('schedule', content.schedule)
     content.contact = data.get('contact', content.contact)
     db.session.commit()
+    # Emit sync event so booking.html content stays consistent across online/local
+    try:
+        payload = {
+            'booking_content': {
+                'title': content.title,
+                'description': content.description,
+                'services': content.services,
+                'utilities': content.utilities,
+                'reasons': getattr(content, 'reasons', None),
+                'schedule': content.schedule,
+                'contact': content.contact,
+                'updated_at': content.updated_at.isoformat() if content.updated_at else None,
+            }
+        }
+        _emit_sync_event('booking_content', 'booking_content', 'booking_content.updated', payload)
+    except Exception:
+        pass
     return jsonify({'message': 'Đã cập nhật nội dung trang đặt lịch khám!'})
 
 @app.route('/api/work-schedule', methods=['GET'])

@@ -358,6 +358,37 @@
             background: #f5f5f5;
             font-weight: bold;
         }
+
+        /* Sync status badge (admin operational safety) */
+        .sync-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.25);
+            background: rgba(255,255,255,0.12);
+            color: white;
+            font-size: 0.9rem;
+            line-height: 1;
+            white-space: nowrap;
+            max-width: 100%;
+        }
+        .sync-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #94a3b8; /* neutral */
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.18);
+            flex: 0 0 auto;
+        }
+        .sync-dot.ok { background: #22c55e; }
+        .sync-dot.warn { background: #f59e0b; }
+        .sync-dot.err { background: #ef4444; }
+        .sync-status .sync-text {
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
     </style>
 </head>
 <body>
@@ -439,6 +470,10 @@
             <a href="camera-admin.html" class="camera-manage-link" title="Mở trang Quản lý camera">
                 <i class="fas fa-video"></i> Quản lý camera
             </a>
+        </div>
+        <div class="sync-status" id="syncStatusBadge" title="Trạng thái đồng bộ online ↔ nội bộ">
+            <span class="sync-dot" id="syncStatusDot"></span>
+            <span class="sync-text" id="syncStatusText">SYNC: đang kiểm tra…</span>
         </div>
     </header>
 
@@ -725,6 +760,93 @@
                  }
                  loadExaminationSettings();
              }
+        });
+
+        // Sync status (operational)
+        function _fmtAgo(iso) {
+            if (!iso) return '';
+            const t = Date.parse(iso);
+            if (Number.isNaN(t)) return '';
+            const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+            if (sec < 60) return `${sec}s`;
+            const min = Math.floor(sec / 60);
+            if (min < 60) return `${min}p`;
+            const hr = Math.floor(min / 60);
+            if (hr < 48) return `${hr}g`;
+            const d = Math.floor(hr / 24);
+            return `${d}n`;
+        }
+
+        async function refreshSyncStatus() {
+            const badge = document.getElementById('syncStatusBadge');
+            const dot = document.getElementById('syncStatusDot');
+            const textEl = document.getElementById('syncStatusText');
+            if (!badge || !dot || !textEl) return;
+
+            const token = (localStorage.getItem('authToken') || '').trim();
+            if (!token) {
+                dot.className = 'sync-dot warn';
+                textEl.textContent = 'SYNC: chưa đăng nhập';
+                return;
+            }
+
+            try {
+                const r = await fetch('/api/sync/status', {
+                    headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${token}` },
+                    cache: 'no-store'
+                });
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                const st = await r.json();
+
+                const role = (st?.role || '').toUpperCase();
+                const enabled = !!st?.enabled;
+                const remote = st?.remote_url ? String(st.remote_url).replace(/\/$/, '') : '';
+                const rt = st?.runtime || {};
+
+                const lastOkAgo = _fmtAgo(rt.last_ok_at_utc);
+                const lastErrAgo = _fmtAgo(rt.last_error_at_utc);
+                const lastErr = rt.last_error ? String(rt.last_error) : '';
+
+                // Decide status color:
+                // - ONLINE: always "ok" (it doesn't run pull loop) unless API errors
+                // - LOCAL: ok if enabled and last_ok within 60s; warn if enabled but stale; err if last_error exists recently
+                let level = 'warn';
+                if (role === 'ONLINE') {
+                    level = 'ok';
+                } else if (!enabled) {
+                    level = 'err';
+                } else if (lastErr && lastErrAgo && (lastErrAgo.endsWith('s') || lastErrAgo.endsWith('p'))) {
+                    level = 'err';
+                } else if (lastOkAgo && (lastOkAgo.endsWith('s') || (lastOkAgo.endsWith('p') && parseInt(lastOkAgo, 10) <= 1))) {
+                    level = 'ok';
+                } else {
+                    level = 'warn';
+                }
+
+                dot.className = `sync-dot ${level}`;
+
+                if (role === 'ONLINE') {
+                    textEl.textContent = `SYNC: ONLINE`;
+                    badge.title = `Node online (cổng đặt lịch). Token đã cấu hình.`;
+                } else {
+                    const seqPull = st?.last_pulled_seq ?? 0;
+                    const seqPush = st?.last_pushed_seq ?? 0;
+                    const okPart = lastOkAgo ? `OK ${lastOkAgo} trước` : 'chưa có OK';
+                    const errPart = lastErrAgo ? `LỖI ${lastErrAgo} trước: ${lastErr}` : '';
+                    textEl.textContent = `SYNC: LOCAL • ${enabled ? 'ON' : 'OFF'} • ${okPart}${errPart ? ` • ${errPart}` : ''}`;
+                    badge.title = `Local sync\nRemote: ${remote || '—'}\nPull seq: ${seqPull}\nPush seq: ${seqPush}${lastErr ? `\nLast error: ${lastErr}` : ''}`;
+                }
+            } catch (e) {
+                dot.className = 'sync-dot err';
+                textEl.textContent = 'SYNC: lỗi kết nối';
+                badge.title = `Không lấy được /api/sync/status (${e?.message || e})`;
+            }
+        }
+
+        // Start polling after page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            refreshSyncStatus();
+            setInterval(refreshSyncStatus, 5000);
         });
 
         // Load examination settings
