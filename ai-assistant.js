@@ -1,7 +1,16 @@
 /**
  * AI Assistant - Trợ lý AI hỗ trợ giọng nói và văn bản tiếng Việt
- * Luôn hiển thị trên mọi trang
+ * Trên trang chủ: chỉ hiển thị khi đã đăng nhập (có authToken). Các trang khác giữ nguyên.
  */
+
+function isHomePagePath() {
+    const path = (window.location.pathname || '').toLowerCase();
+    return path === '/' || /\/index\.html$/i.test(path);
+}
+
+function hasAuthToken() {
+    return !!(localStorage.getItem('authToken') || '').trim();
+}
 
 class AIAssistant {
     constructor() {
@@ -876,10 +885,13 @@ function ensureAIAssistantCSS() {
 // Khởi tạo AI Assistant khi trang load
 let aiAssistant;
 document.addEventListener('DOMContentLoaded', function() {
+    if (isHomePagePath() && !hasAuthToken()) {
+        aiAssistant = null;
+        window.aiAssistant = null;
+        return;
+    }
     ensureAIAssistantCSS();
     aiAssistant = new AIAssistant();
+    window.aiAssistant = aiAssistant;
 });
-
-// Export cho global access
-window.aiAssistant = aiAssistant;
 

@@ -7,6 +7,7 @@ import json
 import sys
 from datetime import datetime, timedelta
 from pydicom.dataset import Dataset
+from name_format import strip_accents_for_dicom_modality
 from pynetdicom import AE, evt
 from pynetdicom.sop_class import ModalityWorklistInformationFind, VerificationSOPClass
 
@@ -142,7 +143,7 @@ def start_worklist_watcher(interval=10):
                     if last_mtime is None:
                         # first load immediately
                         worklist_entries = load_worklist_from_db()
-                        print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {len(worklist_entries)} worklist entries from mwl.db")
+                        _safe_print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {len(worklist_entries)} worklist entries from {os.path.abspath('mwl.db')}")
                         last_mtime = mtime
                         pending_mwl_reload_at = None
                         pending_mwl_mtime = None
@@ -155,7 +156,7 @@ def start_worklist_watcher(interval=10):
                         current_mtime = os.path.getmtime('mwl.db')
                         if pending_mwl_mtime is None or current_mtime == pending_mwl_mtime:
                             worklist_entries = load_worklist_from_db()
-                            print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {len(worklist_entries)} worklist entries from mwl.db")
+                            _safe_print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {len(worklist_entries)} worklist entries from {os.path.abspath('mwl.db')}")
                             last_mtime = current_mtime
                             pending_mwl_reload_at = None
                             pending_mwl_mtime = None
@@ -290,11 +291,20 @@ def handle_find(event):
         d = (value or '').strip().replace('-', '')
         return d[:8] if len(d) >= 8 else d
 
+    def _is_yyyymmdd(value: str) -> bool:
+        return len(value) == 8 and value.isdigit()
+
     def _date_match(entry_date: str, query_date: str) -> bool:
         q_raw = (query_date or '').strip()
         if not q_raw:
             return True
+        # Nhiều modality gửi wildcard thay vì để trống → trước đây so sánh sai → 0 kết quả
+        if q_raw in ('*', '-', '?'):
+            return True
         e = _norm_dicom_date(entry_date)
+        if not _is_yyyymmdd(e):
+            # Ca không có ngày hợp lệ 8 số: không lọc theo ngày (tránh mất worklist)
+            return True
         # DICOM MWL date range: exactly YYYYMMDD-YYYYMMDD
         if len(q_raw) == 17 and q_raw[8] == '-':
             start_n, end_n = q_raw[:8], q_raw[9:17]
@@ -304,7 +314,10 @@ def handle_find(event):
                 if e > end_n:
                     return False
                 return True
-        return e == _norm_dicom_date(q_raw)
+        qn = _norm_dicom_date(q_raw)
+        if not _is_yyyymmdd(qn):
+            return True
+        return e == qn
 
     # Trả đúng cấu trúc MWL với ScheduledProcedureStepSequence
     for entry in worklist_entries:
@@ -316,14 +329,26 @@ def handle_find(event):
             if not _date_match(entry_date, req_date):
                 continue
 
+            study_desc = getattr(entry, 'StudyDescription', '') or 'Sieu am'
+            study_desc = strip_accents_for_dicom_modality(study_desc)
+            patient_pn = strip_accents_for_dicom_modality(getattr(entry, 'PatientName', '') or '')
+
             rsp = Dataset()
-            rsp.SpecificCharacterSet = 'ISO_IR 192'
+            # Không gửi ISO_IR 192: nhiều máy siêu âm hiển thị sai ô vuông với UTF-8 trong PN.
+            # Toàn bộ chuỗi chữ ở đây đã ASCII (không dấu) để tương thích mặc định DICOM.
             rsp.QueryRetrieveLevel = 'PATIENT'
-            rsp.PatientName = getattr(entry, 'PatientName', '') or ''
+            rsp.PatientName = patient_pn
             rsp.PatientID = getattr(entry, 'PatientID', '') or ''
             rsp.PatientBirthDate = getattr(entry, 'PatientBirthDate', '') or ''
             rsp.AccessionNumber = getattr(entry, 'AccessionNumber', '') or ''
-            rsp.RequestedProcedureDescription = getattr(entry, 'StudyDescription', '') or 'Sieu am'
+            rsp.RequestedProcedureDescription = study_desc
+            # Dự kiến sinh (EDD): load_worklist_from_db đã gắn LMP = EDD-280 ngày + comment "EDD yyyy-mm-dd"
+            lmp = getattr(entry, 'LastMenstrualDate', None)
+            if lmp:
+                rsp.LastMenstrualDate = lmp
+            rpc = getattr(entry, 'RequestedProcedureComments', None)
+            if rpc:
+                rsp.RequestedProcedureComments = strip_accents_for_dicom_modality(str(rpc))
 
             sps = Dataset()
             sps.Modality = entry_modality or 'US'
@@ -331,7 +356,7 @@ def handle_find(event):
             sps.ScheduledStationName = STATION_NAME
             sps.ScheduledProcedureStepStartDate = entry_date
             sps.ScheduledProcedureStepStartTime = str(getattr(entry, 'ScheduledProcedureStepStartTime', '') or '').strip()
-            sps.ScheduledProcedureStepDescription = getattr(entry, 'StudyDescription', '') or 'Sieu am'
+            sps.ScheduledProcedureStepDescription = study_desc
             sps.ScheduledProcedureStepID = str(getattr(entry, 'AccessionNumber', '') or '')
             rsp.ScheduledProcedureStepSequence = [sps]
 
@@ -389,6 +414,8 @@ def main():
     start_auto_sync_scheduler(interval_minutes=3)
 
     # Khởi động server
+    _safe_print(f"MWL process cwd: {os.getcwd()}")
+    _safe_print(f"mwl.db resolved path: {os.path.abspath('mwl.db')} (exists={os.path.exists('mwl.db')})")
     print(f"Starting Modality Worklist SCP on 0.0.0.0:{MWL_PORT}")
     ae.start_server(("0.0.0.0", MWL_PORT), block=True, evt_handlers=handlers)
 

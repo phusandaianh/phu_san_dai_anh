@@ -1,8 +1,8 @@
 from flask import Flask, render_template, send_from_directory, request, jsonify, send_file, Response, abort, after_this_request
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import or_, inspect, func, text, bindparam, cast, Integer
-from sqlalchemy.exc import IntegrityError
-from datetime import datetime, timedelta
+from sqlalchemy.exc import IntegrityError, OperationalError
+from datetime import datetime, timedelta, timezone
 import os
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
@@ -39,6 +39,7 @@ from pathlib import Path
 import subprocess
 from voluson_sync_service import get_voluson_sync_service
 import mwl_store
+from name_format import patient_name_title_vi
 
 # Khi chạy bằng `python app.py`, module name là __main__.
 # Một số blueprint có `from app import ...` → nếu không alias sẽ tạo module app thứ 2,
@@ -128,6 +129,15 @@ except Exception as e:
     print("Config from config.py failed, using defaults:", e)
 if not app.config.get('SQLALCHEMY_DATABASE_URI'):
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL') or 'sqlite:///clinic.db'
+# SQLite + Waitress đa luồng: tăng timeout và cho phép dùng chung connection giữa thread để tránh "database is locked" khi ghi AppSetting.
+_db_uri = (app.config.get('SQLALCHEMY_DATABASE_URI') or '').strip()
+if _db_uri.startswith('sqlite:'):
+    _eng = dict(app.config.get('SQLALCHEMY_ENGINE_OPTIONS') or {})
+    _ca = dict(_eng.get('connect_args') or {})
+    _ca.setdefault('check_same_thread', False)
+    _ca.setdefault('timeout', 30)
+    _eng['connect_args'] = _ca
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = _eng
 if not app.config.get('SECRET_KEY') or app.config.get('SECRET_KEY', '').startswith('phong-kham-dai-anh-secret'):
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or app.config.get('SECRET_KEY', 'phong-kham-dai-anh-secret-key-change-in-production')
     if not os.environ.get('SECRET_KEY') and os.environ.get('FLASK_ENV') == 'production':
@@ -1298,6 +1308,24 @@ def api_deny_login_device():
         mimetype='text/plain; charset=utf-8'
     )
 
+
+def _utc_datetime_iso_z(dt):
+    """ISO-8601 có hậu tố Z (UTC). Naive trong DB = UTC (utcnow); tránh JS parse nhầm thành giờ local máy."""
+    if not dt:
+        return None
+    try:
+        if getattr(dt, 'tzinfo', None) is not None:
+            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        s = dt.isoformat()
+        if s.endswith('Z'):
+            return s
+        if s.endswith('+00:00'):
+            return s[:-6] + 'Z'
+        return s + 'Z'
+    except Exception:
+        return None
+
+
 @app.route('/api/active-sessions', methods=['GET'])
 def api_active_sessions():
     """Liệt kê các phiên đăng nhập đang hoạt động (chỉ admin / manage_users)."""
@@ -1333,8 +1361,8 @@ def api_active_sessions():
             'roles': roles,
             'ipAddress': info.ip_address or '',
             'userAgent': info.user_agent or '',
-            'createdAt': info.created_at.isoformat() if info.created_at else None,
-            'lastSeen': info.last_seen.isoformat() if info.last_seen else None,
+            'createdAt': _utc_datetime_iso_z(info.created_at),
+            'lastSeen': _utc_datetime_iso_z(info.last_seen),
             'isNewDevice': bool(info.is_new_device),
         })
     return jsonify(sessions)
@@ -1364,14 +1392,6 @@ def api_login_device_history():
         {}
     ).fetchall()
 
-    def _to_iso_or_none(v):
-        if not v:
-            return None
-        try:
-            return v.isoformat()
-        except Exception:
-            return str(v)
-
     for row in rows:
         rid, uid, ip, ua, created, approved, is_appr, username, full_name = row
         devices.append({
@@ -1381,8 +1401,8 @@ def api_login_device_history():
             'fullName': full_name or '',
             'ipAddress': ip or '',
             'userAgent': (ua or '')[:200],
-            'createdAt': _to_iso_or_none(created),
-            'approvedAt': _to_iso_or_none(approved),
+            'createdAt': _utc_datetime_iso_z(created),
+            'approvedAt': _utc_datetime_iso_z(approved),
             'isApproved': bool(is_appr),
         })
     return jsonify(devices)
@@ -1416,16 +1436,21 @@ def api_upsert_login_approval_host_rule():
     if not user_id or not has_permission(user_id, 'manage_users'):
         return jsonify({'error': 'Forbidden'}), 403
 
-    data = request.get_json(silent=True) or {}
-    host = _normalize_host(data.get('host') or '')
-    if not host:
-        return jsonify({'error': 'Host không hợp lệ'}), 400
-    require_approval = bool(data.get('require_approval', True))
+    try:
+        data = request.get_json(silent=True, force=True) or {}
+        host = _normalize_host(data.get('host') or '')
+        if not host:
+            return jsonify({'error': 'Host không hợp lệ'}), 400
+        require_approval = bool(data.get('require_approval', True))
 
-    rules = _get_login_approval_host_rules()
-    rules[host] = {'require_approval': require_approval}
-    _set_login_approval_host_rules(rules)
-    return jsonify({'message': 'Đã lưu cấu hình host', 'host': host, 'require_approval': require_approval})
+        rules = _get_login_approval_host_rules()
+        rules[host] = {'require_approval': require_approval}
+        _set_login_approval_host_rules(rules)
+        return jsonify({'message': 'Đã lưu cấu hình host', 'host': host, 'require_approval': require_approval})
+    except Exception as ex:
+        db.session.rollback()
+        app.logger.exception('api_upsert_login_approval_host_rule failed')
+        return jsonify({'error': 'Không lưu được xuống máy chủ (CSDL). Thử lại sau.', 'detail': str(ex)}), 500
 
 @app.route('/api/active-sessions/<string:session_id>', methods=['DELETE'])
 def api_revoke_session(session_id):
@@ -1452,14 +1477,26 @@ def api_approve_login_device_by_admin(device_id):
     if not user_id or not has_permission(user_id, 'manage_users'):
         return jsonify({'error': 'Forbidden'}), 403
 
-    rec = TrustedLoginIP.query.get(device_id)
-    if not rec:
-        return jsonify({'error': 'Không tìm thấy thiết bị/IP'}), 404
-
-    rec.is_approved = True
-    rec.approved_at = datetime.utcnow()
-    db.session.commit()
-    return jsonify({'message': 'Đã phê duyệt thiết bị/IP. Người dùng có thể đăng nhập lại.'})
+    last_oe = None
+    for attempt in range(6):
+        try:
+            rec = db.session.get(TrustedLoginIP, device_id)
+            if not rec:
+                return jsonify({'error': 'Không tìm thấy thiết bị/IP'}), 404
+            rec.is_approved = True
+            rec.approved_at = datetime.utcnow()
+            db.session.commit()
+            return jsonify({'message': 'Đã phê duyệt thiết bị/IP. Người dùng có thể đăng nhập lại.'})
+        except OperationalError as ex:
+            last_oe = ex
+            db.session.rollback()
+            time.sleep(0.05 * (attempt + 1))
+        except Exception as ex:
+            db.session.rollback()
+            app.logger.exception('api_approve_login_device_by_admin failed')
+            return jsonify({'error': 'Không lưu được thay đổi.', 'detail': str(ex)}), 500
+    db.session.rollback()
+    return jsonify({'error': 'CSDL đang bận (khóa). Thử lại sau.', 'detail': str(last_oe)}), 503
 
 
 @app.route('/api/login-device-history/<int:device_id>/deny', methods=['POST'])
@@ -1471,14 +1508,26 @@ def api_deny_login_device_by_admin(device_id):
     if not user_id or not has_permission(user_id, 'manage_users'):
         return jsonify({'error': 'Forbidden'}), 403
 
-    rec = TrustedLoginIP.query.get(device_id)
-    if not rec:
-        return jsonify({'error': 'Không tìm thấy thiết bị/IP'}), 404
-
-    rec.is_approved = False
-    rec.approved_at = None
-    db.session.commit()
-    return jsonify({'message': 'Đã từ chối/thu hồi phê duyệt thiết bị/IP.'})
+    last_oe = None
+    for attempt in range(6):
+        try:
+            rec = db.session.get(TrustedLoginIP, device_id)
+            if not rec:
+                return jsonify({'error': 'Không tìm thấy thiết bị/IP'}), 404
+            rec.is_approved = False
+            rec.approved_at = None
+            db.session.commit()
+            return jsonify({'message': 'Đã từ chối/thu hồi phê duyệt thiết bị/IP.'})
+        except OperationalError as ex:
+            last_oe = ex
+            db.session.rollback()
+            time.sleep(0.05 * (attempt + 1))
+        except Exception as ex:
+            db.session.rollback()
+            app.logger.exception('api_deny_login_device_by_admin failed')
+            return jsonify({'error': 'Không lưu được thay đổi.', 'detail': str(ex)}), 500
+    db.session.rollback()
+    return jsonify({'error': 'CSDL đang bận (khóa). Thử lại sau.', 'detail': str(last_oe)}), 503
 
 
 @app.route('/api/login-device-history/<int:device_id>/cancel-login', methods=['POST'])
@@ -1490,34 +1539,46 @@ def api_cancel_login_device_by_admin(device_id):
     if not admin_user_id or not has_permission(admin_user_id, 'manage_users'):
         return jsonify({'error': 'Forbidden'}), 403
 
-    rec = TrustedLoginIP.query.get(device_id)
-    if not rec:
-        return jsonify({'error': 'Không tìm thấy thiết bị/IP'}), 404
+    last_oe = None
+    for attempt in range(6):
+        try:
+            rec = db.session.get(TrustedLoginIP, device_id)
+            if not rec:
+                return jsonify({'error': 'Không tìm thấy thiết bị/IP'}), 404
 
-    rec.is_approved = False
-    rec.approved_at = None
+            rec.is_approved = False
+            rec.approved_at = None
 
-    # Best-effort: ngắt luôn các phiên đang hoạt động cùng user/IP
-    now = datetime.utcnow()
-    revoked_count = 0
-    try:
-        rows = AuthSession.query.filter(
-            AuthSession.user_id == rec.user_id,
-            AuthSession.ip_address == rec.ip_address,
-            AuthSession.revoked == False,  # noqa: E712
-            AuthSession.expires_at >= now
-        ).all()
-        for row in rows:
-            row.revoked = True
-            revoked_count += 1
-    except Exception:
-        pass
+            now = datetime.utcnow()
+            revoked_count = 0
+            try:
+                rows = AuthSession.query.filter(
+                    AuthSession.user_id == rec.user_id,
+                    AuthSession.ip_address == rec.ip_address,
+                    AuthSession.revoked == False,  # noqa: E712
+                    AuthSession.expires_at >= now
+                ).all()
+                for row in rows:
+                    row.revoked = True
+                    revoked_count += 1
+            except Exception:
+                pass
 
-    db.session.commit()
-    return jsonify({
-        'message': 'Đã hủy đăng nhập từ thiết bị/IP này.',
-        'revoked_sessions': revoked_count
-    })
+            db.session.commit()
+            return jsonify({
+                'message': 'Đã hủy đăng nhập từ thiết bị/IP này.',
+                'revoked_sessions': revoked_count
+            })
+        except OperationalError as ex:
+            last_oe = ex
+            db.session.rollback()
+            time.sleep(0.05 * (attempt + 1))
+        except Exception as ex:
+            db.session.rollback()
+            app.logger.exception('api_cancel_login_device_by_admin failed')
+            return jsonify({'error': 'Không lưu được thay đổi.', 'detail': str(ex)}), 500
+    db.session.rollback()
+    return jsonify({'error': 'CSDL đang bận (khóa). Thử lại sau.', 'detail': str(last_oe)}), 503
 
 @app.route('/api/backup', methods=['GET'])
 def api_backup():
@@ -3184,13 +3245,26 @@ class AppSetting(db.Model):
 
     @staticmethod
     def set_value(key, value):
-        setting = AppSetting.query.filter_by(key=key).first()
-        if setting:
-            setting.value = value
-        else:
-            setting = AppSetting(key=key, value=value)
-            db.session.add(setting)
-        db.session.commit()
+        """Ghi AppSetting; retry khi SQLite bị khóa (đa luồng / backup đồng thời)."""
+        last_exc = None
+        for attempt in range(6):
+            try:
+                setting = AppSetting.query.filter_by(key=key).first()
+                if setting:
+                    setting.value = value
+                else:
+                    db.session.add(AppSetting(key=key, value=value))
+                db.session.commit()
+                return
+            except OperationalError as ex:
+                last_exc = ex
+                db.session.rollback()
+                time.sleep(0.05 * (attempt + 1))
+            except Exception:
+                db.session.rollback()
+                raise
+        if last_exc:
+            raise last_exc
 
 _APP_SETTINGS_VALUE_TEXT_MIGRATED = False
 
@@ -3278,21 +3352,6 @@ class AIAssistantAvatar(db.Model):
             'uploaded_by': self.uploaded_by,
             'uploaded_at': self.uploaded_at.isoformat() if self.uploaded_at else None
         }
-
-    @staticmethod
-    def get_value(key, default=None):
-        setting = AppSetting.query.filter_by(key=key).first()
-        return setting.value if setting and setting.value is not None else default
-
-    @staticmethod
-    def set_value(key, value):
-        setting = AppSetting.query.filter_by(key=key).first()
-        if setting:
-            setting.value = value
-        else:
-            setting = AppSetting(key=key, value=value)
-            db.session.add(setting)
-        db.session.commit()
 
 DEFAULT_SLOT_MINUTES_KEY = 'work_schedule_default_slot_minutes'
 DEFAULT_SLOT_MINUTES_FALLBACK = 10
@@ -6754,10 +6813,10 @@ def get_work_schedule():
     ensure_work_schedule_columns()
     today = datetime.now().date()
     days = []
-    # Lấy tất cả lịch trong 14 ngày tới
+    # Lấy tất cả lịch trong 15 ngày tới (hôm nay + 14 ngày sau — đồng bộ trang đặt lịch & nhắc admin)
     all_schedules = WorkSchedule.query.filter(
         WorkSchedule.date >= today.strftime('%Y-%m-%d'),
-        WorkSchedule.date <= (today + timedelta(days=13)).strftime('%Y-%m-%d')
+        WorkSchedule.date <= (today + timedelta(days=14)).strftime('%Y-%m-%d')
     ).order_by(WorkSchedule.date, WorkSchedule.start_time).all()
     # Gom theo ngày
     schedule_dict = {}
@@ -6772,8 +6831,8 @@ def get_work_schedule():
             'slot_minutes': int(getattr(s, 'slot_minutes', 10) or 10),
             'is_closed': bool(getattr(s, 'is_closed', False))
         })
-    # Tạo đủ 14 ngày
-    for i in range(14):
+    # Tạo đủ 15 ngày (mỗi phần tử một ngày, kể cả ngày chưa có ca trong DB)
+    for i in range(15):
         d = today + timedelta(days=i)
         d_str = d.strftime('%Y-%m-%d')
         days.append({
@@ -7779,7 +7838,7 @@ def _upsert_mwl_entry_for_appointment(appointment, study_description: str, acces
                 dks_display = f"{expected_delivery_date[8:10]}/{expected_delivery_date[5:7]}/{expected_delivery_date[0:4]}"
             base_study_desc = f"{base_study_desc} | DKS {dks_display}"
         entry = {
-            'PatientName': patient.name or '',
+            'PatientName': patient_name_title_vi(patient.name or ''),
             'PatientID': getattr(patient, 'patient_id', None) or f"PAT_{appointment.id}",
             'PatientBirthDate': dob,
             'StudyDescription': base_study_desc,
@@ -8185,7 +8244,12 @@ def api_get_mwl_entries():
         _cleanup_outdated_mwl_entries()
         mwl_store.remove_duplicate_mwl_rows()
         entries = mwl_store.get_all_entries()
-        return jsonify({'success': True, 'entries': entries})
+        out = []
+        for row in entries:
+            e = dict(row)
+            e['PatientName'] = patient_name_title_vi(e.get('PatientName') or '')
+            out.append(e)
+        return jsonify({'success': True, 'entries': out})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -8194,9 +8258,11 @@ def api_get_mwl_entries():
 @require_permission('manage_worklist')
 def api_post_mwl_entry():
     try:
-        data = request.json or {}
+        data = dict(request.json or {})
         if not data:
             return jsonify({'success': False, 'error': 'Missing JSON body'}), 400
+        if 'PatientName' in data:
+            data['PatientName'] = patient_name_title_vi(data.get('PatientName') or '')
         mwl_store.init_db()
         entry_id = mwl_store.upsert_entry(data)
         return jsonify({'success': True, 'entry_id': entry_id})
@@ -8208,7 +8274,9 @@ def api_post_mwl_entry():
 @require_permission('manage_worklist')
 def api_put_mwl_entry(entry_id):
     try:
-        data = request.json or {}
+        data = dict(request.json or {})
+        if 'PatientName' in data:
+            data['PatientName'] = patient_name_title_vi(data.get('PatientName') or '')
         mwl_store.init_db()
         updated = mwl_store.update_entry_by_id(entry_id, data)
         if not updated:
@@ -8227,6 +8295,18 @@ def api_delete_mwl_entry(entry_id):
         return jsonify({'success': ok})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _mwl_entry_compare_tuple(entry: dict):
+    """So sánh nội dung MWL (bỏ id DB) để thống kê added/updated/unchanged đúng."""
+    if not entry:
+        return None
+    keys = (
+        'PatientName', 'PatientID', 'PatientBirthDate', 'StudyDescription', 'Modality',
+        'ScheduledProcedureStepStartDate', 'ScheduledProcedureStepStartTime', 'AccessionNumber',
+        'ExpectedDeliveryDate',
+    )
+    return tuple((k, (entry.get(k) if entry.get(k) is not None else '') or '') for k in keys)
 
 
 @app.route('/api/mwl-sync', methods=['POST'])
@@ -8261,7 +8341,7 @@ def api_trigger_mwl_sync():
             if not old_row:
                 added += 1
                 continue
-            if old_row == row:
+            if _mwl_entry_compare_tuple(old_row) == _mwl_entry_compare_tuple(row):
                 unchanged += 1
             else:
                 updated += 1

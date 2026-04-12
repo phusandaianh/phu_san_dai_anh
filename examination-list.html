@@ -821,7 +821,7 @@
         return new Date(d.getFullYear(), d.getMonth(), d.getDate());
     };
     // Tính tuổi thai từ ngày dự kiến sinh (EDD):
-    // GA(days) = 280 - (EDD - ngày tham chiếu), sau đó đổi ra tuần + ngày.
+    // GA(days) = 280 - (EDD - ngày tham chiếu), hiển thị gọn dạng 38w6d.
     const formatGestationalAgeFromEDD = (eddValue, referenceDateValue) => {
         if (!eddValue) return '';
         const edd = startOfLocalDay(eddValue);
@@ -833,7 +833,7 @@
         if (gaDays < 0) return '';
         const weeks = Math.floor(gaDays / 7);
         const days = gaDays % 7;
-        return `${weeks} tuần ${days} ngày`;
+        return `${weeks}w${days}d`;
     };
     /** Ngày hẹn dd/mm/yy và giờ (local) cho cột Giờ hẹn */
     const formatAppointmentSlotDisplay = (isoOrDate) => {

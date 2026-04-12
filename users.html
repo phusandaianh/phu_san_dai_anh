@@ -398,6 +398,16 @@
             <small style="display:block; margin-top:8px; color:#666;">Danh sách máy / IP đã đăng nhập hoặc chờ phê duyệt.</small>
 
             <h3 style="margin: 24px 0 8px; font-size: 1rem; color: #333;">Host tin cậy (bật/tắt yêu cầu phê duyệt)</h3>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:12px;">
+                <input type="text" id="newTrustedHostInput" class="form-control" style="min-width:200px; max-width:320px; flex:1;" placeholder="Hostname hoặc IP (không gồm cổng), ví dụ 192.168.1.50" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();addTrustedHost();}">
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; white-space:nowrap;">
+                    <input type="checkbox" id="newTrustedHostRequireApproval">
+                    <span>Yêu cầu phê duyệt máy lạ</span>
+                </label>
+                <button type="button" class="btn secondary-btn" onclick="addTrustedHost()">
+                    <i class="fas fa-plus"></i> Thêm host
+                </button>
+            </div>
             <div class="table-container">
                 <table class="user-table">
                     <thead>
@@ -432,7 +442,7 @@
                         <tr>
                             <th>Tên file</th>
                             <th>Kích thước</th>
-                            <th>Cập nhật (UTC)</th>
+                            <th>Cập nhật (GMT+7)</th>
                             <th>Thao tác</th>
                         </tr>
                     </thead>
@@ -1317,6 +1327,42 @@ Trân trọng,
             return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
         }
 
+        /** Hiển thị thời gian theo giờ Việt Nam (UTC+7), dùng chung cho users.html */
+        function formatDateGMT7(value) {
+            if (!value) return '';
+            try {
+                const d = new Date(value);
+                if (Number.isNaN(d.getTime())) return '';
+                return d.toLocaleString('vi-VN', {
+                    timeZone: 'Asia/Ho_Chi_Minh',
+                    hour12: false,
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } catch (_) {
+                return '';
+            }
+        }
+
+        function formatNowGMT7ForFilename() {
+            const parts = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            }).formatToParts(new Date());
+            const get = (t) => parts.find((p) => p.type === t)?.value || '00';
+            return `${get('year')}-${get('month')}-${get('day')}-${get('hour')}-${get('minute')}-${get('second')}`;
+        }
+
         async function loadBackupFileList() {
             const tbody = document.getElementById('backupFilesTableBody');
             const hint = document.getElementById('backupDirHint');
@@ -1346,7 +1392,7 @@ Trân trọng,
                         <tr>
                             <td><code>${esc}</code></td>
                             <td>${formatBackupSize(f.size)}</td>
-                            <td>${f.modified_at || '—'}</td>
+                            <td>${f.modified_at ? (formatDateGMT7(f.modified_at) || '—') : '—'}</td>
                             <td style="vertical-align:middle;">
                                 <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
                                     <button type="button" class="btn danger-btn" style="padding:6px 10px; font-size:0.9rem;" data-backup-name="${enc}" onclick="deleteBackupFileFromBtn(this)" title="Xóa file trên server">
@@ -1466,7 +1512,7 @@ Trân trọng,
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `backup-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.zip`;
+                a.download = `backup-${formatNowGMT7ForFilename()}.zip`;
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
@@ -1586,10 +1632,10 @@ Trân trọng,
                 }
                 tbody.innerHTML = items.map(it => `
                     <tr>
-                        <td><code>${it.host}</code></td>
+                        <td><code>${escapeHtml(it.host)}</code></td>
                         <td>
                             <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                                <input type="checkbox" ${it.require_approval ? 'checked' : ''} onchange="toggleHostApproval('${it.host}', this.checked)">
+                                <input type="checkbox" ${it.require_approval ? 'checked' : ''} onchange="toggleHostApproval(${JSON.stringify(it.host)}, this.checked)">
                                 <span>${it.require_approval ? 'Bật (cần phê duyệt)' : 'Tắt (không cần phê duyệt)'}</span>
                             </label>
                         </td>
@@ -1598,6 +1644,53 @@ Trân trọng,
             } catch (error) {
                 console.error('Error loading host approval rules:', error);
                 tbody.innerHTML = '<tr><td colspan="2">Không tải được cấu hình host tin cậy.</td></tr>';
+            }
+        }
+
+        function escapeHtml(s) {
+            if (s == null || s === '') return '';
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function alertLoginHostRuleError(data, fallbackMsg) {
+            const msg = (data && data.error) || fallbackMsg || 'Thao tác thất bại.';
+            const detail = data && data.detail;
+            alert(detail ? (msg + '\n\nChi tiết: ' + detail) : msg);
+        }
+
+        async function addTrustedHost() {
+            const input = document.getElementById('newTrustedHostInput');
+            const reqCb = document.getElementById('newTrustedHostRequireApproval');
+            if (!input) return;
+            const raw = (input.value || '').trim();
+            if (!raw) {
+                alert('Vui lòng nhập hostname hoặc địa chỉ IP.');
+                return;
+            }
+            try {
+                const response = await fetch('/api/login-approval-host-rules', {
+                    method: 'POST',
+                    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        host: raw,
+                        require_approval: !!(reqCb && reqCb.checked)
+                    })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    alertLoginHostRuleError(data, 'Không thêm được host.');
+                    return;
+                }
+                input.value = '';
+                if (reqCb) reqCb.checked = false;
+                await loadLoginApprovalHostRules();
+            } catch (error) {
+                console.error('Error adding trusted host:', error);
+                alert('Không thêm được host.');
             }
         }
 
@@ -1610,7 +1703,7 @@ Trân trọng,
                 });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
-                    alert(data.error || 'Không lưu được cấu hình host.');
+                    alertLoginHostRuleError(data, 'Không lưu được cấu hình host.');
                     await loadLoginApprovalHostRules();
                     return;
                 }
@@ -1622,20 +1715,6 @@ Trân trọng,
             }
         }
 
-        function formatDateGMT7(value) {
-            if (!value) return '';
-            try {
-                const d = new Date(value);
-                if (Number.isNaN(d.getTime())) return '';
-                return d.toLocaleString('vi-VN', {
-                    timeZone: 'Asia/Ho_Chi_Minh',
-                    hour12: false
-                });
-            } catch (_) {
-                return '';
-            }
-        }
-
         function renderDeviceHistory(devices) {
             const tbody = document.getElementById('deviceHistoryTableBody');
             if (!tbody) return;
@@ -1643,37 +1722,41 @@ Trân trọng,
                 tbody.innerHTML = '<tr><td colspan="8">Chưa có thiết bị nào đăng nhập.</td></tr>';
                 return;
             }
-            tbody.innerHTML = devices.map(d => `
+            tbody.innerHTML = devices.map(d => {
+                const devId = JSON.stringify(d.id);
+                return `
                 <tr>
-                    <td>${d.username || ''}</td>
-                    <td>${d.fullName || ''}</td>
-                    <td>${d.ipAddress || ''}</td>
-                    <td style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${d.userAgent || ''}">${d.userAgent || ''}</td>
+                    <td>${escapeHtml(d.username || '')}</td>
+                    <td>${escapeHtml(d.fullName || '')}</td>
+                    <td>${escapeHtml(d.ipAddress || '')}</td>
+                    <td style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(d.userAgent || '')}">${escapeHtml(d.userAgent || '')}</td>
                     <td>${d.createdAt ? formatDateGMT7(d.createdAt) : ''}</td>
                     <td>${d.approvedAt ? formatDateGMT7(d.approvedAt) : '–'}</td>
                     <td>${d.isApproved ? '<span style="color:#28a745;">Đã phê duyệt</span>' : '<span style="color:#ffc107;">Chờ phê duyệt</span>'}</td>
                     <td>
                         ${d.isApproved
-                            ? `<button class="btn danger-btn" onclick="denyLoginDevice(${d.id})"><i class="fas fa-ban"></i> Thu hồi</button>`
+                            ? `<button type="button" class="btn danger-btn" onclick="denyLoginDevice(${devId})"><i class="fas fa-ban"></i> Thu hồi</button>`
                             : `
                                 <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                                    <button class="btn primary-btn" onclick="approveLoginDevice(${d.id})"><i class="fas fa-check"></i> Phê duyệt</button>
-                                    <button class="btn danger-btn" onclick="cancelLoginDevice(${d.id})"><i class="fas fa-times"></i> Hủy đăng nhập</button>
+                                    <button type="button" class="btn primary-btn" onclick="approveLoginDevice(${devId})"><i class="fas fa-check"></i> Phê duyệt</button>
+                                    <button type="button" class="btn danger-btn" onclick="cancelLoginDevice(${devId})"><i class="fas fa-times"></i> Hủy đăng nhập</button>
                                 </div>
                               `
                         }
                     </td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
         }
 
         async function approveLoginDevice(deviceId) {
             if (!deviceId) return;
             if (!confirm('Phê duyệt thiết bị/IP này để cho phép đăng nhập?')) return;
             try {
-                const response = await fetch(`/api/login-device-history/${deviceId}/approve`, {
+                const response = await fetch(`/api/login-device-history/${encodeURIComponent(deviceId)}/approve`, {
                     method: 'POST',
-                    headers: { ...getAuthHeaders() }
+                    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                    body: '{}'
                 });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
@@ -1697,9 +1780,10 @@ Trân trọng,
             if (!deviceId) return;
             if (!confirm('Thu hồi/Từ chối thiết bị/IP này? Máy này sẽ phải chờ phê duyệt lại khi đăng nhập.')) return;
             try {
-                const response = await fetch(`/api/login-device-history/${deviceId}/deny`, {
+                const response = await fetch(`/api/login-device-history/${encodeURIComponent(deviceId)}/deny`, {
                     method: 'POST',
-                    headers: { ...getAuthHeaders() }
+                    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                    body: '{}'
                 });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
@@ -1722,9 +1806,10 @@ Trân trọng,
             if (!deviceId) return;
             if (!confirm('Hủy đăng nhập từ thiết bị/IP này? Thiết bị sẽ không đăng nhập được nếu chưa được phê duyệt lại.')) return;
             try {
-                const response = await fetch(`/api/login-device-history/${deviceId}/cancel-login`, {
+                const response = await fetch(`/api/login-device-history/${encodeURIComponent(deviceId)}/cancel-login`, {
                     method: 'POST',
-                    headers: { ...getAuthHeaders() }
+                    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                    body: '{}'
                 });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {

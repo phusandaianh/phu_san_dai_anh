@@ -85,6 +85,11 @@ def get_today():
 def get_from_today():
     """GET /api/appointments/from-today - Tất cả lịch khám từ hôm nay trở đi (tăng dần theo ngày/giờ)
 
+    Query (tùy chọn):
+    - start: yyyy-mm-dd (mặc định hôm nay)
+    - end: yyyy-mm-dd — giới hạn ngày khám <= end
+    - omit_cancelled: 1/true/yes — bỏ lịch status cancelled
+
     Để tránh lỗi context SQLAlchemy, hàm này chỉ dùng `Appointment.query`
     (không động tới `db.session` trực tiếp).
     """
@@ -119,6 +124,19 @@ def get_from_today():
             .join(Patient, Appointment.patient_id == Patient.id)
             .filter(Appointment.appointment_date >= start_dt)
         )
+
+        # end (optional, yyyy-mm-dd): chỉ lấy lịch có ngày khám <= end (theo lịch)
+        end_str = (request.args.get('end') or '').strip()
+        if end_str:
+            try:
+                end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({'error': 'Định dạng end không hợp lệ (yyyy-mm-dd)'}), 400
+            query = query.filter(db.func.date(Appointment.appointment_date) <= end_date)
+
+        omit_cancelled = (request.args.get('omit_cancelled') or '').strip().lower() in ('1', 'true', 'yes')
+        if omit_cancelled:
+            query = query.filter(Appointment.status != 'cancelled')
 
         if status:
             query = query.filter(Appointment.status == status)

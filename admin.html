@@ -43,6 +43,125 @@
             align-items: flex-start;
         }
 
+        .admin-booking-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 10050;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .admin-booking-modal.hidden {
+            display: none !important;
+        }
+        .admin-booking-modal-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            cursor: pointer;
+        }
+        .admin-booking-modal-box {
+            position: relative;
+            z-index: 1;
+            background: #fff;
+            border-radius: 12px;
+            max-width: 520px;
+            width: 100%;
+            max-height: min(85vh, 640px);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+        }
+        .admin-booking-modal-box header {
+            padding: 16px 18px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .admin-booking-modal-box h2 {
+            margin: 0;
+            font-size: 1.15rem;
+            color: #0c4a6e;
+        }
+        .admin-booking-modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            line-height: 1;
+            cursor: pointer;
+            color: #64748b;
+            padding: 0 4px;
+        }
+        .admin-booking-modal-close:hover {
+            color: #0f172a;
+        }
+        .admin-booking-modal-body {
+            padding: 12px 18px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .admin-booking-modal-lead {
+            margin: 0 0 12px;
+            font-size: 0.95rem;
+            color: #334155;
+        }
+        .admin-booking-modal-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .admin-booking-modal-item {
+            padding: 10px 12px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            font-size: 0.88rem;
+            color: #1e293b;
+        }
+        .admin-booking-modal-item .item-when {
+            font-weight: 600;
+            color: #0369a1;
+        }
+        .admin-booking-modal-footer {
+            padding: 14px 18px 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-end;
+            border-top: 1px solid #e2e8f0;
+        }
+        .admin-booking-modal-footer .btn-read {
+            background: #0369a1;
+            color: #fff;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .admin-booking-modal-footer .btn-read:hover {
+            background: #0284c7;
+        }
+        .admin-booking-modal-footer a.booking-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            background: #f1f5f9;
+            color: #0c4a6e;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: 1px solid #cbd5e1;
+        }
+        .admin-booking-modal-footer a.booking-link:hover {
+            background: #e2e8f0;
+        }
+
         .admin-header nav {
             display: flex;
             flex-direction: column;
@@ -389,6 +508,77 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
+        /* Badge luôn hiện: số ngày có ca mở / 15 (cùng nguồn /api/work-schedule với booking.html) */
+        .admin-coverage-badge {
+            display: inline-flex !important;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            background: rgba(255, 255, 255, 0.14);
+            color: #fff;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            max-width: 100%;
+            transition: background 0.2s ease, transform 0.15s ease;
+        }
+        .admin-coverage-badge:hover {
+            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.22);
+        }
+        .admin-coverage-badge.state-ok {
+            background: rgba(34, 197, 94, 0.35);
+            border-color: rgba(34, 197, 94, 0.55);
+        }
+        .admin-coverage-badge.state-warn {
+            background: rgba(245, 158, 11, 0.42);
+            border-color: rgba(251, 191, 36, 0.65);
+            color: #0c4a6e;
+        }
+
+        /* Hàng dưới: [Quản lý camera …] — [📅 X/15 giữa] — [SYNC] */
+        .admin-header-bottom {
+            flex: 1 0 100%;
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 12px;
+            margin-top: 6px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .admin-header-bottom-left {
+            justify-self: start;
+            min-width: 0;
+        }
+        .admin-header-bottom-center {
+            justify-self: center;
+        }
+        .admin-header-bottom-right {
+            justify-self: end;
+            min-width: 0;
+        }
+        @media (max-width: 768px) {
+            .admin-header-bottom {
+                grid-template-columns: 1fr;
+                justify-items: stretch;
+            }
+            .admin-header-bottom-left,
+            .admin-header-bottom-center,
+            .admin-header-bottom-right {
+                justify-self: stretch;
+            }
+            .admin-header-bottom-center .admin-coverage-badge {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -463,19 +653,49 @@
                 <a href="ai-assistant-admin.html" class="header-nav-btn"><i class="fas fa-robot"></i> Quản lý trợ lý AI</a>
             </div>
         </nav>
-        <div class="user-info-bar" id="adminUserInfoBar" style="display: none;">
-            <i class="fas fa-user-circle"></i>
-            <span><strong id="adminUserDisplayName"></strong> (<span id="adminUserDisplayUsername"></span>)</span>
-            <span id="adminUserRoleBadges"></span>
-            <a href="camera-admin.html" class="camera-manage-link" title="Mở trang Quản lý camera">
-                <i class="fas fa-video"></i> Quản lý camera
-            </a>
-        </div>
-        <div class="sync-status" id="syncStatusBadge" title="Trạng thái đồng bộ online ↔ nội bộ">
-            <span class="sync-dot" id="syncStatusDot"></span>
-            <span class="sync-text" id="syncStatusText">SYNC: đang kiểm tra…</span>
+        <div class="admin-header-bottom">
+            <div class="admin-header-bottom-left">
+                <div class="user-info-bar" id="adminUserInfoBar" style="display: none;">
+                    <i class="fas fa-user-circle"></i>
+                    <span><strong id="adminUserDisplayName"></strong> (<span id="adminUserDisplayUsername"></span>)</span>
+                    <span id="adminUserRoleBadges"></span>
+                    <a href="camera-admin.html" class="camera-manage-link" title="Mở trang Quản lý camera">
+                        <i class="fas fa-video"></i> Quản lý camera
+                    </a>
+                </div>
+            </div>
+            <div class="admin-header-bottom-center">
+                <button type="button" class="admin-coverage-badge state-ok" id="adminScheduleCoverageBadge" title="Ca khám mở trong 15 ngày tới (như trên booking.html)">
+                    <i class="fas fa-calendar-week" aria-hidden="true"></i>
+                    <span id="adminScheduleCoverageBadgeText">—/15</span>
+                </button>
+            </div>
+            <div class="admin-header-bottom-right">
+                <div class="sync-status" id="syncStatusBadge" title="Trạng thái đồng bộ online ↔ nội bộ">
+                    <span class="sync-dot" id="syncStatusDot"></span>
+                    <span class="sync-text" id="syncStatusText">SYNC: đang kiểm tra…</span>
+                </div>
+            </div>
         </div>
     </header>
+
+    <div id="adminBookingNoticeModal" class="admin-booking-modal hidden" role="dialog" aria-modal="true" aria-labelledby="adminBookingNoticeTitle">
+        <div class="admin-booking-modal-overlay" id="adminBookingNoticeOverlay"></div>
+        <div class="admin-booking-modal-box">
+            <header>
+                <h2 id="adminBookingNoticeTitle"><i class="fas fa-user-md"></i> Ca khám mở — 15 ngày tới</h2>
+                <button type="button" class="admin-booking-modal-close" id="adminBookingNoticeCloseX" aria-label="Đóng">&times;</button>
+            </header>
+            <div class="admin-booking-modal-body">
+                <p class="admin-booking-modal-lead" id="adminBookingNoticeLead"></p>
+                <div class="admin-booking-modal-list" id="adminBookingNoticeList"></div>
+            </div>
+            <div class="admin-booking-modal-footer">
+                <a href="doctor-schedule.html" class="booking-link"><i class="fas fa-calendar-plus"></i> Mở Lịch khám (tạo ca bác sĩ)</a>
+                <a href="booking.html" class="booking-link" style="background:#e0f2fe;border-color:#7dd3fc;color:#0369a1;"><i class="fas fa-external-link-alt"></i> Xem trang Đặt lịch</a>
+            </div>
+        </div>
+    </div>
 
     <main class="admin-main">
         <div class="admin-tabs">
@@ -843,10 +1063,182 @@
             }
         }
 
+        function _formatYmdLocal(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        const COVERAGE_WINDOW_DAYS = 15;
+        let adminScheduleCoverageCache = {
+            openDays: 0,
+            missingDates: [],
+            fullCoverage: true,
+            loadError: false
+        };
+
+        function _escHtml(s) {
+            return String(s ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        /** Cùng dữ liệu /api/work-schedule như booking.html: mỗi ngày cần ≥1 ca có is_closed không phải true. */
+        function analyzeWorkScheduleCoverage(daysArray, nDays) {
+            const today = new Date();
+            const expected = [];
+            for (let i = 0; i < nDays; i++) {
+                const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+                expected.push(_formatYmdLocal(d));
+            }
+            const arr = Array.isArray(daysArray) ? daysArray : [];
+            const byDate = {};
+            arr.forEach((day) => {
+                if (day && day.date) byDate[day.date] = day;
+            });
+            let openDays = 0;
+            const missing = [];
+            for (const want of expected) {
+                const day = byDate[want];
+                const shifts = day && Array.isArray(day.shifts) ? day.shifts : [];
+                const hasOpen = shifts.some((s) => s && !s.is_closed);
+                if (hasOpen) openDays++;
+                else missing.push(want);
+            }
+            return {
+                openDays,
+                missingDates: missing,
+                fullCoverage: missing.length === 0,
+                loadError: false
+            };
+        }
+
+        function openAdminBookingNoticeModal() {
+            const modal = document.getElementById('adminBookingNoticeModal');
+            const listEl = document.getElementById('adminBookingNoticeList');
+            const leadEl = document.getElementById('adminBookingNoticeLead');
+            if (!modal || !listEl || !leadEl) return;
+
+            const c = adminScheduleCoverageCache;
+            if (c.loadError) {
+                leadEl.textContent =
+                    'Không tải được lịch làm việc (/api/work-schedule). Kiểm tra máy chủ hoặc tải lại trang.';
+                listEl.innerHTML = '';
+                modal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+                return;
+            }
+
+            if (c.fullCoverage) {
+                leadEl.textContent =
+                    `Đủ ca khám mở cho ${COVERAGE_WINDOW_DAYS} ngày tới: mỗi ngày có ít nhất một ca không đóng. Bệnh nhân có thể đăng ký trên trang Đặt lịch khám theo lịch bác sĩ.`;
+                listEl.innerHTML = `<div class="admin-booking-modal-item" style="border-color:#86efac;background:#f0fdf4;"><strong>Trạng thái:</strong> ${COVERAGE_WINDOW_DAYS}/${COVERAGE_WINDOW_DAYS} ngày có ca mở.</div>`;
+            } else {
+                leadEl.textContent = `Trong ${COVERAGE_WINDOW_DAYS} ngày tới chỉ có ${c.openDays}/${COVERAGE_WINDOW_DAYS} ngày có ít nhất một ca khám mở. Các ngày dưới đây chưa có ca mở — bệnh nhân không đặt được trên booking; hãy thêm ca trên trang Lịch khám.`;
+                const maxRows = 40;
+                listEl.innerHTML = c.missingDates
+                    .slice(0, maxRows)
+                    .map((ymd) => {
+                        const d = new Date(ymd + 'T12:00:00');
+                        const label = Number.isNaN(d.getTime())
+                            ? ymd
+                            : d.toLocaleDateString('vi-VN', {
+                                  weekday: 'long',
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric'
+                              });
+                        return `<div class="admin-booking-modal-item"><div class="item-when">${_escHtml(label)}</div><div>${_escHtml(ymd)}</div></div>`;
+                    })
+                    .join('');
+                if (c.missingDates.length > maxRows) {
+                    listEl.insertAdjacentHTML(
+                        'beforeend',
+                        `<div class="admin-booking-modal-item" style="font-style:italic;color:#64748b;">… và ${c.missingDates.length - maxRows} ngày khác</div>`
+                    );
+                }
+            }
+
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeAdminBookingNoticeModal() {
+            const modal = document.getElementById('adminBookingNoticeModal');
+            if (!modal) return;
+            modal.classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+
+        /** Badge 📅 X/15; nguồn /api/work-schedule như booking.html. */
+        async function refreshAdminScheduleCoverage() {
+            const badge = document.getElementById('adminScheduleCoverageBadge');
+            const badgeText = document.getElementById('adminScheduleCoverageBadgeText');
+
+            try {
+                const r = await fetch('/api/work-schedule', {
+                    headers: { Accept: 'application/json' },
+                    cache: 'no-store'
+                });
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                const days = await r.json();
+                const analysis = analyzeWorkScheduleCoverage(days, COVERAGE_WINDOW_DAYS);
+                adminScheduleCoverageCache = analysis;
+
+                if (badge && badgeText) {
+                    badgeText.textContent = `${analysis.openDays}/${COVERAGE_WINDOW_DAYS}`;
+                    badge.classList.remove('state-ok', 'state-warn');
+                    badge.classList.add(analysis.fullCoverage ? 'state-ok' : 'state-warn');
+                    badge.title = analysis.fullCoverage
+                        ? `Đủ ca mở cho ${COVERAGE_WINDOW_DAYS} ngày tới (giống trang Đặt lịch). Nhấn để xem chi tiết.`
+                        : `Thiếu ca mở: ${analysis.missingDates.length} ngày trong ${COVERAGE_WINDOW_DAYS} ngày tới. Nhấn để xem & mở Lịch khám.`;
+                }
+            } catch (e) {
+                adminScheduleCoverageCache = {
+                    openDays: 0,
+                    missingDates: [],
+                    fullCoverage: false,
+                    loadError: true
+                };
+                if (badge && badgeText) {
+                    badgeText.textContent = '?/15';
+                    badge.classList.remove('state-ok');
+                    badge.classList.add('state-warn');
+                    badge.title = 'Không tải được /api/work-schedule';
+                }
+            }
+        }
+
+        function initAdminBookingNoticeUi() {
+            const covBadge = document.getElementById('adminScheduleCoverageBadge');
+            const closeX = document.getElementById('adminBookingNoticeCloseX');
+            const overlay = document.getElementById('adminBookingNoticeOverlay');
+            if (covBadge) covBadge.addEventListener('click', () => openAdminBookingNoticeModal());
+            if (closeX) closeX.addEventListener('click', () => closeAdminBookingNoticeModal());
+            if (overlay) overlay.addEventListener('click', () => closeAdminBookingNoticeModal());
+            document.addEventListener('keydown', (ev) => {
+                const modal = document.getElementById('adminBookingNoticeModal');
+                if (!modal || modal.classList.contains('hidden')) return;
+                if (ev.key === 'Escape') {
+                    ev.preventDefault();
+                    closeAdminBookingNoticeModal();
+                }
+            });
+        }
+
         // Start polling after page load
         document.addEventListener('DOMContentLoaded', async () => {
             refreshSyncStatus();
             setInterval(refreshSyncStatus, 5000);
+            initAdminBookingNoticeUi();
+            refreshAdminScheduleCoverage();
+            setInterval(refreshAdminScheduleCoverage, 120000);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') refreshAdminScheduleCoverage();
+            });
         });
 
         // Load examination settings

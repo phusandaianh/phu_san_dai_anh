@@ -12,6 +12,7 @@ import importlib.util
 import sys
 
 import mwl_store
+from name_format import patient_name_title_vi
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(ROOT, 'clinic.db')
@@ -73,7 +74,7 @@ def _rows_to_entries(rows, accession_builder):
                 dks_display = f"{expected_delivery_date[8:10]}/{expected_delivery_date[5:7]}/{expected_delivery_date[0:4]}"
             study_desc = f"{study_desc} | DKS {dks_display}"
         entries.append({
-            'PatientName': row_get(row, 'patient_name') or '',
+            'PatientName': patient_name_title_vi(row_get(row, 'patient_name') or ''),
             'PatientID': row_get(row, 'patient_code') or f"PAT_{appt_id}",
             'PatientBirthDate': dob,
             'StudyDescription': study_desc,

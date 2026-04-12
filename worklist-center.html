@@ -439,18 +439,34 @@
           const matches = Number(cfindData.matches || 0);
           const dbN = cfindData.mwl_db_count;
           if (matches === 0) {
-            statusText.textContent = 'MWL OK (TCP + C-FIND) nhưng chưa có bệnh nhân chờ siêu âm. Gợi ý: bấm "Đồng bộ ngay".';
+            let msg = 'MWL OK (TCP + C-FIND) nhưng C-FIND trả về 0 dòng (máy siêu âm cũng sẽ không thấy ca). ';
+            if (typeof dbN === 'number') {
+              msg += `Trong thư mục chạy web (app), mwl.db có ${dbN} dòng. `;
+              if (dbN > 0) {
+                msg += 'Nếu vẫn 0 dòng khi C-FIND: thường do mwl_server.py đang chạy ở thư mục khác / chưa tải lại DB — hãy chạy server cùng thư mục với app và khởi động lại sau khi đồng bộ. ';
+              }
+            }
+            msg += 'Gợi ý: bấm "Đồng bộ ngay" (chỉ đưa lịch siêu âm hôm nay từ clinic.db vào mwl.db).';
+            statusText.textContent = msg;
             statusDiv.classList.remove('ok','err');
             statusDiv.classList.add('warn');
             return;
           }
           let line = `MWL OK (TCP + C-FIND). C-FIND: ${matches} dòng`;
           if (typeof dbN === 'number' && dbN !== matches) {
-            line += ` — mwl.db (app): ${dbN} dòng. Nếu khác: đồng bộ chỉ lấy lịch hôm nay, hoặc mwl_server chạy sai thư mục / chưa tải lại DB.`;
+            const abs = (cfindData.mwl_db_abspath || '').trim();
+            line += ` — mwl.db (app): ${dbN} dòng tổng cộng. `;
+            line += 'Lưu ý: lần kiểm tra này gửi C-FIND với Modality=US; ca có modality khác (hoặc không phải siêu âm) không được đếm dù vẫn nằm trong DB. ';
+            line += 'Nếu cả các ca siêu âm hôm nay cũng vậy: thường là mwl_server.py đang chạy ở thư mục khác (đọc mwl.db khác) hoặc chưa tải lại DB — dừng server, cd đúng thư mục có mwl.db của app, chạy lại sau khi đồng bộ. ';
+            if (abs) line += `File mwl.db mà app đếm: ${abs}`;
           }
           statusText.textContent = line;
           statusDiv.classList.remove('warn','err');
-          statusDiv.classList.add('ok');
+          if (typeof dbN === 'number' && dbN !== matches) {
+            statusDiv.classList.add('warn');
+          } else {
+            statusDiv.classList.add('ok');
+          }
           return;
         }
 
