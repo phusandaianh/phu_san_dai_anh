@@ -1,0 +1,3 @@
+machine_name,target_path,app_port,server_hostname,server_ip,sync_remote_url,sync_token
+LETAN01,\\LETAN01\C$\ClinicApp,5000,clinic-sync.local,192.168.1.230,https://clinic-sync.local,phongkham_2026_secure_sync
+SIEUAM01,\\SIEUAM01\C$\ClinicApp,5000,clinic-sync.local,192.168.1.230,https://clinic-sync.local,phongkham_2026_secure_sync

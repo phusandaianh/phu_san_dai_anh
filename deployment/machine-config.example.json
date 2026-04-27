@@ -1,0 +1,19 @@
+{
+  "machine_name": "MAY_LE_TAN_01",
+  "app_port": 5000,
+  "use_https": false,
+  "sync": {
+    "role": "local",
+    "remote_url": "https://clinic-sync.local",
+    "token": "phongkham_2026_secure_sync",
+    "peer_appointments_url": "https://clinic-sync.local",
+    "peer_token": "phongkham_2026_secure_sync"
+  },
+  "network": {
+    "server_hostname": "clinic-sync.local",
+    "server_ip": "192.168.1.230"
+  },
+  "mwl": {
+    "autostart": true
+  }
+}

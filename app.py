@@ -2779,7 +2779,7 @@ def _mirror_appointment_delete_to_peer(global_id: str) -> None:
         # Không làm hỏng luồng xóa gốc nếu peer lỗi mạng.
         pass
 
-def _work_schedule_payload(ws: WorkSchedule) -> dict:
+def _work_schedule_payload(ws: "WorkSchedule") -> dict:
     return {
         'external_id': (getattr(ws, 'external_id', None) or '').strip(),
         'date': ws.date,
