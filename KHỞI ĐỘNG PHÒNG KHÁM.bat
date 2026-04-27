@@ -1,4 +1,5 @@
 @echo off
 cd /d "%~dp0"
-start_all_servers.bat
+echo [PHONG KHAM] Khoi dong local server voi dong bo 2 chieu...
+call run_local_sync.bat
 

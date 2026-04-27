@@ -6,7 +6,7 @@ REM ==========================================================
 REM Local node with sync to Render (Windows)
 REM Edit the 2 values below before first run.
 REM ==========================================================
-set "SYNC_REMOTE_URL=https://phu-san-dai-anh.onrender.com/"
+set "SYNC_REMOTE_URL=https://phusandaianh.io.vn"
 set "SYNC_TOKEN=phongkham_2026_secure_sync"
 set "SYNC_PEER_APPOINTMENTS_URL=https://phusandaianh.io.vn"
 set "SYNC_PEER_TOKEN=phongkham_2026_secure_sync"
