@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import or_, inspect, func, text, bindparam, cast, Integer
 from sqlalchemy.exc import IntegrityError, OperationalError
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import os
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
@@ -50,6 +51,15 @@ from name_format import patient_name_title_vi
 sys.modules.setdefault('app', sys.modules[__name__])
 
 app = Flask(__name__, static_folder='.', template_folder='')
+
+
+def _clinic_now():
+    """Giờ hiện tại theo múi giờ phòng khám (mặc định Việt Nam)."""
+    tz_name = (os.environ.get('CLINIC_TIMEZONE') or 'Asia/Ho_Chi_Minh').strip() or 'Asia/Ho_Chi_Minh'
+    try:
+        return datetime.now(ZoneInfo(tz_name))
+    except Exception:
+        return datetime.now()
 
 # ===== QR Ads media uploads =====
 QR_ADS_MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'qr-ads-media')
@@ -4225,7 +4235,7 @@ def get_available_slots():
                 continue
             taken.add(appt_dt.strftime('%H:%M'))
         # Nếu hôm nay, loại bỏ các slot đã qua
-        now = datetime.now()
+        now = _clinic_now()
         if now.date() == day:
             current_min = now.hour * 60 + now.minute
         else:
