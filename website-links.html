@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Website & Mạng xã hội - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .admin-header {
+            background-color: #2196f3;
+            color: #fff;
+            padding: 1rem 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .admin-header .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .admin-header .logo strong {
+            color: #fff;
+        }
+        .admin-header .logo img {
+            height: 46px;
+        }
+        .admin-header .back-link.btn {
+            border: 1px solid #fff;
+            color: #fff;
+            background: transparent;
+        }
+        .admin-main {
+            padding: 20px;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        .links-grid {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+        }
+        .link-card {
+            border: 1px solid #dbeafe;
+            border-radius: 10px;
+            padding: 14px;
+            background: #f8fbff;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        .link-card h3 {
+            margin: 0 0 6px;
+            font-size: 1rem;
+            color: #0f172a;
+        }
+        .link-card p {
+            margin: 0 0 10px;
+            color: #475569;
+            font-size: 0.9rem;
+            line-height: 1.35;
+            min-height: calc(1.35em * 2);
+            max-height: calc(1.35em * 2);
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+        .link-card a.btn {
+            width: 100%;
+            justify-content: center;
+            margin-top: auto;
+        }
+        .link-card input[type="url"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        .actions-row {
+            margin-top: 14px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .status-text {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #334155;
+            min-height: 1.2em;
+        }
+        .custom-links-wrap {
+            margin-top: 18px;
+            border-top: 1px dashed #cbd5e1;
+            padding-top: 14px;
+        }
+        #custom-links-inline {
+            display: contents;
+        }
+        .card-delete-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            border: 0;
+            background: transparent;
+            color: #64748b;
+            cursor: pointer;
+            font-size: 0.95rem;
+            padding: 4px;
+        }
+        .card-delete-btn:hover {
+            color: #dc2626;
+        }
+        .custom-item {
+            border: 1px solid #dbeafe;
+            border-radius: 10px;
+            background: #fff;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        .custom-item-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 8px;
+        }
+        .custom-item input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+        .custom-item .remove-btn {
+            margin-top: 8px;
+        }
+        .note {
+            margin-top: 14px;
+            color: #475569;
+            font-size: 0.92rem;
+        }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.PNG" alt="Logo">
+            <strong>Website & Mạng xã hội</strong>
+        </div>
+        <a href="admin.html" class="back-link btn"><i class="fas fa-arrow-left"></i> Quay lại Admin</a>
+    </header>
+
+    <main class="admin-main">
+        <h2><i class="fas fa-globe"></i> Kênh Website & Mạng xã hội</h2>
+        <p class="note">Admin có thể sửa URL trực tiếp rồi bấm lưu để cập nhật trên server.</p>
+
+        <section class="links-grid" id="all-links-grid">
+            <article class="link-card" data-default-key="facebook">
+                <button type="button" class="card-delete-btn" title="Xóa ô này" data-remove-default="facebook"><i class="fas fa-times"></i></button>
+                <h3><i class="fab fa-facebook"></i> Facebook</h3>
+                <p>Trang Facebook chính thức của phòng khám.</p>
+                <input type="url" id="link-facebook" placeholder="https://www.facebook.com/">
+                <a class="btn primary-btn" id="open-facebook" href="https://www.facebook.com/" target="_blank" rel="noopener noreferrer">Mở Facebook</a>
+            </article>
+
+            <article class="link-card" data-default-key="zalo">
+                <button type="button" class="card-delete-btn" title="Xóa ô này" data-remove-default="zalo"><i class="fas fa-times"></i></button>
+                <h3><i class="fas fa-comment-dots"></i> Zalo</h3>
+                <p>Kênh Zalo OA để tư vấn và hỗ trợ nhanh.</p>
+                <input type="url" id="link-zalo" placeholder="https://zalo.me/">
+                <a class="btn primary-btn" id="open-zalo" href="https://zalo.me/" target="_blank" rel="noopener noreferrer">Mở Zalo</a>
+            </article>
+
+            <article class="link-card" data-default-key="google_maps">
+                <button type="button" class="card-delete-btn" title="Xóa ô này" data-remove-default="google_maps"><i class="fas fa-times"></i></button>
+                <h3><i class="fas fa-map-marker-alt"></i> Google Maps</h3>
+                <p>Vị trí phòng khám trên Google Maps.</p>
+                <input type="url" id="link-google-maps" placeholder="https://maps.google.com/">
+                <a class="btn primary-btn" id="open-google-maps" href="https://maps.google.com/" target="_blank" rel="noopener noreferrer">Mở Google Maps</a>
+            </article>
+
+            <article class="link-card" data-default-key="youtube">
+                <button type="button" class="card-delete-btn" title="Xóa ô này" data-remove-default="youtube"><i class="fas fa-times"></i></button>
+                <h3><i class="fab fa-youtube"></i> YouTube</h3>
+                <p>Kênh video truyền thông và hướng dẫn.</p>
+                <input type="url" id="link-youtube" placeholder="https://www.youtube.com/">
+                <a class="btn primary-btn" id="open-youtube" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer">Mở YouTube</a>
+            </article>
+
+            <article class="link-card" data-default-key="tiktok">
+                <button type="button" class="card-delete-btn" title="Xóa ô này" data-remove-default="tiktok"><i class="fas fa-times"></i></button>
+                <h3><i class="fab fa-tiktok"></i> TikTok</h3>
+                <p>Kênh nội dung ngắn của phòng khám.</p>
+                <input type="url" id="link-tiktok" placeholder="https://www.tiktok.com/">
+                <a class="btn primary-btn" id="open-tiktok" href="https://www.tiktok.com/" target="_blank" rel="noopener noreferrer">Mở TikTok</a>
+            </article>
+
+            <article class="link-card" data-default-key="website">
+                <button type="button" class="card-delete-btn" title="Xóa ô này" data-remove-default="website"><i class="fas fa-times"></i></button>
+                <h3><i class="fas fa-link"></i> Website chính</h3>
+                <p>Trang web chính thức của phòng khám.</p>
+                <input type="url" id="link-website" placeholder="https://ten-mien-cua-ban/">
+                <a class="btn primary-btn" id="open-website" href="/" target="_blank" rel="noopener noreferrer">Mở Website</a>
+            </article>
+            <div id="custom-links-inline"></div>
+        </section>
+        <div class="actions-row">
+            <button class="btn primary-btn" id="save-links-btn"><i class="fas fa-save"></i> Lưu cấu hình link</button>
+            <button class="btn secondary-btn" id="reload-links-btn"><i class="fas fa-sync-alt"></i> Tải lại từ server</button>
+        </div>
+        <section class="custom-links-wrap">
+            <h3><i class="fas fa-plus-circle"></i> Website tự thêm</h3>
+            <p class="note" style="margin-top:6px;">Có thể thêm website mới ngoài các kênh mặc định.</p>
+            <div id="custom-links-list"></div>
+            <button class="btn secondary-btn" id="add-custom-link-btn"><i class="fas fa-plus"></i> Thêm website mới</button>
+        </section>
+        <div class="status-text" id="links-status"></div>
+    </main>
+
+    <script>
+        const linkKeys = [
+            ['facebook', 'facebook'],
+            ['zalo', 'zalo'],
+            ['google_maps', 'google-maps'],
+            ['youtube', 'youtube'],
+            ['tiktok', 'tiktok'],
+            ['website', 'website']
+        ];
+        let customLinks = [];
+        let disabledDefaultKeys = [];
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function setStatus(msg, isError) {
+            const el = document.getElementById('links-status');
+            if (!el) return;
+            el.textContent = msg || '';
+            el.style.color = isError ? '#dc2626' : '#0f766e';
+        }
+
+        function applyLinksToUi(links) {
+            linkKeys.forEach(([key, suffix]) => {
+                const input = document.getElementById(`link-${suffix}`);
+                const open = document.getElementById(`open-${suffix}`);
+                const val = (links && links[key]) ? String(links[key]) : '';
+                if (input) input.value = val;
+                if (open) open.href = val || '#';
+            });
+            customLinks = Array.isArray(links && links.custom_links) ? links.custom_links : [];
+            disabledDefaultKeys = Array.isArray(links && links.disabled_default_keys) ? links.disabled_default_keys : [];
+            renderDefaultCards();
+            renderCustomLinks();
+        }
+
+        function collectLinksFromUi() {
+            const links = {};
+            linkKeys.forEach(([key, suffix]) => {
+                const input = document.getElementById(`link-${suffix}`);
+                links[key] = input ? input.value.trim() : '';
+            });
+            links.disabled_default_keys = disabledDefaultKeys.filter((key) => linkKeys.some(([k]) => k === key));
+            links.custom_links = customLinks
+                .map((x) => ({
+                    name: String(x.name || '').trim(),
+                    url: String(x.url || '').trim(),
+                    description: String(x.description || '').trim(),
+                    icon: String(x.icon || 'fas fa-link').trim() || 'fas fa-link'
+                }))
+                .filter((x) => x.name && x.url);
+            return links;
+        }
+
+        function renderCustomLinks() {
+            const root = document.getElementById('custom-links-list');
+            if (!root) return;
+            if (!customLinks.length) {
+                root.innerHTML = '<p class="note" style="margin:0 0 10px;">Chưa có website tự thêm.</p>';
+                renderCustomInlineCards();
+                return;
+            }
+            root.innerHTML = customLinks.map((item, idx) => `
+                <div class="custom-item" data-idx="${idx}">
+                    <div class="custom-item-grid">
+                        <input type="text" data-field="name" placeholder="Tên website" value="${(item.name || '').replace(/"/g, '&quot;')}">
+                        <input type="url" data-field="url" placeholder="https://..." value="${(item.url || '').replace(/"/g, '&quot;')}">
+                        <input type="text" data-field="icon" placeholder="fas fa-link" value="${(item.icon || 'fas fa-link').replace(/"/g, '&quot;')}">
+                        <input type="text" data-field="description" placeholder="Mô tả ngắn" value="${(item.description || '').replace(/"/g, '&quot;')}">
+                    </div>
+                    <button type="button" class="btn danger-btn remove-btn" data-remove-custom="${idx}"><i class="fas fa-trash"></i> Xóa website</button>
+                </div>
+            `).join('');
+            renderCustomInlineCards();
+        }
+
+        function renderCustomInlineCards() {
+            const inlineGrid = document.getElementById('custom-links-inline');
+            if (inlineGrid) {
+                inlineGrid.innerHTML = customLinks
+                    .map((item) => ({
+                        name: String(item.name || '').trim(),
+                        url: String(item.url || '').trim(),
+                        description: String(item.description || '').trim(),
+                        icon: String(item.icon || 'fas fa-link').trim() || 'fas fa-link'
+                    }))
+                    .map((item, idx) => `
+                        <article class="link-card">
+                            <button type="button" class="card-delete-btn" title="Xóa ô này" data-remove-custom="${idx}"><i class="fas fa-times"></i></button>
+                            <h3><i class="${escapeHtml(item.icon)}"></i> ${escapeHtml(item.name || 'Website mới')}</h3>
+                            <p>${escapeHtml(item.description || 'Website tự thêm')}</p>
+                            <input type="url" data-inline-url="${idx}" placeholder="https://..." value="${escapeHtml(item.url)}">
+                            <a class="btn primary-btn" href="${escapeHtml(item.url || '#')}" target="_blank" rel="noopener noreferrer">Mở ${escapeHtml(item.name || 'Website')}</a>
+                        </article>
+                    `).join('');
+            }
+        }
+
+        function renderDefaultCards() {
+            linkKeys.forEach(([key]) => {
+                const card = document.querySelector(`.link-card[data-default-key="${key}"]`);
+                if (!card) return;
+                card.style.display = disabledDefaultKeys.includes(key) ? 'none' : '';
+            });
+        }
+
+        async function loadWebsiteLinks() {
+            setStatus('Đang tải cấu hình link...', false);
+            try {
+                const res = await fetch('/api/website-links');
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.success) throw new Error(data.message || `HTTP ${res.status}`);
+                applyLinksToUi(data.links || {});
+                setStatus('Đã tải cấu hình link từ server.', false);
+            } catch (err) {
+                setStatus('Không tải được cấu hình link: ' + (err.message || err), true);
+            }
+        }
+
+        async function saveWebsiteLinks() {
+            setStatus('Đang lưu cấu hình link...', false);
+            try {
+                const links = collectLinksFromUi();
+                const res = await fetch('/api/website-links', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ links })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.success) throw new Error(data.message || `HTTP ${res.status}`);
+                applyLinksToUi(data.links || links);
+                setStatus('Đã lưu cấu hình link lên server.', false);
+            } catch (err) {
+                setStatus('Không lưu được cấu hình link: ' + (err.message || err), true);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadWebsiteLinks();
+            const saveBtn = document.getElementById('save-links-btn');
+            const reloadBtn = document.getElementById('reload-links-btn');
+            const addCustomBtn = document.getElementById('add-custom-link-btn');
+            if (saveBtn) saveBtn.addEventListener('click', saveWebsiteLinks);
+            if (reloadBtn) reloadBtn.addEventListener('click', loadWebsiteLinks);
+            if (addCustomBtn) {
+                addCustomBtn.addEventListener('click', () => {
+                    customLinks.push({ name: '', url: '', icon: 'fas fa-link', description: '' });
+                    renderCustomLinks();
+                });
+            }
+            const allLinksGrid = document.getElementById('all-links-grid');
+            if (allLinksGrid) {
+                allLinksGrid.addEventListener('click', (ev) => {
+                    const removeDefaultBtn = ev.target.closest('[data-remove-default]');
+                    if (removeDefaultBtn) {
+                        const key = String(removeDefaultBtn.getAttribute('data-remove-default') || '');
+                        if (!key || disabledDefaultKeys.includes(key)) return;
+                        const card = removeDefaultBtn.closest('.link-card');
+                        const titleEl = card ? card.querySelector('h3') : null;
+                        const titleText = titleEl ? titleEl.textContent.trim() : 'website';
+                        if (!window.confirm(`Bạn có chắc muốn xóa ô "${titleText}" không?`)) return;
+                        disabledDefaultKeys.push(key);
+                        renderDefaultCards();
+                        return;
+                    }
+                    const removeCustomBtn = ev.target.closest('[data-remove-custom]');
+                    if (!removeCustomBtn) return;
+                    const idx = Number(removeCustomBtn.getAttribute('data-remove-custom'));
+                    if (!Number.isFinite(idx) || idx < 0 || idx >= customLinks.length) return;
+                    const customName = String(customLinks[idx].name || '').trim() || 'website tự thêm';
+                    if (!window.confirm(`Bạn có chắc muốn xóa "${customName}" không?`)) return;
+                    customLinks.splice(idx, 1);
+                    renderCustomLinks();
+                });
+                allLinksGrid.addEventListener('input', (ev) => {
+                    const target = ev.target;
+                    const idxAttr = target.getAttribute('data-inline-url');
+                    if (idxAttr === null) return;
+                    const idx = Number(idxAttr);
+                    if (!Number.isFinite(idx) || idx < 0 || idx >= customLinks.length) return;
+                    customLinks[idx].url = target.value;
+                    renderCustomInlineCards();
+                });
+            }
+            linkKeys.forEach(([, suffix]) => {
+                const input = document.getElementById(`link-${suffix}`);
+                const open = document.getElementById(`open-${suffix}`);
+                if (input && open) {
+                    input.addEventListener('input', () => {
+                        open.href = input.value.trim() || '#';
+                    });
+                }
+            });
+            const customRoot = document.getElementById('custom-links-list');
+            if (customRoot) {
+                customRoot.addEventListener('input', (ev) => {
+                    const target = ev.target;
+                    const box = target.closest('.custom-item');
+                    if (!box) return;
+                    const idx = Number(box.getAttribute('data-idx'));
+                    const field = target.getAttribute('data-field');
+                    if (!Number.isFinite(idx) || idx < 0 || idx >= customLinks.length || !field) return;
+                    customLinks[idx][field] = target.value;
+                    renderCustomInlineCards();
+                });
+                customRoot.addEventListener('click', (ev) => {
+                    const btn = ev.target.closest('[data-remove-custom]');
+                    if (!btn) return;
+                    const idx = Number(btn.getAttribute('data-remove-custom'));
+                    if (!Number.isFinite(idx) || idx < 0 || idx >= customLinks.length) return;
+                    const customName = String(customLinks[idx].name || '').trim() || 'website tự thêm';
+                    if (!window.confirm(`Bạn có chắc muốn xóa "${customName}" không?`)) return;
+                    customLinks.splice(idx, 1);
+                    renderCustomLinks();
+                });
+            }
+        });
+    </script>
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

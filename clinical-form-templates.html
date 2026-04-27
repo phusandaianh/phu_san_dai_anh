@@ -23,6 +23,9 @@
             display: flex;
             align-items: center;
         }
+        .admin-header .logo span {
+            color: white;
+        }
         .admin-header nav {
             display: flex;
             align-items: center;
@@ -62,6 +65,60 @@
             margin: 0 0 0.5rem 0;
             color: #333;
         }
+        .template-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 0.5rem;
+        }
+        .template-card-header h4 {
+            margin: 0;
+            min-width: 0;
+            word-break: break-word;
+        }
+        .template-lock-btn {
+            padding: 4px 8px;
+            font-size: 12px;
+            flex: 0 0 auto;
+        }
+        .special-template-toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .special-template-toolbar select {
+            min-width: 220px;
+            padding: 6px 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: #fff;
+        }
+        .special-template-toolbar .locked-only-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #374151;
+            user-select: none;
+        }
+        .special-provider-group {
+            margin: 10px 0 18px;
+        }
+        .special-provider-group-title {
+            margin: 0 0 10px 0;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e5e7eb;
+            color: #1a237e;
+            font-size: 16px;
+        }
+        .special-provider-group-title .count {
+            font-size: 13px;
+            color: #666;
+            font-weight: normal;
+        }
         .form-template-card p {
             margin: 0 0 1rem 0;
             color: #666;
@@ -70,6 +127,15 @@
         .form-template-actions {
             display: flex;
             gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: stretch;
+        }
+        .form-template-actions .btn {
+            flex: 1 1 calc(50% - 0.5rem);
+            min-width: 96px;
+            justify-content: center;
+            text-align: center;
+            white-space: nowrap;
         }
         .btn {
             padding: 0.5rem 1rem;
@@ -198,6 +264,134 @@
             font-family: monospace;
             font-size: 12px;
             background: #f8f8f8;
+        }
+        .rich-editor-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 8px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f5f7fb;
+            align-items: center;
+        }
+        .rich-editor-toolbar button,
+        .rich-editor-toolbar select {
+            font-size: 12px;
+            padding: 6px 8px;
+            border: 1px solid #cfd7e3;
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+        }
+        .rich-editor-toolbar button:hover,
+        .rich-editor-toolbar select:hover {
+            border-color: #9eb0cc;
+        }
+        .rich-editor-toolbar button.active {
+            background: #e8f0ff;
+            border-color: #2f7cff;
+            color: #1244a6;
+        }
+        .toolbar-divider {
+            width: 1px;
+            height: 24px;
+            background: #d9e0eb;
+            margin: 0 2px;
+        }
+        #lab-result-template-editor.rich-editor-surface {
+            font-family: 'Times New Roman', serif;
+            font-size: 14px;
+            background: #fff;
+            line-height: 1.4;
+        }
+        #lab-result-template-editor.rich-editor-surface.draw-textbox-mode {
+            cursor: crosshair;
+        }
+        .lab-textbox-draft {
+            position: fixed;
+            border: 1px dashed #2f7cff;
+            background: rgba(47, 124, 255, 0.08);
+            pointer-events: none;
+            z-index: 99999;
+        }
+        .lab-text-box {
+            border: 1px solid #666;
+            min-width: 120px;
+            min-height: 60px;
+            width: 240px;
+            height: 120px;
+            padding: 6px;
+            margin: 8px 0;
+            resize: both;
+            overflow: auto;
+            box-sizing: border-box;
+        }
+        .lab-text-box .lab-text-box-drag-handle {
+            font-size: 11px;
+            color: #4b5563;
+            background: #f3f4f6;
+            border: 1px dashed #cfd7e3;
+            border-radius: 3px;
+            padding: 2px 6px;
+            margin-bottom: 6px;
+            cursor: move;
+            user-select: none;
+        }
+        .lab-text-box.moving {
+            opacity: 0.65;
+        }
+        .lab-textbox-insert-indicator {
+            height: 0;
+            border-top: 2px solid #2f7cff;
+            margin: 4px 0;
+            pointer-events: none;
+        }
+        .lab-text-box .lab-text-box-content {
+            width: 100%;
+            min-height: 100%;
+            outline: none;
+        }
+        .lab-image-frame {
+            display: block;
+            width: 320px;
+            min-height: 120px;
+            margin: 8px auto;
+            padding: 6px;
+            border: 1px dashed #808080;
+            resize: both;
+            overflow: auto;
+            background: #fff;
+        }
+        .lab-image-frame img {
+            width: 100%;
+            height: auto;
+            display: none;
+        }
+        .lab-image-frame .lab-image-placeholder {
+            min-height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 12px;
+            border: 1px dashed #c7c7c7;
+            background: #fafafa;
+            text-align: center;
+            padding: 8px;
+        }
+        .lab-image-frame .lab-image-caption {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #333;
+            text-align: center;
+            border-top: 1px dotted #ddd;
+            padding-top: 4px;
+        }
+        .lab-image-frame.selected {
+            border: 2px solid #2f7cff;
+            box-shadow: 0 0 0 2px rgba(47,124,255,0.15);
         }
         .template-preview {
             border: 1px solid #ddd;
@@ -481,9 +675,6 @@
             <button id="sync-header-btn" class="btn secondary-btn">
               <i class="fas fa-sync"></i> Đồng bộ từ Home Content
             </button>
-            <button id="reset-header-btn" class="btn danger-btn">
-              <i class="fas fa-undo"></i> Reset về mặc định
-            </button>
           </div>
           <div id="header-status" style="font-size: 0.9rem; color: #666; margin-top: 5px;">
             <span id="sync-status">Đang tải...</span>
@@ -571,6 +762,15 @@
                     <i class="fas fa-sync"></i> Làm mới
                 </button>
             </div>
+            <div class="special-template-toolbar">
+                <select id="special-template-provider-filter">
+                    <option value="">Tất cả đơn vị thực hiện</option>
+                </select>
+                <label class="locked-only-label" for="special-template-locked-only">
+                    <input type="checkbox" id="special-template-locked-only" />
+                    Chỉ xem mẫu đã khóa
+                </label>
+            </div>
             <div class="form-template-grid" id="special-templates-grid">
                 <!-- Các mẫu đặc biệt sẽ được load động -->
             </div>
@@ -590,74 +790,30 @@
                     <i class="fas fa-sync"></i> Làm mới
                 </button>
             </div>
+
+            <div class="form-template-grid" style="margin-bottom: 16px;">
+                <div class="form-template-card">
+                    <h4>Mẫu gốc kết quả cận lâm sàng</h4>
+                    <p>Mẫu chuẩn dùng để đồng bộ phần thông tin hành chính cho các mẫu phiếu kết quả đã tạo.</p>
+                    <div class="form-template-actions">
+                        <button class="btn primary-btn" onclick="previewTemplate('lab-result')">
+                            <i class="fas fa-eye"></i> Xem trước
+                        </button>
+                        <button class="btn secondary-btn" onclick="editTemplate('lab-result')">
+                            <i class="fas fa-edit"></i> Sửa
+                        </button>
+                        <button class="btn success-btn" onclick="printTemplate('lab-result')">
+                            <i class="fas fa-print"></i> In
+                        </button>
+                    </div>
+                </div>
+            </div>
             
             <!-- Nhóm mẫu phiếu kết quả -->
             <div class="lab-result-groups">
-                <!-- Nhóm Siêu âm thai -->
-                <div class="lab-result-group">
-                    <h4 class="group-title">
-                        <i class="fas fa-baby"></i> Siêu âm thai
-                        <span class="group-count" id="ultrasound-pregnancy-count">(0)</span>
-                    </h4>
-                    <div class="form-template-grid" id="ultrasound-pregnancy-templates">
-                        <!-- Các mẫu siêu âm thai -->
-                    </div>
-                </div>
-
-                <!-- Nhóm Siêu âm tổng quát -->
-                <div class="lab-result-group">
-                    <h4 class="group-title">
-                        <i class="fas fa-stethoscope"></i> Siêu âm tổng quát
-                        <span class="group-count" id="ultrasound-general-count">(0)</span>
-                    </h4>
-                    <div class="form-template-grid" id="ultrasound-general-templates">
-                        <!-- Các mẫu siêu âm tổng quát -->
-                    </div>
-                </div>
-
-                <!-- Nhóm Xét nghiệm máu -->
-                <div class="lab-result-group">
-                    <h4 class="group-title">
-                        <i class="fas fa-tint"></i> Xét nghiệm máu
-                        <span class="group-count" id="blood-test-count">(0)</span>
-                    </h4>
-                    <div class="form-template-grid" id="blood-test-templates">
-                        <!-- Các mẫu xét nghiệm máu -->
-                    </div>
-                </div>
-
-                <!-- Nhóm Xét nghiệm nước tiểu -->
-                <div class="lab-result-group">
-                    <h4 class="group-title">
-                        <i class="fas fa-flask"></i> Xét nghiệm nước tiểu
-                        <span class="group-count" id="urine-test-count">(0)</span>
-                    </h4>
-                    <div class="form-template-grid" id="urine-test-templates">
-                        <!-- Các mẫu xét nghiệm nước tiểu -->
-                    </div>
-                </div>
-
-                <!-- Nhóm Soi cổ tử cung + Xét nghiệm dịch + Sinh thiết -->
-                <div class="lab-result-group">
-                    <h4 class="group-title">
-                        <i class="fas fa-microscope"></i> Soi cổ tử cung + Xét nghiệm dịch + Sinh thiết
-                        <span class="group-count" id="cervical-test-count">(0)</span>
-                    </h4>
-                    <div class="form-template-grid" id="cervical-test-templates">
-                        <!-- Các mẫu soi cổ tử cung, xét nghiệm dịch, sinh thiết -->
-                    </div>
-                </div>
-
-                <!-- Nhóm Các xét nghiệm khác -->
-                <div class="lab-result-group">
-                    <h4 class="group-title">
-                        <i class="fas fa-vial"></i> Các xét nghiệm khác
-                        <span class="group-count" id="other-test-count">(0)</span>
-                    </h4>
-                    <div class="form-template-grid" id="other-test-templates">
-                        <!-- Các mẫu xét nghiệm khác -->
-                    </div>
-                </div>
+                <p style="color:#666; font-style:italic; margin:0;">
+                    Đang tải nhóm mẫu phiếu từ quản lý nhóm dịch vụ cận lâm sàng...
+                </p>
             </div>
         </section>
     </main>
@@ -714,16 +870,12 @@
             </div>
             <div class="form-group">
                 <label for="special-template-editor">Nội dung mẫu phiếu (HTML):</label>
-                <div style="margin-bottom: 10px;">
-                    <button type="button" class="btn secondary-btn" onclick="resetSpecialTemplate()" style="font-size: 12px; padding: 5px 10px;">
-                        <i class="fas fa-undo"></i> Reset về template mặc định
-                    </button>
-                </div>
                 <div id="special-template-editor" class="header-editor" contenteditable="true"></div>
             </div>
             <div class="modal-footer">
                 <button id="cancel-special-btn" class="btn secondary-btn">Hủy</button>
                 <button id="save-special-btn" class="btn primary-btn">Lưu mẫu đặc biệt</button>
+                <button id="save-print-special-btn" class="btn success-btn"><i class="fas fa-print"></i> Lưu & In</button>
             </div>
         </div>
     </div>
@@ -751,12 +903,69 @@
             </div>
             <div class="form-group">
                 <label for="lab-result-template-editor">Nội dung mẫu phiếu (HTML):</label>
-                <div style="margin-bottom: 10px;">
-                    <button type="button" class="btn secondary-btn" onclick="resetLabResultTemplate()" style="font-size: 12px; padding: 5px 10px;">
-                        <i class="fas fa-undo"></i> Reset về template mặc định
-                    </button>
+                <div id="lab-result-editor-toolbar" class="rich-editor-toolbar">
+                    <select id="lab-font-family">
+                        <option value="">Font chữ</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Arial">Arial</option>
+                        <option value="Tahoma">Tahoma</option>
+                        <option value="Calibri">Calibri</option>
+                        <option value="Courier New">Courier New</option>
+                    </select>
+                    <select id="lab-font-size">
+                        <option value="">Cỡ chữ</option>
+                        <option value="12px">12</option>
+                        <option value="14px">14</option>
+                        <option value="16px">16</option>
+                        <option value="18px">18</option>
+                        <option value="20px">20</option>
+                        <option value="24px">24</option>
+                    </select>
+                    <span class="toolbar-divider"></span>
+                    <button type="button" id="lab-undo-btn">Undo</button>
+                    <button type="button" id="lab-redo-btn">Redo</button>
+                    <span class="toolbar-divider"></span>
+                    <button type="button" data-cmd="bold"><strong>B</strong></button>
+                    <button type="button" data-cmd="italic"><em>I</em></button>
+                    <button type="button" data-cmd="underline"><u>U</u></button>
+                    <span class="toolbar-divider"></span>
+                    <button type="button" data-cmd="justifyleft">Lệch trái</button>
+                    <button type="button" data-cmd="justifycenter">Căn giữa</button>
+                    <button type="button" data-cmd="justifyright">Lệch phải</button>
+                    <span class="toolbar-divider"></span>
+                    <button type="button" id="lab-insert-table-btn">Tạo bảng</button>
+                    <button type="button" id="lab-merge-cell-btn">Merge ô</button>
+                    <button type="button" id="lab-split-cell-btn">Split ô</button>
+                    <button type="button" id="lab-insert-ultrasound-preset-btn">Preset siêu âm thai</button>
+                    <button type="button" id="lab-insert-image-frame-btn">Tạo ô ảnh</button>
+                    <button type="button" id="lab-insert-textbox-btn">Tạo text box</button>
+                    <button type="button" id="lab-insert-image-btn">Chèn ảnh</button>
+                    <button type="button" id="lab-image-align-left-btn">Ảnh trái</button>
+                    <button type="button" id="lab-image-align-center-btn">Ảnh giữa</button>
+                    <button type="button" id="lab-image-align-right-btn">Ảnh phải</button>
+                    <button type="button" id="lab-delete-image-btn">Xóa ảnh</button>
+                    <button type="button" id="lab-insert-dropdown-btn">Dropdown</button>
+                    <button type="button" id="lab-insert-combobox-btn">Combo box</button>
+                    <select id="lab-token-select">
+                        <option value="">Token dữ liệu...</option>
+                        <option value="{{bpd}}">{{bpd}}</option>
+                        <option value="{{hc}}">{{hc}}</option>
+                        <option value="{{ac}}">{{ac}}</option>
+                        <option value="{{fl}}">{{fl}}</option>
+                        <option value="{{efw}}">{{efw}}</option>
+                        <option value="{{afi}}">{{afi}}</option>
+                        <option value="{{mca_pi}}">{{mca_pi}}</option>
+                        <option value="{{ri_umbilical}}">{{ri_umbilical}}</option>
+                        <option value="{{sd_ratio}}">{{sd_ratio}}</option>
+                        <option value="{{gestational_age}}">{{gestational_age}}</option>
+                        <option value="{{exam_date}}">{{exam_date}}</option>
+                        <option value="{{doctor_name}}">{{doctor_name}}</option>
+                    </select>
+                    <button type="button" id="lab-insert-token-btn">Chèn token</button>
+                    <button type="button" id="lab-preview-token-btn">Preview token</button>
+                    <input type="file" id="lab-image-upload-input" accept="image/*" style="display:none;" />
                 </div>
-                <div id="lab-result-template-editor" class="header-editor" contenteditable="true"></div>
+                <div id="lab-result-template-editor" class="header-editor rich-editor-surface" contenteditable="true"></div>
             </div>
             <div class="modal-footer">
                 <button id="cancel-lab-result-btn" class="btn secondary-btn">Hủy</button>
@@ -813,10 +1022,28 @@ let labResultTemplates = [];
 
 // Biến lưu trữ nhóm mẫu phiếu
 let labResultGroups = [];
+let clinicalServiceGroupByName = {};
+let clinicalServiceProviderByName = {};
+const specialTemplateFilters = {
+  providerUnit: '',
+  lockedOnly: false
+};
 
 // Biến lưu trữ vị trí logo hiện tại
 let currentLogoPosition = 'left';
 let isDragging = false;
+
+function normalizeGroupText(value) {
+  return (value || '').toString().trim().toLowerCase();
+}
+
+function makeGroupSlug(name) {
+  const raw = (name || '').toString().trim().toLowerCase();
+  if (!raw) return 'other-test';
+  const noAccent = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const slug = noAccent.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug || 'other-test';
+}
 
 // Hàm helper để sửa đường dẫn logo cho in
 function fixLogoPathForPrint(content) {
@@ -1108,7 +1335,7 @@ function generateHeaderHTMLWithLogoPosition(logoPosition) {
       break;
   }
 
-  return layoutHTML + '<hr style="border:1px solid #000;">';
+  return layoutHTML;
 }
 
 // Hàm tạo header mặc định với vị trí logo
@@ -1169,7 +1396,7 @@ function generateDefaultHeaderWithLogoPosition(logoPosition) {
       break;
   }
 
-  return layoutHTML + '<hr style="border:1px solid #000;">';
+  return layoutHTML;
 }
 
 // Hàm reset vị trí logo
@@ -1193,45 +1420,51 @@ function generateHeaderHTML() {
   return generateHeaderHTMLWithLogoPosition(currentLogoPosition);
 }
 
+function buildPatientInfoTableHtml() {
+  return `
+  <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
+    <tr>
+      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Họ tên:</strong></td>
+      <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
+      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Năm sinh:</strong></td>
+      <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
+    </tr>
+    <tr>
+      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Địa chỉ:</strong></td>
+      <td style="padding:8px; border:1px solid #000;">_________________</td>
+      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Số điện thoại:</strong></td>
+      <td style="padding:8px; border:1px solid #000;">_________________</td>
+    </tr>
+    <tr>
+      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Chẩn đoán:</strong></td>
+      <td style="padding:8px; border:1px solid #000;">_________________</td>
+      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Ghi chú:</strong></td>
+      <td style="padding:8px; border:1px solid #000;">_________________</td>
+    </tr>
+  </table>`;
+}
+
 const labRequestTemplate = `
 <div style="font-family:'Times New Roman', serif; padding:20px;">
   <div style="text-align:center; margin-bottom:20px;">
     <h2 style="color:#0000cc; margin:0;">PHIẾU CHỈ ĐỊNH CẬN LÂM SÀNG</h2>
   </div>
-  
-  <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
-    <tr>
-      <td style="padding:8px; border:1px solid #000; width:20%;"><strong>Họ tên:</strong></td>
-      <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
-      <td style="padding:8px; border:1px solid #000; width:20%;"><strong>Tuổi:</strong></td>
-      <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
-    </tr>
-    <tr>
-      <td style="padding:8px; border:1px solid #000;"><strong>Địa chỉ:</strong></td>
-      <td style="padding:8px; border:1px solid #000;" colspan="3">_________________</td>
-    </tr>
-    <tr>
-      <td style="padding:8px; border:1px solid #000;"><strong>Chẩn đoán:</strong></td>
-      <td style="padding:8px; border:1px solid #000;">_________________</td>
-      <td style="padding:8px; border:1px solid #000;"><strong>Ghi chú:</strong></td>
-      <td style="padding:8px; border:1px solid #000;">_________________</td>
-    </tr>
-  </table>
+  ${buildPatientInfoTableHtml()}
 
   <div style="margin-bottom:20px; margin-top:30px;">
     <div style="border:1px solid #000; padding:10px;">
       <p><strong>Dịch vụ chỉ định:</strong> _________________</p>
-      <p style="margin-top:8px;"><strong>Ghi chú:</strong> ____________________________________________</p>
     </div>
   </div>
 
   <div style="display:flex; justify-content:space-between; margin-top:30px;">
-    <div style="text-align:center;">
-      <p><strong>Bác sĩ chỉ định</strong></p>
-      <p style="margin-top:50px;">_________________</p>
-    </div>
-    <div style="text-align:center;">
+    <div style="text-align:left;">
       <p><strong>Ngày: ___/___/_____</strong></p>
+      <p style="margin-top:8px;"><strong>Đơn vị xét nghiệm:</strong> _________________</p>
+    </div>
+    <div style="text-align:right;">
+      <p><strong>Bác sĩ chỉ định</strong></p>
+      <p style="margin-top:20px;">_________________</p>
     </div>
     </div>
   </div>
@@ -1242,25 +1475,7 @@ const labResultTemplate = `
   <div style="text-align:center; margin-bottom:20px;">
     <h2 style="color:#0000cc; margin:0;">PHIẾU KẾT QUẢ CẬN LÂM SÀNG</h2>
   </div>
-  
-  <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
-    <tr>
-      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Họ tên:</strong></td>
-      <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
-      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Tuổi:</strong></td>
-      <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
-    </tr>
-    <tr>
-      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Địa chỉ:</strong></td>
-      <td style="padding:8px; border:1px solid #000;" colspan="3">_________________</td>
-    </tr>
-    <tr>
-      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Chẩn đoán:</strong></td>
-      <td style="padding:8px; border:1px solid #000;">_________________</td>
-      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Ghi chú:</strong></td>
-      <td style="padding:8px; border:1px solid #000;">_________________</td>
-    </tr>
-  </table>
+  ${buildPatientInfoTableHtml()}
 
   <div style="margin-bottom:20px;">
     <h3 style="color:#0000cc; margin-bottom:10px;">KẾT QUẢ XÉT NGHIỆM:</h3>
@@ -1275,7 +1490,7 @@ const labResultTemplate = `
     </div>
   </div>
 
-  <div style="display:flex; justify-content:space-between; margin-top:30px; padding-top:20px; border-top:2px solid #0000cc;">
+  <div style="display:flex; justify-content:space-between; margin-top:30px; padding-top:20px;">
     <div style="text-align:center; flex:1;">
       <p><strong>Ngày thực hiện</strong></p>
       <div style="margin-top:50px; height:2px; background-color:#000;"></div>
@@ -1289,6 +1504,177 @@ const labResultTemplate = `
   </div>
 </div>
 `;
+
+function ensureLabRequestHasPhoneField(templateHtml) {
+  const source = String(templateHtml || '');
+  if (!source) return source;
+  if (/Số điện thoại\s*:/i.test(source)) return source;
+
+  return source.replace(
+    /(<td[^>]*>\s*<strong>\s*Địa chỉ:\s*<\/strong>\s*<\/td>\s*<td[^>]*?)\s+colspan="3"([^>]*>)([\s\S]*?)(<\/td>)/i,
+    '$1$2$4$5<td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Số điện thoại:</strong></td><td style="padding:8px; border:1px solid #000;">_________________</td>'
+  );
+}
+
+const STANDARD_ADMIN_INFO_TABLE_HTML = `
+<table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
+  <tr>
+    <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Họ tên:</strong></td>
+    <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
+    <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Năm sinh:</strong></td>
+    <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
+  </tr>
+  <tr>
+    <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Địa chỉ:</strong></td>
+    <td style="padding:8px; border:1px solid #000;">_________________</td>
+    <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Số điện thoại:</strong></td>
+    <td style="padding:8px; border:1px solid #000;">_________________</td>
+  </tr>
+  <tr>
+    <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Chẩn đoán:</strong></td>
+    <td style="padding:8px; border:1px solid #000;">_________________</td>
+    <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Ghi chú:</strong></td>
+    <td style="padding:8px; border:1px solid #000;">_________________</td>
+  </tr>
+</table>`;
+
+function isPreeclampsiaTemplateName(name) {
+  const normalized = String(name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+  return normalized.includes('tien san giat');
+}
+
+function normalizeAdminInfoLayoutForPreeclampsia(contentHtml) {
+  const source = String(contentHtml || '');
+  if (!source) return source;
+  const adminTableRegex = /<table[^>]*>[\s\S]*?(Họ tên|Ho ten)[\s\S]*?(Năm sinh|Tuổi|Nam sinh)[\s\S]*?(Chẩn đoán|Chan doan)[\s\S]*?<\/table>/i;
+  if (adminTableRegex.test(source)) {
+    return source.replace(adminTableRegex, STANDARD_ADMIN_INFO_TABLE_HTML);
+  }
+  return source.replace(/(<h2[^>]*>[\s\S]*?<\/h2>)/i, `$1${STANDARD_ADMIN_INFO_TABLE_HTML}`);
+}
+
+function normalizeSpecialTemplateContent(template) {
+  const content = String(template?.content_html || '');
+  if (!content) return content;
+  if (!isPreeclampsiaTemplateName(template?.name)) return content;
+  return normalizeAdminInfoLayoutForPreeclampsia(content);
+}
+
+const LAB_REQUEST_UPGRADE_MARKER = 'lab_request_phone_field_migrated_v1';
+let isPersistingLabRequestUpgrade = false;
+const PREECLAMPSIA_UPGRADE_MARKER_PREFIX = 'preeclampsia_admin_layout_migrated_';
+const preeclampsiaUpgradeInFlight = new Set();
+const LAB_RESULT_SIGNATURE_UPGRADE_MARKER_PREFIX = 'lab_result_signature_layout_migrated_';
+const labResultSignatureUpgradeInFlight = new Set();
+
+function normalizeLabResultSignatureLayout(contentHtml) {
+  let html = String(contentHtml || '');
+  if (!html) return html;
+
+  // Remove top horizontal line in signature section ("Ngày thực hiện / Bác sĩ thực hiện").
+  html = html.replace(
+    /(<div[^>]*style="[^"]*display\s*:\s*flex[^"]*justify-content\s*:\s*space-between[^"]*)border-top\s*:\s*[^;"']+;?/gi,
+    '$1'
+  );
+
+  // Keep signature content clean if template used explicit <hr>.
+  html = html.replace(/<hr\b[^>]*>/gi, '');
+  // Cleanup empty inline style attributes after removing styles.
+  html = html.replace(/\sstyle="\s*"/gi, '');
+
+  return html;
+}
+
+async function persistLabResultSignatureUpgradeSilently(template, upgradedContent) {
+  const templateId = String(template?.id || '').trim();
+  if (!templateId || !upgradedContent) return;
+
+  const markerKey = `${LAB_RESULT_SIGNATURE_UPGRADE_MARKER_PREFIX}${templateId}`;
+  if (sessionStorage.getItem(markerKey) === '1') return;
+  if (labResultSignatureUpgradeInFlight.has(templateId)) return;
+
+  try {
+    labResultSignatureUpgradeInFlight.add(templateId);
+    const response = await fetch(`/api/lab-result-templates/${templateId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: template.name || '',
+        description: template.description || '',
+        category: template.category || 'other-test',
+        content_html: upgradedContent
+      })
+    });
+    if (response.ok) {
+      sessionStorage.setItem(markerKey, '1');
+      const idx = labResultTemplates.findIndex(t => String(t?.id) === templateId);
+      if (idx >= 0) {
+        labResultTemplates[idx] = { ...labResultTemplates[idx], content_html: upgradedContent };
+      }
+    }
+  } catch (error) {
+    console.warn('Không tự lưu được mẫu kết quả đã chuẩn hóa chữ ký:', error);
+  } finally {
+    labResultSignatureUpgradeInFlight.delete(templateId);
+  }
+}
+
+async function persistPreeclampsiaTemplateUpgradeSilently(template, upgradedContent) {
+  const templateId = String(template?.id || '').trim();
+  if (!templateId || !upgradedContent) return;
+  const markerKey = `${PREECLAMPSIA_UPGRADE_MARKER_PREFIX}${templateId}`;
+  if (sessionStorage.getItem(markerKey) === '1') return;
+  if (preeclampsiaUpgradeInFlight.has(templateId)) return;
+
+  try {
+    preeclampsiaUpgradeInFlight.add(templateId);
+    const response = await fetch(`/api/special-templates/${encodeURIComponent(templateId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: template.name || 'Mẫu phiếu khai thác tiền sản giật',
+        description: template.description || '',
+        content_html: upgradedContent
+      })
+    });
+    if (response.ok) {
+      sessionStorage.setItem(markerKey, '1');
+      const idx = specialTemplates.findIndex(t => String(t?.id) === templateId);
+      if (idx >= 0) {
+        specialTemplates[idx] = { ...specialTemplates[idx], content_html: upgradedContent };
+      }
+    }
+  } catch (error) {
+    console.warn('Không tự lưu được mẫu tiền sản giật đã chuẩn hóa:', error);
+  } finally {
+    preeclampsiaUpgradeInFlight.delete(templateId);
+  }
+}
+
+async function persistLabRequestUpgradeSilently(upgradedHtml) {
+  if (!upgradedHtml || isPersistingLabRequestUpgrade) return;
+  if (sessionStorage.getItem(LAB_REQUEST_UPGRADE_MARKER) === '1') return;
+
+  try {
+    isPersistingLabRequestUpgrade = true;
+    const response = await fetch('/api/clinical-form-template/lab-request', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_html: upgradedHtml })
+    });
+    if (response.ok) {
+      sessionStorage.setItem(LAB_REQUEST_UPGRADE_MARKER, '1');
+    }
+  } catch (error) {
+    console.warn('Không tự lưu được template đã nâng cấp:', error);
+  } finally {
+    isPersistingLabRequestUpgrade = false;
+  }
+}
 
 async function getHeader() {
   try {
@@ -1328,16 +1714,85 @@ async function setHeader(html) {
 }
 
 async function getTemplate(templateType) {
+  // Theo yêu cầu: mẫu gốc kết quả cận lâm sàng lấy từ template hardcode ở frontend.
+  if (templateType === 'lab-result') {
+    return labResultTemplate;
+  }
   try {
     const response = await fetch(`/api/clinical-form-template/${templateType}`);
     if (response.ok) {
       const data = await response.json();
-      return data.template || (templateType === 'lab-request' ? labRequestTemplate : labResultTemplate);
+      const rawTemplate = data.template || (templateType === 'lab-request' ? labRequestTemplate : labResultTemplate);
+      if (templateType === 'lab-request') {
+        const upgradedTemplate = ensureLabRequestHasPhoneField(rawTemplate);
+        // Auto-migrate legacy DB template once per session.
+        if (String(data.template || '') && upgradedTemplate !== rawTemplate) {
+          persistLabRequestUpgradeSilently(upgradedTemplate);
+        } else if (/Số điện thoại\s*:/i.test(upgradedTemplate)) {
+          sessionStorage.setItem(LAB_REQUEST_UPGRADE_MARKER, '1');
+        }
+        return upgradedTemplate;
+      }
+      return rawTemplate;
     }
   } catch (error) {
     console.error('Error loading template:', error);
   }
-  return templateType === 'lab-request' ? labRequestTemplate : labResultTemplate;
+  return templateType === 'lab-request'
+    ? ensureLabRequestHasPhoneField(labRequestTemplate)
+    : labResultTemplate;
+}
+
+function extractAdminInfoTableFromHtml(contentHtml) {
+  const source = String(contentHtml || '');
+  const match = source.match(/<table[^>]*>[\s\S]*?(Họ tên|Ho ten)[\s\S]*?(Năm sinh|Nam sinh|Tuổi|Tuoi)[\s\S]*?(Ghi chú|Ghi chu|Chẩn đoán|Chan doan)[\s\S]*?<\/table>/i);
+  return match ? match[0] : '';
+}
+
+function applyAdminInfoTableToLabResultHtml(contentHtml, adminTableHtml) {
+  const source = String(contentHtml || '');
+  const adminTable = String(adminTableHtml || '');
+  if (!source || !adminTable) return source;
+
+  const tableRegex = /<table[^>]*>[\s\S]*?(Họ tên|Ho ten)[\s\S]*?(Năm sinh|Nam sinh|Tuổi|Tuoi)[\s\S]*?(Ghi chú|Ghi chu|Chẩn đoán|Chan doan)[\s\S]*?<\/table>/i;
+  if (tableRegex.test(source)) {
+    return source.replace(tableRegex, adminTable);
+  }
+  return source.replace(/(<h2[^>]*>[\s\S]*?<\/h2>)/i, `$1\n${adminTable}`);
+}
+
+async function syncLabResultTemplatesAdminFromBaseClient(baseHtml) {
+  const adminTable = extractAdminInfoTableFromHtml(baseHtml);
+  if (!adminTable) return 0;
+
+  if (!Array.isArray(labResultTemplates) || !labResultTemplates.length) {
+    await loadLabResultTemplates();
+  }
+
+  let syncedCount = 0;
+  const templates = Array.isArray(labResultTemplates) ? [...labResultTemplates] : [];
+  for (const template of templates) {
+    const currentHtml = String(template?.content_html || '');
+    const nextHtml = applyAdminInfoTableToLabResultHtml(currentHtml, adminTable);
+    if (!nextHtml || nextHtml === currentHtml) continue;
+
+    const response = await fetch(`/api/lab-result-templates/${template.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: template.name || '',
+        description: template.description || '',
+        category: template.category || 'other-test',
+        content_html: nextHtml
+      })
+    });
+    if (response.ok) syncedCount += 1;
+  }
+
+  if (syncedCount > 0) {
+    await loadLabResultTemplates();
+  }
+  return syncedCount;
 }
 
 async function setTemplate(templateType, html) {
@@ -1354,7 +1809,21 @@ async function setTemplate(templateType, html) {
     if (response.ok) {
       const result = await response.json();
       console.log('Template saved successfully:', result);
-      alert('Đã lưu mẫu phiếu thành công!');
+      let successMessage = 'Đã lưu mẫu phiếu thành công!';
+      if (templateType === 'lab-request' && typeof result.synced_special_templates === 'number') {
+        successMessage += `\nĐã tự động cập nhật ${result.synced_special_templates} mẫu phiếu chỉ định dịch vụ.`;
+        // Refresh dữ liệu mẫu đặc biệt trong bộ nhớ để xem trước/in dùng ngay nội dung mới.
+        await loadSpecialTemplates();
+      }
+      if (templateType === 'lab-result' && typeof result.synced_lab_result_templates === 'number') {
+        successMessage += `\nĐã tự động cập nhật ${result.synced_lab_result_templates} mẫu phiếu kết quả cận lâm sàng.`;
+        // Refresh danh sách mẫu kết quả để phản ánh phần hành chính mới.
+        await loadLabResultTemplates();
+      } else if (templateType === 'lab-result') {
+        const fallbackSynced = await syncLabResultTemplatesAdminFromBaseClient(html);
+        successMessage += `\nĐã tự động cập nhật ${fallbackSynced} mẫu phiếu kết quả cận lâm sàng.`;
+      }
+      alert(successMessage);
     } else {
       const errorText = await response.text();
       console.error('Failed to save template. Status:', response.status, 'Error:', errorText);
@@ -1580,18 +2049,104 @@ async function deleteGroup(groupId) {
 // Hàm load nhóm từ database
 async function loadGroupsFromDatabase() {
   try {
-    const response = await fetch('/api/lab-result-groups');
-    if (response.ok) {
-      labResultGroups = await response.json();
-      console.log('Loaded groups from database:', labResultGroups);
+    const groupsRes = await fetch('/api/clinical-service-groups');
+    const servicesRes = await fetch('/api/clinical-services');
+    if (groupsRes.ok) {
+      const groupNames = await groupsRes.json();
+      const names = Array.isArray(groupNames) ? groupNames : [];
+      labResultGroups = names.map((name, idx) => ({
+        id: makeGroupSlug(name),
+        name,
+        icon: 'fas fa-vial',
+        is_default: true,
+        sort_order: idx + 1
+      }));
+      console.log('Loaded groups from clinical services:', labResultGroups);
     } else {
       console.error('Failed to load groups from database');
       labResultGroups = [];
     }
+
+    clinicalServiceGroupByName = {};
+    clinicalServiceProviderByName = {};
+    if (servicesRes.ok) {
+      const services = await servicesRes.json();
+      if (Array.isArray(services)) {
+        services.forEach((svc) => {
+          const key = normalizeGroupText(svc && svc.name);
+          const groupSlug = makeGroupSlug(svc && svc.service_group);
+          const providerUnit = (svc && svc.provider_unit ? String(svc.provider_unit) : '').trim();
+          if (key) clinicalServiceGroupByName[key] = groupSlug;
+          if (key && providerUnit) clinicalServiceProviderByName[key] = providerUnit;
+        });
+      }
+    }
   } catch (error) {
     console.error('Error loading groups from database:', error);
     labResultGroups = [];
+    clinicalServiceGroupByName = {};
   }
+}
+
+function getProviderUnitForSpecialTemplate(template) {
+  const normalizedName = normalizeGroupText(template && template.name);
+  const fromServiceMap = clinicalServiceProviderByName[normalizedName];
+  if (fromServiceMap) return fromServiceMap;
+
+  const rawName = String((template && template.name) || '').trim();
+  const match = rawName.match(/\(([^()]+)\)\s*$/);
+  if (match && match[1]) return match[1].trim();
+  return 'Chưa có đơn vị thực hiện';
+}
+
+function renderSpecialTemplateCard(template) {
+  return `
+    <div class="form-template-card">
+      <div class="template-card-header">
+        <h4>${template.name}</h4>
+        <button class="btn ${template.is_locked ? 'danger-btn' : 'secondary-btn'} template-lock-btn" onclick="toggleSpecialTemplateLock('${template.id}')"
+                title="${template.is_locked ? 'Mở khóa: cho phép tự động cập nhật theo mẫu gốc' : 'Khóa mẫu: không tự động cập nhật theo mẫu gốc'}">
+          <i class="fas ${template.is_locked ? 'fa-lock' : 'fa-lock-open'}"></i> ${template.is_locked ? 'Đã khóa' : 'Khóa'}
+        </button>
+      </div>
+      <p>${template.description || 'Không có mô tả'}</p>
+      <div class="form-template-actions">
+        <button class="btn secondary-btn" onclick="restoreSpecialTemplateLockedSnapshot('${template.id}')" ${template.has_locked_snapshot ? '' : 'disabled'}
+                title="${template.has_locked_snapshot ? 'Quay lại mẫu phiếu đã khóa gần nhất' : 'Mẫu này chưa có bản đã khóa để khôi phục'}">
+          <i class="fas fa-history"></i> Quay lại khóa gần nhất
+        </button>
+        <button class="btn primary-btn" onclick="previewSpecialTemplate('${template.id}')">
+          <i class="fas fa-eye"></i> Xem trước
+        </button>
+        <button class="btn secondary-btn" onclick="editSpecialTemplate('${template.id}')">
+          <i class="fas fa-edit"></i> Sửa
+        </button>
+        <button class="btn success-btn" onclick="printSpecialTemplate('${template.id}')">
+          <i class="fas fa-print"></i> In
+        </button>
+        <button class="btn danger-btn" onclick="deleteSpecialTemplate('${template.id}')">
+          <i class="fas fa-trash"></i> Xóa
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function updateSpecialTemplateProviderFilterOptions() {
+  const providerSelect = document.getElementById('special-template-provider-filter');
+  if (!providerSelect) return;
+
+  const currentValue = providerSelect.value || '';
+  const units = [...new Set(
+    (specialTemplates || []).map(getProviderUnitForSpecialTemplate).filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b, 'vi'));
+
+  providerSelect.innerHTML = '<option value="">Tất cả đơn vị thực hiện</option>' +
+    units.map(unit => `<option value="${unit}">${unit}</option>`).join('');
+
+  const hasCurrent = units.includes(currentValue);
+  providerSelect.value = hasCurrent ? currentValue : '';
+  if (!hasCurrent) specialTemplateFilters.providerUnit = '';
 }
 
 // Hàm tạo nhóm mới trong database
@@ -1669,7 +2224,18 @@ async function loadLabResultTemplates() {
     const response = await fetch('/api/lab-result-templates');
     console.log('Response status:', response.status);
     if (response.ok) {
-      labResultTemplates = await response.json();
+      const loadedTemplates = await response.json();
+      labResultTemplates = loadedTemplates.map(template => {
+        const currentHtml = String(template?.content_html || '');
+        const normalizedHtml = normalizeLabResultSignatureLayout(currentHtml);
+        if (normalizedHtml !== currentHtml) {
+          persistLabResultSignatureUpgradeSilently(template, normalizedHtml);
+        } else if (template?.id) {
+          const markerKey = `${LAB_RESULT_SIGNATURE_UPGRADE_MARKER_PREFIX}${String(template.id)}`;
+          sessionStorage.setItem(markerKey, '1');
+        }
+        return { ...template, content_html: normalizedHtml };
+      });
       console.log('Loaded lab result templates:', labResultTemplates);
       
       // Đảm bảo groups đã được load trước khi render
@@ -1740,13 +2306,16 @@ function renderLabResultTemplates() {
   Object.keys(groups).forEach(groupKey => {
     templatesByGroup[groupKey] = [];
   });
+  const fallbackGroupKey = Object.keys(groups)[0] || null;
   
   labResultTemplates.forEach(template => {
-    const category = template.category || 'other-test'; // Mặc định là "Các xét nghiệm khác"
-    if (templatesByGroup[category]) {
-      templatesByGroup[category].push(template);
-    } else {
-      templatesByGroup['other-test'].push(template);
+    const category = (template.category || '').toString().trim();
+    const byServiceName = clinicalServiceGroupByName[normalizeGroupText(template.name || '')] || '';
+    const targetGroup = templatesByGroup[category]
+      ? category
+      : (templatesByGroup[byServiceName] ? byServiceName : fallbackGroupKey);
+    if (targetGroup && templatesByGroup[targetGroup]) {
+      templatesByGroup[targetGroup].push(template);
     }
   });
   
@@ -1802,6 +2371,710 @@ function renderLabResultTemplates() {
   });
 }
 
+function getLabResultEditorElement() {
+  return document.getElementById('lab-result-template-editor');
+}
+
+function focusLabResultEditor() {
+  const editor = getLabResultEditorElement();
+  if (editor) editor.focus();
+}
+
+function executeLabEditorCommand(command, value = null) {
+  focusLabResultEditor();
+  document.execCommand('styleWithCSS', false, true);
+  document.execCommand(command, false, value);
+}
+
+function insertHtmlToLabEditor(html) {
+  focusLabResultEditor();
+  document.execCommand('insertHTML', false, html);
+}
+
+function applyFontFamilyToLabEditor(fontFamily) {
+  if (!fontFamily) return;
+  executeLabEditorCommand('fontName', fontFamily);
+}
+
+function applyFontSizeToLabEditor(fontSizePx) {
+  if (!fontSizePx) return;
+  focusLabResultEditor();
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  if (range.collapsed) {
+    const marker = document.createElement('span');
+    marker.style.fontSize = fontSizePx;
+    marker.innerHTML = '&#8203;';
+    range.insertNode(marker);
+    selection.removeAllRanges();
+    const newRange = document.createRange();
+    newRange.setStart(marker, 1);
+    newRange.collapse(true);
+    selection.addRange(newRange);
+    return;
+  }
+  const wrapped = document.createElement('span');
+  wrapped.style.fontSize = fontSizePx;
+  try {
+    range.surroundContents(wrapped);
+  } catch (_) {
+    const fragment = range.extractContents();
+    wrapped.appendChild(fragment);
+    range.insertNode(wrapped);
+  }
+}
+
+function insertLabResultTable() {
+  const rows = Number(prompt('Số hàng của bảng:', '3'));
+  if (!rows || rows < 1) return;
+  const cols = Number(prompt('Số cột của bảng:', '3'));
+  if (!cols || cols < 1) return;
+
+  let tableHtml = '<table style="width:100%; border-collapse:collapse; margin:8px 0;">';
+  for (let r = 0; r < rows; r += 1) {
+    tableHtml += '<tr>';
+    for (let c = 0; c < cols; c += 1) {
+      tableHtml += '<td style="border:1px solid #000; padding:6px; min-width:80px;">&nbsp;</td>';
+    }
+    tableHtml += '</tr>';
+  }
+  tableHtml += '</table><p></p>';
+  insertHtmlToLabEditor(tableHtml);
+}
+
+function getSelectedTableCell() {
+  const selection = window.getSelection();
+  if (!selection || !selection.anchorNode) return null;
+  let node = selection.anchorNode;
+  if (node.nodeType === Node.TEXT_NODE) {
+    node = node.parentElement;
+  }
+  return node && node.closest ? node.closest('td,th') : null;
+}
+
+function mergeSelectedCellWithRightCell() {
+  const currentCell = getSelectedTableCell();
+  if (!currentCell) {
+    alert('Vui lòng đặt con trỏ vào ô cần merge.');
+    return;
+  }
+  const nextCell = currentCell.nextElementSibling;
+  if (!nextCell || !/^(TD|TH)$/.test(nextCell.tagName)) {
+    alert('Không có ô bên phải để merge.');
+    return;
+  }
+
+  const currentColSpan = Number(currentCell.getAttribute('colspan') || 1);
+  const nextColSpan = Number(nextCell.getAttribute('colspan') || 1);
+  currentCell.setAttribute('colspan', String(currentColSpan + nextColSpan));
+
+  const currentText = currentCell.innerHTML.trim();
+  const nextText = nextCell.innerHTML.trim();
+  if (nextText) {
+    currentCell.innerHTML = currentText ? `${currentText}<br>${nextText}` : nextText;
+  }
+  nextCell.remove();
+}
+
+function splitSelectedCell() {
+  const currentCell = getSelectedTableCell();
+  if (!currentCell) {
+    alert('Vui lòng đặt con trỏ vào ô cần split.');
+    return;
+  }
+  const row = currentCell.parentElement;
+  if (!row) return;
+  const currentColSpan = Number(currentCell.getAttribute('colspan') || 1);
+
+  if (currentColSpan > 1) {
+    currentCell.setAttribute('colspan', String(currentColSpan - 1));
+  }
+
+  const newCell = document.createElement(currentCell.tagName.toLowerCase());
+  newCell.innerHTML = '&nbsp;';
+  newCell.setAttribute('style', currentCell.getAttribute('style') || 'border:1px solid #000; padding:6px; min-width:80px;');
+  if (currentColSpan <= 1) {
+    newCell.setAttribute('colspan', '1');
+  }
+  row.insertBefore(newCell, currentCell.nextElementSibling);
+}
+
+function insertUltrasoundPresetTable() {
+  const presetHtml = `
+<h3 style="margin:12px 0 8px; color:#0000cc;">BẢNG CHỈ SỐ SIÊU ÂM THAI</h3>
+<table style="width:100%; border-collapse:collapse; margin:8px 0;">
+  <tr>
+    <th style="border:1px solid #000; padding:6px; background:#f0f3ff; text-align:center;">Thông số</th>
+    <th style="border:1px solid #000; padding:6px; background:#f0f3ff; text-align:center;">Giá trị</th>
+    <th style="border:1px solid #000; padding:6px; background:#f0f3ff; text-align:center;">Đơn vị</th>
+    <th style="border:1px solid #000; padding:6px; background:#f0f3ff; text-align:center;">Ghi chú</th>
+  </tr>
+  <tr><td style="border:1px solid #000; padding:6px;">Tuổi thai (GA)</td><td style="border:1px solid #000; padding:6px;">{{gestational_age}}</td><td style="border:1px solid #000; padding:6px;">tuần</td><td style="border:1px solid #000; padding:6px;"></td></tr>
+  <tr><td style="border:1px solid #000; padding:6px;">BPD</td><td style="border:1px solid #000; padding:6px;">{{bpd}}</td><td style="border:1px solid #000; padding:6px;">mm</td><td style="border:1px solid #000; padding:6px;"></td></tr>
+  <tr><td style="border:1px solid #000; padding:6px;">HC</td><td style="border:1px solid #000; padding:6px;">{{hc}}</td><td style="border:1px solid #000; padding:6px;">mm</td><td style="border:1px solid #000; padding:6px;"></td></tr>
+  <tr><td style="border:1px solid #000; padding:6px;">AC</td><td style="border:1px solid #000; padding:6px;">{{ac}}</td><td style="border:1px solid #000; padding:6px;">mm</td><td style="border:1px solid #000; padding:6px;"></td></tr>
+  <tr><td style="border:1px solid #000; padding:6px;">FL</td><td style="border:1px solid #000; padding:6px;">{{fl}}</td><td style="border:1px solid #000; padding:6px;">mm</td><td style="border:1px solid #000; padding:6px;"></td></tr>
+  <tr><td style="border:1px solid #000; padding:6px;">EFW</td><td style="border:1px solid #000; padding:6px;">{{efw}}</td><td style="border:1px solid #000; padding:6px;">g</td><td style="border:1px solid #000; padding:6px;"></td></tr>
+  <tr><td style="border:1px solid #000; padding:6px;">AFI</td><td style="border:1px solid #000; padding:6px;">{{afi}}</td><td style="border:1px solid #000; padding:6px;">cm</td><td style="border:1px solid #000; padding:6px;"></td></tr>
+  <tr><td style="border:1px solid #000; padding:6px;">RI ĐM rốn</td><td style="border:1px solid #000; padding:6px;">{{ri_umbilical}}</td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td></tr>
+  <tr><td style="border:1px solid #000; padding:6px;">S/D ratio</td><td style="border:1px solid #000; padding:6px;">{{sd_ratio}}</td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td></tr>
+  <tr><td style="border:1px solid #000; padding:6px;">MCA PI</td><td style="border:1px solid #000; padding:6px;">{{mca_pi}}</td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td></tr>
+</table>
+<p><strong>Kết luận siêu âm:</strong> {{findings}}</p>
+<p><strong>Khuyến nghị:</strong> {{recommendations}}</p>
+`;
+  insertHtmlToLabEditor(presetHtml);
+}
+
+function insertSelectedTokenToLabEditor() {
+  const tokenSelect = document.getElementById('lab-token-select');
+  if (!tokenSelect || !tokenSelect.value) {
+    alert('Vui lòng chọn token cần chèn.');
+    return;
+  }
+  insertHtmlToLabEditor(tokenSelect.value);
+}
+
+const VALID_LAB_TEMPLATE_TOKENS = new Set([
+  '{{bpd}}', '{{hc}}', '{{ac}}', '{{fl}}', '{{efw}}', '{{estimated_weight}}',
+  '{{afi}}', '{{mca_pi}}', '{{ri_umbilical}}', '{{sd_ratio}}', '{{gestational_age}}',
+  '{{exam_date}}', '{{doctor_name}}', '{{service_name}}', '{{findings}}', '{{recommendations}}',
+  '{{fetal_position}}', '{{placenta_position}}', '{{amniotic_fluid}}'
+]);
+
+const LAB_TOKEN_SAMPLE_VALUES = {
+  '{{bpd}}': '89',
+  '{{hc}}': '320',
+  '{{ac}}': '295',
+  '{{fl}}': '68',
+  '{{efw}}': '2450',
+  '{{estimated_weight}}': '2450',
+  '{{afi}}': '14.2',
+  '{{mca_pi}}': '1.54',
+  '{{ri_umbilical}}': '0.61',
+  '{{sd_ratio}}': '2.45',
+  '{{gestational_age}}': '36+2',
+  '{{exam_date}}': '18/04/2026',
+  '{{doctor_name}}': 'BS CK2 Hà Ngọc Đại',
+  '{{service_name}}': 'Siêu âm thai 4D',
+  '{{findings}}': 'Thai sống, ngôi đầu, tim thai tốt, chưa ghi nhận bất thường rõ.',
+  '{{recommendations}}': 'Theo dõi thai máy, tái khám sau 1 tuần.',
+  '{{fetal_position}}': 'Ngôi đầu',
+  '{{placenta_position}}': 'Mặt trước thân tử cung',
+  '{{amniotic_fluid}}': 'Trong giới hạn bình thường'
+};
+
+function extractTemplateTokens(contentHtml) {
+  const html = String(contentHtml || '');
+  const matches = html.match(/\{\{\s*[\w.]+\s*\}\}/g) || [];
+  return [...new Set(matches.map(token => token.replace(/\s+/g, '')))];
+}
+
+function getInvalidTemplateTokens(contentHtml) {
+  return extractTemplateTokens(contentHtml).filter(token => !VALID_LAB_TEMPLATE_TOKENS.has(token));
+}
+
+function renderTemplateWithSampleTokenValues(contentHtml) {
+  let html = String(contentHtml || '');
+  Object.entries(LAB_TOKEN_SAMPLE_VALUES).forEach(([token, value]) => {
+    html = html.split(token).join(String(value));
+  });
+  return html;
+}
+
+async function previewLabTemplateTokenRendering() {
+  const editor = getLabResultEditorElement();
+  if (!editor) return;
+  const content = editor.innerHTML || '';
+  const invalidTokens = getInvalidTemplateTokens(content);
+  if (invalidTokens.length > 0) {
+    alert(`Có token chưa hợp lệ, vui lòng sửa trước khi preview:\n${invalidTokens.join('\n')}`);
+    return;
+  }
+
+  try {
+    const header = await getHeader();
+    const renderedContent = renderTemplateWithSampleTokenValues(normalizeLabResultSignatureLayout(content));
+    document.getElementById('preview-content').innerHTML = header + renderedContent;
+    document.getElementById('preview-modal').style.display = 'block';
+  } catch (error) {
+    console.error('Error previewing token rendering:', error);
+    alert('Không thể preview token: ' + (error?.message || 'Lỗi không xác định'));
+  }
+}
+
+let selectedLabImageFrame = null;
+let isLabTextBoxDrawMode = false;
+let movingLabTextBox = null;
+let labTextBoxInsertIndicator = null;
+
+function setSelectedLabImageFrame(frame) {
+  if (selectedLabImageFrame && selectedLabImageFrame !== frame) {
+    selectedLabImageFrame.classList.remove('selected');
+  }
+  selectedLabImageFrame = frame || null;
+  if (selectedLabImageFrame) {
+    selectedLabImageFrame.classList.add('selected');
+  }
+}
+
+function getSelectedOrNearestImageFrame() {
+  if (selectedLabImageFrame && document.body.contains(selectedLabImageFrame)) {
+    return selectedLabImageFrame;
+  }
+  const cell = getSelectedTableCell();
+  if (cell) return null;
+  const selection = window.getSelection();
+  if (!selection || !selection.anchorNode) return null;
+  let node = selection.anchorNode;
+  if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+  return node && node.closest ? node.closest('.lab-image-frame') : null;
+}
+
+function insertImageFrameAtCursor() {
+  const frameHtml = `
+<figure class="lab-image-frame" contenteditable="false">
+  <img alt="Ảnh kết quả cận lâm sàng" />
+  <div class="lab-image-placeholder">Ô ảnh: bấm "Chèn ảnh" để thêm hình tại vị trí này</div>
+  <figcaption class="lab-image-caption" contenteditable="true">Chú thích ảnh...</figcaption>
+</figure>
+<p></p>`;
+  insertHtmlToLabEditor(frameHtml);
+}
+
+function setLabTextBoxDrawMode(enabled) {
+  isLabTextBoxDrawMode = !!enabled;
+  const editor = getLabResultEditorElement();
+  const button = document.getElementById('lab-insert-textbox-btn');
+  if (editor) {
+    editor.classList.toggle('draw-textbox-mode', isLabTextBoxDrawMode);
+  }
+  if (button) {
+    button.classList.toggle('active', isLabTextBoxDrawMode);
+    button.title = isLabTextBoxDrawMode
+      ? 'Kéo chuột trong vùng nội dung để tạo text box'
+      : '';
+  }
+}
+
+function placeLabEditorCaretAtPoint(clientX, clientY) {
+  const editor = getLabResultEditorElement();
+  if (!editor) return false;
+  focusLabResultEditor();
+
+  let range = null;
+  if (document.caretRangeFromPoint) {
+    range = document.caretRangeFromPoint(clientX, clientY);
+  } else if (document.caretPositionFromPoint) {
+    const position = document.caretPositionFromPoint(clientX, clientY);
+    if (position) {
+      range = document.createRange();
+      range.setStart(position.offsetNode, position.offset);
+      range.collapse(true);
+    }
+  }
+
+  if (!range || !editor.contains(range.startContainer)) return false;
+  const selection = window.getSelection();
+  if (!selection) return false;
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return true;
+}
+
+function buildLabTextBoxHtml(width, height) {
+  const safeWidth = Math.max(120, Math.round(width));
+  const safeHeight = Math.max(60, Math.round(height));
+  return `
+<div class="lab-text-box" contenteditable="false" style="width:${safeWidth}px; height:${safeHeight}px;">
+  <div class="lab-text-box-drag-handle" contenteditable="false">Kéo để di chuyển</div>
+  <div class="lab-text-box-content" contenteditable="true">Nhập nội dung...</div>
+</div>
+<p></p>`;
+}
+
+function ensureLabTextBoxStructure(editor) {
+  if (!editor) return;
+  const boxes = editor.querySelectorAll('.lab-text-box');
+  boxes.forEach((box) => {
+    box.setAttribute('contenteditable', 'false');
+    let handle = box.querySelector('.lab-text-box-drag-handle');
+    if (!handle) {
+      handle = document.createElement('div');
+      handle.className = 'lab-text-box-drag-handle';
+      handle.textContent = 'Kéo để di chuyển';
+      box.insertBefore(handle, box.firstChild);
+    }
+    handle.setAttribute('contenteditable', 'false');
+  });
+}
+
+function getLabTextBoxDropTarget(editor, box, clientX, clientY) {
+  if (!editor || !box) return;
+  let range = null;
+  if (document.caretRangeFromPoint) {
+    range = document.caretRangeFromPoint(clientX, clientY);
+  } else if (document.caretPositionFromPoint) {
+    const position = document.caretPositionFromPoint(clientX, clientY);
+    if (position) {
+      range = document.createRange();
+      range.setStart(position.offsetNode, position.offset);
+      range.collapse(true);
+    }
+  }
+
+  if (!range || !editor.contains(range.startContainer)) {
+    return { parent: editor, referenceNode: null };
+  }
+
+  let container = range.startContainer;
+  if (container.nodeType === Node.TEXT_NODE) {
+    container = container.parentElement;
+  }
+  if (!container || container === box || (container.closest && container.closest('.lab-text-box') === box)) {
+    return null;
+  }
+
+  const block = container.closest
+    ? container.closest('p,div,table,figure,h1,h2,h3,h4,h5,h6,ul,ol,li,blockquote')
+    : null;
+
+  if (!block || block === editor || block === box || !editor.contains(block)) {
+    return { parent: editor, referenceNode: null };
+  }
+
+  if (block.classList && block.classList.contains('lab-textbox-insert-indicator')) {
+    return { parent: editor, referenceNode: block };
+  }
+
+  const rect = block.getBoundingClientRect();
+  const insertAfter = clientY > (rect.top + rect.height / 2);
+  const referenceNode = insertAfter ? (block.nextSibling || null) : block;
+  return { parent: editor, referenceNode };
+}
+
+function ensureLabTextBoxInsertIndicator() {
+  if (labTextBoxInsertIndicator && document.body.contains(labTextBoxInsertIndicator)) {
+    return labTextBoxInsertIndicator;
+  }
+  labTextBoxInsertIndicator = document.createElement('div');
+  labTextBoxInsertIndicator.className = 'lab-textbox-insert-indicator';
+  labTextBoxInsertIndicator.setAttribute('contenteditable', 'false');
+  return labTextBoxInsertIndicator;
+}
+
+function showLabTextBoxInsertIndicator(editor, box, clientX, clientY) {
+  const target = getLabTextBoxDropTarget(editor, box, clientX, clientY);
+  if (!target || !target.parent) return null;
+  const indicator = ensureLabTextBoxInsertIndicator();
+  if (target.referenceNode) {
+    target.parent.insertBefore(indicator, target.referenceNode);
+  } else {
+    target.parent.appendChild(indicator);
+  }
+  return target;
+}
+
+function clearLabTextBoxInsertIndicator() {
+  if (labTextBoxInsertIndicator && labTextBoxInsertIndicator.parentNode) {
+    labTextBoxInsertIndicator.parentNode.removeChild(labTextBoxInsertIndicator);
+  }
+}
+
+function startLabTextBoxMove(editor, box, startEvent) {
+  if (!editor || !box || !startEvent) return;
+  movingLabTextBox = box;
+  box.classList.add('moving');
+  let latestTarget = null;
+
+  const onMouseMove = (event) => {
+    if (!movingLabTextBox) return;
+    latestTarget = showLabTextBoxInsertIndicator(editor, movingLabTextBox, event.clientX, event.clientY);
+  };
+
+  const onMouseUp = (event) => {
+    if (movingLabTextBox) {
+      latestTarget = latestTarget || showLabTextBoxInsertIndicator(editor, movingLabTextBox, event.clientX, event.clientY);
+      if (latestTarget && latestTarget.parent) {
+        if (latestTarget.referenceNode) {
+          latestTarget.parent.insertBefore(movingLabTextBox, latestTarget.referenceNode);
+        } else {
+          latestTarget.parent.appendChild(movingLabTextBox);
+        }
+      }
+      movingLabTextBox.classList.remove('moving');
+    }
+    movingLabTextBox = null;
+    clearLabTextBoxInsertIndicator();
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  };
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
+function insertLabTextBoxByDrag(startEvent) {
+  const editor = getLabResultEditorElement();
+  if (!editor || !startEvent) return;
+
+  const startX = startEvent.clientX;
+  const startY = startEvent.clientY;
+  const draft = document.createElement('div');
+  draft.className = 'lab-textbox-draft';
+  document.body.appendChild(draft);
+
+  const updateDraft = (currentX, currentY) => {
+    const left = Math.min(startX, currentX);
+    const top = Math.min(startY, currentY);
+    const width = Math.max(120, Math.abs(currentX - startX));
+    const height = Math.max(60, Math.abs(currentY - startY));
+    draft.style.left = `${left}px`;
+    draft.style.top = `${top}px`;
+    draft.style.width = `${width}px`;
+    draft.style.height = `${height}px`;
+  };
+  updateDraft(startX + 1, startY + 1);
+
+  const onMove = (event) => {
+    updateDraft(event.clientX, event.clientY);
+  };
+  const onUp = (event) => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    draft.remove();
+
+    const width = Math.max(120, Math.abs(event.clientX - startX));
+    const height = Math.max(60, Math.abs(event.clientY - startY));
+    if (!placeLabEditorCaretAtPoint(startX, startY)) {
+      focusLabResultEditor();
+    }
+    insertHtmlToLabEditor(buildLabTextBoxHtml(width, height));
+    setLabTextBoxDrawMode(false);
+  };
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function applyImageAlignment(position) {
+  const frame = getSelectedOrNearestImageFrame();
+  if (!frame) {
+    alert('Vui lòng chọn ô ảnh trước khi căn chỉnh.');
+    return;
+  }
+  frame.style.display = 'block';
+  frame.style.marginTop = '8px';
+  frame.style.marginBottom = '8px';
+  if (position === 'left') {
+    frame.style.marginLeft = '0';
+    frame.style.marginRight = 'auto';
+  } else if (position === 'right') {
+    frame.style.marginLeft = 'auto';
+    frame.style.marginRight = '0';
+  } else {
+    frame.style.marginLeft = 'auto';
+    frame.style.marginRight = 'auto';
+  }
+}
+
+function deleteSelectedImageFrame() {
+  const frame = getSelectedOrNearestImageFrame();
+  if (!frame) {
+    alert('Vui lòng chọn ô ảnh cần xóa.');
+    return;
+  }
+  frame.remove();
+  setSelectedLabImageFrame(null);
+}
+
+function insertLabResultDropdownControl() {
+  const optionsText = prompt('Nhập các lựa chọn (cách nhau bởi dấu phẩy):', 'Bình thường,Bất thường,Cần theo dõi');
+  if (!optionsText) return;
+  const options = optionsText.split(',').map(item => item.trim()).filter(Boolean);
+  if (!options.length) return;
+  const optionsHtml = options.map(opt => `<option value="${opt}">${opt}</option>`).join('');
+  insertHtmlToLabEditor(`<select style="min-width:180px; padding:4px; margin:0 4px;">${optionsHtml}</select>`);
+}
+
+function insertLabResultComboBoxControl() {
+  const optionsText = prompt('Nhập các gợi ý combo box (cách nhau bởi dấu phẩy):', 'Đầu,Dây rốn,Tim,Dịch ối');
+  if (!optionsText) return;
+  const options = optionsText.split(',').map(item => item.trim()).filter(Boolean);
+  const listId = `lab-combo-${Date.now()}`;
+  const optionsHtml = options.map(opt => `<option value="${opt}"></option>`).join('');
+  insertHtmlToLabEditor(`<input list="${listId}" style="min-width:220px; padding:4px; margin:0 4px;" placeholder="Nhập hoặc chọn..." /><datalist id="${listId}">${optionsHtml}</datalist>`);
+}
+
+function initializeLabResultRichEditorToolbar() {
+  const toolbar = document.getElementById('lab-result-editor-toolbar');
+  if (!toolbar || toolbar.dataset.initialized === '1') return;
+  toolbar.dataset.initialized = '1';
+
+  // Keep text selection when interacting with toolbar controls.
+  toolbar.addEventListener('mousedown', (event) => {
+    if (event.target.closest('button') || event.target.closest('select')) {
+      event.preventDefault();
+    }
+  });
+
+  toolbar.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-cmd]');
+    if (!button) return;
+    const command = button.dataset.cmd;
+    if (command) executeLabEditorCommand(command);
+  });
+
+  const fontFamilySelect = document.getElementById('lab-font-family');
+  const fontSizeSelect = document.getElementById('lab-font-size');
+  const undoBtn = document.getElementById('lab-undo-btn');
+  const redoBtn = document.getElementById('lab-redo-btn');
+  const insertTableBtn = document.getElementById('lab-insert-table-btn');
+  const mergeCellBtn = document.getElementById('lab-merge-cell-btn');
+  const splitCellBtn = document.getElementById('lab-split-cell-btn');
+  const insertUltrasoundPresetBtn = document.getElementById('lab-insert-ultrasound-preset-btn');
+  const insertImageFrameBtn = document.getElementById('lab-insert-image-frame-btn');
+  const insertTextBoxBtn = document.getElementById('lab-insert-textbox-btn');
+  const insertImageBtn = document.getElementById('lab-insert-image-btn');
+  const imageAlignLeftBtn = document.getElementById('lab-image-align-left-btn');
+  const imageAlignCenterBtn = document.getElementById('lab-image-align-center-btn');
+  const imageAlignRightBtn = document.getElementById('lab-image-align-right-btn');
+  const deleteImageBtn = document.getElementById('lab-delete-image-btn');
+  const insertDropdownBtn = document.getElementById('lab-insert-dropdown-btn');
+  const insertComboBoxBtn = document.getElementById('lab-insert-combobox-btn');
+  const insertTokenBtn = document.getElementById('lab-insert-token-btn');
+  const previewTokenBtn = document.getElementById('lab-preview-token-btn');
+  const imageUploadInput = document.getElementById('lab-image-upload-input');
+  const editor = getLabResultEditorElement();
+
+  if (fontFamilySelect) {
+    fontFamilySelect.addEventListener('change', () => applyFontFamilyToLabEditor(fontFamilySelect.value));
+  }
+  if (fontSizeSelect) {
+    fontSizeSelect.addEventListener('change', () => applyFontSizeToLabEditor(fontSizeSelect.value));
+  }
+  if (undoBtn) {
+    undoBtn.addEventListener('click', () => executeLabEditorCommand('undo'));
+  }
+  if (redoBtn) {
+    redoBtn.addEventListener('click', () => executeLabEditorCommand('redo'));
+  }
+  if (insertTableBtn) {
+    insertTableBtn.addEventListener('click', insertLabResultTable);
+  }
+  if (mergeCellBtn) {
+    mergeCellBtn.addEventListener('click', mergeSelectedCellWithRightCell);
+  }
+  if (splitCellBtn) {
+    splitCellBtn.addEventListener('click', splitSelectedCell);
+  }
+  if (insertUltrasoundPresetBtn) {
+    insertUltrasoundPresetBtn.addEventListener('click', insertUltrasoundPresetTable);
+  }
+  if (insertImageFrameBtn) {
+    insertImageFrameBtn.addEventListener('click', insertImageFrameAtCursor);
+  }
+  if (insertTextBoxBtn) {
+    insertTextBoxBtn.addEventListener('click', () => {
+      setLabTextBoxDrawMode(!isLabTextBoxDrawMode);
+    });
+  }
+  if (imageAlignLeftBtn) {
+    imageAlignLeftBtn.addEventListener('click', () => applyImageAlignment('left'));
+  }
+  if (imageAlignCenterBtn) {
+    imageAlignCenterBtn.addEventListener('click', () => applyImageAlignment('center'));
+  }
+  if (imageAlignRightBtn) {
+    imageAlignRightBtn.addEventListener('click', () => applyImageAlignment('right'));
+  }
+  if (deleteImageBtn) {
+    deleteImageBtn.addEventListener('click', deleteSelectedImageFrame);
+  }
+  if (insertDropdownBtn) {
+    insertDropdownBtn.addEventListener('click', insertLabResultDropdownControl);
+  }
+  if (insertComboBoxBtn) {
+    insertComboBoxBtn.addEventListener('click', insertLabResultComboBoxControl);
+  }
+  if (insertTokenBtn) {
+    insertTokenBtn.addEventListener('click', insertSelectedTokenToLabEditor);
+  }
+  if (previewTokenBtn) {
+    previewTokenBtn.addEventListener('click', previewLabTemplateTokenRendering);
+  }
+  if (insertImageBtn && imageUploadInput) {
+    insertImageBtn.addEventListener('click', () => imageUploadInput.click());
+    imageUploadInput.addEventListener('change', () => {
+      const file = imageUploadInput.files && imageUploadInput.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        alert('Vui lòng chọn file ảnh hợp lệ.');
+        imageUploadInput.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const src = String(reader.result || '');
+        if (src) {
+          const targetFrame = getSelectedOrNearestImageFrame();
+          if (targetFrame) {
+            const img = targetFrame.querySelector('img');
+            const placeholder = targetFrame.querySelector('.lab-image-placeholder');
+            if (img) {
+              img.src = src;
+              img.style.display = 'block';
+            }
+            if (placeholder) {
+              placeholder.style.display = 'none';
+            }
+            setSelectedLabImageFrame(targetFrame);
+          } else {
+            insertHtmlToLabEditor(`
+<figure class="lab-image-frame" contenteditable="false">
+  <img src="${src}" alt="Ảnh kết quả cận lâm sàng" style="display:block;" />
+  <div class="lab-image-placeholder" style="display:none;">Ô ảnh</div>
+  <figcaption class="lab-image-caption" contenteditable="true">Chú thích ảnh...</figcaption>
+</figure>
+<p></p>`);
+          }
+        }
+        imageUploadInput.value = '';
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  if (editor) {
+    ensureLabTextBoxStructure(editor);
+
+    editor.addEventListener('mousedown', (event) => {
+      const handle = event.target.closest ? event.target.closest('.lab-text-box-drag-handle') : null;
+      if (!handle) return;
+      const box = handle.closest('.lab-text-box');
+      if (!box) return;
+      event.preventDefault();
+      startLabTextBoxMove(editor, box, event);
+    });
+
+    editor.addEventListener('mousedown', (event) => {
+      if (!isLabTextBoxDrawMode) return;
+      event.preventDefault();
+      insertLabTextBoxByDrag(event);
+    });
+    editor.addEventListener('input', () => ensureLabTextBoxStructure(editor));
+    editor.addEventListener('click', (event) => {
+      const frame = event.target.closest ? event.target.closest('.lab-image-frame') : null;
+      if (frame) {
+        setSelectedLabImageFrame(frame);
+      } else {
+        setSelectedLabImageFrame(null);
+      }
+    });
+  }
+}
+
 // Hàm xử lý mẫu phiếu kết quả
 async function previewLabResultTemplate(templateId) {
   console.log('Previewing lab result template:', templateId);
@@ -1839,11 +3112,12 @@ async function editLabResultTemplate(templateId) {
   }
   
   try {
+    initializeLabResultRichEditorToolbar();
     // Mở modal chỉnh sửa mẫu kết quả
     document.getElementById('lab-result-template-name').value = template.name;
     document.getElementById('lab-result-template-description').value = template.description || '';
     document.getElementById('lab-result-template-category').value = template.category || 'other-test';
-    document.getElementById('lab-result-template-editor').innerHTML = template.content_html;
+    document.getElementById('lab-result-template-editor').innerHTML = normalizeLabResultSignatureLayout(template.content_html);
     
     // Đánh dấu đang chỉnh sửa
     document.getElementById('lab-result-template-modal').dataset.templateId = templateId;
@@ -1880,7 +3154,18 @@ async function printLabResultTemplate(templateId) {
           <title>In mẫu phiếu kết quả</title>
           <style>
             body { font-family: 'Times New Roman', serif; margin: 0; padding: 20px; }
-            @media print { body { margin: 0; padding: 0; } }
+            @media print {
+              body { margin: 0; padding: 0; }
+              td[style*="border:1px solid #000"],
+              td[style*="border: 1px solid #000"],
+              th[style*="border:1px solid #000"],
+              th[style*="border: 1px solid #000"],
+              div[style*="border:1px solid #000"],
+              div[style*="border: 1px solid #000"],
+              .lab-text-box {
+                border: none !important;
+              }
+            }
           </style>
         </head>
         <body>
@@ -1924,6 +3209,7 @@ async function deleteLabResultTemplate(templateId) {
 function openLabResultTemplateModal() {
   const modal = document.getElementById('lab-result-template-modal');
   modal.style.display = 'block';
+  initializeLabResultRichEditorToolbar();
   // Clear form and remove templateId for new template
   delete modal.dataset.templateId;
   document.getElementById('lab-result-template-name').value = '';
@@ -1944,12 +3230,14 @@ function openLabResultTemplateModal() {
     <tr>
       <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Họ tên:</strong></td>
       <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
-      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Tuổi:</strong></td>
+      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Năm sinh:</strong></td>
       <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
     </tr>
     <tr>
       <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Địa chỉ:</strong></td>
-      <td style="padding:8px; border:1px solid #000;" colspan="3">_________________</td>
+      <td style="padding:8px; border:1px solid #000;">_________________</td>
+      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Số điện thoại:</strong></td>
+      <td style="padding:8px; border:1px solid #000;">_________________</td>
     </tr>
     <tr>
       <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Chẩn đoán:</strong></td>
@@ -1972,7 +3260,7 @@ function openLabResultTemplateModal() {
     </div>
   </div>
 
-  <div style="display:flex; justify-content:space-between; margin-top:30px; padding-top:20px; border-top:2px solid #0000cc;">
+  <div style="display:flex; justify-content:space-between; margin-top:30px; padding-top:20px;">
     <div style="text-align:center; flex:1;">
       <p><strong>Ngày thực hiện</strong></p>
       <div style="margin-top:50px; height:2px; background-color:#000;"></div>
@@ -1986,75 +3274,21 @@ function openLabResultTemplateModal() {
   </div>
 </div>`;
   
-  document.getElementById('lab-result-template-editor').innerHTML = defaultTemplate;
+  document.getElementById('lab-result-template-editor').innerHTML = normalizeLabResultSignatureLayout(defaultTemplate);
 }
 
 function closeLabResultTemplateModal() {
   document.getElementById('lab-result-template-modal').style.display = 'none';
 }
 
-// Hàm reset template kết quả về mặc định
-function resetLabResultTemplate() {
-  const defaultTemplate = `
-<div style="font-family:'Times New Roman', serif; padding:20px;">
-  <div style="text-align:center; margin-bottom:20px;">
-    <h2 style="color:#0000cc; margin:0;">PHIẾU KẾT QUẢ CẬN LÂM SÀNG</h2>
-  </div>
-  
-  <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
-    <tr>
-      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Họ tên:</strong></td>
-      <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
-      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Tuổi:</strong></td>
-      <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
-    </tr>
-    <tr>
-      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Địa chỉ:</strong></td>
-      <td style="padding:8px; border:1px solid #000;" colspan="3">_________________</td>
-    </tr>
-    <tr>
-      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Chẩn đoán:</strong></td>
-      <td style="padding:8px; border:1px solid #000;">_________________</td>
-      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Ghi chú:</strong></td>
-      <td style="padding:8px; border:1px solid #000;">_________________</td>
-    </tr>
-  </table>
-
-  <div style="margin-bottom:20px;">
-    <h3 style="color:#0000cc; margin-bottom:10px;">KẾT QUẢ XÉT NGHIỆM:</h3>
-    <div style="border:1px solid #000; padding:15px; min-height:150px; background-color:#fafafa;">
-      <p><strong>Siêu âm:</strong></p>
-      <p>Kết quả: _________________</p>
-      <p>Ghi chú: _________________</p>
-      <br>
-      <p><strong>Xét nghiệm:</strong></p>
-      <p>Kết quả: _________________</p>
-      <p>Ghi chú: _________________</p>
-    </div>
-  </div>
-
-  <div style="display:flex; justify-content:space-between; margin-top:30px; padding-top:20px; border-top:2px solid #0000cc;">
-    <div style="text-align:center; flex:1;">
-      <p><strong>Ngày thực hiện</strong></p>
-      <div style="margin-top:50px; height:2px; background-color:#000;"></div>
-      <p style="margin-top:10px; font-weight:bold;">___/___/_____</p>
-    </div>
-    <div style="text-align:center; flex:1;">
-      <p><strong>Bác sĩ thực hiện</strong></p>
-      <div style="margin-top:50px; height:2px; background-color:#000;"></div>
-      <p style="margin-top:10px; font-weight:bold;">_________________</p>
-    </div>
-  </div>
-</div>`;
-  
-  document.getElementById('lab-result-template-editor').innerHTML = defaultTemplate;
-}
 
 async function saveLabResultTemplate() {
   const name = document.getElementById('lab-result-template-name').value.trim();
   const description = document.getElementById('lab-result-template-description').value.trim();
   const category = document.getElementById('lab-result-template-category').value;
   const content = document.getElementById('lab-result-template-editor').innerHTML.trim();
+  const invalidTokens = getInvalidTemplateTokens(content);
+  const normalizedContent = normalizeLabResultSignatureLayout(content);
   const modal = document.getElementById('lab-result-template-modal');
   const templateId = modal.dataset.templateId;
   
@@ -2063,8 +3297,12 @@ async function saveLabResultTemplate() {
     return;
   }
   
-  if (!content) {
+  if (!normalizedContent) {
     alert('Vui lòng nhập nội dung mẫu phiếu');
+    return;
+  }
+  if (invalidTokens.length > 0) {
+    alert(`Có token chưa hợp lệ, vui lòng kiểm tra trước khi lưu:\n${invalidTokens.join('\n')}`);
     return;
   }
   
@@ -2080,7 +3318,7 @@ async function saveLabResultTemplate() {
           name: name,
           description: description,
           category: category,
-          content_html: content
+          content_html: normalizedContent
         })
       });
     } else {
@@ -2093,7 +3331,7 @@ async function saveLabResultTemplate() {
           name: name,
           description: description,
           category: category,
-          content_html: content
+          content_html: normalizedContent
         })
       });
     }
@@ -2147,45 +3385,224 @@ function renderSpecialTemplates() {
     return;
   }
   
+  updateSpecialTemplateProviderFilterOptions();
   console.log('Rendering templates:', specialTemplates);
-  
-  grid.innerHTML = specialTemplates.map(template => `
-    <div class="form-template-card">
-      <h4>${template.name}</h4>
-      <p>${template.description || 'Không có mô tả'}</p>
-      <div class="form-template-actions">
-        <button class="btn primary-btn" onclick="previewSpecialTemplate('${template.id}')">
-          <i class="fas fa-eye"></i> Xem trước
-        </button>
-        <button class="btn secondary-btn" onclick="editSpecialTemplate('${template.id}')">
-          <i class="fas fa-edit"></i> Sửa
-        </button>
-        <button class="btn success-btn" onclick="printSpecialTemplate('${template.id}')">
-          <i class="fas fa-print"></i> In
-        </button>
-        <button class="btn danger-btn" onclick="deleteSpecialTemplate('${template.id}')">
-          <i class="fas fa-trash"></i> Xóa
-        </button>
+
+  let filteredTemplates = [...specialTemplates];
+  if (specialTemplateFilters.lockedOnly) {
+    filteredTemplates = filteredTemplates.filter(t => !!t.is_locked);
+  }
+  if (specialTemplateFilters.providerUnit) {
+    filteredTemplates = filteredTemplates.filter(t => getProviderUnitForSpecialTemplate(t) === specialTemplateFilters.providerUnit);
+  }
+
+  if (!filteredTemplates.length) {
+    grid.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">Không có mẫu phù hợp bộ lọc hiện tại.</p>';
+    return;
+  }
+
+  const grouped = new Map();
+  filteredTemplates.forEach(template => {
+    const unit = getProviderUnitForSpecialTemplate(template);
+    if (!grouped.has(unit)) grouped.set(unit, []);
+    grouped.get(unit).push(template);
+  });
+
+  const groupEntries = [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0], 'vi'));
+  grid.innerHTML = groupEntries.map(([unit, templates]) => `
+    <div class="special-provider-group">
+      <h4 class="special-provider-group-title">${unit} <span class="count">(${templates.length} mẫu)</span></h4>
+      <div class="form-template-grid">
+        ${templates.map(renderSpecialTemplateCard).join('')}
       </div>
     </div>
   `).join('');
 }
 
-async function saveSpecialTemplate() {
+async function toggleSpecialTemplateLock(templateId) {
+  const template = specialTemplates.find(t => t.id == templateId);
+  if (!template) return;
+
+  const nextLocked = !template.is_locked;
+  if (!nextLocked) {
+    const ok = confirm('Mở khóa mẫu phiếu sẽ cho phép nội dung bị cập nhật theo mẫu gốc. Nội dung phiếu có thể thay đổi. Bạn có chắc chắn mở khóa không?');
+    if (!ok) return;
+  }
+  try {
+    const response = await fetch(`/api/special-templates/${templateId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_locked: nextLocked })
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      alert('Lỗi khi cập nhật trạng thái khóa: ' + error);
+      return;
+    }
+
+    const idx = specialTemplates.findIndex(t => t.id == templateId);
+    if (idx >= 0) {
+      specialTemplates[idx].is_locked = nextLocked;
+    }
+    await loadSpecialTemplates();
+  } catch (error) {
+    console.error('Error toggling special template lock:', error);
+    alert('Có lỗi xảy ra khi cập nhật trạng thái khóa');
+  }
+}
+
+async function restoreSpecialTemplateLockedSnapshot(templateId) {
+  const template = specialTemplates.find(t => t.id == templateId);
+  if (!template || !template.has_locked_snapshot) {
+    alert('Mẫu này chưa có bản đã khóa để khôi phục');
+    return;
+  }
+  const ok = confirm('Khôi phục mẫu phiếu đã khóa gần nhất? Nội dung hiện tại sẽ bị thay thế.');
+  if (!ok) return;
+
+  try {
+    const response = await fetch(`/api/special-templates/${templateId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restore_last_locked: true })
+    });
+    if (!response.ok) {
+      const error = await response.text();
+      alert('Lỗi khi khôi phục mẫu đã khóa: ' + error);
+      return;
+    }
+    alert('Đã khôi phục mẫu phiếu đã khóa gần nhất.');
+    await loadSpecialTemplates();
+  } catch (error) {
+    console.error('Error restoring locked snapshot:', error);
+    alert('Có lỗi xảy ra khi khôi phục mẫu đã khóa');
+  }
+}
+
+async function persistTemplateDraftToPatientRecords(prefillMeta, contentHtml, fallbackServiceType = '') {
+  if (!prefillMeta || prefillMeta.source !== 'examination-list' || !prefillMeta.appointment_id) return;
+  try {
+    const fullInfoResponse = await fetch(`/api/appointments/${encodeURIComponent(prefillMeta.appointment_id)}/full-info`);
+    if (!fullInfoResponse.ok) return;
+    const appt = await fullInfoResponse.json();
+    const patientName = String(appt.patient_name || '').trim();
+    const patientPhone = String(appt.patient_phone || '').trim();
+    const serviceType = String(fallbackServiceType || prefillMeta.template_name || appt.service_type || 'Phiếu khai thác tiền sản giật').trim();
+    const appointmentDate = appt.appointment_date || new Date().toISOString();
+    if (!patientName || !patientPhone || !appointmentDate || !serviceType) return;
+
+    const plainContent = String(contentHtml || '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const notesPrefix = `[Phiếu tiền sản giật] ${serviceType}`;
+    const notes = plainContent ? `${notesPrefix}: ${plainContent.slice(0, 1800)}` : notesPrefix;
+
+    const recordResponse = await fetch('/api/patient-records', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        patient_name: patientName,
+        patient_phone: patientPhone,
+        appointment_date: appointmentDate,
+        doctor_name: (appt.doctor_name || ''),
+        service_type: serviceType,
+        status: 'pending',
+        notes: notes,
+        appointment_id: Number(prefillMeta.appointment_id)
+      })
+    });
+    if (!recordResponse.ok) return;
+    const recordPayload = await recordResponse.json().catch(() => null);
+    const patientRecordId = Number(recordPayload?.id || 0);
+    if (!patientRecordId) return;
+    await fetch(`/api/patient-records/${patientRecordId}/template-snapshot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        appointment_id: Number(prefillMeta.appointment_id),
+        template_name: serviceType,
+        content_html: String(contentHtml || '')
+      })
+    });
+  } catch (error) {
+    console.warn('Không đồng bộ được phiếu sang hồ sơ bệnh nhân:', error);
+  }
+}
+
+async function printSpecialDraftContent(contentHtml, options = {}) {
+  const { includesHeader = false } = options;
+  const header = await getHeader();
+  const fullContent = includesHeader ? (contentHtml || '') : ((header || '') + (contentHtml || ''));
+  const fixedContent = await fixLogoPathForPrintWithBase64(fullContent);
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>In phiếu đã lưu hồ sơ</title>
+        <style>
+          body { font-family: 'Times New Roman', serif; margin: 0; padding: 20px; }
+          @media print {
+            body { margin: 0; padding: 0; }
+            td[style*="border:1px solid #000"],
+            td[style*="border: 1px solid #000"],
+            th[style*="border:1px solid #000"],
+            th[style*="border: 1px solid #000"],
+            div[style*="border:1px solid #000"],
+            div[style*="border: 1px solid #000"],
+            .lab-text-box {
+              border: none !important;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        ${fixedContent}
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.print();
+}
+
+async function saveSpecialTemplate(options = {}) {
+  const { silent = false, keepOpen = false } = options;
   const name = document.getElementById('special-template-name').value.trim();
   const description = document.getElementById('special-template-description').value.trim();
   const content = document.getElementById('special-template-editor').innerHTML.trim();
   const modal = document.getElementById('special-template-modal');
   const templateId = modal.dataset.templateId;
+  const prefillMetaRaw = modal.dataset.prefillMeta || '';
+  let prefillMeta = null;
+  if (prefillMetaRaw) {
+    try { prefillMeta = JSON.parse(prefillMetaRaw); } catch (_) { prefillMeta = null; }
+  }
+  const isPrefillDraft = !!(prefillMeta && prefillMeta.source === 'examination-list');
+  const prefillHasHeader = modal.dataset.prefillHasHeader === '1';
   
   if (!name) {
     alert('Vui lòng nhập tên mẫu phiếu');
-    return;
+    return null;
   }
   
   if (!content) {
     alert('Vui lòng nhập nội dung mẫu phiếu');
-    return;
+    return null;
+  }
+
+  // Draft opened from examination-list: save ONLY to patient records,
+  // never overwrite/create special templates.
+  if (isPrefillDraft) {
+    await persistTemplateDraftToPatientRecords(prefillMeta, content, name);
+    if (!silent) alert('Đã lưu phiếu vào hồ sơ bệnh nhân (không ghi đè mẫu phiếu gốc).');
+    if (!keepOpen) closeSpecialTemplateModal();
+    return {
+      id: null,
+      draft_only: true,
+      content_html: content,
+      includes_header: prefillHasHeader
+    };
   }
   
   try {
@@ -2217,9 +3634,14 @@ async function saveSpecialTemplate() {
     }
     
     if (response.ok) {
-      alert('Đã lưu mẫu đặc biệt thành công!');
-      closeSpecialTemplateModal();
+      const saved = await response.json().catch(() => null);
+      const savedTemplateId = (saved && saved.id) ? String(saved.id) : '';
+      if (savedTemplateId) modal.dataset.templateId = savedTemplateId;
+      await persistTemplateDraftToPatientRecords(prefillMeta, content, name);
+      if (!silent) alert('Đã lưu mẫu đặc biệt thành công!');
+      if (!keepOpen) closeSpecialTemplateModal();
       await loadSpecialTemplates();
+      return saved;
     } else {
       const error = await response.text();
       alert('Lỗi khi lưu mẫu đặc biệt: ' + error);
@@ -2228,6 +3650,21 @@ async function saveSpecialTemplate() {
     console.error('Error saving special template:', error);
     alert('Có lỗi xảy ra khi lưu mẫu đặc biệt');
   }
+  return null;
+}
+
+async function saveAndPrintSpecialTemplate() {
+  const saved = await saveSpecialTemplate({ silent: true, keepOpen: true });
+  if (!saved) return;
+  if (saved.draft_only) {
+    await printSpecialDraftContent(
+      saved.content_html || document.getElementById('special-template-editor').innerHTML || '',
+      { includesHeader: !!saved.includes_header }
+    );
+    return;
+  }
+  if (!saved.id) return;
+  await printSpecialTemplate(saved.id);
 }
 
 async function deleteSpecialTemplate(templateId) {
@@ -2255,9 +3692,13 @@ async function deleteSpecialTemplate(templateId) {
 
 function openSpecialTemplateModal() {
   const modal = document.getElementById('special-template-modal');
+  setSpecialTemplateDirectDraftMode(false);
   modal.style.display = 'block';
   // Clear form and remove templateId for new template
   delete modal.dataset.templateId;
+  delete modal.dataset.prefillMeta;
+  delete modal.dataset.prefillHasHeader;
+  delete modal.dataset.directDraftMode;
   document.getElementById('special-template-name').value = '';
   document.getElementById('special-template-description').value = '';
   
@@ -2272,12 +3713,14 @@ function openSpecialTemplateModal() {
     <tr>
       <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Họ tên:</strong></td>
       <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
-      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Tuổi:</strong></td>
+      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Năm sinh:</strong></td>
       <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
     </tr>
     <tr>
       <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Địa chỉ:</strong></td>
-      <td style="padding:8px; border:1px solid #000;" colspan="3">_________________</td>
+      <td style="padding:8px; border:1px solid #000;">_________________</td>
+      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Số điện thoại:</strong></td>
+      <td style="padding:8px; border:1px solid #000;">_________________</td>
     </tr>
     <tr>
       <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Chẩn đoán:</strong></td>
@@ -2309,56 +3752,49 @@ function openSpecialTemplateModal() {
 }
 
 function closeSpecialTemplateModal() {
-  document.getElementById('special-template-modal').style.display = 'none';
+  const modal = document.getElementById('special-template-modal');
+  delete modal.dataset.prefillMeta;
+  delete modal.dataset.prefillHasHeader;
+  delete modal.dataset.directDraftMode;
+  setSpecialTemplateDirectDraftMode(false);
+  modal.style.display = 'none';
 }
 
-// Hàm reset template đặc biệt về mặc định
-function resetSpecialTemplate() {
-  const defaultTemplate = `
-<div style="font-family:'Times New Roman', serif; padding:20px;">
-  <div style="text-align:center; margin-bottom:20px;">
-    <h2 style="color:#0000cc; margin:0;">PHIẾU CHỈ ĐỊNH CẬN LÂM SÀNG</h2>
-  </div>
-  
-  <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
-    <tr>
-      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Họ tên:</strong></td>
-      <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
-      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Tuổi:</strong></td>
-      <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
-    </tr>
-    <tr>
-      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Địa chỉ:</strong></td>
-      <td style="padding:8px; border:1px solid #000;" colspan="3">_________________</td>
-    </tr>
-    <tr>
-      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Chẩn đoán:</strong></td>
-      <td style="padding:8px; border:1px solid #000;">_________________</td>
-      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Ghi chú:</strong></td>
-      <td style="padding:8px; border:1px solid #000;">_________________</td>
-    </tr>
-  </table>
+function setSpecialTemplateDirectDraftMode(enabled) {
+  const modal = document.getElementById('special-template-modal');
+  if (!modal) return;
 
-  <div style="margin-bottom:20px; margin-top:30px;">
-    <div style="border:1px solid #000; padding:10px;">
-      <p><strong>Dịch vụ chỉ định:</strong> _________________</p>
-      <p style="margin-top:8px;"><strong>Ghi chú:</strong> ____________________________________________</p>
-    </div>
-  </div>
+  const title = modal.querySelector('.modal-header h3');
+  const nameWrap = document.getElementById('special-template-name')?.closest('.form-group');
+  const descWrap = document.getElementById('special-template-description')?.closest('.form-group');
+  const saveBtn = document.getElementById('save-special-btn');
+  const savePrintBtn = document.getElementById('save-print-special-btn');
+  const cancelBtn = document.getElementById('cancel-special-btn');
+  const editor = document.getElementById('special-template-editor');
 
-  <div style="display:flex; justify-content:space-between; margin-top:30px;">
-    <div style="text-align:center;">
-      <p><strong>Bác sĩ chỉ định</strong></p>
-      <p style="margin-top:50px;">_________________</p>
-    </div>
-    <div style="text-align:center;">
-      <p><strong>Ngày: ___/___/_____</strong></p>
-    </div>
-  </div>
-</div>`;
-  
-  document.getElementById('special-template-editor').innerHTML = defaultTemplate;
+  if (enabled) {
+    if (title) title.textContent = 'Phiếu khai thác tiền sản giật (điền bổ sung)';
+    if (nameWrap) nameWrap.style.display = 'none';
+    if (descWrap) descWrap.style.display = 'none';
+    if (saveBtn) saveBtn.textContent = 'Lưu vào hồ sơ';
+    if (savePrintBtn) savePrintBtn.innerHTML = '<i class="fas fa-print"></i> Lưu & In phiếu';
+    if (cancelBtn) cancelBtn.textContent = 'Đóng';
+    if (editor) {
+      // Focus editor directly so user can continue filling immediately.
+      editor.focus();
+      editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    return;
+  }
+
+  if (title) title.textContent = 'Thêm mẫu phiếu chỉ định đặc biệt';
+  if (nameWrap) nameWrap.style.display = '';
+  if (descWrap) descWrap.style.display = '';
+  if (saveBtn) saveBtn.textContent = 'Lưu mẫu đặc biệt';
+  if (savePrintBtn) savePrintBtn.innerHTML = '<i class="fas fa-print"></i> Lưu & In';
+  if (cancelBtn) cancelBtn.textContent = 'Hủy';
 }
+
 
 async function previewSpecialTemplate(templateId) {
   console.log('Previewing special template:', templateId);
@@ -2373,7 +3809,11 @@ async function previewSpecialTemplate(templateId) {
   
   try {
     const header = await getHeader();
-    const fullContent = header + template.content_html;
+    const normalizedContent = normalizeSpecialTemplateContent(template);
+    if (normalizedContent !== String(template.content_html || '')) {
+      persistPreeclampsiaTemplateUpgradeSilently(template, normalizedContent);
+    }
+    const fullContent = header + normalizedContent;
     
     document.getElementById('preview-content').innerHTML = fullContent;
     document.getElementById('preview-modal').style.display = 'block';
@@ -2396,14 +3836,22 @@ async function editSpecialTemplate(templateId) {
   }
   
   try {
+    setSpecialTemplateDirectDraftMode(false);
+    const normalizedContent = normalizeSpecialTemplateContent(template);
+    if (normalizedContent !== String(template.content_html || '')) {
+      persistPreeclampsiaTemplateUpgradeSilently(template, normalizedContent);
+    }
     // Mở modal chỉnh sửa mẫu đặc biệt
     document.getElementById('special-template-name').value = template.name;
     document.getElementById('special-template-description').value = template.description || '';
-    document.getElementById('special-template-editor').innerHTML = template.content_html;
+    document.getElementById('special-template-editor').innerHTML = normalizedContent;
     
     // Đánh dấu đang chỉnh sửa
-    document.getElementById('special-template-modal').dataset.templateId = templateId;
-    document.getElementById('special-template-modal').style.display = 'block';
+    const modal = document.getElementById('special-template-modal');
+    modal.dataset.templateId = templateId;
+    delete modal.dataset.prefillMeta;
+    delete modal.dataset.prefillHasHeader;
+    modal.style.display = 'block';
     
     console.log('Edit modal opened successfully');
   } catch (error) {
@@ -2424,7 +3872,11 @@ async function printSpecialTemplate(templateId) {
   
   try {
     const header = await getHeader();
-    const fullContent = header + template.content_html;
+    const normalizedContent = normalizeSpecialTemplateContent(template);
+    if (normalizedContent !== String(template.content_html || '')) {
+      persistPreeclampsiaTemplateUpgradeSilently(template, normalizedContent);
+    }
+    const fullContent = header + normalizedContent;
     
     // Sửa đường dẫn logo trong content để in
     const fixedContent = await fixLogoPathForPrintWithBase64(fullContent);
@@ -2436,7 +3888,18 @@ async function printSpecialTemplate(templateId) {
           <title>In mẫu phiếu đặc biệt</title>
           <style>
             body { font-family: 'Times New Roman', serif; margin: 0; padding: 20px; }
-            @media print { body { margin: 0; padding: 0; } }
+            @media print {
+              body { margin: 0; padding: 0; }
+              td[style*="border:1px solid #000"],
+              td[style*="border: 1px solid #000"],
+              th[style*="border:1px solid #000"],
+              th[style*="border: 1px solid #000"],
+              div[style*="border:1px solid #000"],
+              div[style*="border: 1px solid #000"],
+              .lab-text-box {
+                border: none !important;
+              }
+            }
           </style>
         </head>
         <body>
@@ -2497,19 +3960,6 @@ async function syncHeaderFromHomeContent() {
   }
 }
 
-// Hàm reset header về mặc định
-function resetHeaderToDefault() {
-  if (confirm('Bạn có chắc muốn reset header về mặc định? Thao tác này sẽ xóa header đã chỉnh sửa thủ công.')) {
-    localStorage.removeItem('clinicalFormHeader');
-    updateSyncStatus('Đã reset về mặc định', 'success');
-    
-    // Cập nhật modal nếu đang mở
-    const headerEditor = document.getElementById('header-editor');
-    if (headerEditor && headerEditor.style.display !== 'none') {
-      headerEditor.innerHTML = generateHeaderHTML();
-    }
-  }
-}
 
 // Hàm cập nhật trạng thái đồng bộ
 function updateSyncStatus(message, type = 'info') {
@@ -2554,7 +4004,18 @@ async function printTemplate(templateType) {
         <title>In mẫu phiếu</title>
         <style>
           body { font-family: 'Times New Roman', serif; margin: 0; padding: 20px; }
-          @media print { body { margin: 0; padding: 0; } }
+          @media print {
+            body { margin: 0; padding: 0; }
+            td[style*="border:1px solid #000"],
+            td[style*="border: 1px solid #000"],
+            th[style*="border:1px solid #000"],
+            th[style*="border: 1px solid #000"],
+            div[style*="border:1px solid #000"],
+            div[style*="border: 1px solid #000"],
+            .lab-text-box {
+              border: none !important;
+            }
+          }
         </style>
       </head>
       <body>
@@ -2566,18 +4027,62 @@ async function printTemplate(templateType) {
   printWindow.print();
 }
 
+function openPrefillDraftFromExamination() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('prefillDraft') !== '1') return;
+
+  const storageKey = 'clinical_template_prefill_draft';
+  const raw = localStorage.getItem(storageKey);
+  if (!raw) return;
+
+  let draft = null;
+  try {
+    draft = JSON.parse(raw);
+  } catch (error) {
+    console.error('Không đọc được dữ liệu phiếu prefill:', error);
+  }
+  localStorage.removeItem(storageKey);
+  window.history.replaceState({}, document.title, window.location.pathname);
+
+  if (!draft || !draft.content_html) {
+    alert('Không có dữ liệu phiếu đã điền sẵn để mở.');
+    return;
+  }
+
+  // Expire draft after 30 minutes for safety.
+  const maxAgeMs = 30 * 60 * 1000;
+  if (draft.created_at && (Date.now() - Number(draft.created_at) > maxAgeMs)) {
+    alert('Dữ liệu phiếu đã hết hạn, vui lòng mở lại từ trang lịch khám.');
+    return;
+  }
+
+  const modal = document.getElementById('special-template-modal');
+  if (!modal) return;
+
+  // Open as a prefilled draft for this patient/service (avoid overwriting template directly).
+  delete modal.dataset.templateId;
+  modal.dataset.prefillMeta = JSON.stringify({
+    source: String(draft.source || ''),
+    appointment_id: String(draft.appointment_id || ''),
+    service_id: String(draft.service_id || ''),
+    template_id: draft.template_id || null
+  });
+  const prefilledHtml = String(draft.full_content_html || draft.content_html || '');
+  modal.dataset.prefillHasHeader = draft.has_header || draft.full_content_html ? '1' : '0';
+  modal.dataset.directDraftMode = '1';
+  document.getElementById('special-template-name').value = `Bản nháp: ${draft.template_name || 'Mẫu phiếu khai thác tiền sản giật'}`;
+  document.getElementById('special-template-description').value = draft.description || '';
+  document.getElementById('special-template-editor').innerHTML = prefilledHtml;
+  setSpecialTemplateDirectDraftMode(true);
+  modal.style.display = 'block';
+}
+
 // Event listeners
 document.addEventListener('DOMContentLoaded', async function() {
   // Load home content data
   updateSyncStatus('Đang tải dữ liệu...', 'info');
   await loadHomeContent();
-  updateSyncStatus('Sẵn sàng - Header tự động đồng bộ mỗi 30 giây', 'success');
-  
-  // Set up auto-refresh every 30 seconds
-  setInterval(async () => {
-    await refreshHeader();
-    updateSyncStatus('Đã tự động cập nhật từ Home Content', 'success');
-  }, 30000);
+  updateSyncStatus('Sẵn sàng - Header chỉ đồng bộ khi bấm nút', 'success');
   
   // Header modal
   const editHeaderBtn = document.getElementById('edit-header-btn');
@@ -2607,12 +4112,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     syncHeaderBtn.addEventListener('click', syncHeaderFromHomeContent);
   }
 
-  // Reset header button
-  const resetHeaderBtn = document.getElementById('reset-header-btn');
-  if (resetHeaderBtn) {
-    resetHeaderBtn.addEventListener('click', resetHeaderToDefault);
-  }
-
   if (closeHeaderModal) {
     closeHeaderModal.addEventListener('click', function() {
       headerModal.style.display = 'none';
@@ -2640,6 +4139,9 @@ document.addEventListener('DOMContentLoaded', async function() {
   const closeSpecialModal = document.getElementById('close-special-modal');
   const cancelSpecialBtn = document.getElementById('cancel-special-btn');
   const saveSpecialBtn = document.getElementById('save-special-btn');
+  const savePrintSpecialBtn = document.getElementById('save-print-special-btn');
+  const specialProviderFilter = document.getElementById('special-template-provider-filter');
+  const specialLockedOnly = document.getElementById('special-template-locked-only');
 
   if (addSpecialTemplateBtn) {
     addSpecialTemplateBtn.addEventListener('click', openSpecialTemplateModal);
@@ -2660,6 +4162,21 @@ document.addEventListener('DOMContentLoaded', async function() {
   if (saveSpecialBtn) {
     saveSpecialBtn.addEventListener('click', saveSpecialTemplate);
   }
+  if (savePrintSpecialBtn) {
+    savePrintSpecialBtn.addEventListener('click', saveAndPrintSpecialTemplate);
+  }
+  if (specialProviderFilter) {
+    specialProviderFilter.addEventListener('change', () => {
+      specialTemplateFilters.providerUnit = specialProviderFilter.value || '';
+      renderSpecialTemplates();
+    });
+  }
+  if (specialLockedOnly) {
+    specialLockedOnly.addEventListener('change', () => {
+      specialTemplateFilters.lockedOnly = !!specialLockedOnly.checked;
+      renderSpecialTemplates();
+    });
+  }
 
   // Lab result template buttons
   const addLabResultTemplateBtn = document.getElementById('add-lab-result-template-btn');
@@ -2678,7 +4195,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   if (manageGroupsBtn) {
-    manageGroupsBtn.addEventListener('click', openManageGroupsModal);
+    manageGroupsBtn.style.display = 'none';
+    manageGroupsBtn.title = 'Nhóm mẫu phiếu kết quả được đồng bộ từ nhóm dịch vụ cận lâm sàng';
   }
 
   if (closeLabResultModal) {
@@ -2714,6 +4232,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   try {
     console.log('Initial load attempt...');
     await loadSpecialTemplates();
+    openPrefillDraftFromExamination();
   } catch (error) {
     console.error('Error loading special templates on page load:', error);
   }
@@ -2784,7 +4303,18 @@ document.addEventListener('DOMContentLoaded', async function() {
             <title>In mẫu phiếu</title>
             <style>
               body { font-family: 'Times New Roman', serif; margin: 0; padding: 20px; }
-              @media print { body { margin: 0; padding: 0; } }
+              @media print {
+                body { margin: 0; padding: 0; }
+                td[style*="border:1px solid #000"],
+                td[style*="border: 1px solid #000"],
+                th[style*="border:1px solid #000"],
+                th[style*="border: 1px solid #000"],
+                div[style*="border:1px solid #000"],
+                div[style*="border: 1px solid #000"],
+                .lab-text-box {
+                  border: none !important;
+                }
+              }
             </style>
           </head>
           <body>

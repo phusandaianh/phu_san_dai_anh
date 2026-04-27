@@ -17,6 +17,43 @@
             background-color: #e3f2fd;
             cursor: pointer;
         }
+        /* Compact table rows to show more patients on screen */
+        .appointments-table th,
+        .appointments-table td {
+            padding: 4px 6px;
+            line-height: 1.2;
+            vertical-align: middle;
+        }
+        .appointments-table th {
+            font-size: 13px;
+        }
+        .appointments-table td {
+            font-size: 12px;
+        }
+        .appointments-table th:first-child,
+        .appointments-table td:first-child {
+            width: 44px;
+            min-width: 44px;
+            max-width: 44px;
+            text-align: center;
+            padding-left: 2px;
+            padding-right: 2px;
+        }
+        .appointments-table th:nth-child(13),
+        .appointments-table td:nth-child(13) {
+            white-space: nowrap;
+        }
+        #appointments-body .btn,
+        #appointments-body .speak-btn,
+        #appointments-body .zalo-btn {
+            padding: 3px 8px;
+            font-size: 12px;
+            line-height: 1.2;
+            border-radius: 3px;
+        }
+        #appointments-body td div[style*="flex-direction: column"] {
+            gap: 3px !important;
+        }
         .btn.danger-btn {
             background-color: #dc3545;
             color: white;
@@ -231,6 +268,28 @@
             background-color: #c82333 !important;
             transform: scale(1.1) !important;
         }
+        #clinical-form-preview .fill-hint {
+            background: #fff4a3;
+            border-radius: 3px;
+            padding: 0 2px;
+            box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+        }
+        #clinical-form-preview .fill-hint-checkbox {
+            background: #ffe78a;
+            border-radius: 2px;
+            padding: 0 1px;
+        }
+        #clinical-form-preview .fill-hint-checkbox-wrap {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #ffe78a;
+            border-radius: 3px;
+            padding: 1px 2px;
+        }
+        #clinical-form-preview .fill-hint-checkbox-wrap input[type="checkbox"] {
+            accent-color: #d4a106;
+        }
 
         /* Full screen layout like patient-records.html */
         .admin-header {
@@ -284,6 +343,217 @@
         }
         .appointments-container {
             margin-top: 0;
+        }
+        .appointments-container {
+            align-items: start;
+        }
+        .clinical-services {
+            position: sticky;
+            top: 12px;
+            align-self: start;
+            max-height: calc(100vh - 24px);
+            overflow-y: auto;
+            padding-bottom: 80px; /* avoid bottom overlap with floating widgets */
+        }
+        @media (max-width: 768px) {
+            .clinical-services {
+                position: static;
+                top: auto;
+                max-height: none;
+                overflow: visible;
+                padding-bottom: 0;
+            }
+        }
+
+        /* Keep "Thêm dịch vụ" rows compact on one line when possible */
+        #service-modal .modal-content {
+            width: min(96vw, 1650px);
+            max-width: 1650px;
+            min-height: 82vh;
+            max-height: 92vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #service-modal #service-list {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            justify-content: stretch;
+            align-content: start;
+            gap: 8px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 8px;
+        }
+
+        #service-modal .service-item label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            width: 100%;
+            padding: 4px 8px;
+            line-height: 1.25;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: #fff;
+        }
+
+        #service-modal .service-checkbox {
+            flex: 0 0 auto;
+            margin: 0;
+        }
+
+        #service-modal .service-line {
+            min-width: 0;
+            flex: 1 1 auto;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 6px;
+            white-space: nowrap;
+            width: 100%;
+            max-width: 100%;
+        }
+
+        #service-modal .service-name {
+            width: 100%;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: block;
+            white-space: nowrap;
+            word-break: normal;
+        }
+
+        #service-modal .modal-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        #service-modal .modal-header-row h2 {
+            margin: 0;
+        }
+
+        #service-modal .modal-doctor-select {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+        }
+
+        #service-modal .modal-doctor-select select {
+            min-width: 180px;
+        }
+
+        #service-modal .service-item {
+            padding: 2px 0;
+            width: 100%;
+        }
+        #service-modal .service-item label {
+            box-sizing: border-box;
+        }
+        #service-modal .selection-mode {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        #service-modal .selection-mode label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+        }
+        #service-modal .service-categories {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            margin-bottom: 8px;
+            scrollbar-width: thin;
+        }
+        #service-modal .service-category {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            border: 1px solid #dbe4f0;
+            border-radius: 999px;
+            background: #f8fbff;
+            padding: 4px 8px;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        #service-modal .service-category label {
+            margin: 0;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        #service-modal .provider-unit-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        #service-modal .service-search {
+            margin-bottom: 10px;
+        }
+        #service-modal .service-search input {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        #service-modal .provider-unit-chip {
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            background: #fff;
+            color: #1e293b;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        #service-modal .provider-unit-chip.active {
+            background: #1976D2;
+            color: #fff;
+            border-color: #1976D2;
+        }
+
+        /* Save/Close buttons compact size */
+        #service-modal .modal-actions {
+            gap: 14px;
+        }
+
+        #service-modal #save-services,
+        #service-modal #close-service-modal {
+            min-width: 60px;
+            min-height: 36px;
+            padding: 6px 12px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            border-radius: 8px;
+        }
+
+        @media (max-width: 640px) {
+            #service-modal .modal-content {
+                width: 98vw;
+                min-height: 88vh;
+            }
+            #service-modal .service-line {
+                flex-wrap: wrap;
+                row-gap: 4px;
+                white-space: normal;
+            }
         }
     </style>
 </head>
@@ -386,14 +656,20 @@
                 </div>
 
                 <div class="clinical-services">
-                    <h3>Dịch vụ cận lâm sàng của bệnh nhân</h3>
-                <div class="services-list" id="services-list"></div>
                     <div class="selected-services">
                         <h4>Dịch vụ đã chọn</h4>
                     <div id="selected-services-list"></div>
                         <div class="total-amount">
                             <span>Tổng cộng:</span>
                             <span id="total-amount">0đ</span>
+                        </div>
+                        <div class="total-amount">
+                            <span>Giảm giá:</span>
+                            <input id="discount-amount-input" type="text" inputmode="numeric" value="0" style="width:140px; text-align:right;">
+                        </div>
+                        <div class="total-amount">
+                            <span>Phải thanh toán:</span>
+                            <span id="payable-amount">0đ</span>
                         </div>
                         <button id="print-clinical-service" class="btn primary-btn" disabled>
                             <i class="fas fa-print"></i> In phiếu chỉ định
@@ -413,7 +689,26 @@
     <!-- Modal chọn dịch vụ -->
     <div id="service-modal" class="modal hidden">
         <div class="modal-content">
-            <h2>Thêm dịch vụ cho bệnh nhân</h2>
+            <div class="modal-header-row">
+                <h2>Thêm dịch vụ cho bệnh nhân</h2>
+                <label class="modal-doctor-select" for="service-doctor-select">
+                    <span>Bác sĩ chỉ định:</span>
+                    <select id="service-doctor-select"></select>
+                </label>
+            </div>
+            <div class="selection-mode">
+                <label>
+                    <input type="radio" name="service-selection-mode" value="group" checked>
+                    Chọn theo nhóm dịch vụ
+                </label>
+                <label>
+                    <input type="radio" name="service-selection-mode" value="provider">
+                    Chọn theo đơn vị thực hiện dịch vụ
+                </label>
+            </div>
+            <div class="service-search">
+                <input id="service-search-input" type="text" placeholder="Tìm dịch vụ theo tên..." />
+            </div>
             <div class="service-categories">
                 <div class="service-category">
                     <input type="radio" id="ultrasound-pregnancy" name="service-type" value="Siêu âm thai">
@@ -443,7 +738,12 @@
                     <input type="radio" id="package-services" name="service-type" value="Gói cận lâm sàng">
                     <label for="package-services">Gói cận lâm sàng</label>
                 </div>
+                <div class="service-category">
+                    <input type="radio" id="selected-services-only" name="service-type" value="Các dịch vụ đã chọn">
+                    <label for="selected-services-only">Các dịch vụ đã chọn</label>
+                </div>
             </div>
+        <div id="provider-unit-filters" class="provider-unit-filters hidden"></div>
         <div id="service-list" class="service-list"></div>
             <div class="modal-actions">
                 <button id="save-services" class="btn primary-btn">Lưu</button>
@@ -497,7 +797,7 @@
                     <option value="PK Đại Anh">PK Đại Anh</option>
                 </select>
                 <label for="edit-expected-delivery-date">Ngày dự kiến sinh</label>
-                <input id="edit-expected-delivery-date" type="date" />
+                <input id="edit-expected-delivery-date" type="text" inputmode="numeric" placeholder="dd/mm/yyyy" />
             </div>
             <div class="modal-actions" style="margin-top:16px;">
                 <button id="save-patient-btn" class="btn primary-btn">Lưu</button>
@@ -787,13 +1087,73 @@
         APPOINTMENTS_PAST: '/api/appointments/past',
         APPOINTMENTS_BY_DATE: d => `/api/appointments/by-date?date=${encodeURIComponent(d)}`,
             CLINICAL_SERVICES: '/api/clinical-services',
+            CLINICAL_SERVICE_PACKAGES: '/api/clinical-service-packages',
         APPOINTMENT_SERVICES: id => `/api/appointments/${id}/clinical-services`
     };
 
     // State
-    const state = { currentAppointmentId: null, selectedServices: new Set(), allServices: [], pollTimer: null, lastAppointmentsData: null };
+    const state = {
+        currentAppointmentId: null,
+        selectedServices: new Set(),
+        selectedServiceDoctors: new Map(),
+        currentDoctorName: 'PK Đại Anh',
+        discountByAppointment: new Map(),
+        splitProviderUnitsByAppointment: new Map(),
+        allServices: [],
+        allServicePackages: [],
+        serviceSelectionMode: 'group',
+        selectedProviderUnit: '__all__',
+        serviceSearchQuery: '',
+        doctors: [],
+        pollTimer: null,
+        lastAppointmentsData: null
+    };
     let allAppointments = [];
     let clinicalPrintSelection = { appointmentId: null, services: [] };
+    async function loadDoctorsList() {
+        if (state.doctors.length) return state.doctors;
+        const doctorsResponse = await api.get('/api/doctors');
+        const doctors = Array.isArray(doctorsResponse?.doctors) ? doctorsResponse.doctors : [];
+        state.doctors = doctors.length ? doctors : ['PK Đại Anh'];
+        return state.doctors;
+    }
+
+    function renderDoctorOptions(selectedDoctor = '') {
+        const doctors = state.doctors.length ? state.doctors : ['PK Đại Anh'];
+        return doctors.map(d => `<option value="${escapeHtml(d)}" ${d === selectedDoctor ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('');
+    }
+
+    function syncDoctorSelects(sourceId = '') {
+        const doctorName = state.currentDoctorName || 'PK Đại Anh';
+        const serviceDoctorSelect = document.getElementById('service-doctor-select');
+        const editDoctorSelect = document.getElementById('edit-doctor');
+        if (serviceDoctorSelect && sourceId !== 'service-doctor-select') {
+            serviceDoctorSelect.value = doctorName;
+        }
+        if (editDoctorSelect && sourceId !== 'edit-doctor') {
+            editDoctorSelect.value = doctorName;
+        }
+    }
+
+    function setCurrentDoctorName(doctorName, options = {}) {
+        const normalizedDoctor = (doctorName || 'PK Đại Anh').trim() || 'PK Đại Anh';
+        const shouldRefreshServices = !!options.refreshServices;
+        const sourceId = options.sourceId || '';
+        state.currentDoctorName = normalizedDoctor;
+        syncDoctorSelects(sourceId);
+        if (shouldRefreshServices) {
+            if (state.serviceSelectionMode === 'provider') {
+                filterServicesByProviderUnit(state.selectedProviderUnit || '__all__');
+            } else {
+                filterServices((document.querySelector('input[name="service-type"]:checked') || {}).value || 'Siêu âm thai');
+            }
+        }
+    }
+
+    function currentModalDoctor() {
+        return document.getElementById('service-doctor-select')?.value || state.currentDoctorName || 'PK Đại Anh';
+    }
+
     // Chế độ lọc lịch khám:
     // - today_future: từ hôm nay trở đi (bao gồm hôm nay)
     // - past: các ngày trước hôm nay
@@ -804,12 +1164,61 @@
 
     // Utils
     const formatCurrency = n => (n || 0).toLocaleString('vi-VN') + 'đ';
+    const parseMoneyInput = (value) => {
+        const digits = String(value || '').replace(/[^\d]/g, '');
+        return Number(digits || 0);
+    };
+    const formatMoneyInput = n => (n || 0).toLocaleString('vi-VN');
+    function getCurrentDiscountAmount() {
+        if (!state.currentAppointmentId) return 0;
+        return Number(state.discountByAppointment.get(state.currentAppointmentId) || 0);
+    }
+    function setCurrentDiscountAmount(amount) {
+        const safeAmount = Math.max(0, Number(amount || 0));
+        const discountInput = document.getElementById('discount-amount-input');
+        if (state.currentAppointmentId) {
+            state.discountByAppointment.set(state.currentAppointmentId, safeAmount);
+        }
+        if (discountInput) {
+            discountInput.value = formatMoneyInput(safeAmount);
+        }
+    }
+    function updatePaymentSummary(totalAmount) {
+        const total = Math.max(0, Number(totalAmount || 0));
+        const discount = Math.min(getCurrentDiscountAmount(), total);
+        const payable = Math.max(0, total - discount);
+        const payableEl = document.getElementById('payable-amount');
+        if (payableEl) payableEl.textContent = formatCurrency(payable);
+        if (discount !== getCurrentDiscountAmount()) {
+            setCurrentDiscountAmount(discount);
+        }
+    }
     const escapeHtml = (v) => String(v ?? '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    /* Strip trailing (provider_unit) from service display name, case-insensitive. */
+    const clinicalDisplayNameWithoutProviderSuffix = (name, providerUnit) => {
+        let n = String(name || '').trim();
+        const u = String(providerUnit || '').trim();
+        if (n && u && u !== 'Chưa có đơn vị thực hiện') {
+            const re = new RegExp('\\s*\\(' + escapeRegExp(u) + '\\)\\s*$', 'i');
+            n = n.replace(re, '').trim();
+        }
+        return n;
+    };
+    const providerSplitKey = (appointmentId, providerUnit) => `${String(appointmentId || '').trim()}__${String(providerUnit || '').trim().toLowerCase()}`;
+    const isProviderUnitSplit = (appointmentId, providerUnit) => {
+        const key = providerSplitKey(appointmentId, providerUnit);
+        return state.splitProviderUnitsByAppointment.get(key) === true;
+    };
+    const setProviderUnitSplit = (appointmentId, providerUnit, split) => {
+        const key = providerSplitKey(appointmentId, providerUnit);
+        state.splitProviderUnitsByAppointment.set(key, !!split);
+    };
     const formatNoteCell = (notes) => {
         const text = (notes || '').trim();
         if (!text) return '<span style="color:#999;">—</span>';
@@ -874,76 +1283,118 @@
                     throw new Error(`${r.status} ${text}`);
                 }
                 return r.json();
+            },
+            async put(url, data) {
+                const r = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+                if (!r.ok) {
+                    let text = await r.text().catch(()=>'');
+                    throw new Error(`${r.status} ${text}`);
+                }
+                return r.json();
             }
     };
 
     // Load dịch vụ của bệnh nhân
         async function loadPatientClinicalServices(appointmentId) {
+                await loadDoctorsList();
                 // no-store + cache bust để tránh trình duyệt giữ dữ liệu cũ sau khi xóa
                 const resp = await fetch(`${API_ENDPOINTS.APPOINTMENT_SERVICES(appointmentId)}?_t=${Date.now()}`, { cache: 'no-store' });
                 if (!resp.ok) {
                     let txt = await resp.text().catch(()=>'');
                     throw new Error(txt || `Không tải được danh sách dịch vụ (${resp.status})`);
                 }
-                const services = await resp.json();
-        const list = document.getElementById('services-list');
+                const servicesRaw = await resp.json();
+                const services = await ensureProviderUnitsForServices(servicesRaw);
         const selectedList = document.getElementById('selected-services-list');
         if (!services.length) {
-            list.innerHTML = '<i>Chưa có dịch vụ nào.</i>';
             if (selectedList) selectedList.innerHTML = '<i>Chưa chọn dịch vụ nào.</i>';
-                } else {
-            // Render each service with delete button on the left and print button on the right
-            list.innerHTML = services.map(s => {
-                const isUltrasound = (s.service_group && s.service_group.toLowerCase().includes('siêu âm')) || 
-                                     (s.name && s.name.toLowerCase().includes('siêu âm'));
-                // Bỏ hiển thị nút nhập kết quả cho các dịch vụ thuộc nhóm "Các dịch vụ khác"
-                // Theo clinical-services-admin.html, giá trị trong DB là "dịch vụ khác" (không có "Các")
-                const serviceGroupLower = (s.service_group || '').toLowerCase().trim();
-                
-                // Kiểm tra chính xác: giá trị trong DB là "dịch vụ khác"
-                // Cũng kiểm tra các biến thể có thể có
-                const isOtherService = serviceGroupLower === 'dịch vụ khác' || 
-                                      serviceGroupLower === 'các dịch vụ khác' ||
-                                      (serviceGroupLower.includes('dịch vụ khác') && serviceGroupLower.length <= 20); // Tránh match nhầm với các chuỗi dài
-                
-                const showResultBtn = !isOtherService;
-                
-                return `
-                <div class="service-item" data-link-id="${s.id}" data-service-id="${s.service_id}" data-price="${Number(s.price || 0)}" style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px; border-bottom:1px solid #eee;">
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <button class="btn danger-btn service-delete-btn" data-appointment-id="${appointmentId}" data-service-id="${s.service_id}" title="Xóa dịch vụ">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                        <div class="service-info">
-                            <h4 style="margin:0">${s.name}</h4>
-                            <p style="margin:0">${s.description || ''}</p>
-                        </div>
-                    </div>
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        ${showResultBtn ? `
-                        <button class="btn primary-btn service-result-btn" data-appointment-id="${appointmentId}" data-service-id="${s.service_id}" data-service-name="${s.name}" data-is-ultrasound="${isUltrasound}" title="Nhập kết quả">
-                            <i class="fas fa-file-medical"></i> Nhập kết quả
-                        </button>
-                        ` : ''}
-                        <button class="btn success-btn service-print-btn" data-appointment-id="${appointmentId}" data-service-id="${s.service_id}" title="In phiếu cho dịch vụ">
-                            <i class="fas fa-print"></i>
-                        </button>
-                    </div>
-                </div>
-            `;
-            }).join('');
+        } else {
             if (selectedList) {
-                selectedList.innerHTML = services.map(s => `
-                    <div class="selected-service-item" data-service-id="${s.service_id}" data-price="${Number(s.price || 0)}">
-                        <span>${s.name}</span>
-                        <span>${formatCurrency(s.price)}</span>
+                const byUnit = groupClinicalServicesByProviderUnit(services);
+                const unitKeys = [...byUnit.keys()].sort((a, b) => a.localeCompare(b, 'vi'));
+                selectedList.innerHTML = unitKeys.map(unit => {
+                    const items = byUnit.get(unit) || [];
+                    const splitMode = isProviderUnitSplit(appointmentId, unit);
+                    const nameParts = items.map(s => clinicalDisplayNameWithoutProviderSuffix(s.name, unit)).filter(Boolean);
+                    const mergedName = nameParts.join(' + ');
+                    const mergedPrice = items.reduce((sum, s) => sum + Number(s.price || 0), 0);
+                    const serviceIds = items.map(s => s.service_id).filter(id => id != null).join(',');
+                    const splitRows = items.map(s => {
+                        const singleId = String(s.service_id ?? '').trim();
+                        const displayName = clinicalDisplayNameWithoutProviderSuffix(s.name, unit);
+                        const isUltrasound = (s.service_group && s.service_group.toLowerCase().includes('siêu âm')) ||
+                                             (s.name && s.name.toLowerCase().includes('siêu âm'));
+                        const serviceGroupLower = (s.service_group || '').toLowerCase().trim();
+                        const isOtherService = serviceGroupLower === 'dịch vụ khác' ||
+                                              serviceGroupLower === 'các dịch vụ khác' ||
+                                              (serviceGroupLower.includes('dịch vụ khác') && serviceGroupLower.length <= 20);
+                        const showResultBtn = !isOtherService;
+                        return `
+                        <div class="selected-service-item service-item" data-service-ids="${escapeHtml(singleId)}" data-service-id="${escapeHtml(singleId)}" data-price="${Number(s.price || 0)}" style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed #eee;">
+                            <div style="display:flex; align-items:flex-start; gap:8px; min-width:0; flex:1;">
+                                <button class="btn danger-btn service-delete-btn" data-appointment-id="${appointmentId}" data-service-id="${escapeHtml(singleId)}" title="Xóa dịch vụ" style="padding:3px 8px; font-size:11px;">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <span class="selected-service-name-link"
+                                      data-appointment-id="${escapeHtml(String(appointmentId))}"
+                                      data-service-id="${escapeHtml(singleId)}"
+                                      data-service-name="${escapeHtml(displayName)}"
+                                      style="min-width:0; word-break:break-word; cursor:pointer; text-decoration:underline dotted;"
+                                      title="Mở mẫu khai thác tiền sản giật (nếu là dịch vụ tiền sản giật)">${escapeHtml(displayName)}</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                                ${showResultBtn ? `
+                                <button class="btn primary-btn service-result-btn" data-appointment-id="${appointmentId}" data-service-id="${escapeHtml(singleId)}" data-service-name="${escapeHtml(s.name || '')}" data-is-ultrasound="${isUltrasound}" title="Nhập kết quả" style="padding:3px 8px; font-size:11px;">
+                                    <i class="fas fa-file-medical"></i>
+                                </button>
+                                ` : ''}
+                                <button class="btn success-btn service-print-btn" data-appointment-id="${appointmentId}" data-service-id="${escapeHtml(singleId)}" title="In phiếu cho dịch vụ" style="padding:4px 12px; font-size:12px; white-space:nowrap;">
+                                    <i class="fas fa-print"></i> In
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    }).join('');
+                    return `
+                    <div class="selected-provider-group" style="margin-bottom:14px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; font-weight:600; color:#1a237e; margin:0 0 6px; padding-bottom:6px; border-bottom:1px solid #e0e0e0;">
+                            <span style="flex:1; min-width:0;">${escapeHtml(unit)}</span>
+                            <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                                <button type="button" class="btn secondary-btn selected-group-toggle-btn" style="padding:4px 10px; font-size:12px; white-space:nowrap;" title="${splitMode ? 'Gộp lại dịch vụ theo đơn vị' : 'Tách từng dịch vụ của đơn vị này'}"
+                                    data-appointment-id="${escapeHtml(appointmentId)}"
+                                    data-provider-unit="${escapeHtml(unit)}"
+                                    data-split="${splitMode ? '1' : '0'}">
+                                    ${splitMode ? 'Gộp DV' : 'Tách DV'}
+                                </button>
+                                <button type="button" class="btn success-btn selected-group-print-btn" style="padding:4px 12px; font-size:12px; white-space:nowrap;" title="${splitMode ? 'In riêng theo từng dịch vụ đã tách' : 'In phiếu chỉ định gộp theo đơn vị này'}"
+                                    data-appointment-id="${escapeHtml(appointmentId)}"
+                                    data-service-ids="${escapeHtml(serviceIds)}"
+                                    data-split="${splitMode ? '1' : '0'}">
+                                    <i class="fas fa-print"></i> In
+                                </button>
+                            </div>
+                        </div>
+                        ${splitMode ? splitRows : `
+                        <div class="selected-service-item" data-service-ids="${escapeHtml(serviceIds)}" data-price="${mergedPrice}">
+                            <span class="selected-service-name-link"
+                                  data-appointment-id="${escapeHtml(String(appointmentId))}"
+                                  data-service-ids="${escapeHtml(serviceIds)}"
+                                  data-service-name="${escapeHtml(mergedName)}"
+                                  style="cursor:pointer; text-decoration:underline dotted;"
+                                  title="Mở mẫu khai thác tiền sản giật (nếu có trong nhóm dịch vụ)">${escapeHtml(mergedName)}</span>
+                            <span>${formatCurrency(mergedPrice)}</span>
+                        </div>
+                        `}
                     </div>
-                `).join('');
+                `;
+                }).join('');
             }
             // Delete button event handlers are now handled in the actions column
         }
         const total = services.reduce((sum, s) => sum + (s.price || 0), 0);
         document.getElementById('total-amount').textContent = formatCurrency(total);
+        setCurrentDiscountAmount(getCurrentDiscountAmount());
+        updatePaymentSummary(total);
         const printBtn = document.getElementById('print-clinical-service');
         if (printBtn) printBtn.disabled = services.length === 0;
     }
@@ -952,9 +1403,149 @@
     async function loadSelectedServices() {
         const services = await api.get(API_ENDPOINTS.APPOINTMENT_SERVICES(state.currentAppointmentId));
         state.selectedServices.clear();
-        services.forEach(s => state.selectedServices.add(s.service_id));
+        state.selectedServiceDoctors.clear();
+        services.forEach(s => {
+            state.selectedServices.add(s.service_id);
+            state.selectedServiceDoctors.set(s.service_id, s.doctor_name || 'PK Đại Anh');
+        });
         const printBtn = document.getElementById('print-clinical-service');
         if (printBtn) printBtn.disabled = services.length === 0;
+    }
+
+    function isPackageFullySelected(pkg) {
+        const packageServices = Array.isArray(pkg?.services) ? pkg.services : [];
+        if (!packageServices.length) return false;
+        return packageServices.every(svc => state.selectedServices.has(Number(svc.id)));
+    }
+
+    function togglePackageServices(pkg, shouldSelect) {
+        const packageServices = Array.isArray(pkg?.services) ? pkg.services : [];
+        packageServices.forEach(svc => {
+            const id = Number(svc.id);
+            if (!id) return;
+            if (shouldSelect) {
+                state.selectedServices.add(id);
+                if (!state.selectedServiceDoctors.has(id)) {
+                    state.selectedServiceDoctors.set(id, currentModalDoctor());
+                }
+            } else {
+                state.selectedServices.delete(id);
+                state.selectedServiceDoctors.delete(id);
+            }
+        });
+    }
+
+    function normalizeSearchText(value) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim();
+    }
+
+    function matchesServiceSearch(name) {
+        const query = normalizeSearchText(state.serviceSearchQuery || '');
+        if (!query) return true;
+        return normalizeSearchText(name).includes(query);
+    }
+
+    function getProviderUnitsFromServices() {
+        const units = new Set();
+        (state.allServices || []).forEach(s => {
+            const unit = String(s?.provider_unit || '').trim();
+            if (unit) units.add(unit);
+        });
+        return [...units].sort((a, b) => a.localeCompare(b, 'vi'));
+    }
+
+    function renderProviderUnitFilters() {
+        const wrap = document.getElementById('provider-unit-filters');
+        if (!wrap) return;
+        const units = getProviderUnitsFromServices();
+        wrap.innerHTML = '';
+        if (!units.length) {
+            wrap.innerHTML = '<i>Chưa có đơn vị thực hiện dịch vụ.</i>';
+            return;
+        }
+        const allBtn = document.createElement('button');
+        allBtn.type = 'button';
+        allBtn.className = `provider-unit-chip ${state.selectedProviderUnit === '__all__' ? 'active' : ''}`;
+        allBtn.textContent = 'Tất cả đơn vị';
+        allBtn.onclick = () => {
+            state.selectedProviderUnit = '__all__';
+            renderProviderUnitFilters();
+            filterServicesByProviderUnit(state.selectedProviderUnit);
+        };
+        wrap.appendChild(allBtn);
+
+        units.forEach(unit => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `provider-unit-chip ${state.selectedProviderUnit === unit ? 'active' : ''}`;
+            btn.textContent = unit;
+            btn.onclick = () => {
+                state.selectedProviderUnit = unit;
+                renderProviderUnitFilters();
+                filterServicesByProviderUnit(state.selectedProviderUnit);
+            };
+            wrap.appendChild(btn);
+        });
+    }
+
+    function filterServicesByProviderUnit(providerUnit) {
+        const list = document.getElementById('service-list');
+        if (!list) return;
+        const filtered = (state.allServices || []).filter(s => {
+            if (providerUnit === '__all__') return true;
+            return String(s?.provider_unit || '').trim() === providerUnit;
+        }).filter(s => matchesServiceSearch(s?.name || ''));
+
+        if (!filtered.length) {
+            list.innerHTML = '<i>Không có dịch vụ theo đơn vị đã chọn.</i>';
+            return;
+        }
+
+        list.innerHTML = filtered.map(s => `
+            <div class="service-item">
+                <label>
+                    <input type="checkbox" class="service-checkbox" value="${s.id}" ${state.selectedServices.has(s.id) ? 'checked' : ''}>
+                    <span class="service-line">
+                        <span class="service-name">${s.name}</span>
+                    </span>
+                </label>
+            </div>
+        `).join('');
+
+        list.querySelectorAll('.service-checkbox').forEach(cb => {
+            cb.onchange = () => {
+                const id = parseInt(cb.value);
+                if (cb.checked) {
+                    state.selectedServices.add(id);
+                    if (!state.selectedServiceDoctors.has(id)) {
+                        state.selectedServiceDoctors.set(id, currentModalDoctor());
+                    }
+                } else {
+                    state.selectedServices.delete(id);
+                    state.selectedServiceDoctors.delete(id);
+                }
+            };
+        });
+    }
+
+    function applyServiceSelectionMode(mode) {
+        state.serviceSelectionMode = mode === 'provider' ? 'provider' : 'group';
+        const categories = document.querySelector('.service-categories');
+        const providerFilters = document.getElementById('provider-unit-filters');
+        if (categories) categories.classList.toggle('hidden', state.serviceSelectionMode !== 'group');
+        if (providerFilters) providerFilters.classList.toggle('hidden', state.serviceSelectionMode !== 'provider');
+
+        if (state.serviceSelectionMode === 'provider') {
+            renderProviderUnitFilters();
+            filterServicesByProviderUnit(state.selectedProviderUnit || '__all__');
+            return;
+        }
+        const selectedCategory = (document.querySelector('input[name="service-type"]:checked') || {}).value || 'Siêu âm thai';
+        filterServices(selectedCategory);
     }
 
     // Lưu dịch vụ đã chọn
@@ -982,7 +1573,17 @@
             }
             // Add by posting master service_id
             for (const id of toAdd) {
-                await api.post(API_ENDPOINTS.APPOINTMENT_SERVICES(appointmentId), { service_id: id });
+                const doctorName = state.selectedServiceDoctors.get(id) || currentModalDoctor();
+                await api.post(API_ENDPOINTS.APPOINTMENT_SERVICES(appointmentId), { service_id: id, doctor_name: doctorName });
+            }
+            // Update doctor for existing selected services
+            for (const s of current) {
+                if (!newServiceIds.includes(s.service_id)) continue;
+                const nextDoctor = state.selectedServiceDoctors.get(s.service_id) || currentModalDoctor();
+                const currentDoctor = s.doctor_name || 'PK Đại Anh';
+                if (nextDoctor !== currentDoctor) {
+                    await api.put(`/api/appointments/${appointmentId}/clinical-services/link/${s.id}`, { doctor_name: nextDoctor });
+                }
             }
 
             closeServiceModal();
@@ -1077,41 +1678,119 @@
     async function openServiceModal(id) {
         state.currentAppointmentId = id;
         document.getElementById('service-modal').classList.remove('hidden');
+        state.serviceSearchQuery = '';
+        const serviceSearchInput = document.getElementById('service-search-input');
+        if (serviceSearchInput) serviceSearchInput.value = '';
+        await loadDoctorsList();
+        const doctorSelect = document.getElementById('service-doctor-select');
+        if (doctorSelect) {
+            doctorSelect.innerHTML = renderDoctorOptions(state.currentDoctorName || 'PK Đại Anh');
+            doctorSelect.onchange = () => {
+                setCurrentDoctorName(doctorSelect.value, { sourceId: 'service-doctor-select', refreshServices: true });
+            };
+        }
         if (!state.allServices.length) state.allServices = await api.get(API_ENDPOINTS.CLINICAL_SERVICES);
-                await loadSelectedServices();
+        if (!state.allServicePackages.length) {
+            try {
+                const packages = await api.get(API_ENDPOINTS.CLINICAL_SERVICE_PACKAGES);
+                state.allServicePackages = Array.isArray(packages) ? packages : [];
+            } catch (error) {
+                console.warn('Không tải được danh sách gói cận lâm sàng:', error);
+                state.allServicePackages = [];
+            }
+        }
+        await loadSelectedServices();
+        if (doctorSelect) {
+            const firstDoctor = state.selectedServiceDoctors.values().next().value;
+            setCurrentDoctorName(firstDoctor || state.currentDoctorName || 'PK Đại Anh', { sourceId: 'service-doctor-select' });
+        }
+        state.serviceSelectionMode = 'group';
+        state.selectedProviderUnit = '__all__';
+        const modeGroup = document.querySelector('input[name="service-selection-mode"][value="group"]');
+        if (modeGroup) modeGroup.checked = true;
         const first = document.querySelector('input[name="service-type"]');
-        if (first) { first.checked = true; filterServices(first.value); }
+        if (first) first.checked = true;
+        applyServiceSelectionMode('group');
     }
         function closeServiceModal() {
         document.getElementById('service-modal').classList.add('hidden');
             state.currentAppointmentId = null;
             state.selectedServices.clear();
+            state.selectedServiceDoctors.clear();
+            state.serviceSearchQuery = '';
         }
 
     // Lọc dịch vụ
         function filterServices(category) {
         const list = document.getElementById('service-list');
         const map = { 'Siêu âm thai':'siêu âm thai','Siêu âm khác':'siêu âm khác','Xét nghiệm máu':'xét nghiệm máu','Xét nghiệm dịch':'xét nghiệm dịch','Các dịch vụ khác':'dịch vụ khác' };
+        if (category === 'Gói cận lâm sàng') {
+            const packages = state.allServicePackages.filter(pkg => {
+                const packageName = String(pkg?.name || '');
+                if (matchesServiceSearch(packageName)) return true;
+                const packageServices = Array.isArray(pkg?.services) ? pkg.services : [];
+                return packageServices.some(svc => matchesServiceSearch(svc?.name || ''));
+            });
+            if (!packages.length) {
+                list.innerHTML = '<i>Chưa có gói cận lâm sàng. Vui lòng tạo ở trang quản lý dịch vụ.</i>';
+                return;
+            }
+            list.innerHTML = packages.map(pkg => {
+                const packageServices = Array.isArray(pkg.services) ? pkg.services : [];
+                const serviceNames = packageServices.map(svc => escapeHtml(svc.name || '')).filter(Boolean).join(', ');
+                return `
+                    <div class="service-item">
+                        <label>
+                            <input type="checkbox" class="package-checkbox" value="${pkg.id}" ${isPackageFullySelected(pkg) ? 'checked' : ''}>
+                            <span class="service-line">
+                                <span class="service-name">${escapeHtml(pkg.name || 'Gói cận lâm sàng')}</span>
+                            </span>
+                            <small style="display:block; margin-top:4px; color:#666;">
+                                ${serviceNames || 'Gói chưa có dịch vụ thành phần.'}
+                            </small>
+                        </label>
+                    </div>
+                `;
+            }).join('');
+            list.querySelectorAll('.package-checkbox').forEach(cb => {
+                cb.onchange = () => {
+                    const pkg = packages.find(item => String(item.id) === String(cb.value));
+                    if (!pkg) return;
+                    togglePackageServices(pkg, cb.checked);
+                };
+            });
+            return;
+        }
         let filtered = [];
         if (category === 'Tất cả các dịch vụ') filtered = state.allServices;
-        else if (category === 'Gói cận lâm sàng')
-            filtered = state.allServices.filter(s => (s.name||'').toLowerCase().includes('gói') || (s.description||'').toLowerCase().includes('gói'));
+        else if (category === 'Các dịch vụ đã chọn')
+            filtered = state.allServices.filter(s => state.selectedServices.has(s.id));
         else filtered = state.allServices.filter(s => (s.service_group||'').toLowerCase() === map[category]);
+        filtered = filtered.filter(s => matchesServiceSearch(s?.name || ''));
 
         if (!filtered.length) { list.innerHTML = '<i>Không có dịch vụ.</i>'; return; }
         list.innerHTML = filtered.map(s => `
                     <div class="service-item">
                         <label>
                     <input type="checkbox" class="service-checkbox" value="${s.id}" ${state.selectedServices.has(s.id) ? 'checked' : ''}>
-                    ${s.name} <span class="service-price">${formatCurrency(s.price)}</span>
+                    <span class="service-line">
+                        <span class="service-name">${s.name}</span>
+                    </span>
                         </label>
                     </div>
                 `).join('');
         list.querySelectorAll('.service-checkbox').forEach(cb => {
             cb.onchange = () => {
                 const id = parseInt(cb.value);
-                if (cb.checked) state.selectedServices.add(id);
-                else state.selectedServices.delete(id);
+                if (cb.checked) {
+                    state.selectedServices.add(id);
+                    if (!state.selectedServiceDoctors.has(id)) {
+                        state.selectedServiceDoctors.set(id, currentModalDoctor());
+                    }
+                } else {
+                    state.selectedServices.delete(id);
+                    state.selectedServiceDoctors.delete(id);
+                }
             };
         });
     }
@@ -1287,8 +1966,11 @@
             
             // Clear dịch vụ nếu đang xem bệnh nhân bị xóa
             if (state.currentAppointmentId == appointmentId) {
-                document.getElementById('services-list').innerHTML = '<i>Chọn bệnh nhân để xem dịch vụ.</i>';
+                const selectedList = document.getElementById('selected-services-list');
+                if (selectedList) selectedList.innerHTML = '<i>Chọn bệnh nhân để xem dịch vụ.</i>';
                 document.getElementById('total-amount').textContent = '0đ';
+                setCurrentDiscountAmount(0);
+                updatePaymentSummary(0);
                 state.currentAppointmentId = null;
             }
 
@@ -1355,7 +2037,7 @@
                 </td>
                 <td>${formatNoteCell(a.notes)}</td>
                 <td>
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <div style="display: flex; flex-direction: row; gap: 5px; align-items: center; flex-wrap: nowrap;">
                         <button class="btn primary-btn add-service-btn" data-appointment-id="${a.id}">Thêm dịch vụ</button>
                         <button class="btn danger-btn delete-service-btn" data-appointment-id="${a.id}">Xóa dịch vụ</button>
                     </div>
@@ -1450,6 +2132,9 @@
                     option.textContent = doctor;
                     doctorSelect.appendChild(option);
                 });
+                doctorSelect.onchange = () => {
+                    setCurrentDoctorName(doctorSelect.value, { sourceId: 'edit-doctor', refreshServices: true });
+                };
                 
                 // Get current diagnosis
                 let currentDiagnosis = '';
@@ -1483,8 +2168,16 @@
                 document.getElementById('edit-reason').value = appt.service_type || '';
                 document.getElementById('edit-diagnosis').value = currentDiagnosis;
                 document.getElementById('edit-notes').value = currentNotes;
-                document.getElementById('edit-doctor').value = appt.doctor_name || 'PK Đại Anh';
-                document.getElementById('edit-expected-delivery-date').value = appt.expected_delivery_date || '';
+                setCurrentDoctorName(appt.doctor_name || 'PK Đại Anh', { sourceId: 'edit-doctor' });
+                const editExpectedDeliveryDateInput = document.getElementById('edit-expected-delivery-date');
+                if (editExpectedDeliveryDateInput) {
+                    editExpectedDeliveryDateInput.type = 'date';
+                    editExpectedDeliveryDateInput.value = appt.expected_delivery_date || '';
+                    if (!editExpectedDeliveryDateInput.value) {
+                        editExpectedDeliveryDateInput.type = 'text';
+                        editExpectedDeliveryDateInput.placeholder = 'dd/mm/yyyy';
+                    }
+                }
                 document.getElementById('patient-edit-modal').classList.remove('hidden');
                 // Save handler
                 const saveBtn = document.getElementById('save-patient-btn');
@@ -1511,6 +2204,7 @@
                         const diagnosis = document.getElementById('edit-diagnosis').value.trim();
                         const notes = document.getElementById('edit-notes').value.trim();
                         const doctor = (document.getElementById('edit-doctor').value || 'PK Đại Anh').trim() || 'PK Đại Anh';
+                        setCurrentDoctorName(doctor, { sourceId: 'edit-doctor' });
                         const expectedDeliveryDate = (document.getElementById('edit-expected-delivery-date').value || '').trim();
                         
                         console.log('Dữ liệu cập nhật:', { reason, diagnosis, notes, doctor, expectedDeliveryDate });
@@ -1558,6 +2252,11 @@
                 };
                 document.getElementById('close-patient-modal').onclick = () => {
                     document.getElementById('patient-edit-modal').classList.add('hidden');
+                    const editExpectedDeliveryDateInput = document.getElementById('edit-expected-delivery-date');
+                    if (editExpectedDeliveryDateInput && !editExpectedDeliveryDateInput.value) {
+                        editExpectedDeliveryDateInput.type = 'text';
+                        editExpectedDeliveryDateInput.placeholder = 'dd/mm/yyyy';
+                    }
                 };
             } catch(err) {
                 console.error(err);
@@ -1583,6 +2282,26 @@
 
     // DOM ready
         document.addEventListener('DOMContentLoaded', () => {
+            const editExpectedDeliveryDateInput = document.getElementById('edit-expected-delivery-date');
+            if (editExpectedDeliveryDateInput) {
+                const toggleExpectedDeliveryDateMode = () => {
+                    if (!editExpectedDeliveryDateInput.value) {
+                        editExpectedDeliveryDateInput.type = 'text';
+                        editExpectedDeliveryDateInput.placeholder = 'dd/mm/yyyy';
+                    } else {
+                        editExpectedDeliveryDateInput.type = 'date';
+                    }
+                };
+                editExpectedDeliveryDateInput.addEventListener('focus', () => {
+                    editExpectedDeliveryDateInput.type = 'date';
+                    if (typeof editExpectedDeliveryDateInput.showPicker === 'function') {
+                        editExpectedDeliveryDateInput.showPicker();
+                    }
+                });
+                editExpectedDeliveryDateInput.addEventListener('blur', toggleExpectedDeliveryDateMode);
+                toggleExpectedDeliveryDateMode();
+            }
+
             // Đảm bảo voices được load khi trang khởi động
             ensureVoicesLoaded(() => {
                 const voices = window.speechSynthesis.getVoices();
@@ -1610,9 +2329,45 @@
             });
             
             loadAppointments();
-        document.getElementById('services-list').innerHTML='<i>Chọn bệnh nhân để xem dịch vụ.</i>';
+        const selectedList = document.getElementById('selected-services-list');
+        if (selectedList) selectedList.innerHTML='<i>Chọn bệnh nhân để xem dịch vụ.</i>';
+        setCurrentDiscountAmount(0);
+        updatePaymentSummary(0);
+        const discountInput = document.getElementById('discount-amount-input');
+        if (discountInput) {
+            discountInput.oninput = () => {
+                const parsed = parseMoneyInput(discountInput.value);
+                setCurrentDiscountAmount(parsed);
+                const total = parseMoneyInput(document.getElementById('total-amount')?.textContent || '0');
+                updatePaymentSummary(total);
+            };
+            discountInput.onblur = () => {
+                setCurrentDiscountAmount(parseMoneyInput(discountInput.value));
+            };
+        }
         document.getElementById('save-services').onclick=saveSelectedServices;
         document.getElementById('close-service-modal').onclick=closeServiceModal;
+        const serviceSearchInput = document.getElementById('service-search-input');
+        if (serviceSearchInput) {
+            serviceSearchInput.oninput = () => {
+                state.serviceSearchQuery = serviceSearchInput.value || '';
+                if (state.serviceSelectionMode === 'provider') {
+                    filterServicesByProviderUnit(state.selectedProviderUnit || '__all__');
+                    return;
+                }
+                const query = String(state.serviceSearchQuery || '').trim();
+                if (query) {
+                    // In group mode, searching should work globally by service name
+                    // regardless of the currently selected category tab.
+                    const allServicesRadio = document.getElementById('all-services');
+                    if (allServicesRadio) allServicesRadio.checked = true;
+                    filterServices('Tất cả các dịch vụ');
+                    return;
+                }
+                const selectedCategory = (document.querySelector('input[name="service-type"]:checked') || {}).value || 'Siêu âm thai';
+                filterServices(selectedCategory);
+            };
+        }
         const printClinicalServiceBtn = document.getElementById('print-clinical-service');
         if (printClinicalServiceBtn) {
             printClinicalServiceBtn.onclick = () => openClinicalPrintSelectModal(state.currentAppointmentId);
@@ -1648,6 +2403,9 @@
             };
         }
         document.querySelectorAll('input[name="service-type"]').forEach(r=>r.onchange=()=>filterServices(r.value));
+        document.querySelectorAll('input[name="service-selection-mode"]').forEach(r => {
+            r.onchange = () => applyServiceSelectionMode(r.value);
+        });
             // Auto refresh periodically and on focus
             const startPolling = () => {
                 if (state.pollTimer) clearInterval(state.pollTimer);
@@ -2738,9 +3496,156 @@
             modal.style.display = 'block';
         }
 
-        // Clinical form print functionality
-        async function printClinicalForm(appointmentId, selectedServiceIds = null) {
+        function normalizeTemplateName(value) {
+            return String(value || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/\([^)]*\)\s*$/g, '')
+                .replace(/[^\w\s]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+        }
+
+        function findSpecialTemplateForService(service, specialTemplates = []) {
+            if (!service || !Array.isArray(specialTemplates) || !specialTemplates.length) return null;
+            const providerUnit = String(service?.provider_unit || '').trim();
+            const cleanServiceName = clinicalDisplayNameWithoutProviderSuffix(service?.name, providerUnit);
+            const serviceName = normalizeTemplateName(cleanServiceName || service?.name);
+            if (!serviceName) return null;
+
+            const exactMatch = specialTemplates.find(t => normalizeTemplateName(t?.name) === serviceName);
+            if (exactMatch?.content_html) return exactMatch;
+
+            const partialMatch = specialTemplates.find(t => {
+                const templateName = normalizeTemplateName(t?.name);
+                return templateName && (serviceName.includes(templateName) || templateName.includes(serviceName));
+            });
+            if (partialMatch?.content_html) return partialMatch;
+
+            return null;
+        }
+
+        function pickLabRequestTemplateForService(service, defaultTemplate, specialTemplates = []) {
+            return findSpecialTemplateForService(service, specialTemplates)?.content_html || defaultTemplate;
+        }
+
+        function isPreeclampsiaServiceName(value) {
+            return normalizeTemplateName(value).includes('tien san giat');
+        }
+
+        function isExactPreeclampsiaTemplateName(value) {
+            const normalized = normalizeTemplateName(value);
+            return normalized === 'mau phieu khai thac tien san giat' || normalized === 'mau phieu sang loc tien san giat';
+        }
+
+        async function openPreeclampsiaTemplateEditor(appointmentId, serviceId = '', serviceIds = []) {
             try {
+                const appointmentResponse = await fetch(`/api/appointments/${appointmentId}/full-info`);
+                if (!appointmentResponse.ok) {
+                    alert('Không tải được thông tin lịch khám để mở mẫu phiếu.');
+                    return;
+                }
+                const appointment = await appointmentResponse.json();
+                const clinicalServices = await ensureProviderUnitsForServices(appointment.clinical_services || []);
+                if (!clinicalServices.length) {
+                    alert('Chưa có dịch vụ cận lâm sàng cho lịch khám này.');
+                    return;
+                }
+
+                const normalizedIds = (Array.isArray(serviceIds) ? serviceIds : [])
+                    .map(id => String(id || '').trim())
+                    .filter(Boolean);
+                if (serviceId) normalizedIds.unshift(String(serviceId).trim());
+
+                let targetService = null;
+                if (normalizedIds.length) {
+                    targetService = clinicalServices.find(s => normalizedIds.includes(String(s.service_id || s.id || '').trim()) && isPreeclampsiaServiceName(s.name));
+                }
+                if (!targetService && normalizedIds.length) {
+                    targetService = clinicalServices.find(s => normalizedIds.includes(String(s.service_id || s.id || '').trim()));
+                }
+                if (!targetService) {
+                    targetService = clinicalServices.find(s => isPreeclampsiaServiceName(s.name));
+                }
+                if (!targetService || !isPreeclampsiaServiceName(targetService.name)) {
+                    alert('Chỉ mở nhanh mẫu này cho dịch vụ xét nghiệm tiền sản giật.');
+                    return;
+                }
+
+                const printTemplates = await loadClinicalPrintTemplates();
+                const matchedTemplate = (printTemplates.specialTemplates || []).find(t => isExactPreeclampsiaTemplateName(t?.name))
+                    || findSpecialTemplateForService(targetService, printTemplates.specialTemplates);
+                if (!matchedTemplate?.content_html) {
+                    alert('Không tìm thấy đúng mẫu "Mẫu phiếu khai thác tiền sản giật" ở trang Mẫu phiếu cận lâm sàng.');
+                    return;
+                }
+                const sourceTemplate = matchedTemplate.content_html;
+                const filledTemplate = fillClinicalFormTemplate(sourceTemplate, appointment, targetService, [targetService]);
+                const fullContent = (printTemplates.headerHtml || '') + filledTemplate;
+
+                openPreeclampsiaInlineModal(fullContent);
+            } catch (error) {
+                console.error('Không thể mở mẫu khai thác tiền sản giật:', error);
+                alert('Có lỗi khi mở mẫu khai thác tiền sản giật: ' + (error.message || error));
+            }
+        }
+
+        async function loadClinicalPrintTemplates() {
+            const [templateResponse, headerResponse, specialResponse] = await Promise.all([
+                fetch('/api/clinical-form-template/lab-request'),
+                fetch('/api/clinical-form-header'),
+                fetch('/api/special-templates').catch(() => null)
+            ]);
+
+            const templateData = templateResponse.ok ? await templateResponse.json() : {};
+            const headerData = headerResponse.ok ? await headerResponse.json() : {};
+            const specialTemplates = specialResponse && specialResponse.ok ? await specialResponse.json() : [];
+
+            return {
+                defaultTemplate: templateData.template || '',
+                headerHtml: headerData.header || '',
+                specialTemplates: Array.isArray(specialTemplates) ? specialTemplates : []
+            };
+        }
+
+        async function ensureProviderUnitsForServices(services) {
+            const source = Array.isArray(services) ? services : [];
+            if (!source.length) return [];
+            const missingProvider = source.some(s => !String(s?.provider_unit || '').trim());
+            if (!missingProvider) return source;
+
+            if (!state.allServices.length) {
+                try {
+                    state.allServices = await api.get(API_ENDPOINTS.CLINICAL_SERVICES);
+                } catch (error) {
+                    console.warn('Không tải được danh mục dịch vụ để bổ sung đơn vị thực hiện:', error);
+                }
+            }
+            const byId = new Map((state.allServices || []).map(s => [String(s.id), String(s.provider_unit || '').trim()]));
+            return source.map(s => {
+                const current = String(s?.provider_unit || '').trim();
+                if (current) return s;
+                const fallback = byId.get(String(s?.service_id)) || '';
+                return { ...s, provider_unit: fallback };
+            });
+        }
+
+        function groupClinicalServicesByProviderUnit(services) {
+            const map = new Map();
+            const list = Array.isArray(services) ? services : [];
+            for (const s of list) {
+                const unit = String(s?.provider_unit || '').trim() || 'Chưa có đơn vị thực hiện';
+                if (!map.has(unit)) map.set(unit, []);
+                map.get(unit).push(s);
+            }
+            return map;
+        }
+
+        // Clinical form print functionality
+        async function printClinicalForm(appointmentId, selectedServiceIds = null, options = {}) {
+            try {
+                const groupByProvider = options.groupByProvider !== false;
                 // Get full appointment data including diagnosis and clinical services
                 const appointmentResponse = await fetch(`/api/appointments/${appointmentId}/full-info`);
                 if (!appointmentResponse.ok) {
@@ -2759,16 +3664,11 @@
                     return;
                 }
 
-                // Get clinical form template
-                const templateResponse = await fetch('/api/clinical-form-template/lab-request');
-                const templateData = await templateResponse.json();
-                
-                // Get header template from database (same as clinical-form-templates)
-                const headerResponse = await fetch('/api/clinical-form-header');
-                const headerData = await headerResponse.json();
+                // Load template/hader từ trang clinical-form-templates (qua API chung)
+                const printTemplates = await loadClinicalPrintTemplates();
                 
                 // Create forms for selected clinical services
-                const sourceServices = appointment.clinical_services || [];
+                const sourceServices = await ensureProviderUnitsForServices(appointment.clinical_services || []);
                 const filteredServices = Array.isArray(selectedServiceIds) && selectedServiceIds.length
                     ? sourceServices.filter(s => selectedServiceIds.includes(String(s.service_id)))
                     : sourceServices;
@@ -2777,18 +3677,49 @@
                     return;
                 }
 
-                // Create forms for each clinical service
                 const forms = [];
-                console.log(`Tạo ${filteredServices.length} phiếu chỉ định`);
-                
-                for (const service of filteredServices) {
-                    console.log(`Tạo phiếu cho dịch vụ: ${service.name}`);
-                    const filledTemplate = fillClinicalFormTemplate(templateData.template, appointment, service);
-                    const fullContent = headerData.header + filledTemplate;
-                    forms.push({
-                        service: service,
-                        content: fullContent
-                    });
+                if (groupByProvider) {
+                    // Group services by provider unit: same unit => same request form
+                    const groupedByProvider = new Map();
+                    for (const service of filteredServices) {
+                        const providerUnit = String(service?.provider_unit || '').trim() || 'Chưa có đơn vị thực hiện';
+                        if (!groupedByProvider.has(providerUnit)) groupedByProvider.set(providerUnit, []);
+                        groupedByProvider.get(providerUnit).push(service);
+                    }
+                    console.log(`Tạo ${groupedByProvider.size} phiếu chỉ định theo đơn vị thực hiện`);
+                    for (const [providerUnit, servicesInUnit] of groupedByProvider.entries()) {
+                        const primaryService = servicesInUnit[0];
+                        console.log(`Tạo phiếu cho đơn vị "${providerUnit}" (${servicesInUnit.length} dịch vụ)`);
+                        const matchedTemplate = servicesInUnit
+                            .map(svc => findSpecialTemplateForService(svc, printTemplates.specialTemplates))
+                            .find(Boolean);
+                        const serviceTemplate = matchedTemplate?.content_html || printTemplates.defaultTemplate;
+                        const filledTemplate = fillClinicalFormTemplate(serviceTemplate, appointment, primaryService, servicesInUnit);
+                        const fullContent = printTemplates.headerHtml + filledTemplate;
+                        forms.push({
+                            service: primaryService,
+                            provider_unit: providerUnit,
+                            content: fullContent
+                        });
+                    }
+                } else {
+                    // Split mode: one request form per selected service
+                    console.log(`Tạo ${filteredServices.length} phiếu chỉ định tách theo từng dịch vụ`);
+                    for (const service of filteredServices) {
+                        const providerUnit = String(service?.provider_unit || '').trim() || 'Chưa có đơn vị thực hiện';
+                        const serviceTemplate = pickLabRequestTemplateForService(
+                            service,
+                            printTemplates.defaultTemplate,
+                            printTemplates.specialTemplates
+                        );
+                        const filledTemplate = fillClinicalFormTemplate(serviceTemplate, appointment, service, [service]);
+                        const fullContent = printTemplates.headerHtml + filledTemplate;
+                        forms.push({
+                            service,
+                            provider_unit: providerUnit,
+                            content: fullContent
+                        });
+                    }
                 }
                 
                 console.log(`Đã tạo ${forms.length} phiếu chỉ định`);
@@ -2802,19 +3733,82 @@
             }
         }
 
-        function fillClinicalFormTemplate(template, appointment, service = null) {
+        function fillClinicalFormTemplate(template, appointment, service = null, groupedServices = null) {
             // Replace placeholders with actual data
             let filledTemplate = template;
+            const replaceNextCellByLabel = (html, label, value) => {
+                const safeValue = value || '';
+                // Generic fallback: find a label cell, then replace the immediate next cell value.
+                const pattern = new RegExp(
+                    `(<t[dh][^>]*>\\s*<strong>\\s*${label}\\s*:\\s*<\\/strong>\\s*<\\/t[dh]>\\s*<t[dh][^>]*>)([\\s\\S]*?)(<\\/t[dh]>)`,
+                    'i'
+                );
+                return html.replace(pattern, `$1${safeValue}$3`);
+            };
+            const standardPatientInfoTable = `
+<table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
+  <tr>
+    <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Họ tên:</strong></td>
+    <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
+    <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Năm sinh:</strong></td>
+    <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
+  </tr>
+  <tr>
+    <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Địa chỉ:</strong></td>
+    <td style="padding:8px; border:1px solid #000;">_________________</td>
+    <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Số điện thoại:</strong></td>
+    <td style="padding:8px; border:1px solid #000;">_________________</td>
+  </tr>
+  <tr>
+    <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Chẩn đoán:</strong></td>
+    <td style="padding:8px; border:1px solid #000;">_________________</td>
+    <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Ghi chú:</strong></td>
+    <td style="padding:8px; border:1px solid #000;">_________________</td>
+  </tr>
+</table>`;
             
             console.log('fillClinicalFormTemplate called with:', { appointment, service });
             console.log('Template before filling:', filledTemplate.substring(0, 500) + '...');
+
+            // Preeclampsia draft should share the same administrative layout/content
+            // as lab-request form for consistent data entry.
+            if (isPreeclampsiaServiceName(service?.name || '')) {
+                const adminTableRegex = /<table[^>]*>[\s\S]*?(Họ tên|Ho ten)[\s\S]*?(Năm sinh|Tuổi)[\s\S]*?<\/table>/i;
+                if (adminTableRegex.test(filledTemplate)) {
+                    filledTemplate = filledTemplate.replace(adminTableRegex, standardPatientInfoTable);
+                } else {
+                    filledTemplate = filledTemplate.replace(
+                        /(<h2[^>]*>[\s\S]*?<\/h2>)/i,
+                        `$1${standardPatientInfoTable}`
+                    );
+                }
+            }
+
+            // Remove duplicated service subtitle below main title in request forms.
+            // Service name is already shown in "Dịch vụ chỉ định".
+            filledTemplate = filledTemplate.replace(
+                /(<h2[^>]*>\s*PHIẾU CHỈ ĐỊNH CẬN LÂM SÀNG\s*<\/h2>)\s*<p[^>]*>[\s\S]*?<\/p>/i,
+                '$1'
+            );
+            // Ensure request form uses "Năm sinh" label instead of "Tuổi"
+            // even when existing template content in DB still has old label.
+            filledTemplate = filledTemplate.replace(
+                /(<strong>\s*)Tuổi(\s*:\s*<\/strong>)/gi,
+                '$1Năm sinh$2'
+            );
+            // Remove "Nội dung chỉ định" line from request form.
+            filledTemplate = filledTemplate.replace(
+                /<p[^>]*>\s*<strong>\s*Nội dung chỉ định:\s*<\/strong>[\s\S]*?<\/p>/i,
+                ''
+            );
             
-            // Calculate age from date of birth
-            let age = '';
+            // Fill birth year from date of birth for "Năm sinh" field.
+            let birthYear = '';
             if (appointment.patient_dob) {
                 const dob = new Date(appointment.patient_dob);
-                const today = new Date();
-                age = today.getFullYear() - dob.getFullYear();
+                if (!Number.isNaN(dob.getTime())) {
+                    birthYear = String(dob.getFullYear());
+                }
             }
             
             // Replace specific fields with more precise targeting
@@ -2823,18 +3817,22 @@
                 /<td style="padding:8px; border:1px solid #000; width:30%;">_________________<\/td>/,
                 `<td style="padding:8px; border:1px solid #000; width:30%;">${appointment.patient_name || ''}</td>`
             );
+            filledTemplate = replaceNextCellByLabel(filledTemplate, 'Họ tên', appointment.patient_name || '');
             
-            // 2. Tuổi (second occurrence in patient info table)
+            // 2. Năm sinh (second occurrence in patient info table)
             filledTemplate = filledTemplate.replace(
                 /<td style="padding:8px; border:1px solid #000; width:30%;">_________________<\/td>/,
-                `<td style="padding:8px; border:1px solid #000; width:30%;">${age}</td>`
+                `<td style="padding:8px; border:1px solid #000; width:30%;">${birthYear}</td>`
             );
+            filledTemplate = replaceNextCellByLabel(filledTemplate, 'Năm sinh', birthYear);
             
             // 3. Địa chỉ (colspan=3 in address row)
             filledTemplate = filledTemplate.replace(
                 /<td style="padding:8px; border:1px solid #000;" colspan="3">_________________<\/td>/,
                 `<td style="padding:8px; border:1px solid #000;" colspan="3">${appointment.patient_address || ''}</td>`
             );
+            filledTemplate = replaceNextCellByLabel(filledTemplate, 'Địa chỉ', appointment.patient_address || '');
+            filledTemplate = replaceNextCellByLabel(filledTemplate, 'Số điện thoại', appointment.patient_phone || '');
             
             // 4. Chẩn đoán và Ghi chú (now split into two columns)
             console.log('Filling diagnosis and notes:', { diagnosis: appointment.diagnosis, notes: appointment.notes });
@@ -2844,12 +3842,14 @@
                 /<td style="padding:8px; border:1px solid #000;"><strong>Chẩn đoán:<\/strong><\/td>\s*<td style="padding:8px; border:1px solid #000;">_________________<\/td>/,
                 `<td style="padding:8px; border:1px solid #000;"><strong>Chẩn đoán:</strong></td>\n      <td style="padding:8px; border:1px solid #000;">${appointment.diagnosis || ''}</td>`
             );
+            filledTemplate = replaceNextCellByLabel(filledTemplate, 'Chẩn đoán', appointment.diagnosis || '');
             
             // Replace notes - use a more flexible approach  
             filledTemplate = filledTemplate.replace(
                 /<td style="padding:8px; border:1px solid #000;"><strong>Ghi chú:<\/strong><\/td>\s*<td style="padding:8px; border:1px solid #000;">_________________<\/td>/,
                 `<td style="padding:8px; border:1px solid #000;"><strong>Ghi chú:</strong></td>\n      <td style="padding:8px; border:1px solid #000;">${appointment.notes || ''}</td>`
             );
+            filledTemplate = replaceNextCellByLabel(filledTemplate, 'Ghi chú', appointment.notes || '');
             
             // Fallback: If the above doesn't work, try a simpler approach
             if (filledTemplate.includes('_________________')) {
@@ -2873,45 +3873,58 @@
                 );
             }
             
-            // 5. Bác sĩ chỉ định (in the signature section) - layout mới
-            console.log('Replacing doctor name:', appointment.doctor_name || 'PK Đại Anh');
-            // Replace doctor name in the new layout (right side)
+            // 5. Hoán đổi vị trí Ngày/Bác sĩ nếu mẫu đang để ngược yêu cầu
             filledTemplate = filledTemplate.replace(
-                /<p style="margin-top:20px;">_________________<\/p>/,
-                `<p style="margin-top:20px;">${appointment.doctor_name || 'PK Đại Anh'}</p>`
+                /(<div style="display:flex; justify-content:space-between; margin-top:30px;">)\s*(<div style="text-align:center;">[\s\S]*?<strong>\s*Bác sĩ chỉ định\s*<\/strong>[\s\S]*?<\/div>)\s*(<div style="text-align:center;">[\s\S]*?<strong>\s*Ngày:\s*___\/___\/_____\s*<\/strong>[\s\S]*?<\/div>)/i,
+                '$1$3$2'
+            );
+
+            // 6. Bác sĩ chỉ định (always override line under "Bác sĩ chỉ định")
+            const doctorForService = (service && service.doctor_name) || appointment.doctor_name || 'PK Đại Anh';
+            console.log('Replacing doctor name:', doctorForService);
+            filledTemplate = filledTemplate.replace(
+                /(<p[^>]*>\s*<strong>\s*Bác sĩ chỉ định\s*<\/strong>\s*<\/p>\s*<p[^>]*>)([\s\S]*?)(<\/p>)/i,
+                `$1${doctorForService}$3`
             );
             
-            // 6. Update clinical service section if service is provided
-            if (service) {
-                console.log('Filling service information:', service);
-                
-                // Check if service is ultrasound based on service_group or name
-                const serviceGroup = (service.service_group || '').toLowerCase();
-                const serviceName = (service.name || '').toLowerCase();
-                const isUltrasound = serviceGroup.includes('siêu âm') || 
-                                    serviceGroup.includes('sieu am') || 
-                                    serviceGroup.includes('ultrasound') ||
-                                    serviceName.includes('siêu âm') ||
-                                    serviceName.includes('sieu am');
-                
-                // Check specific ultrasound types
-                const isPregnancyUltrasound = serviceName.includes('thai') || 
-                                             serviceName.includes('pregnancy');
-                const isPelvisUltrasound = serviceName.includes('tử cung') || 
-                                         serviceName.includes('phần phụ') ||
-                                         serviceName.includes('pelvis');
-                const isAbdomenUltrasound = serviceName.includes('ổ bụng') || 
-                                           serviceName.includes('abdomen');
-                
-                // Check if it's a lab test
-                const isLabTest = serviceGroup.includes('xét nghiệm') || 
-                                 serviceGroup.includes('xet nghiem') ||
-                                 serviceName.includes('xét nghiệm') ||
-                                 serviceName.includes('xet nghiem') ||
-                                 serviceName.includes('máu') ||
-                                 serviceName.includes('nước tiểu') ||
-                                 serviceName.includes('nuoc tieu');
-                
+            // 7. Update clinical service section (single service or grouped by provider unit)
+            const rawServicesForForm = Array.isArray(groupedServices) && groupedServices.length
+                ? groupedServices
+                : (service ? [service] : []);
+            const seenServices = new Set();
+            const servicesForForm = rawServicesForForm.filter((svc) => {
+                const rawName = String(svc?.name || '').trim();
+                const normalizedName = rawName
+                    .toLowerCase()
+                    .replace(/\s+/g, ' ');
+                // Deduplicate by normalized service name first so merged requests
+                // do not print the same service label multiple times.
+                const idKey = String(svc?.service_id || svc?.id || '').trim();
+                const uniqueKey = normalizedName || idKey;
+                if (!uniqueKey) return false;
+                if (seenServices.has(uniqueKey)) return false;
+                seenServices.add(uniqueKey);
+                return true;
+            });
+            if (servicesForForm.length) {
+                console.log('Filling services information:', servicesForForm);
+                const serviceNamesText = servicesForForm
+                    .map(svc => clinicalDisplayNameWithoutProviderSuffix(svc?.name, svc?.provider_unit))
+                    .filter(Boolean)
+                    .join(', ');
+                if (serviceNamesText) {
+                    // Prefer replacing the full <p> row: <p><strong>Dịch vụ chỉ định:</strong> ...</p>
+                    filledTemplate = filledTemplate.replace(
+                        /(<p[^>]*>\s*<strong>\s*Dịch vụ chỉ định:\s*<\/strong>\s*)([\s\S]*?)(\s*<\/p>)/i,
+                        `$1${serviceNamesText}$3`
+                    );
+                    // Fallback for templates without <strong> wrapper.
+                    filledTemplate = filledTemplate.replace(
+                        /(<p[^>]*>\s*Dịch vụ chỉ định:\s*)([\s\S]*?)(\s*<\/p>)/i,
+                        `$1${serviceNamesText}$3`
+                    );
+                }
+
                 // Update checkboxes in the service section
                 // Match the div containing checkboxes (more flexible regex)
                 const serviceSectionRegex = /<div style="border:1px solid #000; padding:10px; min-height:100px;">([\s\S]*?)<\/div>/;
@@ -2921,25 +3934,10 @@
                     let serviceContent = serviceSectionMatch[0];
                     let innerContent = serviceSectionMatch[1];
                     
-                    // Determine which service to display and create new content with only selected service
-                    let selectedServiceText = '';
-                    
-                    if (isPregnancyUltrasound) {
-                        // Display "Siêu âm thai" with full service name if different
-                        selectedServiceText = `<p>☑ ${service.name}</p>`;
-                    } else if (isPelvisUltrasound) {
-                        // Display "Siêu âm tử cung phần phụ" with full service name if different
-                        selectedServiceText = `<p>☑ ${service.name}</p>`;
-                    } else if (isAbdomenUltrasound) {
-                        // Display "Siêu âm ổ bụng" with full service name if different
-                        selectedServiceText = `<p>☑ ${service.name}</p>`;
-                    } else if (isLabTest) {
-                        // Display lab test with full service name
-                        selectedServiceText = `<p>☑ ${service.name}</p>`;
-                    } else {
-                        // Display in "Khác" format
-                        selectedServiceText = `<p>☑ Khác: ${service.name}</p>`;
-                    }
+                    // Hiển thị toàn bộ dịch vụ được ghép trong cùng phiếu
+                    const selectedServiceText = servicesForForm
+                        .map(svc => `<p>☑ ${clinicalDisplayNameWithoutProviderSuffix(svc?.name, svc?.provider_unit) || ''}</p>`)
+                        .join('');
                     
                     // Replace entire content with only the selected service
                     innerContent = selectedServiceText;
@@ -2952,12 +3950,39 @@
                 }
             }
             
-            // Add current date
-            const today = new Date();
-            const day = today.getDate().toString().padStart(2, '0');
-            const month = (today.getMonth() + 1).toString().padStart(2, '0');
-            const year = today.getFullYear();
+            // Date rule:
+            // - Appointment in future: use appointment date
+            // - Current/past appointment: use current date
+            const now = new Date();
+            const nowDateOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const apptDateRaw = appointment.appointment_date ? new Date(appointment.appointment_date) : null;
+            const apptDateOnly = apptDateRaw && !Number.isNaN(apptDateRaw.getTime())
+                ? new Date(apptDateRaw.getFullYear(), apptDateRaw.getMonth(), apptDateRaw.getDate())
+                : null;
+            const displayDate = (apptDateOnly && apptDateOnly > nowDateOnly) ? apptDateOnly : now;
+
+            const day = displayDate.getDate().toString().padStart(2, '0');
+            const month = (displayDate.getMonth() + 1).toString().padStart(2, '0');
+            const year = displayDate.getFullYear();
             filledTemplate = filledTemplate.replace(/___\/___\/_____/g, `${day}/${month}/${year}`);
+
+            // Đồng bộ "Đơn vị xét nghiệm" theo đơn vị thực hiện dịch vụ đã chọn/in.
+            const providerUnitForForm = servicesForForm
+                .map(svc => String(svc?.provider_unit || '').trim())
+                .filter(Boolean)[0] || 'Chưa có đơn vị thực hiện';
+            if (/Đơn vị xét nghiệm:/i.test(filledTemplate)) {
+                // Nếu mẫu đã có dòng này (thường là dạng gạch dưới), thay bằng giá trị thực.
+                filledTemplate = filledTemplate.replace(
+                    /(<strong>\s*Đơn vị xét nghiệm:\s*<\/strong>\s*)([\s\S]*?)(\s*<\/p>)/i,
+                    `$1${providerUnitForForm}$3`
+                );
+            } else {
+                // Nếu mẫu chưa có thì chèn thêm dưới dòng ngày.
+                filledTemplate = filledTemplate.replace(
+                    /(<p[^>]*>\s*<strong>\s*Ngày:\s*\d{2}\/\d{2}\/\d{4}\s*<\/strong>\s*<\/p>)/i,
+                    `$1<p style="margin-top:6px;"><strong>Đơn vị xét nghiệm:</strong> ${providerUnitForForm}</p>`
+                );
+            }
             
             console.log('Template after filling:', filledTemplate.substring(0, 1000) + '...');
             console.log('Final filled template length:', filledTemplate.length);
@@ -2965,8 +3990,76 @@
             return filledTemplate;
         }
 
+        function openPreeclampsiaInlineModal(fullContent) {
+            const modal = document.getElementById('clinical-form-modal');
+            const modalContent = modal?.querySelector('.modal-content');
+            const modalHeader = modal?.querySelector('.modal-header');
+            const modalFooter = modal?.querySelector('.modal-footer');
+            const previewContent = document.getElementById('clinical-form-preview');
+            const modalTitle = document.querySelector('#clinical-form-modal h3');
+            if (!modal || !modalContent || !previewContent) return;
+
+            if (modalTitle) {
+                modalTitle.textContent = 'Phiếu khai thác tiền sản giật (điền bổ sung)';
+            }
+            // Maximize modal viewport for easier data entry.
+            modal.style.display = 'flex';
+            modal.style.alignItems = 'stretch';
+            modal.style.justifyContent = 'center';
+            modal.style.padding = '0';
+            modalContent.style.maxWidth = '100vw';
+            modalContent.style.maxHeight = '100vh';
+            modalContent.style.height = '100vh';
+            modalContent.style.width = '98vw';
+            modalContent.style.margin = '0';
+            modalContent.style.padding = '6px 8px';
+            modalContent.style.display = 'flex';
+            modalContent.style.flexDirection = 'column';
+            modalContent.style.overflowY = 'auto';
+            if (modalHeader) {
+                // Hide header in direct-fill mode so editor starts at top edge.
+                modalHeader.style.display = 'none';
+                modalHeader.style.padding = '0';
+                modalHeader.style.marginBottom = '0';
+            }
+            if (modalFooter) {
+                modalFooter.style.padding = '6px 4px 2px';
+                modalFooter.style.marginTop = '6px';
+            }
+            previewContent.innerHTML = decorateInlineFillHints(fullContent || '');
+            previewContent.contentEditable = 'true';
+            previewContent.spellcheck = false;
+            previewContent.style.minHeight = '0';
+            previewContent.style.flex = '1 1 auto';
+            previewContent.style.overflowY = 'auto';
+            previewContent.style.outline = '2px solid #2563eb';
+            previewContent.style.padding = '8px 10px';
+            previewContent.style.margin = '0';
+        }
+
+        function decorateInlineFillHints(html) {
+            let output = String(html || '');
+            // Highlight long underscore placeholders users usually need to fill.
+            output = output.replace(/_{6,}/g, (m) => `<span class="fill-hint">${m}</span>`);
+            // Highlight dotted placeholders like "....." or longer.
+            output = output.replace(/\.{5,}/g, (m) => `<span class="fill-hint">${m}</span>`);
+            // Highlight unchecked HTML checkbox inputs.
+            output = output.replace(
+                /<input\b([^>]*\btype\s*=\s*["']checkbox["'][^>]*)>/gi,
+                (fullMatch, attrs) => /\bchecked\b/i.test(attrs)
+                    ? fullMatch
+                    : `<span class="fill-hint-checkbox-wrap"><input ${attrs}></span>`
+            );
+            // Highlight empty checkboxes for quick visual scanning.
+            output = output.replace(/[☐□◻]/g, (m) => `<span class="fill-hint fill-hint-checkbox">${m}</span>`);
+            return output;
+        }
+
         function showClinicalFormPreview(forms) {
             const modal = document.getElementById('clinical-form-modal');
+            const modalContent = modal?.querySelector('.modal-content');
+            const modalHeader = modal?.querySelector('.modal-header');
+            const modalFooter = modal?.querySelector('.modal-footer');
             const previewContent = document.getElementById('clinical-form-preview');
             
             // Update modal title to show number of forms
@@ -2974,32 +4067,50 @@
             if (modalTitle && Array.isArray(forms)) {
                 modalTitle.textContent = `Xem trước phiếu chỉ định cận lâm sàng (${forms.length} phiếu)`;
             }
-            // Helper: remove the very first HTML node/line from a chunk of HTML.
-            // This is useful when the header/template may contain an unwanted first line
-            // (for example a stray character or image placeholder) that should not
-            // appear in the preview or printed output.
-            function stripFirstNode(html) {
-                const tmp = document.createElement('div');
-                tmp.innerHTML = html || '';
-                if (tmp.firstChild) tmp.removeChild(tmp.firstChild);
-                return tmp.innerHTML;
+            if (modalContent) {
+                modalContent.style.maxWidth = '90%';
+                modalContent.style.maxHeight = '90%';
+                modalContent.style.width = '';
+                modalContent.style.height = '';
+                modalContent.style.margin = '';
+                modalContent.style.padding = '';
+                modalContent.style.display = '';
+                modalContent.style.flexDirection = '';
+                modalContent.style.overflowY = '';
+            }
+            if (modalHeader) {
+                modalHeader.style.display = '';
+                modalHeader.style.padding = '';
+                modalHeader.style.marginBottom = '';
+            }
+            if (modalFooter) {
+                modalFooter.style.padding = '';
+                modalFooter.style.marginTop = '';
+            }
+            if (previewContent) {
+                previewContent.contentEditable = 'false';
+                previewContent.style.minHeight = '';
+                previewContent.style.flex = '';
+                previewContent.style.overflowY = '';
+                previewContent.style.outline = '';
+                previewContent.style.padding = '20px';
+                previewContent.style.margin = '';
             }
 
             // If forms is an array, display multiple forms
             if (Array.isArray(forms)) {
                 let html = '';
                 forms.forEach((form, index) => {
-                    const cleanedContent = stripFirstNode(form.content);
                     html += `
                         <div style="page-break-after: always; margin-bottom: 20px; border: 2px solid #007bff; padding: 10px;">
-                            ${cleanedContent}
+                            ${form.content || ''}
                         </div>
                     `;
                 });
                 previewContent.innerHTML = html;
             } else {
-                // Single form (backward compatibility) - strip first node as well
-                previewContent.innerHTML = stripFirstNode(forms);
+                // Single form (backward compatibility)
+                previewContent.innerHTML = forms || '';
             }
 
             modal.style.display = 'block';
@@ -3007,6 +4118,46 @@
 
         function closeClinicalFormModal() {
             const modal = document.getElementById('clinical-form-modal');
+            const modalContent = modal?.querySelector('.modal-content');
+            const modalHeader = modal?.querySelector('.modal-header');
+            const modalFooter = modal?.querySelector('.modal-footer');
+            const previewContent = document.getElementById('clinical-form-preview');
+            const modalTitle = document.querySelector('#clinical-form-modal h3');
+            if (modalContent) {
+                modalContent.style.maxWidth = '90%';
+                modalContent.style.maxHeight = '90%';
+                modalContent.style.width = '';
+                modalContent.style.height = '';
+                modalContent.style.margin = '';
+                modalContent.style.padding = '';
+                modalContent.style.display = '';
+                modalContent.style.flexDirection = '';
+                modalContent.style.overflowY = '';
+            }
+            if (modalHeader) {
+                modalHeader.style.display = '';
+                modalHeader.style.padding = '';
+                modalHeader.style.marginBottom = '';
+            }
+            if (modalFooter) {
+                modalFooter.style.padding = '';
+                modalFooter.style.marginTop = '';
+            }
+            if (previewContent) {
+                previewContent.contentEditable = 'false';
+                previewContent.style.minHeight = '';
+                previewContent.style.flex = '';
+                previewContent.style.overflowY = '';
+                previewContent.style.outline = '';
+                previewContent.style.padding = '20px';
+                previewContent.style.margin = '';
+            }
+            if (modalTitle) {
+                modalTitle.textContent = 'Xem trước phiếu chỉ định cận lâm sàng';
+            }
+            modal.style.alignItems = '';
+            modal.style.justifyContent = '';
+            modal.style.padding = '';
             modal.style.display = 'none';
         }
 
@@ -3018,10 +4169,10 @@
                     <head>
                         <title>Phiếu chỉ định cận lâm sàng</title>
                         <style>
-                            /* A5 size in millimeters */
+                            /* A4 portrait with compact margins */
                             @page {
-                                size: 148mm 210mm;
-                                margin: 10mm;
+                                size: A4 portrait;
+                                margin: 8mm 8mm 8mm 8mm;
                             }
                             
                             body {
@@ -3029,7 +4180,7 @@
                                 margin: 0;
                                 padding: 0;
                                 font-size: 12pt;
-                                width: 128mm; /* 148mm - 20mm margins */
+                                width: auto;
                             }
                             
                             /* Adjust table sizes */
@@ -3064,16 +4215,12 @@
                             
                             @media print { 
                                 body { 
-                                    width: 128mm;
-                                    height: 190mm; /* 210mm - 20mm margins */
+                                    width: auto;
+                                    height: auto;
                                 }
                                 .page-break { 
                                     page-break-after: always; 
                                 }
-                                /* Ẩn tiêu đề preview khi in */
-                                h3[style*="color: #0000cc"] { display: none; }
-                                /* Ẩn tiêu đề phiếu chỉ định khi in */
-                                h2[style*="color:#0000cc"] { display: none; }
                                 /* Đảm bảo page break hoạt động */
                                 div[style*="page-break-after: always"] {
                                     page-break-after: always !important;
@@ -3084,12 +4231,10 @@
                                     padding: 0 !important;
                                 }
                             }
-                            /* Hiển thị tiêu đề khi xem trước */
-                            h3[style*="color: #0000cc"] { margin-bottom: 8px; }
                         </style>
                     </head>
                     <body>
-                        <div style="max-width:128mm;margin:0 auto;">
+                        <div style="width:100%; margin:0 auto;">
                             ${content}
                         </div>
                     </body>
@@ -3115,20 +4260,30 @@
                     alert('Bệnh nhân chưa có dịch vụ cận lâm sàng.');
                     return;
                 }
-                const svc = appointment.clinical_services.find(s => String(s.service_id) === String(serviceId) || String(s.id) === String(serviceId));
+                const normalizedServices = await ensureProviderUnitsForServices(appointment.clinical_services || []);
+                const svc = normalizedServices.find(s => String(s.service_id) === String(serviceId) || String(s.id) === String(serviceId));
                 if (!svc) {
                     alert('Không tìm thấy dịch vụ để in.');
                     return;
                 }
 
-                const templateResponse = await fetch('/api/clinical-form-template/lab-request');
-                const templateData = await templateResponse.json();
-                const headerResponse = await fetch('/api/clinical-form-header');
-                const headerData = await headerResponse.json();
+                const providerUnit = String(svc?.provider_unit || '').trim();
+                const splitMode = isProviderUnitSplit(appointmentId, providerUnit);
+                const servicesInSameProvider = splitMode
+                    ? [svc]
+                    : (providerUnit
+                        ? normalizedServices.filter(s => String(s?.provider_unit || '').trim() === providerUnit)
+                        : [svc]);
 
-                const filledTemplate = fillClinicalFormTemplate(templateData.template, appointment, svc);
-                const fullContent = headerData.header + filledTemplate;
-                showClinicalFormPreview([{ service: svc, content: fullContent }]);
+                const printTemplates = await loadClinicalPrintTemplates();
+                const serviceTemplate = pickLabRequestTemplateForService(
+                    svc,
+                    printTemplates.defaultTemplate,
+                    printTemplates.specialTemplates
+                );
+                const filledTemplate = fillClinicalFormTemplate(serviceTemplate, appointment, svc, servicesInSameProvider);
+                const fullContent = printTemplates.headerHtml + filledTemplate;
+                showClinicalFormPreview([{ service: svc, provider_unit: providerUnit, content: fullContent }]);
             } catch (error) {
                 console.error('Error printing single clinical form:', error);
                 alert('Lỗi khi in phiếu chỉ định: ' + error.message);
@@ -3156,6 +4311,50 @@
             if (e.target.closest('.print-clinical-btn')) {
                 const appointmentId = e.target.closest('.print-clinical-btn').getAttribute('data-appointment-id');
                 printClinicalForm(appointmentId);
+                return;
+            }
+
+            // Toggle tách/gộp dịch vụ theo đơn vị (mục Dịch vụ đã chọn)
+            const groupToggleBtn = e.target.closest('.selected-group-toggle-btn');
+            if (groupToggleBtn) {
+                const apptId = groupToggleBtn.getAttribute('data-appointment-id');
+                const providerUnit = groupToggleBtn.getAttribute('data-provider-unit') || '';
+                const isSplit = groupToggleBtn.getAttribute('data-split') === '1';
+                if (!apptId || !providerUnit) return;
+                setProviderUnitSplit(apptId, providerUnit, !isSplit);
+                loadPatientClinicalServices(apptId);
+                return;
+            }
+
+            // Mở mẫu khai thác tiền sản giật từ tên dịch vụ trong cột "Dịch vụ đã chọn"
+            const serviceNameLink = e.target.closest('.selected-service-name-link');
+            if (serviceNameLink) {
+                const appointmentId = serviceNameLink.getAttribute('data-appointment-id') || state.currentAppointmentId;
+                const serviceId = serviceNameLink.getAttribute('data-service-id') || '';
+                const serviceIds = (serviceNameLink.getAttribute('data-service-ids') || '')
+                    .split(',')
+                    .map(id => String(id || '').trim())
+                    .filter(Boolean);
+                if (!appointmentId) {
+                    alert('Không xác định được lịch khám để mở mẫu.');
+                    return;
+                }
+                openPreeclampsiaTemplateEditor(appointmentId, serviceId, serviceIds);
+                return;
+            }
+
+            // In phiếu chỉ định gộp theo đơn vị (mục Dịch vụ đã chọn)
+            const groupPrintBtn = e.target.closest('.selected-group-print-btn');
+            if (groupPrintBtn) {
+                const apptId = groupPrintBtn.getAttribute('data-appointment-id');
+                const rawIds = groupPrintBtn.getAttribute('data-service-ids') || '';
+                const ids = rawIds.split(',').map(x => String(x).trim()).filter(Boolean);
+                const splitMode = groupPrintBtn.getAttribute('data-split') === '1';
+                if (!apptId || !ids.length) {
+                    alert('Không có chỉ định để in.');
+                    return;
+                }
+                printClinicalForm(apptId, ids, { groupByProvider: !splitMode });
                 return;
             }
 
@@ -3189,8 +4388,24 @@
                         // Cập nhật UI ngay lập tức để người dùng thấy phản hồi tức thời
                         if (serviceItem) serviceItem.remove();
                         const selectedList = document.getElementById('selected-services-list');
-                        const selectedItem = selectedList ? selectedList.querySelector(`.selected-service-item[data-service-id="${serviceId}"]`) : null;
-                        if (selectedItem) selectedItem.remove();
+                        let selectedItem = null;
+                        if (selectedList) {
+                            const sid = String(serviceId);
+                            selectedList.querySelectorAll('.selected-service-item').forEach(row => {
+                                const idsAttr = row.getAttribute('data-service-ids') || '';
+                                const ids = idsAttr.split(',').map(x => String(x).trim()).filter(Boolean);
+                                if (ids.includes(sid)) selectedItem = row;
+                            });
+                        }
+                        if (selectedItem) {
+                            const group = selectedItem.closest('.selected-provider-group');
+                            const groupItems = group ? group.querySelectorAll('.selected-service-item') : [];
+                            if (group && groupItems.length <= 1) {
+                                group.remove();
+                            } else {
+                                selectedItem.remove();
+                            }
+                        }
                         if (selectedList && !selectedList.querySelector('.selected-service-item')) {
                             selectedList.innerHTML = '<i>Chưa chọn dịch vụ nào.</i>';
                         }
@@ -3200,6 +4415,7 @@
                             const currentTotal = Number(currentTotalText || 0);
                             const nextTotal = Math.max(0, currentTotal - removedPrice);
                             totalEl.textContent = formatCurrency(nextTotal);
+                            updatePaymentSummary(nextTotal);
                         }
                         const printBtn = document.getElementById('print-clinical-service');
                         if (printBtn && selectedList) {
@@ -3244,8 +4460,9 @@
             if (resultBtn) {
                 const appointmentId = resultBtn.getAttribute('data-appointment-id');
                 const serviceName = resultBtn.getAttribute('data-service-name');
+                const serviceId = resultBtn.getAttribute('data-service-id') || '';
                 const isUltrasound = resultBtn.getAttribute('data-is-ultrasound') === 'true';
-                openClinicalResultModal(appointmentId, serviceName, isUltrasound);
+                openClinicalResultModal(appointmentId, serviceName, isUltrasound, serviceId);
                 return;
             }
 
@@ -3254,6 +4471,23 @@
         // Function to save clinical form as PDF
         async function saveClinicalFormAsPDF() {
             try {
+                function getNextPdfFilename(baseNameWithoutExt) {
+                    const storageKey = 'clinical_pdf_download_counts_v1';
+                    let counters = {};
+                    try {
+                        counters = JSON.parse(localStorage.getItem(storageKey) || '{}') || {};
+                    } catch (_) {
+                        counters = {};
+                    }
+
+                    const usedCount = Number(counters[baseNameWithoutExt] || 0);
+                    counters[baseNameWithoutExt] = usedCount + 1;
+                    localStorage.setItem(storageKey, JSON.stringify(counters));
+
+                    if (usedCount === 0) return `${baseNameWithoutExt}.pdf`;
+                    return `${baseNameWithoutExt} ${usedCount}.pdf`;
+                }
+
                 // Get the current appointment data
                 const currentAppointmentId = window.currentAppointmentId;
                 if (!currentAppointmentId) {
@@ -3281,12 +4515,25 @@
                 const now = new Date();
                 const day = now.getDate().toString().padStart(2, '0');
                 const month = (now.getMonth() + 1).toString().padStart(2, '0');
-                const year = now.getFullYear();
-                const birthYear = patient.date_of_birth ? new Date(patient.date_of_birth).getFullYear() : '';
-                
-                // Clean patient name for filename
-                const cleanName = patient.name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
-                const filename = `${cleanName}_${birthYear}.${day}.${month}.${year}.pdf`;
+                const year2 = now.getFullYear().toString().slice(-2);
+                const dob = patient.date_of_birth ? new Date(patient.date_of_birth) : null;
+                const birthYear2 = dob && !Number.isNaN(dob.getTime())
+                    ? dob.getFullYear().toString().slice(-2)
+                    : '00';
+
+                // Remove Vietnamese accents for filename and normalize spaces
+                const cleanName = String(patient.name || 'benh nhan')
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .replace(/đ/g, 'd')
+                    .replace(/Đ/g, 'D')
+                    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim()
+                    .toLowerCase();
+
+                const baseFilename = `${cleanName} ${birthYear2} ${day}.${month}.${year2}`;
+                const filename = getNextPdfFilename(baseFilename);
 
                 // Get the clinical form content
                 const formContent = document.getElementById('clinical-form-preview').innerHTML;
@@ -3315,8 +4562,6 @@
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
-                    
-                    alert('Đã lưu file PDF thành công!');
                 } else {
                     const error = await pdfResponse.text();
                     alert('Lỗi khi tạo PDF: ' + error);
@@ -3367,19 +4612,329 @@
     
     <script>
         // Clinical Result Functions (for all services)
-        async function openClinicalResultModal(appointmentId, serviceName, isUltrasound) {
+        function normalizeTemplateLookupName(value) {
+            return String(value || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^\w\s]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+        }
+
+        function buildServiceNameCandidates(serviceName) {
+            const raw = String(serviceName || '').trim();
+            const candidates = new Set();
+            if (raw) candidates.add(raw);
+            // Remove trailing "(...)" provider/unit suffix often shown in selected services.
+            const withoutTrailingParen = raw.replace(/\s*\([^)]*\)\s*$/g, '').trim();
+            if (withoutTrailingParen) candidates.add(withoutTrailingParen);
+            // Handle accidental duplicated spaces or separators.
+            const compact = raw.replace(/\s+/g, ' ').trim();
+            if (compact) candidates.add(compact);
+            return [...candidates].filter(Boolean);
+        }
+
+        function getAppointmentBirthYear(appointment) {
+            if (!appointment?.patient_dob) return '';
+            const dob = new Date(appointment.patient_dob);
+            if (Number.isNaN(dob.getTime())) return '';
+            return String(dob.getFullYear());
+        }
+
+        function getCurrentDateDDMMYYYY() {
+            const now = new Date();
+            return `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+        }
+
+        function formatDateTimeLocalForGMT7(dateValue) {
+            const parsedDate = dateValue instanceof Date ? dateValue : new Date(dateValue);
+            if (Number.isNaN(parsedDate.getTime())) return '';
+
+            // datetime-local has no timezone metadata; normalize to Vietnam timezone (GMT+7).
+            const gmt7Date = new Date(parsedDate.getTime() + (7 * 60 * 60 * 1000));
+            return gmt7Date.toISOString().slice(0, 16);
+        }
+
+        function parseExamDateForInput(dateValue) {
+            if (!dateValue) return '';
+            if (dateValue instanceof Date) return formatDateTimeLocalForGMT7(dateValue);
+
+            const raw = String(dateValue).trim();
+            if (!raw) return '';
+
+            const normalized = raw.replace(' ', 'T');
+            const hasTimezoneMetadata = /(?:Z|[+\-]\d{2}:\d{2})$/i.test(normalized);
+
+            if (hasTimezoneMetadata) {
+                return formatDateTimeLocalForGMT7(normalized);
+            }
+
+            return normalized.slice(0, 16);
+        }
+
+        function formatExamDateTokenValue(examDateValue) {
+            const value = String(examDateValue || '').trim();
+            if (!value) return '';
+            const datePart = value.includes('T') ? value.split('T')[0] : value.split(' ')[0];
+            const parts = datePart.split('-');
+            if (parts.length !== 3) return datePart;
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+
+        function buildClinicalTemplateTokenMap(resultData, serviceName, doctorName) {
+            const fields = resultData?.fields || {};
+            const normalizedEntries = Object.entries(fields).map(([key, value]) => ({
+                key: normalizeTemplateLookupName(key),
+                value: value == null ? '' : String(value)
+            }));
+            const findFieldValue = (...possibleKeys) => {
+                const normalizedKeys = possibleKeys.map(k => normalizeTemplateLookupName(k));
+                const matched = normalizedEntries.find(entry => normalizedKeys.includes(entry.key));
+                return matched ? matched.value : '';
+            };
+
+            const examDateToken = formatExamDateTokenValue(resultData?.exam_date);
+            const estimatedWeight = findFieldValue('estimated_weight', 'can_nang', 'cân_nặng', 'efw', 'weight');
+            return {
+                '{{exam_date}}': examDateToken,
+                '{{doctor_name}}': String(doctorName || '').trim(),
+                '{{service_name}}': String(serviceName || '').trim(),
+                '{{gestational_age}}': findFieldValue('gestational_age', 'tuoi_thai', 'tuổi_thai', 'ga'),
+                '{{bpd}}': findFieldValue('bpd', 'duong_kinh_luong_dinh'),
+                '{{hc}}': findFieldValue('hc', 'chu_vi_dau', 'head_circumference'),
+                '{{ac}}': findFieldValue('ac', 'chu_vi_bung', 'abdominal_circumference'),
+                '{{fl}}': findFieldValue('fl', 'chieu_dai_xuong_dui', 'femur_length'),
+                '{{estimated_weight}}': estimatedWeight,
+                '{{efw}}': estimatedWeight,
+                '{{afi}}': findFieldValue('afi'),
+                '{{ri_umbilical}}': findFieldValue('ri_umbilical', 'ri_dong_mach_ron'),
+                '{{sd_ratio}}': findFieldValue('sd_ratio'),
+                '{{mca_pi}}': findFieldValue('mca_pi'),
+                '{{fetal_position}}': findFieldValue('fetal_position', 'ngoi_thai', 'ngôi_thai'),
+                '{{placenta_position}}': findFieldValue('placenta_position', 'vi_tri_nhau', 'vị_trí_nhau'),
+                '{{amniotic_fluid}}': findFieldValue('amniotic_fluid', 'nuoc_oi', 'nước_ối'),
+                '{{findings}}': findFieldValue('findings', 'nhan_xet', 'nhận_xét', 'ket_qua', 'kết_quả'),
+                '{{recommendations}}': findFieldValue('recommendations', 'khuyen_nghi', 'khuyến_nghị')
+            };
+        }
+
+        function replaceTemplateTokensWithData(templateHtml, tokenMap) {
+            let html = String(templateHtml || '');
+            Object.entries(tokenMap || {}).forEach(([token, value]) => {
+                const safeValue = value == null ? '' : String(value);
+                html = html.split(token).join(safeValue);
+            });
+            return html;
+        }
+
+        const clinicalDoctorNameCache = new Map();
+        async function getDoctorNameForClinicalResult(appointmentId) {
+            const key = String(appointmentId || '').trim();
+            if (!key) return '';
+            if (clinicalDoctorNameCache.has(key)) return clinicalDoctorNameCache.get(key);
+
+            let doctorName = '';
             try {
-                // Get appointment info
-                const appointment = await api.get(`/api/appointments/${appointmentId}`);
+                const fullInfoResp = await fetch(`/api/appointments/${encodeURIComponent(key)}/full-info`);
+                if (fullInfoResp.ok) {
+                    const fullInfo = await fullInfoResp.json();
+                    doctorName = String(fullInfo?.doctor_name || '').trim();
+                }
+            } catch (_) {
+                doctorName = '';
+            }
+
+            if (!doctorName) {
+                try {
+                    const appt = await api.get(`/api/appointments/${encodeURIComponent(key)}`);
+                    doctorName = String(appt?.doctor_name || '').trim();
+                } catch (_) {
+                    doctorName = '';
+                }
+            }
+
+            clinicalDoctorNameCache.set(key, doctorName);
+            return doctorName;
+        }
+
+        function getClinicalResultAdminFieldValue(fieldName, fieldLabel, appointment, serviceName) {
+            const normalizedName = normalizeTemplateLookupName(fieldName || '');
+            const normalizedLabel = normalizeTemplateLookupName(fieldLabel || '');
+            const key = `${normalizedName} ${normalizedLabel}`.trim();
+            const birthYear = getAppointmentBirthYear(appointment);
+
+            const hasAny = (...tokens) => tokens.some(token => key.includes(token));
+
+            if (hasAny('ho ten', 'hoten', 'ten benh nhan', 'benh nhan')) return appointment?.patient_name || '';
+            if (hasAny('nam sinh', 'namsinh', 'year of birth', 'birth year', 'tuoi')) return birthYear;
+            if (hasAny('dia chi', 'diachi', 'address')) return appointment?.patient_address || '';
+            if (hasAny('so dien thoai', 'sdt', 'phone', 'dien thoai')) return appointment?.patient_phone || '';
+            if (hasAny('chan doan', 'chandoan', 'diagnosis')) return appointment?.diagnosis || '';
+            if (hasAny('ghi chu', 'ghichu', 'note', 'notes')) return appointment?.notes || '';
+            if (hasAny('dich vu', 'service')) return serviceName || '';
+            if (hasAny('bac si', 'bacsi', 'doctor')) return appointment?.doctor_name || '';
+
+            return null;
+        }
+
+        function applyClinicalResultAdminInfoToTemplateHtml(templateHtml, appointment, serviceName) {
+            let html = String(templateHtml || '');
+            const birthYear = getAppointmentBirthYear(appointment);
+            const placeholderPattern = '(?:_{3,}|\\.{3,}|\\s*_{2,}\\s*)';
+            const currentDateText = getCurrentDateDDMMYYYY();
+            const assignedDoctorName = String(appointment?.doctor_name || '').trim();
+
+            const replaceNextCellByLabel = (source, labelRegex, value) => {
+                const safeValue = value || '';
+                const pattern = new RegExp(
+                    `(<t[dh][^>]*>\\s*(?:<strong>\\s*)?${labelRegex}\\s*:?\\s*(?:<\\/strong>\\s*)?<\\/t[dh]>\\s*<t[dh][^>]*>)([\\s\\S]*?)(<\\/t[dh]>)`,
+                    'i'
+                );
+                return source.replace(pattern, `$1${safeValue}$3`);
+            };
+
+            const replacePlaceholderNearLabel = (source, labelRegex, value) => {
+                const safeValue = value || '';
+                let output = source;
+                // Case 1: Label and placeholder in the same cell/line
+                output = output.replace(
+                    new RegExp(`((?:${labelRegex})\\s*:?\\s*)${placeholderPattern}`, 'i'),
+                    `$1${safeValue}`
+                );
+                // Case 2: Label cell followed by value cell placeholder
+                output = output.replace(
+                    new RegExp(
+                        `(<t[dh][^>]*>\\s*(?:<strong>\\s*)?${labelRegex}\\s*:?\\s*(?:<\\/strong>\\s*)?<\\/t[dh]>\\s*<t[dh][^>]*>\\s*)${placeholderPattern}(\\s*<\\/t[dh]>)`,
+                        'i'
+                    ),
+                    `$1${safeValue}$2`
+                );
+                // Case 3: Label in <strong> then placeholder text in same paragraph/div
+                output = output.replace(
+                    new RegExp(
+                        `(<(?:p|div|span|li|td)[^>]*>\\s*(?:<strong>\\s*)?${labelRegex}\\s*:?\\s*(?:<\\/strong>\\s*)?)${placeholderPattern}`,
+                        'i'
+                    ),
+                    `$1${safeValue}`
+                );
+                return output;
+            };
+
+            html = replaceNextCellByLabel(html, '(Họ\\s*tên|Ho\\s*ten)', appointment?.patient_name || '');
+            html = replaceNextCellByLabel(html, '(Năm\\s*sinh|Nam\\s*sinh|Tuổi|Tuoi)', birthYear);
+            html = replaceNextCellByLabel(html, '(Địa\\s*chỉ|Dia\\s*chi)', appointment?.patient_address || '');
+            html = replaceNextCellByLabel(html, '(Số\\s*điện\\s*thoại|So\\s*dien\\s*thoai|SĐT|SDT)', appointment?.patient_phone || '');
+            html = replaceNextCellByLabel(html, '(Chẩn\\s*đoán|Chan\\s*doan)', appointment?.diagnosis || '');
+            html = replaceNextCellByLabel(html, '(Ghi\\s*chú|Ghi\\s*chu)', appointment?.notes || '');
+            html = replaceNextCellByLabel(html, '(Dịch\\s*vụ|Dich\\s*vu)', serviceName || '');
+
+            html = replacePlaceholderNearLabel(html, '(Họ\\s*tên|Ho\\s*ten)', appointment?.patient_name || '');
+            html = replacePlaceholderNearLabel(html, '(Năm\\s*sinh|Nam\\s*sinh|Tuổi|Tuoi)', birthYear);
+            html = replacePlaceholderNearLabel(html, '(Địa\\s*chỉ|Dia\\s*chi)', appointment?.patient_address || '');
+            html = replacePlaceholderNearLabel(html, '(Số\\s*điện\\s*thoại|So\\s*dien\\s*thoai|SĐT|SDT)', appointment?.patient_phone || '');
+            html = replacePlaceholderNearLabel(html, '(Chẩn\\s*đoán|Chan\\s*doan)', appointment?.diagnosis || '');
+            html = replacePlaceholderNearLabel(html, '(Ghi\\s*chú|Ghi\\s*chu)', appointment?.notes || '');
+            html = replacePlaceholderNearLabel(html, '(Dịch\\s*vụ|Dich\\s*vu)', serviceName || '');
+
+            html = html.replace(
+                /(<p[^>]*>\s*(?:<strong>\s*)?(?:Họ\s*tên|Ho\s*ten)\s*:?\s*(?:<\/strong>\s*)?)([\s\S]*?)(<\/p>)/i,
+                `$1${appointment?.patient_name || ''}$3`
+            );
+            html = html.replace(
+                /(<p[^>]*>\s*(?:<strong>\s*)?(?:Năm\s*sinh|Nam\s*sinh|Tuổi|Tuoi)\s*:?\s*(?:<\/strong>\s*)?)([\s\S]*?)(<\/p>)/i,
+                `$1${birthYear}$3`
+            );
+            html = html.replace(
+                /(<p[^>]*>\s*(?:<strong>\s*)?(?:Địa\s*chỉ|Dia\s*chi)\s*:?\s*(?:<\/strong>\s*)?)([\s\S]*?)(<\/p>)/i,
+                `$1${appointment?.patient_address || ''}$3`
+            );
+            html = html.replace(
+                /(<p[^>]*>\s*(?:<strong>\s*)?(?:Số\s*điện\s*thoại|So\s*dien\s*thoai|SĐT|SDT)\s*:?\s*(?:<\/strong>\s*)?)([\s\S]*?)(<\/p>)/i,
+                `$1${appointment?.patient_phone || ''}$3`
+            );
+            html = html.replace(
+                /(<p[^>]*>\s*(?:<strong>\s*)?(?:Chẩn\s*đoán|Chan\s*doan)\s*:?\s*(?:<\/strong>\s*)?)([\s\S]*?)(<\/p>)/i,
+                `$1${appointment?.diagnosis || ''}$3`
+            );
+            html = html.replace(
+                /(<p[^>]*>\s*(?:<strong>\s*)?(?:Ghi\s*chú|Ghi\s*chu)\s*:?\s*(?:<\/strong>\s*)?)([\s\S]*?)(<\/p>)/i,
+                `$1${appointment?.notes || ''}$3`
+            );
+            // Force-fill signature area value lines right below labels (common table-based templates).
+            // This keeps the date/name on the line under the heading as requested.
+            html = html.replace(
+                /((?:Ngày\s*thực\s*hiện|Ngay\s*thuc\s*hien)[\s\S]{0,260}?)(?:<hr[^>]*>\s*)?(?:_{3,}|(?:_\s*){2,}|\.{3,})/i,
+                `$1${currentDateText}`
+            );
+            html = html.replace(
+                /((?:Bác\s*sĩ\s*thực\s*hiện|Bac\s*si\s*thuc\s*hien)[\s\S]{0,260}?)(?:<hr[^>]*>\s*)?(?:_{3,}|(?:_\s*){2,}|\.{3,})/i,
+                `$1${assignedDoctorName}`
+            );
+            // Remove stray <hr> placed right before signature labels.
+            html = html.replace(
+                /<hr\b[^>]*>\s*(?=[\s\S]{0,160}(?:Ngày\s*thực\s*hiện|Ngay\s*thuc\s*hien|Bác\s*sĩ\s*thực\s*hiện|Bac\s*si\s*thuc\s*hien))/gi,
+                ''
+            );
+            // Remove horizontal rules used as signature lines near these two sections.
+            html = html.replace(
+                /((?:Ngày\s*thực\s*hiện|Ngay\s*thuc\s*hien|Bác\s*sĩ\s*thực\s*hiện|Bac\s*si\s*thuc\s*hien)[\s\S]{0,220}?)<hr\b[^>]*>/gi,
+                '$1'
+            );
+            // Remove inline border-top signature lines in the same sections.
+            html = html.replace(
+                /((?:Ngày\s*thực\s*hiện|Ngay\s*thuc\s*hien|Bác\s*sĩ\s*thực\s*hiện|Bac\s*si\s*thuc\s*hien)[\s\S]{0,220}?style="[^"]*)border-top\s*:\s*[^;"']+;?/gi,
+                '$1'
+            );
+            // Remove all horizontal rule lines from result template display.
+            html = html.replace(/<hr\b[^>]*>/gi, '');
+            // Remove any remaining top border styles that render horizontal lines.
+            html = html.replace(/border-top\s*:\s*[^;"']+;?/gi, '');
+            // Cleanup empty inline style attributes after removing border-top.
+            html = html.replace(/\sstyle="\s*"/gi, '');
+
+            // Final cleanup: remove leftover placeholder underscores after auto-fill.
+            // Examples:
+            // - "1992____________" -> "1992"
+            // - "Liên Sơn ... ________" -> "Liên Sơn ..."
+            // - standalone "____________" -> ""
+            html = html.replace(/>(\s*)_{3,}(\s*)</g, '>$1$2<');
+            html = html.replace(/((?:^|>)[^<]*?\S)\s*_{3,}\s*(?=<|$)/g, '$1');
+            // Date placeholder in result template must be current date when creating the form.
+            // Support flexible variants: __/__/____, ___/___/_____, "__ / __ / ____", etc.
+            html = html.replace(/_{2,}\s*\/\s*_{2,}\s*\/\s*_{2,}/g, currentDateText);
+            // Extra fallback for placeholders with spaced underscores: "_ _ _ / _ _ / _ _ _ _"
+            html = html.replace(/(?:_\s*){2,}\/\s*(?:_\s*){2,}\/\s*(?:_\s*){2,}/g, currentDateText);
+            // Remove trailing date placeholder fragments after a valid date, e.g. "18/04/2026/___/".
+            html = html.replace(
+                /(\b\d{1,2}\/\d{1,2}\/\d{4})\s*(?:\/\s*(?:_{2,}|(?:_\s*){2,}|\.{2,})\s*)+/g,
+                '$1'
+            );
+            // Remove a trailing slash after a valid date, e.g. "18/04/2026/" -> "18/04/2026".
+            html = html.replace(/(\b\d{1,2}\/\d{1,2}\/\d{4})\s*\/+(?=\s|<|$)/g, '$1');
+
+            return html;
+        }
+
+        async function openClinicalResultModal(appointmentId, serviceName, isUltrasound, serviceId = '') {
+            try {
+                // Get appointment info (prefer full-info so admin fields are complete like print flow)
+                let appointment = null;
+                try {
+                    const fullInfoResp = await fetch(`/api/appointments/${appointmentId}/full-info`);
+                    if (fullInfoResp.ok) {
+                        appointment = await fullInfoResp.json();
+                    }
+                } catch (_) {
+                    appointment = null;
+                }
+                if (!appointment) {
+                    appointment = await api.get(`/api/appointments/${appointmentId}`);
+                }
                 const patientId = appointment.patient_id;
                 
-                // If ultrasound, use the existing ultrasound form
-                if (isUltrasound) {
-                    await openUltrasoundResultModal(appointmentId, serviceName);
-                    return;
-                }
-                
-                // For other services, load template and create dynamic form
+                // Dùng chung luồng template động cho tất cả dịch vụ, bao gồm siêu âm,
+                // để luôn mở đúng mẫu phiếu đã tạo tại clinical-form-templates.html.
                 const contentDiv = document.getElementById('clinical-result-content');
                 contentDiv.innerHTML = '<div style="text-align:center; padding:20px;"><i class="fas fa-spinner fa-spin"></i> Đang tải mẫu phiếu...</div>';
                 
@@ -3389,31 +4944,57 @@
                 // Try to load template - tự động lấy mẫu phiếu kết quả cận lâm sàng trùng tên dịch vụ
                 // BẮT BUỘC phải có mẫu kết quả trùng tên với dịch vụ
                 let template = null;
+                const serviceNameCandidates = buildServiceNameCandidates(serviceName);
                 try {
-                    // Thử tìm mẫu phiếu theo tên dịch vụ chính xác trước
-                    let templateResponse = await fetch(`/api/lab-result-templates/by-name?name=${encodeURIComponent(serviceName)}`);
-                    if (templateResponse.ok) {
+                    // 1) Thử theo từng biến thể tên dịch vụ (exact by-name endpoint).
+                    for (const candidate of serviceNameCandidates) {
+                        const templateResponse = await fetch(`/api/lab-result-templates/by-name?name=${encodeURIComponent(candidate)}`);
+                        if (!templateResponse.ok) continue;
                         template = await templateResponse.json();
-                        console.log('Đã tìm thấy mẫu phiếu theo tên chính xác:', template.name);
-                    } else {
-                        // Nếu không tìm thấy, thử tìm tất cả mẫu phiếu và tìm theo tên gần giống
+                        if (template && template.content_html) {
+                            console.log('Đã tìm thấy mẫu phiếu theo tên dịch vụ:', candidate, template.name);
+                            break;
+                        }
+                    }
+
+                    // 2) Fallback: tải tất cả mẫu và so khớp không dấu + gần đúng.
+                    if (!template) {
                         const allTemplatesResponse = await fetch('/api/lab-result-templates');
                         if (allTemplatesResponse.ok) {
                             const allTemplates = await allTemplatesResponse.json();
-                            const serviceNameLower = serviceName.toLowerCase().trim();
-                            
-                            // Tìm mẫu phiếu có tên chứa tên dịch vụ hoặc ngược lại
+                            const normalizedCandidates = serviceNameCandidates.map(normalizeTemplateLookupName).filter(Boolean);
+                            // Priority 1: exact normalized name.
                             template = allTemplates.find(t => {
-                                const templateNameLower = (t.name || '').toLowerCase().trim();
-                                return templateNameLower === serviceNameLower ||
-                                       templateNameLower.includes(serviceNameLower) ||
-                                       serviceNameLower.includes(templateNameLower);
+                                const templateNorm = normalizeTemplateLookupName(t?.name || '');
+                                if (!templateNorm) return false;
+                                return normalizedCandidates.some(c => c && templateNorm === c);
                             });
-                            
+
+                            // Priority 2: closest partial match, skip empty names.
+                            if (!template) {
+                                let best = null;
+                                let bestScore = -1;
+                                allTemplates.forEach(t => {
+                                    const templateNorm = normalizeTemplateLookupName(t?.name || '');
+                                    if (!templateNorm) return;
+                                    normalizedCandidates.forEach(c => {
+                                        if (!c) return;
+                                        let score = 0;
+                                        if (templateNorm.includes(c)) score = Math.max(score, 2);
+                                        if (c.includes(templateNorm)) score = Math.max(score, 1);
+                                        if (score > bestScore) {
+                                            bestScore = score;
+                                            best = t;
+                                        }
+                                    });
+                                });
+                                if (bestScore > 0) template = best;
+                            }
+
                             if (template) {
-                                console.log('Đã tìm thấy mẫu phiếu theo tên gần giống:', template.name);
+                                console.log('Đã tìm thấy mẫu phiếu theo tên gần đúng:', template.name, { serviceId, serviceNameCandidates });
                             } else {
-                                console.log('Không tìm thấy mẫu phiếu cho dịch vụ:', serviceName);
+                                console.log('Không tìm thấy mẫu phiếu cho dịch vụ:', { serviceId, serviceNameCandidates });
                             }
                         }
                     }
@@ -3440,14 +5021,14 @@
                 }
                 
                 // Nếu có mẫu, tạo form từ template
-                await createFormFromTemplate(template, appointmentId, patientId, serviceName);
+                await createFormFromTemplate(template, appointmentId, patientId, serviceName, appointment);
             } catch (error) {
                 console.error('Error opening clinical result modal:', error);
                 alert('Lỗi khi mở form nhập kết quả: ' + error.message);
             }
         }
 
-        async function createFormFromTemplate(template, appointmentId, patientId, serviceName) {
+        async function createFormFromTemplate(template, appointmentId, patientId, serviceName, appointment = null) {
             const contentDiv = document.getElementById('clinical-result-content');
             
             // Parse template HTML
@@ -3472,6 +5053,77 @@
                     });
                 }
             });
+
+            // Fallback for legacy/free-form templates without data-field markers:
+            // render the full template so users can edit directly.
+            if (!formFields.length) {
+                const templateHtml = applyClinicalResultAdminInfoToTemplateHtml(
+                    template.content_html || '',
+                    appointment || {},
+                    serviceName
+                );
+                contentDiv.innerHTML = `
+                    <form id="clinical-result-form">
+                        <input type="hidden" id="clinical-appointment-id" value="${appointmentId}" />
+                        <input type="hidden" id="clinical-patient-id" value="${patientId}" />
+                        <input type="hidden" id="clinical-service-name" value="${serviceName}" />
+                        <input type="hidden" id="clinical-template-id" value="${template.id}" />
+                        <input type="hidden" id="clinical-doctor-name" value="${appointment?.doctor_name || ''}" />
+                        <input type="hidden" id="clinical-template-html-value" name="template_html_value" />
+                        
+                        <div style="margin-bottom:15px;">
+                            <label><strong>Dịch vụ:</strong> ${serviceName}</label>
+                        </div>
+                        
+                        <div style="margin-bottom:15px;">
+                            <label for="clinical-exam-date">Ngày khám *</label>
+                            <input type="datetime-local" id="clinical-exam-date" required style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;" />
+                        </div>
+
+                        <div style="margin-bottom:15px;">
+                            <label><strong>Mẫu kết quả cận lâm sàng</strong></label>
+                            <div id="clinical-template-html-editor" contenteditable="true"
+                                 style="background:#fff; border:1px solid #ddd; border-radius:6px; padding:10px; max-height:45vh; overflow:auto;">
+                                ${templateHtml}
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom:20px;">
+                            <label>File PDF kết quả</label>
+                            <div id="clinical-pdf-upload-area" style="border:2px dashed #ddd; border-radius:8px; padding:15px; text-align:center; background:#f9f9f9;">
+                                <input type="file" id="clinical-pdf-file" accept=".pdf" style="display:none;" onchange="handlePdfUpload(event)" />
+                                <button type="button" class="btn secondary-btn" onclick="document.getElementById('clinical-pdf-file').click()" style="margin-bottom:10px;">
+                                    <i class="fas fa-upload"></i> Tải lên PDF
+                                </button>
+                                <div id="clinical-pdf-preview" style="margin-top:10px;"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="modal-actions" style="display:flex; gap:10px; justify-content:flex-end;">
+                            <button type="button" class="btn secondary-btn" onclick="closeClinicalResultModal()">Hủy</button>
+                            <button type="button" class="btn secondary-btn" onclick="document.getElementById('clinical-pdf-file').click()">
+                                <i class="fas fa-file-pdf"></i> Tải lên PDF
+                            </button>
+                            <button type="submit" class="btn primary-btn">
+                                <i class="fas fa-save"></i> Lưu kết quả
+                            </button>
+                        </div>
+                    </form>
+                `;
+
+                document.getElementById('clinical-exam-date').value = formatDateTimeLocalForGMT7(new Date());
+
+                document.getElementById('clinical-result-form').addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    const htmlEditor = document.getElementById('clinical-template-html-editor');
+                    const htmlValue = document.getElementById('clinical-template-html-value');
+                    if (htmlValue && htmlEditor) htmlValue.value = htmlEditor.innerHTML || '';
+                    await saveClinicalResult(appointmentId, patientId, serviceName, template.id);
+                });
+
+                loadExistingPdf(appointmentId, serviceName);
+                return;
+            }
             
             // Create form HTML
             let formHTML = `
@@ -3480,6 +5132,7 @@
                     <input type="hidden" id="clinical-patient-id" value="${patientId}" />
                     <input type="hidden" id="clinical-service-name" value="${serviceName}" />
                     <input type="hidden" id="clinical-template-id" value="${template.id}" />
+                    <input type="hidden" id="clinical-doctor-name" value="${appointment?.doctor_name || ''}" />
                     
                     <div style="margin-bottom:15px;">
                         <label><strong>Dịch vụ:</strong> ${serviceName}</label>
@@ -3496,16 +5149,35 @@
             // Add fields from template
             formFields.forEach(field => {
                 const fieldId = `clinical-field-${field.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                const adminValue = getClinicalResultAdminFieldValue(
+                    field.name,
+                    field.label,
+                    appointment || {},
+                    serviceName
+                );
+                let resolvedValue = adminValue !== null ? adminValue : field.value;
+                const nameNorm = normalizeTemplateLookupName(field.name || '');
+                const labelNorm = normalizeTemplateLookupName(field.label || '');
+                const isDateField = /(ngay|date)/i.test(`${nameNorm} ${labelNorm}`);
+                const isDatePlaceholder = /_{2,}\s*\/\s*_{2,}\s*\/\s*_{2,}/.test(String(resolvedValue || ''))
+                    || /(?:_\s*){2,}\/\s*(?:_\s*){2,}\/\s*(?:_\s*){2,}/.test(String(resolvedValue || ''));
+                if (isDateField && (!String(resolvedValue || '').trim() || isDatePlaceholder)) {
+                    resolvedValue = getCurrentDateDDMMYYYY();
+                }
                 if (field.type === 'textarea' || (field.element && field.element.tagName.toLowerCase() === 'div' && field.element.contentEditable === 'true')) {
                     formHTML += `
                         <div>
                             <label for="${fieldId}">${field.label}</label>
-                            <textarea id="${fieldId}" name="${field.name}" rows="3" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">${field.value}</textarea>
+                            <textarea id="${fieldId}" name="${field.name}" rows="3" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">${resolvedValue || ''}</textarea>
                         </div>
                     `;
                 } else if (field.type === 'select' || (field.element && field.element.tagName.toLowerCase() === 'select')) {
-                    const options = Array.from(field.element.options || []).map(opt => 
-                        `<option value="${opt.value}" ${opt.selected ? 'selected' : ''}>${opt.text}</option>`
+                    const options = Array.from(field.element.options || []).map(opt => {
+                        const isSelected = (resolvedValue !== null && resolvedValue !== undefined)
+                            ? String(opt.value) === String(resolvedValue)
+                            : opt.selected;
+                        return `<option value="${opt.value}" ${isSelected ? 'selected' : ''}>${opt.text}</option>`;
+                    }
                     ).join('');
                     formHTML += `
                         <div>
@@ -3517,7 +5189,7 @@
                     formHTML += `
                         <div>
                             <label for="${fieldId}">${field.label}</label>
-                            <input type="text" id="${fieldId}" name="${field.name}" value="${field.value}" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;" />
+                            <input type="text" id="${fieldId}" name="${field.name}" value="${resolvedValue || ''}" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;" />
                         </div>
                     `;
                 }
@@ -3558,8 +5230,7 @@
             });
             
             // Set default date
-            const now = new Date();
-            document.getElementById('clinical-exam-date').value = now.toISOString().slice(0, 16);
+            document.getElementById('clinical-exam-date').value = formatDateTimeLocalForGMT7(new Date());
             
             // Load existing PDF if any
             loadExistingPdf(appointmentId, serviceName);
@@ -3572,6 +5243,7 @@
                     <input type="hidden" id="clinical-appointment-id" value="${appointmentId}" />
                     <input type="hidden" id="clinical-patient-id" value="${patientId}" />
                     <input type="hidden" id="clinical-service-name" value="${serviceName}" />
+                    <input type="hidden" id="clinical-doctor-name" value="" />
                     
                     <div style="margin-bottom:15px;">
                         <label><strong>Dịch vụ:</strong> ${serviceName}</label>
@@ -3616,8 +5288,7 @@
             `;
             
             // Set default date
-            const now = new Date();
-            document.getElementById('clinical-exam-date').value = now.toISOString().slice(0, 16);
+            document.getElementById('clinical-exam-date').value = formatDateTimeLocalForGMT7(new Date());
             
             // Attach form submit handler
             document.getElementById('clinical-result-form').addEventListener('submit', async function(e) {
@@ -4034,6 +5705,19 @@
                     resultData.result_text = document.getElementById('clinical-result-text').value || '';
                     resultData.notes = document.getElementById('clinical-notes').value || '';
                 }
+                const templateHtmlEditor = document.getElementById('clinical-template-html-editor');
+                if (templateHtmlEditor) {
+                    let doctorName = String(document.getElementById('clinical-doctor-name')?.value || '').trim();
+                    if (!doctorName) {
+                        doctorName = await getDoctorNameForClinicalResult(appointmentId);
+                    }
+                    const tokenMap = buildClinicalTemplateTokenMap(resultData, serviceName, doctorName);
+                    const renderedTemplateHtml = replaceTemplateTokensWithData(templateHtmlEditor.innerHTML || '', tokenMap);
+                    resultData.template_html = renderedTemplateHtml;
+                    const textContainer = document.createElement('div');
+                    textContainer.innerHTML = renderedTemplateHtml;
+                    resultData.result_text = textContainer.innerText || '';
+                }
                 
                 // Upload PDF if exists
                 if (uploadedPdfFile) {
@@ -4118,9 +5802,8 @@
                 document.getElementById('ultrasound-result-id').value = '';
                 
                 // Set default exam date to now
-                const now = new Date();
                 const examDateInput = document.getElementById('ultrasound-exam-date');
-                examDateInput.value = now.toISOString().slice(0, 16);
+                examDateInput.value = formatDateTimeLocalForGMT7(new Date());
                 
                 // Check if there's existing result
                 const existingResults = await api.get(`/api/ultrasound-results?appointment_id=${appointmentId}`);
@@ -4134,7 +5817,7 @@
                     document.getElementById('ultrasound-result-form').reset();
                     document.getElementById('ultrasound-appointment-id').value = appointmentId;
                     document.getElementById('ultrasound-patient-id').value = patientId;
-                    document.getElementById('ultrasound-exam-date').value = now.toISOString().slice(0, 16);
+                    document.getElementById('ultrasound-exam-date').value = formatDateTimeLocalForGMT7(new Date());
                     document.getElementById('print-ultrasound-btn').style.display = 'none';
                     
                     // Try to load template data if service name is provided
@@ -4270,8 +5953,7 @@
 
         function loadUltrasoundResultData(result) {
             if (result.exam_date) {
-                const examDate = new Date(result.exam_date);
-                document.getElementById('ultrasound-exam-date').value = examDate.toISOString().slice(0, 16);
+                document.getElementById('ultrasound-exam-date').value = parseExamDateForInput(result.exam_date);
             }
             document.getElementById('ultrasound-gestational-age').value = result.gestational_age || '';
             document.getElementById('ultrasound-bpd').value = result.bpd || '';

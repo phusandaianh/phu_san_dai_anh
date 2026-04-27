@@ -11,6 +11,9 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image
+from reportlab.lib.units import inch
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from io import BytesIO
 import base64
 import schedule
@@ -2012,7 +2015,7 @@ STAFF_ONLY_PAGES = set([
     'ai-assistant-admin.html', 'prescription-management.html',
     'disease-tests.html', 'test-meanings.html', 'ultrasound-analysis.html',
     'ultrasound-general.html', 'ctg-analysis.html', 'cervical-examination-analysis.html',
-    'mom-apps.html', 'appointment-details.html', 'lab-pricelist.html',
+    'mom-apps.html', 'appointment-details.html',
     'staff-training.html', 'improved-lab-result-template.html', 'improved-lab-request-template.html',
     'links.html', 'clinic-maps.html', 'pregnancy-utilities.html',
     'staff-work-calendar.html', 'staff-attendance.html',
@@ -2327,6 +2330,7 @@ class ClinicalService(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     appointment_id = db.Column(db.Integer, db.ForeignKey('appointment.id'), nullable=False)
     service_id = db.Column(db.Integer, db.ForeignKey('clinical_service_setting.id'), nullable=False)
+    doctor_name = db.Column(db.String(100), default='PK Đại Anh')
     status = db.Column(db.String(20), default='pending')  # pending, completed
     # Ultrasound/MWL per-order sync tracking (for each ultrasound indication)
     Maysieuam_status = db.Column(db.String(20), default='')  # '', queued, syncing, synced, failed
@@ -2511,6 +2515,8 @@ def ensure_clinical_service_sync_columns():
             alter_sql.append("ALTER TABLE clinical_service ADD COLUMN Maysieuam_synced_at DATETIME")
         if 'Maysieuam_accession' not in columns:
             alter_sql.append("ALTER TABLE clinical_service ADD COLUMN Maysieuam_accession VARCHAR(64)")
+        if 'doctor_name' not in columns:
+            alter_sql.append("ALTER TABLE clinical_service ADD COLUMN doctor_name VARCHAR(100) DEFAULT 'PK Đại Anh'")
         for sql in alter_sql:
             db.session.execute(text(sql))
         if alter_sql:
@@ -2785,6 +2791,8 @@ def ensure_lab_settings_columns():
             db.session.execute(text("ALTER TABLE lab_settings ADD COLUMN service_group_list TEXT DEFAULT '[]'"))
         if 'reset_password_hash' not in columns:
             db.session.execute(text("ALTER TABLE lab_settings ADD COLUMN reset_password_hash VARCHAR(255) DEFAULT ''"))
+        if 'website_links_json' not in columns:
+            db.session.execute(text("ALTER TABLE lab_settings ADD COLUMN website_links_json TEXT DEFAULT ''"))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -2879,6 +2887,335 @@ def ensure_service_group_tracked(service_group, commit_changes=False):
     groups.append(label)
     save_service_groups(groups, settings=settings, commit=commit_changes)
 
+def make_service_group_slug(name):
+    raw = (name or '').strip().lower()
+    if not raw:
+        return 'other-test'
+    normalized = unicodedata.normalize('NFKD', raw)
+    ascii_text = normalized.encode('ascii', 'ignore').decode('ascii')
+    slug = re.sub(r'[^a-z0-9]+', '-', ascii_text).strip('-')
+    return slug or 'other-test'
+
+def build_clinical_patient_info_block():
+    return """
+<table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
+  <tr>
+    <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Họ tên:</strong></td>
+    <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
+    <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Năm sinh:</strong></td>
+    <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
+  </tr>
+  <tr>
+    <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Địa chỉ:</strong></td>
+    <td style="padding:8px; border:1px solid #000;" colspan="3">_________________</td>
+  </tr>
+  <tr>
+    <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Chẩn đoán:</strong></td>
+    <td style="padding:8px; border:1px solid #000;">_________________</td>
+    <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Ghi chú:</strong></td>
+    <td style="padding:8px; border:1px solid #000;">_________________</td>
+  </tr>
+</table>
+"""
+
+def build_default_request_template_html(service_name):
+    service_label, provider_unit = split_service_label_and_provider_unit(service_name)
+    return f"""
+<div style="font-family:'Times New Roman', serif; padding:20px;">
+  <div style="text-align:center; margin-bottom:20px;">
+    <h2 style="color:#0000cc; margin:0;">PHIẾU CHỈ ĐỊNH CẬN LÂM SÀNG</h2>
+  </div>
+  {build_clinical_patient_info_block()}
+  <div style="margin-bottom:20px; margin-top:30px;">
+    <div style="border:1px solid #000; padding:10px;">
+      <p><strong>Dịch vụ chỉ định:</strong> {service_label}</p>
+    </div>
+  </div>
+  <div style="display:flex; justify-content:space-between; margin-top:30px;">
+    <div style="text-align:left;">
+      <p><strong>Ngày: ___/___/_____</strong></p>
+      <p style="margin-top:8px;"><strong>Đơn vị xét nghiệm:</strong> {provider_unit or '_________________'}</p>
+    </div>
+    <div style="text-align:right;">
+      <p><strong>Bác sĩ chỉ định</strong></p>
+      <p style="margin-top:20px;">_________________</p>
+    </div>
+  </div>
+</div>"""
+
+def build_default_result_template_html(service_name):
+    service_label = (service_name or '').strip() or 'Dịch vụ cận lâm sàng'
+    return f"""
+<div style="font-family:'Times New Roman', serif; padding:20px;">
+  <div style="text-align:center; margin-bottom:20px;">
+    <h2 style="color:#0000cc; margin:0;">PHIẾU KẾT QUẢ CẬN LÂM SÀNG</h2>
+    <p style="margin:4px 0 0 0; font-weight:600;">{service_label}</p>
+  </div>
+  {build_clinical_patient_info_block()}
+  <div style="margin-bottom:20px;">
+    <h3 style="color:#0000cc; margin-bottom:10px;">KẾT QUẢ:</h3>
+    <div style="border:1px solid #000; padding:15px; min-height:150px; background-color:#fafafa;">
+      <p><strong>Dịch vụ:</strong> {service_label}</p>
+      <p><strong>Kết quả:</strong> ____________________________________________</p>
+      <p><strong>Kết luận:</strong> ____________________________________________</p>
+    </div>
+  </div>
+  <div style="display:flex; justify-content:space-between; margin-top:30px; padding-top:20px; border-top:2px solid #0000cc;">
+    <div style="text-align:center; flex:1;">
+      <p><strong>Ngày thực hiện</strong></p>
+      <p style="margin-top:50px; font-weight:bold;">___/___/_____</p>
+    </div>
+    <div style="text-align:center; flex:1;">
+      <p><strong>Bác sĩ thực hiện</strong></p>
+      <p style="margin-top:50px; font-weight:bold;">_________________</p>
+    </div>
+  </div>
+</div>"""
+
+def _escape_html_text(value):
+    return (value or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+def split_service_label_and_provider_unit(service_name):
+    raw = (service_name or '').strip()
+    if not raw:
+        return 'Dịch vụ cận lâm sàng', ''
+
+    match = re.match(r'^(.*?)\s*\(([^()]+)\)\s*$', raw)
+    if not match:
+        return raw, ''
+
+    base_name = (match.group(1) or '').strip() or raw
+    provider_unit = (match.group(2) or '').strip()
+    return base_name, provider_unit
+
+def apply_service_name_to_request_template(base_html, service_name):
+    """Inject service and provider unit into request template rows."""
+    content = base_html or ''
+    raw_label, raw_provider_unit = split_service_label_and_provider_unit(service_name)
+    label = _escape_html_text(raw_label)
+    provider_unit = _escape_html_text(raw_provider_unit or '_________________')
+
+    # Prefer replacing a full <p> row with strong label.
+    content, count = re.subn(
+        r'(<p[^>]*>\s*<strong>\s*Dịch vụ chỉ định:\s*</strong>\s*)([\s\S]*?)(\s*</p>)',
+        lambda m: f"{m.group(1)}{label}{m.group(3)}",
+        content,
+        count=1,
+        flags=re.IGNORECASE
+    )
+    if count:
+        pass
+    else:
+        # Fallback if no <strong> around label.
+        content, count = re.subn(
+            r'(<p[^>]*>\s*Dịch vụ chỉ định:\s*)([\s\S]*?)(\s*</p>)',
+            lambda m: f"{m.group(1)}{label}{m.group(3)}",
+            content,
+            count=1,
+            flags=re.IGNORECASE
+        )
+        if not count:
+            # If the row does not exist, append a standard service row block.
+            service_block = f'''
+  <div style="margin-bottom:20px; margin-top:30px;">
+    <div style="border:1px solid #000; padding:10px;">
+      <p><strong>Dịch vụ chỉ định:</strong> {label}</p>
+    </div>
+  </div>
+'''
+            if '</table>' in content:
+                content = content.replace('</table>', '</table>' + service_block, 1)
+            else:
+                content = content + service_block
+
+    # Replace provider unit line if present.
+    content, count = re.subn(
+        r'(<p[^>]*>\s*<strong>\s*Đơn vị xét nghiệm:\s*</strong>\s*)([\s\S]*?)(\s*</p>)',
+        lambda m: f"{m.group(1)}{provider_unit}{m.group(3)}",
+        content,
+        count=1,
+        flags=re.IGNORECASE
+    )
+    if not count:
+        content, count = re.subn(
+            r'(<p[^>]*>\s*Đơn vị xét nghiệm:\s*)([\s\S]*?)(\s*</p>)',
+            lambda m: f"{m.group(1)}{provider_unit}{m.group(3)}",
+            content,
+            count=1,
+            flags=re.IGNORECASE
+        )
+
+    return content
+
+def get_lab_request_base_template_html():
+    template = ClinicalFormTemplate.query.filter_by(template_type='lab-request').first()
+    if template and template.content_html:
+        return template.content_html
+    return build_default_request_template_html('Dịch vụ cận lâm sàng')
+
+def sync_special_request_templates_from_base(base_html):
+    """Apply the updated base request template to all existing special request templates."""
+    templates = SpecialTemplate.query.all()
+    synced_count = 0
+    for template in templates:
+        if getattr(template, 'is_locked', False):
+            continue
+        template.content_html = apply_service_name_to_request_template(base_html, template.name)
+        template.updated_at = datetime.utcnow()
+        synced_count += 1
+    return synced_count
+
+def extract_admin_info_table_html(content_html):
+    source = content_html or ''
+    match = re.search(
+        r'<table[^>]*>[\s\S]*?(Họ tên|Ho ten)[\s\S]*?(Năm sinh|Nam sinh|Tuổi|Tuoi)[\s\S]*?(Ghi chú|Ghi chu|Chẩn đoán|Chan doan)[\s\S]*?<\/table>',
+        source,
+        flags=re.IGNORECASE
+    )
+    return match.group(0) if match else ''
+
+def apply_admin_info_table_to_result_template(content_html, admin_table_html):
+    source = content_html or ''
+    admin_table = admin_table_html or ''
+    if not source or not admin_table:
+        return source
+
+    table_pattern = re.compile(
+        r'<table[^>]*>[\s\S]*?(Họ tên|Ho ten)[\s\S]*?(Năm sinh|Nam sinh|Tuổi|Tuoi)[\s\S]*?(Ghi chú|Ghi chu|Chẩn đoán|Chan doan)[\s\S]*?<\/table>',
+        flags=re.IGNORECASE
+    )
+    if table_pattern.search(source):
+        return table_pattern.sub(admin_table, source, count=1)
+
+    # Fallback: inject the admin table under the main title.
+    heading_pattern = re.compile(r'(<h2[^>]*>[\s\S]*?<\/h2>)', flags=re.IGNORECASE)
+    if heading_pattern.search(source):
+        return heading_pattern.sub(lambda m: f"{m.group(1)}\n  {admin_table}", source, count=1)
+    return admin_table + source
+
+def sync_lab_result_templates_admin_from_base(base_html):
+    """Apply administrative info block from base lab-result template to all lab-result templates."""
+    admin_table_html = extract_admin_info_table_html(base_html)
+    if not admin_table_html:
+        return 0
+
+    templates = LabResultTemplate.query.all()
+    synced_count = 0
+    for template in templates:
+        current_html = template.content_html or ''
+        synced_html = apply_admin_info_table_to_result_template(current_html, admin_table_html)
+        if synced_html != current_html:
+            template.content_html = synced_html
+            template.updated_at = datetime.utcnow()
+            synced_count += 1
+    return synced_count
+
+def sync_lab_result_groups_with_service_groups(commit_changes=False):
+    groups, _ = get_service_group_list(auto_commit=False)
+    existing_groups = LabResultGroup.query.order_by(LabResultGroup.sort_order, LabResultGroup.name).all()
+    existing_by_id = {g.id: g for g in existing_groups}
+    valid_ids = []
+    fallback_id = None
+
+    for idx, group_name in enumerate(groups):
+        gid = make_service_group_slug(group_name)
+        if gid in valid_ids:
+            continue
+        valid_ids.append(gid)
+        if fallback_id is None:
+            fallback_id = gid
+        model = existing_by_id.get(gid)
+        if model:
+            model.name = group_name
+            model.sort_order = idx + 1
+            model.updated_at = datetime.utcnow()
+        else:
+            db.session.add(LabResultGroup(
+                id=gid,
+                name=group_name,
+                icon='fas fa-vial',
+                is_default=True,
+                sort_order=idx + 1
+            ))
+
+    if not fallback_id:
+        fallback_id = 'other-test'
+        if fallback_id not in existing_by_id:
+            db.session.add(LabResultGroup(
+                id=fallback_id,
+                name='Các xét nghiệm khác',
+                icon='fas fa-vial',
+                is_default=True,
+                sort_order=1
+            ))
+        valid_ids = [fallback_id]
+
+    for group in existing_groups:
+        if group.id not in valid_ids:
+            LabResultTemplate.query.filter_by(category=group.id).update({'category': fallback_id}, synchronize_session=False)
+            db.session.delete(group)
+
+    if commit_changes:
+        db.session.commit()
+    return valid_ids
+
+def sync_templates_for_clinical_service(service_name, service_group=None, old_service_name=None, delete_mode=False):
+    label = (service_name or '').strip()
+    if not label and not (delete_mode and old_service_name):
+        return
+
+    group_id = make_service_group_slug(service_group)
+    current_norm = normalize_service_group_name(label)
+    old_norm = normalize_service_group_name(old_service_name)
+
+    if delete_mode:
+        if old_norm:
+            SpecialTemplate.query.filter(func.lower(SpecialTemplate.name) == old_norm).delete(synchronize_session=False)
+            LabResultTemplate.query.filter(func.lower(LabResultTemplate.name) == old_norm).delete(synchronize_session=False)
+        return
+
+    request_template = None
+    result_template = None
+    if old_norm:
+        request_template = SpecialTemplate.query.filter(func.lower(SpecialTemplate.name) == old_norm).first()
+        result_template = LabResultTemplate.query.filter(func.lower(LabResultTemplate.name) == old_norm).first()
+    if not request_template:
+        request_template = SpecialTemplate.query.filter(func.lower(SpecialTemplate.name) == current_norm).first()
+    if not result_template:
+        result_template = LabResultTemplate.query.filter(func.lower(LabResultTemplate.name) == current_norm).first()
+
+    if request_template:
+        request_template.name = label
+        request_template.description = f'Mẫu phiếu chỉ định cho dịch vụ {label}'
+        request_template.content_html = request_template.content_html or build_default_request_template_html(label)
+        request_template.updated_at = datetime.utcnow()
+    else:
+        db.session.add(SpecialTemplate(
+            name=label,
+            description=f'Mẫu phiếu chỉ định cho dịch vụ {label}',
+            content_html=build_default_request_template_html(label)
+        ))
+
+    if result_template:
+        result_template.name = label
+        result_template.description = f'Mẫu phiếu kết quả cho dịch vụ {label}'
+        result_template.category = group_id
+        result_template.content_html = result_template.content_html or build_default_result_template_html(label)
+        result_template.updated_at = datetime.utcnow()
+    else:
+        db.session.add(LabResultTemplate(
+            name=label,
+            description=f'Mẫu phiếu kết quả cho dịch vụ {label}',
+            content_html=build_default_result_template_html(label),
+            category=group_id
+        ))
+
+def sync_all_clinical_service_templates():
+    services = ClinicalServiceSetting.query.all()
+    sync_lab_result_groups_with_service_groups(commit_changes=False)
+    for service in services:
+        sync_templates_for_clinical_service(service.name, service_group=service.service_group)
+
 def find_service_group_for_service(service_name):
     normalized = normalize_service_group_name(service_name)
     if not normalized:
@@ -2916,6 +3253,32 @@ def ensure_patient_record_columns():
     except Exception:
         db.session.rollback()
 
+def ensure_patient_record_template_snapshot_table():
+    """Ensure table storing full clinical-form HTML snapshots exists."""
+    try:
+        try:
+            db.create_all()
+        except Exception:
+            pass
+        inspector = inspect(db.engine)
+        table_names = inspector.get_table_names()
+        if 'patient_record_template_snapshot' in table_names:
+            return
+        db.session.execute(text("""
+            CREATE TABLE patient_record_template_snapshot (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_record_id INTEGER NOT NULL,
+                appointment_id INTEGER,
+                template_name VARCHAR(200),
+                content_html TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
 class WorkSchedule(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.String(10), nullable=False)  # yyyy-mm-dd
@@ -2947,6 +3310,7 @@ class StaffAttendance(db.Model):
 class ClinicalServicePackage(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, default='')
     price = db.Column(db.Float, nullable=False)
     # Relationship to link package with clinical services
     services = db.relationship('ClinicalServiceSetting', secondary='package_clinical_service', backref=db.backref('packages', lazy='dynamic'))
@@ -2958,6 +3322,17 @@ package_clinical_service = db.Table('package_clinical_service',
     db.Column('package_id', db.Integer, db.ForeignKey('clinical_service_package.id'), primary_key=True),
     db.Column('service_id', db.Integer, db.ForeignKey('clinical_service_setting.id'), primary_key=True)
 )
+
+def ensure_clinical_service_package_description_column():
+    """Đảm bảo bảng gói cận lâm sàng có cột mô tả."""
+    try:
+        inspector = inspect(db.engine)
+        columns = [c.get('name') for c in inspector.get_columns('clinical_service_package')]
+        if 'description' not in columns:
+            db.session.execute(text("ALTER TABLE clinical_service_package ADD COLUMN description TEXT DEFAULT ''"))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 # Quản lý danh sách xét nghiệm tổng hợp
 class LabOrder(db.Model):
@@ -2993,6 +3368,8 @@ class LabSettings(db.Model):
     provider_unit_list = db.Column(db.Text, default='[]')
     # Master list of clinical service groups managed by admin (JSON text)
     service_group_list = db.Column(db.Text, default='[]')
+    # Website/social links shown on Website page (JSON text)
+    website_links_json = db.Column(db.Text, default='')
 
 class ClinicDoctor(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -3018,6 +3395,99 @@ class ClinicalFormTemplate(db.Model):
     logo_position = db.Column(db.String(20), default='left')  # 'left', 'center', 'right'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+def get_default_website_links():
+    return {
+        'facebook': 'https://www.facebook.com/',
+        'zalo': 'https://zalo.me/',
+        'google_maps': 'https://maps.google.com/',
+        'youtube': 'https://www.youtube.com/',
+        'tiktok': 'https://www.tiktok.com/',
+        'website': '/',
+        'custom_links': []
+    }
+
+def get_website_links_from_settings(settings):
+    defaults = get_default_website_links()
+    raw = (getattr(settings, 'website_links_json', '') or '').strip()
+    if not raw:
+        return defaults
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return defaults
+        merged = defaults.copy()
+        for key in defaults.keys():
+            if key == 'custom_links':
+                continue
+            val = data.get(key)
+            if isinstance(val, str) and val.strip():
+                merged[key] = val.strip()
+        custom = data.get('custom_links')
+        if isinstance(custom, list):
+            normalized_custom = []
+            for item in custom:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get('name') or '').strip()
+                url = str(item.get('url') or '').strip()
+                if not name or not url:
+                    continue
+                normalized_custom.append({
+                    'name': name,
+                    'url': url,
+                    'description': str(item.get('description') or '').strip(),
+                    'icon': str(item.get('icon') or 'fas fa-link').strip() or 'fas fa-link'
+                })
+            merged['custom_links'] = normalized_custom
+        return merged
+    except Exception:
+        return defaults
+
+@app.route('/api/website-links', methods=['GET', 'PUT'])
+def api_website_links():
+    try:
+        ensure_lab_settings_columns()
+        settings = get_lab_settings_record(auto_commit=False)
+        if request.method == 'GET':
+            return jsonify({'success': True, 'links': get_website_links_from_settings(settings)})
+
+        data = request.json or {}
+        payload = data.get('links') or {}
+        defaults = get_default_website_links()
+        merged = defaults.copy()
+        if isinstance(payload, dict):
+            for key in defaults.keys():
+                if key == 'custom_links':
+                    continue
+                val = payload.get(key)
+                if isinstance(val, str):
+                    merged[key] = val.strip() or defaults[key]
+            custom = payload.get('custom_links')
+            if isinstance(custom, list):
+                normalized_custom = []
+                for item in custom:
+                    if not isinstance(item, dict):
+                        continue
+                    name = str(item.get('name') or '').strip()
+                    url = str(item.get('url') or '').strip()
+                    if not name or not url:
+                        continue
+                    normalized_custom.append({
+                        'name': name,
+                        'url': url,
+                        'description': str(item.get('description') or '').strip(),
+                        'icon': str(item.get('icon') or 'fas fa-link').strip() or 'fas fa-link'
+                    })
+                merged['custom_links'] = normalized_custom
+
+        settings.website_links_json = json.dumps(merged, ensure_ascii=False)
+        db.session.add(settings)
+        db.session.commit()
+        return jsonify({'success': True, 'links': merged, 'message': 'Đã lưu liên kết website.'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi khi lưu liên kết website: {str(e)}'}), 500
 
 
 @app.route('/api/lab-settings', methods=['GET', 'PUT'])
@@ -5099,6 +5569,9 @@ def dicom_viewer_alias():
 def get_clinical_services():
     # Ensure columns exist for older databases
     ensure_clinical_service_setting_columns()
+    ensure_lab_result_template_columns()
+    sync_all_clinical_service_templates()
+    db.session.commit()
     services = ClinicalServiceSetting.query.all()
     return jsonify([{
         'id': s.id,
@@ -5142,6 +5615,8 @@ def create_clinical_service():
         )
         db.session.add(service)
         ensure_service_group_tracked(service_group, commit_changes=False)
+        sync_lab_result_groups_with_service_groups(commit_changes=False)
+        sync_templates_for_clinical_service(name, service_group=service_group)
         # Also ensure provider_unit is in master list
         try:
             s = LabSettings.query.first()
@@ -5171,6 +5646,7 @@ def update_clinical_service(id):
     ensure_lab_settings_columns()
     data = request.json
     service = _get_or_404(ClinicalServiceSetting, id)
+    old_name = service.name
     name = data.get('name')
     price = data.get('price')
     description = (data.get('description') or '').strip()
@@ -5198,6 +5674,8 @@ def update_clinical_service(id):
         service.service_group = service_group
         service.provider_unit = provider_unit
         ensure_service_group_tracked(service_group, commit_changes=False)
+        sync_lab_result_groups_with_service_groups(commit_changes=False)
+        sync_templates_for_clinical_service(name, service_group=service_group, old_service_name=old_name)
 
         # Also ensure provider_unit is in master list
         try:
@@ -5224,9 +5702,12 @@ def update_clinical_service(id):
 @app.route('/api/clinical-services/<int:id>', methods=['DELETE'])
 def delete_clinical_service(id):
     service = _get_or_404(ClinicalServiceSetting, id)
+    service_name = service.name
     provider_unit = service.provider_unit
     try:
+        sync_templates_for_clinical_service(service_name, old_service_name=service_name, delete_mode=True)
         db.session.delete(service)
+        sync_lab_result_groups_with_service_groups(commit_changes=False)
         db.session.commit()
     except Exception as e:
         db.session.rollback()
@@ -5262,6 +5743,7 @@ def delete_clinical_service(id):
 @app.route('/api/clinical-service-groups', methods=['GET', 'POST'])
 def manage_clinical_service_groups():
     if request.method == 'GET':
+        sync_lab_result_groups_with_service_groups(commit_changes=True)
         groups, _ = get_service_group_list(auto_commit=True)
         return jsonify(groups)
 
@@ -5277,6 +5759,7 @@ def manage_clinical_service_groups():
             return jsonify({'message': f'Nhóm "{new_group}" đã tồn tại.'}), 400
         groups.append(new_group)
         save_service_groups(groups, settings=settings, commit=True)
+        sync_lab_result_groups_with_service_groups(commit_changes=True)
         return jsonify({'message': 'Đã thêm nhóm dịch vụ cận lâm sàng.', 'groups': groups})
     except Exception as e:
         db.session.rollback()
@@ -5307,10 +5790,15 @@ def rename_clinical_service_group():
 
         groups[target_index] = new_name
         save_service_groups(groups, settings=settings, commit=False)
+        old_group_slug = make_service_group_slug(old_name)
+        new_group_slug = make_service_group_slug(new_name)
+        if old_group_slug != new_group_slug:
+            LabResultTemplate.query.filter_by(category=old_group_slug).update({'category': new_group_slug}, synchronize_session=False)
 
         db.session.query(ClinicalServiceSetting).filter(
             db.func.lower(ClinicalServiceSetting.service_group) == old_norm
         ).update({'service_group': new_name}, synchronize_session=False)
+        sync_lab_result_groups_with_service_groups(commit_changes=False)
         db.session.commit()
         return jsonify({'message': 'Đã cập nhật tên nhóm dịch vụ.', 'groups': groups})
     except Exception as e:
@@ -7660,8 +8148,10 @@ def init_default_pregnancy_utilities():
 
 @app.route('/api/clinical-service-packages', methods=['POST'])
 def create_clinical_service_package():
+    ensure_clinical_service_package_description_column()
     data = request.json
     name = data.get('name')
+    description = (data.get('description') or '').strip()
     price = data.get('price')
     service_ids = data.get('service_ids', [])
 
@@ -7677,6 +8167,7 @@ def create_clinical_service_package():
         # Create the new package
         new_package = ClinicalServicePackage(
             name=name,
+            description=description,
             price=price
         )
         db.session.add(new_package)
@@ -7698,6 +8189,7 @@ def create_clinical_service_package():
 
 @app.route('/api/clinical-service-packages', methods=['GET'])
 def get_clinical_service_packages():
+    ensure_clinical_service_package_description_column()
     packages = ClinicalServicePackage.query.all()
     packages_list = []
     for package in packages:
@@ -7712,6 +8204,7 @@ def get_clinical_service_packages():
         packages_list.append({
             'id': package.id,
             'name': package.name,
+            'description': package.description or '',
             'price': package.price,
             'services': services_list,
             'created_at': package.created_at.isoformat(),
@@ -7733,9 +8226,11 @@ def delete_clinical_service_package(id):
 
 @app.route('/api/clinical-service-packages/<int:package_id>', methods=['PUT'])
 def update_clinical_service_package(package_id):
+    ensure_clinical_service_package_description_column()
     package = _get_or_404(ClinicalServicePackage, package_id)
     data = request.json
     name = data.get('name')
+    description = (data.get('description') or '').strip()
     price = data.get('price')
     service_ids = data.get('service_ids') # Allow service_ids to be None if not updating services
 
@@ -7752,6 +8247,7 @@ def update_clinical_service_package(package_id):
             return jsonify({'message': f'Tên gói "{name}" đã tồn tại.'}), 400
 
         package.name = name
+        package.description = description
         package.price = price
 
         # Update associated services if service_ids is provided
@@ -7794,7 +8290,9 @@ def get_appointment_clinical_services(appointment_id):
         'service_id': s.service.id,  # id dịch vụ gốc (ClinicalServiceSetting)
         'name': s.service.name,
         'price': s.service.price,
+        'doctor_name': getattr(s, 'doctor_name', None) or getattr(appointment, 'doctor_name', None) or 'PK Đại Anh',
         'service_group': s.service.service_group,  # Thêm service_group để kiểm tra nhóm dịch vụ
+        'provider_unit': getattr(s.service, 'provider_unit', None),
         'description': getattr(s.service, 'description', ''),  # Thêm description nếu có
         'Maysieuam': {
             'status': getattr(s, 'Maysieuam_status', '') or '',
@@ -8002,8 +8500,13 @@ def add_appointment_clinical_service(appointment_id):
         # Kiểm tra service tồn tại
         service = _get_or_404(ClinicalServiceSetting, service_id)
 
+        doctor_name = (data.get('doctor_name') or '').strip() or (getattr(appointment, 'doctor_name', '') or 'PK Đại Anh')
         # Thêm mới bản ghi ClinicalService (không dùng relationship append)
-        clinical_service = ClinicalService(appointment_id=appointment_id, service_id=service_id)
+        clinical_service = ClinicalService(
+            appointment_id=appointment_id,
+            service_id=service_id,
+            doctor_name=doctor_name
+        )
         db.session.add(clinical_service)
         # Flush để có id cho clinical_service
         db.session.flush()
@@ -8175,6 +8678,26 @@ def remove_appointment_clinical_service(appointment_id, service_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Đã xảy ra lỗi khi xóa dịch vụ khám: {str(e)}'}), 500
+
+@app.route('/api/appointments/<int:appointment_id>/clinical-services/link/<int:link_id>', methods=['PUT'])
+def update_appointment_clinical_service(appointment_id, link_id):
+    """Cập nhật thông tin bản ghi chỉ định cận lâm sàng theo id liên kết."""
+    try:
+        ensure_clinical_service_sync_columns()
+        clinical_service = ClinicalService.query.filter_by(id=link_id, appointment_id=appointment_id).first()
+        if not clinical_service:
+            return jsonify({'message': 'Không tìm thấy chỉ định cận lâm sàng'}), 404
+
+        data = request.json or {}
+        doctor_name = (data.get('doctor_name') or '').strip()
+        if doctor_name:
+            clinical_service.doctor_name = doctor_name
+            db.session.commit()
+            return jsonify({'message': 'Đã cập nhật bác sĩ chỉ định', 'doctor_name': clinical_service.doctor_name})
+        return jsonify({'message': 'Không có dữ liệu cập nhật'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Đã xảy ra lỗi khi cập nhật chỉ định: {str(e)}'}), 500
 
 # Check-in API endpoints
 @app.route('/api/checkin', methods=['POST'])
@@ -8733,7 +9256,6 @@ def initialize_default_templates():
     <p style="margin:2px 0; font-size:13px;">TDP Quán Trắng - Tân An - Bắc Ninh - ĐT: 0858.838.616</p>
   </div>
 </div>
-<hr style="border:1px solid #000; margin-top:5px;">
 '''
             
             # Template phiếu chỉ định
@@ -8745,40 +9267,37 @@ def initialize_default_templates():
   
   <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
     <tr>
-      <td style="padding:8px; border:1px solid #000; width:20%;"><strong>Họ tên:</strong></td>
+      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Họ tên:</strong></td>
       <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
-      <td style="padding:8px; border:1px solid #000; width:20%;"><strong>Tuổi:</strong></td>
+      <td style="padding:8px; border:1px solid #000; width:20%; background-color:#f8f9fa;"><strong>Năm sinh:</strong></td>
       <td style="padding:8px; border:1px solid #000; width:30%;">_________________</td>
     </tr>
     <tr>
-      <td style="padding:8px; border:1px solid #000;"><strong>Địa chỉ:</strong></td>
+      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Địa chỉ:</strong></td>
       <td style="padding:8px; border:1px solid #000;" colspan="3">_________________</td>
     </tr>
     <tr>
-      <td style="padding:8px; border:1px solid #000;"><strong>Chẩn đoán:</strong></td>
-      <td style="padding:8px; border:1px solid #000;" colspan="3">_________________</td>
+      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Chẩn đoán:</strong></td>
+      <td style="padding:8px; border:1px solid #000;">_________________</td>
+      <td style="padding:8px; border:1px solid #000; background-color:#f8f9fa;"><strong>Ghi chú:</strong></td>
+      <td style="padding:8px; border:1px solid #000;">_________________</td>
     </tr>
   </table>
 
-  <div style="margin-bottom:20px;">
-    <h3 style="color:#0000cc; margin-bottom:10px;">CHỈ ĐỊNH XÉT NGHIỆM:</h3>
-    <div style="border:1px solid #000; padding:10px; min-height:100px;">
-      <p>□ Siêu âm ổ bụng</p>
-      <p>□ Siêu âm tử cung phần phụ</p>
-      <p>□ Siêu âm thai</p>
-      <p>□ Xét nghiệm máu</p>
-      <p>□ Xét nghiệm nước tiểu</p>
-      <p>□ Khác: _________________</p>
+  <div style="margin-bottom:20px; margin-top:30px;">
+    <div style="border:1px solid #000; padding:10px;">
+      <p><strong>Dịch vụ chỉ định:</strong> _________________</p>
     </div>
   </div>
 
   <div style="display:flex; justify-content:space-between; margin-top:30px;">
-    <div style="text-align:center;">
-      <p><strong>Bác sĩ chỉ định</strong></p>
-      <p style="margin-top:50px;">_________________</p>
-    </div>
-    <div style="text-align:center;">
+    <div style="text-align:left;">
       <p><strong>Ngày: ___/___/_____</strong></p>
+      <p style="margin-top:8px;"><strong>Đơn vị xét nghiệm:</strong> _________________</p>
+    </div>
+    <div style="text-align:right;">
+      <p><strong>Bác sĩ chỉ định</strong></p>
+      <p style="margin-top:20px;">_________________</p>
     </div>
   </div>
 </div>
@@ -8871,6 +9390,31 @@ def ensure_logo_position_column():
             print("logo_position column already exists")
     except Exception as e:
         print(f"Error checking/adding logo_position column: {e}")
+
+def ensure_special_template_lock_column():
+    """Đảm bảo các cột khóa mẫu tồn tại trong bảng special_template."""
+    try:
+        inspector = inspect(db.engine)
+        table_names = inspector.get_table_names()
+        if 'special_template' not in table_names:
+            return
+
+        columns = [col['name'] for col in inspector.get_columns('special_template')]
+        if 'is_locked' not in columns:
+            db.session.execute(text('ALTER TABLE special_template ADD COLUMN is_locked BOOLEAN DEFAULT 0'))
+            db.session.commit()
+            print("Added is_locked column to special_template table")
+        if 'locked_snapshot_html' not in columns:
+            db.session.execute(text('ALTER TABLE special_template ADD COLUMN locked_snapshot_html TEXT'))
+            db.session.commit()
+            print("Added locked_snapshot_html column to special_template table")
+        if 'locked_snapshot_at' not in columns:
+            db.session.execute(text('ALTER TABLE special_template ADD COLUMN locked_snapshot_at DATETIME'))
+            db.session.commit()
+            print("Added locked_snapshot_at column to special_template table")
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error checking/adding special_template lock columns: {e}")
 
 def ensure_clinic_summary_column():
     """Đảm bảo cột clinic_summary tồn tại trong bảng HomeContent"""
@@ -9018,6 +9562,9 @@ def update_clinical_form_template(template_type):
         
         template = ClinicalFormTemplate.query.filter_by(template_type=template_type).first()
         
+        synced_special_templates = 0
+        synced_lab_result_templates = 0
+
         if template:
             template.content_html = content_html
             template.updated_at = datetime.utcnow()
@@ -9028,9 +9575,21 @@ def update_clinical_form_template(template_type):
                 content_html=content_html
             )
             db.session.add(template)
+
+        # Khi thay đổi mẫu phiếu chỉ định gốc, tự động cập nhật toàn bộ mẫu chỉ định dịch vụ đã có.
+        if template_type == 'lab-request':
+            synced_special_templates = sync_special_request_templates_from_base(content_html)
+        # Khi thay đổi mẫu phiếu kết quả gốc, tự động đồng bộ khối hành chính cho mọi mẫu kết quả.
+        if template_type == 'lab-result':
+            synced_lab_result_templates = sync_lab_result_templates_admin_from_base(content_html)
         
         db.session.commit()
-        return jsonify({'message': 'Đã cập nhật template thành công', 'id': template.id})
+        return jsonify({
+            'message': 'Đã cập nhật template thành công',
+            'id': template.id,
+            'synced_special_templates': synced_special_templates,
+            'synced_lab_result_templates': synced_lab_result_templates
+        })
     except Exception as e:
         db.session.rollback()
         print(f"Error updating template {template_type}: {str(e)}")
@@ -9063,7 +9622,6 @@ def get_clinical_form_header():
     <p style="margin:2px 0; font-size:14px;">TDP Quán Trắng - Tân An - Bắc Ninh - ĐT: 0858.838.616</p>
   </div>
 </div>
-<hr style="border:1px solid #000;">
 '''
                 return jsonify({'header': header, 'logo_position': 'left'})
             else:
@@ -9111,7 +9669,10 @@ def get_appointment_full_info(appointment_id):
                     'name': service_setting.name,
                     'price': service_setting.price,
                     'description': service_setting.description,
-                    'status': service.status
+                    'service_group': getattr(service_setting, 'service_group', None),
+                    'provider_unit': getattr(service_setting, 'provider_unit', None),
+                    'status': service.status,
+                    'doctor_name': getattr(service, 'doctor_name', None) or getattr(appointment, 'doctor_name', None) or 'PK Đại Anh'
                 })
         
         return jsonify({
@@ -9140,6 +9701,9 @@ class SpecialTemplate(db.Model):
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     content_html = db.Column(db.Text, nullable=False)
+    is_locked = db.Column(db.Boolean, default=False, nullable=False)
+    locked_snapshot_html = db.Column(db.Text)
+    locked_snapshot_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -9214,39 +9778,54 @@ class PregnancyUtility(db.Model):
 @app.route('/api/special-templates', methods=['GET'])
 def get_special_templates():
     try:
-        # Sử dụng raw SQL để tránh vấn đề datetime parsing
-        result = db.session.execute(db.text("""
-            SELECT id, name, description, content_html, created_at, updated_at 
-            FROM special_template 
-            ORDER BY created_at DESC
-        """)).fetchall()
-        
+        base_request_template = get_lab_request_base_template_html()
+        rows = SpecialTemplate.query.order_by(SpecialTemplate.created_at.desc()).all()
+        has_updates = False
+
         templates = []
-        for row in result:
+        for row in rows:
+            if not getattr(row, 'is_locked', False):
+                synced_html = apply_service_name_to_request_template(base_request_template, row.name)
+                if row.content_html != synced_html:
+                    row.content_html = synced_html
+                    row.updated_at = datetime.utcnow()
+                    has_updates = True
+
             templates.append({
-                'id': row[0],
-                'name': row[1],
-                'description': row[2],
-                'content_html': row[3],
-                'created_at': row[4],
-                'updated_at': row[5]
+                'id': row.id,
+                'name': row.name,
+                'description': row.description,
+                'content_html': row.content_html,
+                'is_locked': bool(getattr(row, 'is_locked', False)),
+                'has_locked_snapshot': bool(getattr(row, 'locked_snapshot_html', None)),
+                'locked_snapshot_at': row.locked_snapshot_at.strftime('%Y-%m-%d %H:%M:%S') if getattr(row, 'locked_snapshot_at', None) else None,
+                'created_at': row.created_at.strftime('%Y-%m-%d %H:%M:%S') if row.created_at else None,
+                'updated_at': row.updated_at.strftime('%Y-%m-%d %H:%M:%S') if row.updated_at else None
             })
+
+        if has_updates:
+            db.session.commit()
         
         return jsonify(templates)
     except Exception as e:
+        db.session.rollback()
         return jsonify({'message': f'Lỗi khi lấy danh sách mẫu đặc biệt: {str(e)}'}), 500
 
 @app.route('/api/special-templates', methods=['POST'])
 def create_special_template():
     try:
         data = request.json
-        if not data or not data.get('name') or not data.get('content_html'):
-            return jsonify({'message': 'Tên và nội dung mẫu phiếu là bắt buộc'}), 400
+        if not data or not data.get('name'):
+            return jsonify({'message': 'Tên mẫu phiếu là bắt buộc'}), 400
+
+        base_request_template = get_lab_request_base_template_html()
+        generated_html = apply_service_name_to_request_template(base_request_template, data['name'])
         
         template = SpecialTemplate(
             name=data['name'],
             description=data.get('description', ''),
-            content_html=data['content_html']
+            content_html=generated_html,
+            is_locked=bool(data.get('is_locked', False))
         )
         db.session.add(template)
         db.session.commit()
@@ -9256,6 +9835,9 @@ def create_special_template():
             'name': template.name,
             'description': template.description,
             'content_html': template.content_html,
+            'is_locked': bool(template.is_locked),
+            'has_locked_snapshot': bool(getattr(template, 'locked_snapshot_html', None)),
+            'locked_snapshot_at': template.locked_snapshot_at.strftime('%Y-%m-%d %H:%M:%S') if getattr(template, 'locked_snapshot_at', None) else None,
             'created_at': template.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'updated_at': template.updated_at.strftime('%Y-%m-%d %H:%M:%S')
         }), 201
@@ -9268,13 +9850,51 @@ def update_special_template(template_id):
     try:
         template = _get_or_404(SpecialTemplate, template_id)
         data = request.json
+        was_locked = bool(template.is_locked)
+
+        if bool(data.get('restore_last_locked')):
+            snapshot = getattr(template, 'locked_snapshot_html', None)
+            if not snapshot:
+                return jsonify({'message': 'Mẫu này chưa có bản đã khóa để khôi phục'}), 400
+            template.content_html = snapshot
+            template.is_locked = True
+            template.updated_at = datetime.utcnow()
+            db.session.commit()
+            return jsonify({
+                'id': template.id,
+                'name': template.name,
+                'description': template.description,
+                'content_html': template.content_html,
+                'is_locked': bool(template.is_locked),
+                'has_locked_snapshot': bool(getattr(template, 'locked_snapshot_html', None)),
+                'locked_snapshot_at': template.locked_snapshot_at.strftime('%Y-%m-%d %H:%M:%S') if getattr(template, 'locked_snapshot_at', None) else None,
+                'created_at': template.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'updated_at': template.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+            })
         
         if data.get('name'):
             template.name = data['name']
         if 'description' in data:
             template.description = data['description']
-        if data.get('content_html'):
-            template.content_html = data['content_html']
+        if 'is_locked' in data:
+            template.is_locked = bool(data.get('is_locked'))
+
+        manual_content = data.get('content_html')
+        if isinstance(manual_content, str) and manual_content.strip():
+            # Nếu người dùng sửa nội dung thủ công thì giữ nguyên nội dung đã sửa
+            # và mặc định khóa mẫu để tránh bị đồng bộ đè lại.
+            template.content_html = manual_content
+            if 'is_locked' not in data:
+                template.is_locked = True
+        else:
+            base_request_template = get_lab_request_base_template_html()
+            if not bool(template.is_locked):
+                template.content_html = apply_service_name_to_request_template(base_request_template, template.name)
+
+        # Khi chuyển sang trạng thái khóa, lưu snapshot gần nhất để có thể quay lại.
+        if bool(template.is_locked) and not was_locked:
+            template.locked_snapshot_html = template.content_html
+            template.locked_snapshot_at = datetime.utcnow()
         
         template.updated_at = datetime.utcnow()
         db.session.commit()
@@ -9284,6 +9904,9 @@ def update_special_template(template_id):
             'name': template.name,
             'description': template.description,
             'content_html': template.content_html,
+            'is_locked': bool(template.is_locked),
+            'has_locked_snapshot': bool(getattr(template, 'locked_snapshot_html', None)),
+            'locked_snapshot_at': template.locked_snapshot_at.strftime('%Y-%m-%d %H:%M:%S') if getattr(template, 'locked_snapshot_at', None) else None,
             'created_at': template.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'updated_at': template.updated_at.strftime('%Y-%m-%d %H:%M:%S')
         })
@@ -9601,6 +10224,15 @@ class PatientRecord(db.Model):
     notes = db.Column(db.Text)
     appointment_id = db.Column(db.Integer)
     lab_order_id = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class PatientRecordTemplateSnapshot(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    patient_record_id = db.Column(db.Integer, nullable=False)
+    appointment_id = db.Column(db.Integer)
+    template_name = db.Column(db.String(200))
+    content_html = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -10188,20 +10820,54 @@ def create_patient_record():
         data = request.json
         if not data or not data.get('patient_name') or not data.get('patient_phone') or not data.get('appointment_date') or not data.get('service_type'):
             return jsonify({'message': 'Tên bệnh nhân, số điện thoại, ngày khám và lý do khám là bắt buộc'}), 400
-        
+
+        appointment_id = data.get('appointment_id')
+        lab_order_id = data.get('lab_order_id')
+        appointment_dt = datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00'))
+
+        existing = None
+        if appointment_id is not None and str(appointment_id).strip() != '':
+            try:
+                existing = PatientRecord.query.filter_by(appointment_id=int(appointment_id)).first()
+            except Exception:
+                existing = None
+
+        if existing:
+            existing.patient_name = data['patient_name']
+            existing.patient_phone = data['patient_phone']
+            existing.appointment_date = appointment_dt
+            existing.doctor_name = data.get('doctor_name', existing.doctor_name or '')
+            existing.service_type = data['service_type']
+            existing.status = data.get('status', existing.status or 'pending')
+            if 'notes' in data:
+                existing.notes = data.get('notes', '')
+            if lab_order_id is not None and str(lab_order_id).strip() != '':
+                try:
+                    existing.lab_order_id = int(lab_order_id)
+                except Exception:
+                    pass
+            existing.updated_at = datetime.utcnow()
+            db.session.commit()
+            return jsonify({
+                'message': 'Đã cập nhật hồ sơ thành công',
+                'id': existing.id
+            })
+
         record = PatientRecord(
             patient_name=data['patient_name'],
             patient_phone=data['patient_phone'],
-            appointment_date=datetime.fromisoformat(data['appointment_date'].replace('Z', '+00:00')),
+            appointment_date=appointment_dt,
             doctor_name=data.get('doctor_name', ''),
             service_type=data['service_type'],
             status=data.get('status', 'pending'),
-            notes=data.get('notes', '')
+            notes=data.get('notes', ''),
+            appointment_id=(int(appointment_id) if appointment_id is not None and str(appointment_id).strip() != '' else None),
+            lab_order_id=(int(lab_order_id) if lab_order_id is not None and str(lab_order_id).strip() != '' else None)
         )
-        
+
         db.session.add(record)
         db.session.commit()
-        
+
         return jsonify({
             'message': 'Đã tạo hồ sơ thành công',
             'id': record.id
@@ -10254,6 +10920,79 @@ def delete_patient_record(record_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Lỗi khi xóa hồ sơ: {str(e)}'}), 500
+
+@app.route('/api/patient-records/<int:record_id>/template-snapshot', methods=['POST'])
+def upsert_patient_record_template_snapshot(record_id):
+    """Save/update full HTML form snapshot linked to a patient record."""
+    try:
+        ensure_patient_record_columns()
+        ensure_patient_record_template_snapshot_table()
+        record = _get_or_404(PatientRecord, record_id)
+        data = request.json or {}
+        content_html = (data.get('content_html') or '').strip()
+        if not content_html:
+            return jsonify({'message': 'Nội dung phiếu không được để trống'}), 400
+
+        template_name = (data.get('template_name') or '').strip() or 'Phiếu chỉ định'
+        appointment_id = data.get('appointment_id') or record.appointment_id
+        snapshot = None
+        if appointment_id:
+            snapshot = PatientRecordTemplateSnapshot.query.filter_by(
+                patient_record_id=record.id,
+                appointment_id=appointment_id
+            ).order_by(PatientRecordTemplateSnapshot.updated_at.desc()).first()
+        if not snapshot:
+            snapshot = PatientRecordTemplateSnapshot.query.filter_by(
+                patient_record_id=record.id
+            ).order_by(PatientRecordTemplateSnapshot.updated_at.desc()).first()
+
+        if snapshot:
+            snapshot.template_name = template_name
+            snapshot.content_html = content_html
+            snapshot.appointment_id = appointment_id
+            snapshot.updated_at = datetime.utcnow()
+        else:
+            snapshot = PatientRecordTemplateSnapshot(
+                patient_record_id=record.id,
+                appointment_id=appointment_id,
+                template_name=template_name,
+                content_html=content_html
+            )
+            db.session.add(snapshot)
+        db.session.commit()
+        return jsonify({
+            'message': 'Đã lưu snapshot HTML phiếu',
+            'snapshot_id': snapshot.id
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi lưu snapshot phiếu: {str(e)}'}), 500
+
+@app.route('/api/patient-records/<int:record_id>/template-snapshot', methods=['GET'])
+def get_patient_record_template_snapshot(record_id):
+    """Get latest saved full HTML form snapshot for a patient record."""
+    try:
+        ensure_patient_record_columns()
+        ensure_patient_record_template_snapshot_table()
+        _get_or_404(PatientRecord, record_id)
+        snapshot = PatientRecordTemplateSnapshot.query.filter_by(
+            patient_record_id=record_id
+        ).order_by(PatientRecordTemplateSnapshot.updated_at.desc()).first()
+        if not snapshot:
+            return jsonify({'message': 'Chưa có snapshot phiếu', 'snapshot': None})
+        return jsonify({
+            'snapshot': {
+                'id': snapshot.id,
+                'patient_record_id': snapshot.patient_record_id,
+                'appointment_id': snapshot.appointment_id,
+                'template_name': snapshot.template_name,
+                'content_html': snapshot.content_html,
+                'created_at': snapshot.created_at.isoformat() if snapshot.created_at else None,
+                'updated_at': snapshot.updated_at.isoformat() if snapshot.updated_at else None
+            }
+        })
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy snapshot phiếu: {str(e)}'}), 500
 
 @app.route('/api/patient-records/<int:record_id>/clinical-results', methods=['GET'])
 def get_patient_record_clinical_results(record_id):
@@ -10354,6 +11093,7 @@ def get_gynecology_records_summary():
 @app.route('/api/lab-result-groups', methods=['GET'])
 def get_lab_result_groups():
     try:
+        sync_lab_result_groups_with_service_groups(commit_changes=True)
         groups = LabResultGroup.query.order_by(LabResultGroup.sort_order, LabResultGroup.name).all()
         return jsonify([{
             'id': group.id,
@@ -10369,40 +11109,7 @@ def get_lab_result_groups():
 
 @app.route('/api/lab-result-groups', methods=['POST'])
 def create_lab_result_group():
-    try:
-        data = request.json
-        if not data or not data.get('name'):
-            return jsonify({'message': 'Tên nhóm là bắt buộc'}), 400
-        
-        # Tạo ID từ tên nhóm
-        group_id = data.get('id') or data['name'].lower().replace(' ', '-').replace('+', '-plus')
-        
-        # Kiểm tra ID trùng lặp
-        if db.session.get(LabResultGroup, group_id):
-            return jsonify({'message': 'ID nhóm đã tồn tại'}), 400
-        
-        group = LabResultGroup(
-            id=group_id,
-            name=data['name'],
-            icon=data.get('icon', 'fas fa-vial'),
-            is_default=data.get('is_default', False),
-            sort_order=data.get('sort_order', 0)
-        )
-        db.session.add(group)
-        db.session.commit()
-        
-        return jsonify({
-            'id': group.id,
-            'name': group.name,
-            'icon': group.icon,
-            'is_default': group.is_default,
-            'sort_order': group.sort_order,
-            'created_at': group.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'updated_at': group.updated_at.strftime('%Y-%m-%d %H:%M:%S')
-        }), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'message': f'Lỗi khi tạo nhóm: {str(e)}'}), 500
+    return jsonify({'message': 'Nhóm mẫu phiếu kết quả được quản lý từ trang nhóm dịch vụ cận lâm sàng.'}), 400
 def update_lab_result_group(group_id):
     try:
         group = _get_or_404(LabResultGroup, group_id)
@@ -10433,25 +11140,7 @@ def update_lab_result_group(group_id):
 
 @app.route('/api/lab-result-groups/<string:group_id>', methods=['DELETE'])
 def delete_lab_result_group(group_id):
-    try:
-        group = _get_or_404(LabResultGroup, group_id)
-        
-        # Không cho phép xóa nhóm mặc định
-        if group.is_default:
-            return jsonify({'message': 'Không thể xóa nhóm mặc định'}), 400
-        
-        # Chuyển các mẫu phiếu sang nhóm "Các xét nghiệm khác"
-        other_group = LabResultGroup.query.filter_by(id='other-test').first()
-        if other_group:
-            LabResultTemplate.query.filter_by(category=group_id).update({'category': 'other-test'})
-        
-        db.session.delete(group)
-        db.session.commit()
-        
-        return jsonify({'message': 'Đã xóa nhóm thành công'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'message': f'Lỗi khi xóa nhóm: {str(e)}'}), 500
+    return jsonify({'message': 'Nhóm mẫu phiếu kết quả được quản lý từ trang nhóm dịch vụ cận lâm sàng.'}), 400
 
 def initialize_default_groups():
     """Khởi tạo các nhóm mặc định nếu chưa có"""
@@ -10500,6 +11189,10 @@ def ensure_lab_result_template_columns():
 def get_lab_result_templates():
     ensure_lab_result_template_columns()
     try:
+        # Ensure every clinical service has a matching lab result template
+        sync_all_clinical_service_templates()
+        db.session.commit()
+
         # Sử dụng raw SQL để tránh vấn đề datetime parsing
         result = db.session.execute(db.text("""
             SELECT id, name, description, content_html, category, created_at, updated_at 
@@ -13693,6 +14386,7 @@ def initialize_user_management():
     try:
         with app.app_context():
             db.create_all()
+            ensure_special_template_lock_column()
             ensure_user_status_column()
             ensure_user_security_columns()
             initialize_default_roles()
@@ -13713,6 +14407,7 @@ if __name__ == '__main__':
         db.create_all()
         ensure_clinic_summary_column()
         ensure_logo_position_column()
+        ensure_special_template_lock_column()
         ensure_user_status_column()
         ensure_user_security_columns()
         ensure_clinical_result_columns()
@@ -13854,20 +14549,38 @@ def generate_clinical_form_pdf():
         # Parse HTML content and convert to PDF elements
         from reportlab.platypus import Paragraph, Spacer
         from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.lib.units import inch
         from reportlab.lib.enums import TA_CENTER, TA_LEFT
         
         styles = getSampleStyleSheet()
         story = []
+
+        # Register Unicode font for Vietnamese text (Windows local server)
+        base_font = 'Helvetica'
+        bold_font = 'Helvetica-Bold'
+        try:
+            arial_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'arial.ttf')
+            arial_bold_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'arialbd.ttf')
+            if os.path.exists(arial_path):
+                pdfmetrics.registerFont(TTFont('ArialUnicode', arial_path))
+                base_font = 'ArialUnicode'
+            if os.path.exists(arial_bold_path):
+                pdfmetrics.registerFont(TTFont('ArialUnicodeBold', arial_bold_path))
+                bold_font = 'ArialUnicodeBold'
+            elif base_font == 'ArialUnicode':
+                bold_font = 'ArialUnicode'
+        except Exception as font_error:
+            print(f"PDF font fallback to Helvetica: {font_error}")
         
         # Create custom styles
         title_style = styles['Heading1']
         title_style.alignment = TA_CENTER
         title_style.fontSize = 16
         title_style.textColor = colors.blue
+        title_style.fontName = bold_font
         
         normal_style = styles['Normal']
         normal_style.fontSize = 10
+        normal_style.fontName = base_font
         
         # Process HTML content
         # Split content into lines and process each
@@ -13895,8 +14608,10 @@ def generate_clinical_form_pdf():
             elif '<strong>' in line or '<b>' in line:
                 # Bold text
                 text_content = re.sub(r'<[^>]+>', '', line)
-                bold_style = normal_style
+                bold_style = styles['BodyText']
+                bold_style.fontSize = 10
                 bold_style.fontName = 'Helvetica-Bold'
+                bold_style.fontName = bold_font
                 para = Paragraph(text_content, bold_style)
                 story.append(para)
             else:
@@ -15701,6 +16416,7 @@ def bootstrap_schema_on_startup():
     try:
         with app.app_context():
             db.create_all()
+            ensure_special_template_lock_column()
             ensure_appointment_doctor_column()
             ensure_appointment_expected_delivery_date_column()
             ensure_appointment_sync_columns()

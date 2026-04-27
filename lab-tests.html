@@ -14,24 +14,31 @@
         .tab-btn { padding:6px 10px; border:1px solid #ccc; border-radius:6px; background:#f5f5f5; cursor:pointer; }
         .tab-btn.active { background:#2196F3; color:#fff; border-color:#2196F3; }
         .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:10px 0; }
-        table { width:100%; border-collapse:collapse; font-size:14px; }
-        th, td { padding:8px; border: none; }
-        th { background:#f7f7f7; border-bottom:1px solid #e0e0e0; }
-        td { border: none; }
+        table { width:100%; border-collapse:collapse; font-size:14px; table-layout: fixed; }
+        th, td { padding:6px 8px; border:1px dotted #9ca3af; vertical-align: middle; }
+        th {
+            background:#f3f4f6;
+            border:1px solid #9ca3af;
+            font-weight:700;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+        td { background: #fff; }
         .small { width:100px; }
         /* Make patient row inputs/selects match button size */
-        tbody input, tbody select { font-size: 16px; padding:6px; box-sizing: border-box; border: none; outline: none; }
-        tbody input:focus, tbody select:focus { border: none; outline: none; }
+        tbody input, tbody select { font-size: 14px; padding:4px 6px; box-sizing: border-box; border: 1px solid transparent; outline: none; width: 100%; background: transparent; }
+        tbody input:focus, tbody select:focus { border: 1px solid #2563eb; outline: none; background: #fff; }
         /* Make name column wider so full names are visible */
         th:nth-child(2), td:nth-child(2) { min-width: 220px; }
         /* Specific large input style for name/new-name */
         .lab-input-large { font-size:16px; padding:6px; width:100%; min-width:200px; box-sizing: border-box; border: none; outline: none; }
         .lab-input-large:focus { border: none; outline: none; }
         /* Remove border from all inputs and selects in table */
-        table input, table select { border: none; outline: none; }
-        table input:focus, table select:focus { border: none; outline: none; }
+        table input, table select { border: 1px solid transparent; outline: none; }
+        table input:focus, table select:focus { border: 1px solid #2563eb; outline: none; }
         .right { text-align:right; }
-        .table-wrapper { overflow-x:auto; margin: 0 -12px; padding: 0 12px; }
+        .table-wrapper { overflow:auto; margin: 0 -12px; padding: 0 12px; max-height: 72vh; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; }
         .waiting { opacity: 0.6; }
         .btn-sync-range.active { background-color: #1976d2; }
         .status-option { padding: 6px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 4px; }
@@ -43,10 +50,43 @@
         .th-filter-btn { position: absolute; right: 4px; bottom: 2px; background: transparent; border: 0; padding: 0; cursor: pointer; line-height: 0; }
         .th-filter-btn svg { width: 14px; height: 14px; fill: #6b6b6b; }
         .th-filter-btn:hover svg { fill: #333; }
+        .lab-table th:first-child,
+        .lab-table td:first-child {
+            width: 40px;
+            min-width: 40px;
+            max-width: 40px;
+            text-align: center;
+            padding-left: 2px;
+            padding-right: 2px;
+        }
         .lab-table th:last-child,
         .lab-table td:last-child {
-            width: 110px;
-            min-width: 110px;
+            width: 132px;
+            min-width: 132px;
+        }
+        .lab-table td.actions-cell {
+            white-space: nowrap;
+        }
+        .lab-table td.actions-cell .btn.small-btn {
+            padding: 4px 8px;
+            font-size: 12px;
+            line-height: 1.2;
+        }
+        /* Make displayed data controls fill their column width */
+        .lab-table td input,
+        .lab-table td select {
+            width: 100% !important;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+        .lab-table td .small,
+        .lab-table td .lab-input-large {
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: none !important;
+        }
+        .lab-table tbody tr:nth-child(even) td {
+            background: #fcfcfd;
         }
         #new-name {
             flex: 0 0 260px;
@@ -372,7 +412,7 @@
                     <select class="small status-select" data-id="${r.id}" data-field="status">${window.LAB_STATUSES.map(st=>`<option value="${st.name}" data-color="${st.color||''}" ${r.status===st.name?'selected':''}>${st.name}</option>`).join('')}</select>
                 </td>
                 <td><input value="${r.note||''}" data-id="${r.id}" data-field="note"></td>
-                <td>
+                <td class="actions-cell">
                     <button class="btn small-btn" onclick="saveRow(${r.id})">Lưu</button>
                     <button class="btn small-btn" onclick="delRow(${r.id})">Xóa</button>
                 </td>
@@ -581,8 +621,8 @@
                 loadRows();
             };
         }
-        // populate sync modal provider
-        document.getElementById('sync-provider').innerHTML = document.getElementById('filter-provider').innerHTML;
+        // Legacy hook removed: sync-provider/filter-provider không còn trên giao diện mới.
+        // Giữ code an toàn để tránh crash khởi tạo khi phần tử không tồn tại.
         
         // ===== Bộ hẹn giờ kiểm tra thay đổi tháng/năm hàng tuần (chủ nhật 18:00) =====
         // Lưu tháng/năm hiện tại để phát hiện khi có thay đổi

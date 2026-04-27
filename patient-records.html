@@ -885,6 +885,9 @@
                             <button class="btn btn-primary btn-small" onclick="viewRecord(${record.id})" title="Kết quả phiên khám">
                                 <i class="fas fa-folder"></i>
                             </button>
+                            <button class="btn btn-success btn-small" onclick="viewSavedTemplateSnapshot(${record.id})" title="Xem phiếu đã lưu (HTML)">
+                                <i class="fas fa-file-code"></i>
+                            </button>
                             <button class="btn btn-secondary btn-small" onclick="editRecord(${record.id})" title="Sửa">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -1009,6 +1012,65 @@
             const record = records.find(r => r.id === id);
             if (!record) return;
             await openClinicalResultsModal(record);
+        }
+
+        async function viewSavedTemplateSnapshot(recordId) {
+            try {
+                const response = await fetch(`/api/patient-records/${recordId}/template-snapshot`);
+                if (!response.ok) {
+                    alert('Không tải được phiếu đã lưu.');
+                    return;
+                }
+                const payload = await response.json();
+                const snapshot = payload?.snapshot;
+                if (!snapshot || !snapshot.content_html) {
+                    alert('Hồ sơ này chưa có phiếu HTML đã lưu.');
+                    return;
+                }
+
+                const metaEl = document.getElementById('saved-template-meta');
+                const contentEl = document.getElementById('saved-template-content');
+                if (metaEl) {
+                    const updatedText = snapshot.updated_at ? formatDateTime(snapshot.updated_at) : 'Chưa rõ';
+                    metaEl.textContent = `${snapshot.template_name || 'Phiếu chỉ định'} - Cập nhật: ${updatedText}`;
+                }
+                if (contentEl) {
+                    contentEl.innerHTML = snapshot.content_html;
+                }
+                const modal = document.getElementById('saved-template-modal');
+                if (modal) modal.style.display = 'flex';
+            } catch (error) {
+                console.error('Lỗi khi mở phiếu HTML đã lưu:', error);
+                alert('Lỗi mở phiếu đã lưu!');
+            }
+        }
+
+        function closeSavedTemplateModal() {
+            const modal = document.getElementById('saved-template-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function printSavedTemplateSnapshot() {
+            const content = document.getElementById('saved-template-content')?.innerHTML || '';
+            if (!content.trim()) {
+                alert('Không có nội dung phiếu để in.');
+                return;
+            }
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                    <head>
+                        <title>Phiếu đã lưu</title>
+                        <style>
+                            body { font-family: 'Times New Roman', serif; margin: 0; padding: 20px; }
+                            @media print { body { margin: 0; padding: 0; } }
+                        </style>
+                    </head>
+                    <body>${content}</body>
+                </html>
+            `);
+            printWindow.document.close();
+            printWindow.print();
         }
 
         // Delete record
@@ -2374,6 +2436,24 @@
         
         initializePage();
     </script>
+
+    <!-- Modal xem phiếu HTML đã lưu -->
+    <div id="saved-template-modal" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:1100px; max-height:92vh; overflow:auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px;">
+                <div>
+                    <h3 style="margin:0;">Phiếu đã lưu (HTML)</h3>
+                    <small id="saved-template-meta" style="color:#666;"></small>
+                </div>
+                <button class="close-modal" onclick="closeSavedTemplateModal()">&times;</button>
+            </div>
+            <div id="saved-template-content" style="background:#fff; border:1px solid #ddd; padding:12px;"></div>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+                <button class="btn btn-success" onclick="printSavedTemplateSnapshot()"><i class="fas fa-print"></i> In phiếu</button>
+                <button class="btn btn-secondary" onclick="closeSavedTemplateModal()">Đóng</button>
+            </div>
+        </div>
+    </div>
     
     <!-- Footer -->
     <footer class="footer" style="background: #333; color: white; text-align: center; padding: 2rem; margin-top: 3rem;">
