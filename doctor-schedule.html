@@ -456,6 +456,110 @@
 
         // Work Schedule Management
         let currentDate = new Date();
+        const SCHEDULE_AUTO_REFRESH_MS = 7000;
+        let scheduleAutoRefreshTimer = null;
+        let scheduleAutoRefreshInFlight = false;
+        let lastScheduleSnapshotKey = null;
+
+        function getVisibleScheduleDateRange() {
+            const start = new Date(currentDate);
+            const end = new Date(currentDate);
+            end.setDate(end.getDate() + 29);
+            const toDateStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            return { startDate: toDateStr(start), endDate: toDateStr(end) };
+        }
+
+        function hasOpenScheduleModal() {
+            const modalIds = [
+                'doctor-template-modal',
+                'doctor-list-modal',
+                'shift-templates-modal',
+                'doctor-picker-modal'
+            ];
+            return modalIds.some((id) => {
+                const el = document.getElementById(id);
+                if (!el) return false;
+                if (!el.classList.contains('hidden')) return true;
+                const display = (el.style.display || '').trim().toLowerCase();
+                return display === 'flex' || display === 'block';
+            });
+        }
+
+        function hasUnsavedScheduleChanges() {
+            const rows = document.querySelectorAll('.shift-row');
+            return Array.from(rows).some((row) => {
+                const shiftId = (row.dataset.shiftId || '').trim();
+                if (!shiftId) return true;
+                return false;
+            });
+        }
+
+        function isEditingScheduleInput() {
+            const active = document.activeElement;
+            if (!active) return false;
+            const tag = (active.tagName || '').toLowerCase();
+            if (!['input', 'textarea', 'select'].includes(tag)) return false;
+            return !!active.closest('#doctor-schedule-main');
+        }
+
+        function shouldAutoRefreshSchedule() {
+            if (document.hidden) return false;
+            if (hasOpenScheduleModal()) return false;
+            if (hasUnsavedScheduleChanges()) return false;
+            if (isEditingScheduleInput()) return false;
+            return true;
+        }
+
+        async function fetchScheduleSnapshotKey() {
+            const { startDate, endDate } = getVisibleScheduleDateRange();
+            const response = await fetch(`/api/admin/work-schedule?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`);
+            if (!response.ok) throw new Error(`Không thể tải snapshot lịch (${response.status})`);
+            const rows = await response.json();
+            const normalized = (Array.isArray(rows) ? rows : []).map((r) => ({
+                id: r.id,
+                external_id: r.external_id || '',
+                date: r.date || '',
+                start_time: r.start_time || '',
+                end_time: r.end_time || '',
+                doctor_name: r.doctor_name || '',
+                is_locked: !!r.is_locked,
+                is_closed: !!r.is_closed,
+                slot_minutes: Number(r.slot_minutes || 10)
+            }));
+            normalized.sort((a, b) => {
+                const ka = `${a.date}|${a.start_time}|${a.end_time}|${a.external_id}|${a.id}`;
+                const kb = `${b.date}|${b.start_time}|${b.end_time}|${b.external_id}|${b.id}`;
+                return ka.localeCompare(kb);
+            });
+            return JSON.stringify(normalized);
+        }
+
+        async function checkAndAutoRefreshSchedule() {
+            if (scheduleAutoRefreshInFlight) return;
+            if (!shouldAutoRefreshSchedule()) return;
+            scheduleAutoRefreshInFlight = true;
+            try {
+                const nextKey = await fetchScheduleSnapshotKey();
+                if (lastScheduleSnapshotKey !== null && nextKey !== lastScheduleSnapshotKey) {
+                    renderSchedule();
+                }
+                lastScheduleSnapshotKey = nextKey;
+            } catch (error) {
+                console.warn('Auto refresh lịch bác sĩ thất bại:', error);
+            } finally {
+                scheduleAutoRefreshInFlight = false;
+            }
+        }
+
+        function startScheduleAutoRefresh() {
+            if (scheduleAutoRefreshTimer) clearInterval(scheduleAutoRefreshTimer);
+            scheduleAutoRefreshTimer = setInterval(() => {
+                checkAndAutoRefreshSchedule();
+            }, SCHEDULE_AUTO_REFRESH_MS);
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) checkAndAutoRefreshSchedule();
+            });
+        }
 
         function renderSchedule() {
             const list = document.getElementById('appointment-list');
@@ -1796,6 +1900,12 @@
                     updateTemplateSelects();
                 }, 100);
             });
+            try {
+                lastScheduleSnapshotKey = await fetchScheduleSnapshotKey();
+            } catch (error) {
+                console.warn('Không thể khởi tạo snapshot lịch bác sĩ:', error);
+            }
+            startScheduleAutoRefresh();
         }
 
         initializeDoctorSchedulePage();

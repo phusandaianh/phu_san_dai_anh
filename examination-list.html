@@ -1106,7 +1106,8 @@
         serviceSearchQuery: '',
         doctors: [],
         pollTimer: null,
-        lastAppointmentsData: null
+        lastAppointmentsData: null,
+        isLoadingAppointments: false
     };
     let allAppointments = [];
     let clinicalPrintSelection = { appointmentId: null, services: [] };
@@ -1982,6 +1983,9 @@
 
     // Load appointments
     async function loadAppointments() {
+        if (state.isLoadingAppointments) return;
+        state.isLoadingAppointments = true;
+        try {
         const dateInput = document.getElementById('filter-date');
         const selected = dateInput && dateInput.value ? dateInput.value : null;
             // Build server-side search filters
@@ -2278,6 +2282,9 @@
             deleteAppointment(state.currentAppointmentId);
         };
         updateHeaderActionState();
+        } finally {
+            state.isLoadingAppointments = false;
+        }
     }
 
     // DOM ready
@@ -2406,13 +2413,37 @@
         document.querySelectorAll('input[name="service-selection-mode"]').forEach(r => {
             r.onchange = () => applyServiceSelectionMode(r.value);
         });
-            // Auto refresh periodically and on focus
+            // Auto refresh nhẹ: chỉ chạy khi tab active, không mở modal và không đang nhập liệu.
+            const AUTO_REFRESH_MS = 7000;
+            const REFRESH_PAUSE_AFTER_INPUT_MS = 12000;
+            let lastInputAt = 0;
+            const markUserInput = () => { lastInputAt = Date.now(); };
+            const hasOpenModal = () => {
+                if (document.getElementById('service-modal') && !document.getElementById('service-modal').classList.contains('hidden')) return true;
+                if (document.getElementById('clinical-print-select-modal') && !document.getElementById('clinical-print-select-modal').classList.contains('hidden')) return true;
+                if (document.getElementById('patient-edit-modal') && !document.getElementById('patient-edit-modal').classList.contains('hidden')) return true;
+                if (document.getElementById('clinical-result-modal') && !document.getElementById('clinical-result-modal').classList.contains('hidden')) return true;
+                if (document.getElementById('ultrasound-result-modal') && !document.getElementById('ultrasound-result-modal').classList.contains('hidden')) return true;
+                const formPreviewModal = document.getElementById('clinical-form-modal');
+                if (formPreviewModal && (formPreviewModal.style.display === 'block' || formPreviewModal.style.display === 'flex')) return true;
+                return !!document.getElementById('pdf-viewer-modal');
+            };
+            const shouldAutoRefresh = () => {
+                if (document.hidden) return false;
+                if (hasOpenModal()) return false;
+                if ((Date.now() - lastInputAt) < REFRESH_PAUSE_AFTER_INPUT_MS) return false;
+                return true;
+            };
+            const onAutoRefreshTick = () => {
+                if (!shouldAutoRefresh()) return;
+                loadAppointments().catch(() => {});
+            };
             const startPolling = () => {
                 if (state.pollTimer) clearInterval(state.pollTimer);
-                state.pollTimer = setInterval(() => { loadAppointments().catch(()=>{}); }, 8000);
+                state.pollTimer = setInterval(onAutoRefreshTick, AUTO_REFRESH_MS);
             };
             startPolling();
-            document.addEventListener('visibilitychange', () => { if (!document.hidden) loadAppointments(); });
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) loadAppointments().catch(() => {}); });
             const fd = document.getElementById('filter-date');
             const pastBtn = document.getElementById('btn-past');
             const todayBtn = document.getElementById('btn-today');
@@ -2476,6 +2507,14 @@
             const searchPhoneInput = document.getElementById('search-phone');
             const statusSelect = document.getElementById('filter-status');
             const suggestionsDiv = document.getElementById('search-suggestions');
+            if (fd) {
+                fd.addEventListener('input', markUserInput);
+                fd.addEventListener('change', markUserInput);
+            }
+            if (searchNameInput) searchNameInput.addEventListener('input', markUserInput);
+            if (searchPidInput) searchPidInput.addEventListener('input', markUserInput);
+            if (searchPhoneInput) searchPhoneInput.addEventListener('input', markUserInput);
+            if (statusSelect) statusSelect.addEventListener('change', markUserInput);
 
             // Load all appointments for local suggestions (does NOT include search filters)
             async function loadAllAppointmentsForSuggestions() {
