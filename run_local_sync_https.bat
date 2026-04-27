@@ -8,6 +8,8 @@ REM Edit the 2 values below before first run.
 REM ==========================================================
 set "SYNC_REMOTE_URL=https://phu-san-dai-anh.onrender.com/"
 set "SYNC_TOKEN=phongkham_2026_secure_sync"
+set "SYNC_PEER_APPOINTMENTS_URL=https://phusandaianh.io.vn"
+set "SYNC_PEER_TOKEN=phongkham_2026_secure_sync"
 
 set "SYNC_ROLE=local"
 set "PORT=5000"
@@ -39,6 +41,7 @@ echo.
 echo [SYNC+HTTPS] Starting LOCAL node with:
 echo             SYNC_ROLE=%SYNC_ROLE%
 echo             SYNC_REMOTE_URL=%SYNC_REMOTE_URL%
+echo             SYNC_PEER_APPOINTMENTS_URL=%SYNC_PEER_APPOINTMENTS_URL%
 echo             PORT=%PORT%
 echo             USE_HTTPS=%USE_HTTPS%
 echo.

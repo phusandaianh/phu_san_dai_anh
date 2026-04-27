@@ -26,3 +26,5 @@ services:
       # Thêm thủ công trên Render:
       # PUBLIC_BOOKING_URL = https://<app>.onrender.com
       # SYNC_TOKEN = <cung-gia-tri-voi-may-noi-bo>
+      # SYNC_PEER_APPOINTMENTS_URL = http://<IP-may-noi-bo>:5000
+      # SYNC_PEER_TOKEN = <cung-gia-tri-voi-SYNC_TOKEN-hoac-mot-token-rieng>

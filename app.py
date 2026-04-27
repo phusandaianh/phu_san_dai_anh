@@ -2721,6 +2721,27 @@ def _http_json(method: str, url: str, headers: dict = None, body_obj=None, timeo
     except Exception as e:
         return 0, {'error': str(e)}
 
+def _mirror_appointment_create_to_peer(payload: dict) -> None:
+    """Best-effort mirror đăng ký khám sang node peer để đảm bảo hiển thị 2 chiều."""
+    try:
+        peer_base = (os.environ.get('SYNC_PEER_APPOINTMENTS_URL') or app.config.get('SYNC_PEER_APPOINTMENTS_URL') or '').strip().rstrip('/')
+        if not peer_base:
+            return
+        token = (os.environ.get('SYNC_PEER_TOKEN') or app.config.get('SYNC_PEER_TOKEN') or '').strip()
+        headers = {'X-Appointment-Mirror': '1'}
+        if token:
+            headers['X-Sync-Token'] = token
+        _http_json(
+            'POST',
+            f"{peer_base}/api/appointments",
+            headers=headers,
+            body_obj=payload or {},
+            timeout_s=10,
+        )
+    except Exception:
+        # Không làm hỏng luồng đăng ký gốc nếu peer lỗi mạng.
+        pass
+
 def _notify_new_appointment_via_zalo_webhook(appointment, patient) -> bool:
     """Gửi thông báo đăng ký khám mới qua webhook trung gian Zalo (nếu cấu hình)."""
     webhook_url = (os.environ.get('ZALO_NOTIFY_WEBHOOK_URL') or app.config.get('ZALO_NOTIFY_WEBHOOK_URL') or '').strip()
@@ -4055,7 +4076,16 @@ def create_appointment():
     except Exception:
         return jsonify({'message': 'Thời gian đăng ký không hợp lệ.'}), 400
 
+    incoming_global_id = (data.get('global_id') or '').strip()
+    is_mirrored_request = (request.headers.get('X-Appointment-Mirror') or '').strip() == '1'
+
     try:
+        # Idempotent cho luồng mirror: cùng global_id thì coi như đã tạo.
+        if incoming_global_id:
+            existing_by_global = Appointment.query.filter_by(global_id=incoming_global_id).first()
+            if existing_by_global:
+                return jsonify({'message': 'Đăng ký lịch khám thành công', 'appointment_id': existing_by_global.id})
+
         # Kiểm tra trùng slot: đã có người đặt cùng thời điểm này
         existing_slot = Appointment.query.filter(
             Appointment.appointment_date == appointment_dt,
@@ -4084,13 +4114,28 @@ def create_appointment():
             appointment_date=appointment_dt,
             service_type=data['service_type'],
             doctor_name=doctor_name or 'PK Đại Anh',
-            global_id=str(uuid.uuid4()),
+            global_id=incoming_global_id or str(uuid.uuid4()),
             source=(os.environ.get('SYNC_ROLE') or app.config.get('SYNC_ROLE') or 'local'),
             version=1,
             last_modified_by='patient',
         )
         db.session.add(appointment)
         db.session.commit()
+
+        # Mirror trực tiếp sang peer (2 chiều), chỉ chạy ở request gốc để tránh loop.
+        if not is_mirrored_request:
+            mirror_payload = {
+                'name': patient.name,
+                'phone': patient.phone,
+                'date_of_birth': patient.date_of_birth.isoformat() if patient.date_of_birth else data.get('date_of_birth'),
+                'address': patient.address or data.get('address'),
+                'service_type': appointment.service_type,
+                'appointment_date': appointment.appointment_date.strftime('%Y-%m-%d'),
+                'appointment_time': appointment.appointment_date.strftime('%H:%M'),
+                'doctor_name': getattr(appointment, 'doctor_name', None) or doctor_name,
+                'global_id': appointment.global_id,
+            }
+            _mirror_appointment_create_to_peer(mirror_payload)
 
         # Emit sync event (best-effort)
         try:
