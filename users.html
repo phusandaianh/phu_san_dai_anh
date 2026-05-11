@@ -268,6 +268,9 @@
                     <button id="tabBackup" onclick="setActiveTab('backup')" class="btn secondary-btn">
                         <i class="fas fa-database"></i> Sao lưu &amp; Khôi phục
                     </button>
+                    <button id="tabDeploymentMachines" onclick="setActiveTab('deployment_machines')" class="btn secondary-btn">
+                        <i class="fas fa-desktop"></i> Máy triển khai
+                    </button>
 					</span>
 				</div>
 				<button onclick="logout()" class="btn secondary-btn">
@@ -470,6 +473,55 @@
                 </small>
             </div>
         </div>
+
+        <div id="deploymentMachinesSection" style="display: none; margin-top: 20px;">
+            <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                <h2 style="margin:0; font-size: 1.2rem;">Thông tin triển khai máy trạm</h2>
+                <div class="btn-group">
+                    <button type="button" class="btn secondary-btn" onclick="addDeploymentMachineRow()">
+                        <i class="fas fa-plus"></i> Thêm máy
+                    </button>
+                    <button type="button" class="btn primary-btn" onclick="saveDeploymentMachines()">
+                        <i class="fas fa-save"></i> Lưu danh sách máy
+                    </button>
+                    <button type="button" class="btn secondary-btn" onclick="exportDeploymentMachinesCsv()">
+                        <i class="fas fa-file-export"></i> Xuất CSV
+                    </button>
+                    <button type="button" class="btn secondary-btn" onclick="downloadDeploymentMachinesCsv()">
+                        <i class="fas fa-download"></i> Tải file machines.csv
+                    </button>
+                    <button type="button" class="btn secondary-btn" onclick="saveDeploymentMachinesCsvToServer()">
+                        <i class="fas fa-server"></i> Lưu machines.csv lên server
+                    </button>
+                    <button type="button" class="btn secondary-btn" onclick="copyDeploymentCommand()">
+                        <i class="fas fa-copy"></i> Copy lệnh deploy
+                    </button>
+                </div>
+            </div>
+            <p style="color:#666; margin: 0 0 8px 0;">
+                Bạn có thể cập nhật thủ công danh sách máy để phục vụ deploy hàng loạt:
+                <code>machine_name</code> và <code>target_path</code> (UNC).
+            </p>
+            <div class="table-container">
+                <table class="user-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 30%;">Tên máy Windows (machine_name)</th>
+                            <th>Đường dẫn đích UNC (target_path)</th>
+                            <th style="width: 90px;">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="deploymentMachinesTableBody"></tbody>
+                </table>
+            </div>
+            <small style="display:block; margin-top:8px; color:#666;">
+                Ví dụ target_path: <code>\\LETAN01\C$\ClinicApp</code>
+            </small>
+            <div style="margin-top: 10px;">
+                <label for="deploymentMachinesCsvPreview" style="font-weight:600; display:block; margin-bottom:6px;">CSV preview</label>
+                <textarea id="deploymentMachinesCsvPreview" class="form-control" rows="6" readonly style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;"></textarea>
+            </div>
+        </div>
         </div>
     </div>
 
@@ -644,7 +696,8 @@
             loginTempToken: null,
             resendCooldown: 30,
             myPermissions: [],
-            allowedPages: []
+            allowedPages: [],
+            deploymentMachines: []
         };
 
         // Hàm đăng nhập
@@ -862,6 +915,7 @@
             const permSection = document.getElementById('permissionsSection');
             const sessionsSection = document.getElementById('sessionsSection');
             const backupSection = document.getElementById('backupSection');
+            const deploymentMachinesSection = document.getElementById('deploymentMachinesSection');
             if (!adminActions) return;
             // Menu/tab permissions (UX): dựa trên permission, backend vẫn là nguồn bảo mật chính
             const canManageUsers = hasPerm('manage_users');
@@ -872,6 +926,7 @@
             if (permSection) permSection.style.display = 'none';
             if (sessionsSection) sessionsSection.style.display = 'none';
             if (backupSection) backupSection.style.display = 'none';
+            if (deploymentMachinesSection) deploymentMachinesSection.style.display = 'none';
 
             // Ẩn/hiện các nút tab tương ứng
             const tabUsers = document.getElementById('tabUsers');
@@ -879,11 +934,13 @@
             const tabPerm = document.getElementById('tabPermissions');
             const tabSessions = document.getElementById('tabSessions');
             const tabBackup = document.getElementById('tabBackup');
+            const tabDeploymentMachines = document.getElementById('tabDeploymentMachines');
             if (tabUsers) tabUsers.style.display = canManageUsers ? '' : 'none';
             if (tabAdd) tabAdd.style.display = canManageUsers ? '' : 'none';
             if (tabPerm) tabPerm.style.display = canSystemConfig ? '' : 'none';
             if (tabSessions) tabSessions.style.display = canManageUsers ? '' : 'none';
             if (tabBackup) tabBackup.style.display = canManageUsers ? '' : 'none';
+            if (tabDeploymentMachines) tabDeploymentMachines.style.display = canManageUsers ? '' : 'none';
         }
 
         // Kiểm tra đăng nhập khi tải trang
@@ -1277,6 +1334,179 @@ Trân trọng,
             document.getElementById('userManagementTable').style.display = 'block';
         }
 
+        function renderDeploymentMachinesTable() {
+            const tbody = document.getElementById('deploymentMachinesTableBody');
+            if (!tbody) return;
+            const rows = Array.isArray(state.deploymentMachines) ? state.deploymentMachines : [];
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#888;">Chưa có máy nào. Bấm "Thêm máy" để tạo.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rows.map((item, idx) => `
+                <tr>
+                    <td>
+                        <input type="text" class="form-control machine-name-input" data-index="${idx}" value="${(item.machine_name || '').replace(/"/g, '&quot;')}" placeholder="VD: LETAN01">
+                    </td>
+                    <td>
+                        <input type="text" class="form-control target-path-input" data-index="${idx}" value="${(item.target_path || '').replace(/"/g, '&quot;')}" placeholder="VD: \\\\LETAN01\\C$\\ClinicApp">
+                    </td>
+                    <td style="text-align:center;">
+                        <button type="button" class="btn danger-btn" style="padding:6px 10px; font-size:0.9rem;" onclick="removeDeploymentMachineRow(${idx})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadDeploymentMachines() {
+            try {
+                const res = await fetch('/api/deployment-machines', { headers: { ...getAuthHeaders() } });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'LOAD_FAILED');
+                state.deploymentMachines = Array.isArray(data.machines) ? data.machines : [];
+                renderDeploymentMachinesTable();
+            } catch (e) {
+                renderDeploymentMachinesTable();
+                alert('Không tải được danh sách máy triển khai.');
+            }
+        }
+
+        function addDeploymentMachineRow() {
+            state.deploymentMachines = Array.isArray(state.deploymentMachines) ? state.deploymentMachines : [];
+            state.deploymentMachines.push({ machine_name: '', target_path: '' });
+            renderDeploymentMachinesTable();
+        }
+
+        function removeDeploymentMachineRow(index) {
+            state.deploymentMachines = (state.deploymentMachines || []).filter((_, i) => i !== index);
+            renderDeploymentMachinesTable();
+        }
+
+        async function saveDeploymentMachines() {
+            const tbody = document.getElementById('deploymentMachinesTableBody');
+            if (!tbody) return;
+            const nameInputs = Array.from(tbody.querySelectorAll('.machine-name-input'));
+            const pathInputs = Array.from(tbody.querySelectorAll('.target-path-input'));
+            const rows = nameInputs.map((input, i) => ({
+                machine_name: (input.value || '').trim(),
+                target_path: (pathInputs[i]?.value || '').trim()
+            })).filter(r => r.machine_name || r.target_path);
+
+            try {
+                const res = await fetch('/api/deployment-machines', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                    body: JSON.stringify({ machines: rows })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'SAVE_FAILED');
+                state.deploymentMachines = Array.isArray(data.machines) ? data.machines : rows;
+                renderDeploymentMachinesTable();
+                alert('Đã lưu danh sách máy triển khai.');
+            } catch (e) {
+                alert('Không thể lưu danh sách máy triển khai.');
+            }
+        }
+
+        function buildDeploymentMachinesCsv() {
+            const tbody = document.getElementById('deploymentMachinesTableBody');
+            const rows = [];
+            if (tbody) {
+                const nameInputs = Array.from(tbody.querySelectorAll('.machine-name-input'));
+                const pathInputs = Array.from(tbody.querySelectorAll('.target-path-input'));
+                for (let i = 0; i < nameInputs.length; i++) {
+                    const machineName = (nameInputs[i].value || '').trim();
+                    const targetPath = (pathInputs[i]?.value || '').trim();
+                    if (!machineName && !targetPath) continue;
+                    rows.push({
+                        machine_name: machineName,
+                        target_path: targetPath
+                    });
+                }
+            }
+
+            const esc = (v) => {
+                const s = String(v == null ? '' : v);
+                return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+            };
+
+            const lines = [];
+            lines.push('machine_name,target_path,app_port,server_hostname,server_ip,sync_remote_url,sync_token');
+            for (const r of rows) {
+                const appPort = '5000';
+                const serverHostname = 'clinic-sync.local';
+                const serverIp = '192.168.1.230';
+                const syncRemoteUrl = 'https://clinic-sync.local';
+                const syncToken = 'phongkham_2026_secure_sync';
+                lines.push([
+                    esc(r.machine_name),
+                    esc(r.target_path),
+                    esc(appPort),
+                    esc(serverHostname),
+                    esc(serverIp),
+                    esc(syncRemoteUrl),
+                    esc(syncToken)
+                ].join(','));
+            }
+            return lines.join('\r\n');
+        }
+
+        function exportDeploymentMachinesCsv() {
+            const csv = buildDeploymentMachinesCsv();
+            const preview = document.getElementById('deploymentMachinesCsvPreview');
+            if (preview) preview.value = csv;
+            alert('Đã xuất CSV vào ô preview. Bạn có thể kiểm tra trước khi tải file.');
+        }
+
+        function downloadDeploymentMachinesCsv() {
+            const csv = buildDeploymentMachinesCsv();
+            const preview = document.getElementById('deploymentMachinesCsvPreview');
+            if (preview) preview.value = csv;
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'machines.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function saveDeploymentMachinesCsvToServer() {
+            const csv = buildDeploymentMachinesCsv();
+            const preview = document.getElementById('deploymentMachinesCsvPreview');
+            if (preview) preview.value = csv;
+            try {
+                const res = await fetch('/api/deployment-machines/export-csv', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                    body: JSON.stringify({ csv })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'SAVE_CSV_FAILED');
+                alert(`Đã lưu file machines.csv lên server: ${data.path || 'deployment/machines.csv'}`);
+            } catch (e) {
+                alert('Không thể lưu machines.csv lên server.');
+            }
+        }
+
+        async function copyDeploymentCommand() {
+            const cmd = 'powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy_bulk.ps1 -CsvPath .\\deployment\\machines.csv';
+            try {
+                await navigator.clipboard.writeText(cmd);
+                alert('Đã copy lệnh deploy vào clipboard.');
+            } catch (e) {
+                const preview = document.getElementById('deploymentMachinesCsvPreview');
+                if (preview) {
+                    preview.value = cmd;
+                    preview.select();
+                }
+                alert('Không copy tự động được. Lệnh đã hiển thị trong ô preview để bạn copy thủ công.');
+            }
+        }
+
         // Tabs helper
         function setActiveTab(tab) {
             const tabUsers = document.getElementById('tabUsers');
@@ -1284,20 +1514,24 @@ Trân trọng,
             const tabPerm = document.getElementById('tabPermissions');
             const tabSessions = document.getElementById('tabSessions');
             const tabBackup = document.getElementById('tabBackup');
-            [tabUsers, tabAdd, tabPerm, tabSessions, tabBackup].forEach(btn => btn && btn.classList.remove('primary-btn'));
-            [tabUsers, tabAdd, tabPerm, tabSessions, tabBackup].forEach(btn => btn && btn.classList.add('secondary-btn'));
+            const tabDeploymentMachines = document.getElementById('tabDeploymentMachines');
+            [tabUsers, tabAdd, tabPerm, tabSessions, tabBackup, tabDeploymentMachines].forEach(btn => btn && btn.classList.remove('primary-btn'));
+            [tabUsers, tabAdd, tabPerm, tabSessions, tabBackup, tabDeploymentMachines].forEach(btn => btn && btn.classList.add('secondary-btn'));
             const userTable = document.getElementById('userManagementTable');
             const permSection = document.getElementById('permissionsSection');
             const sessionsSection = document.getElementById('sessionsSection');
             const backupSection = document.getElementById('backupSection');
+            const deploymentMachinesSection = document.getElementById('deploymentMachinesSection');
             if (tab === 'users') {
                 if (userTable) userTable.style.display = 'block';
                 if (permSection) permSection.style.display = 'none';
                 if (sessionsSection) sessionsSection.style.display = 'none';
                 if (backupSection) backupSection.style.display = 'none';
+                if (deploymentMachinesSection) deploymentMachinesSection.style.display = 'none';
                 tabUsers && tabUsers.classList.remove('secondary-btn');
                 tabUsers && tabUsers.classList.add('primary-btn');
             } else if (tab === 'permissions') {
+                if (deploymentMachinesSection) deploymentMachinesSection.style.display = 'none';
                 showPermissionsTab();
                 tabPerm && tabPerm.classList.remove('secondary-btn');
                 tabPerm && tabPerm.classList.add('primary-btn');
@@ -1306,6 +1540,7 @@ Trân trọng,
                 if (permSection) permSection.style.display = 'none';
                 if (sessionsSection) sessionsSection.style.display = 'block';
                 if (backupSection) backupSection.style.display = 'none';
+                if (deploymentMachinesSection) deploymentMachinesSection.style.display = 'none';
                 tabSessions && tabSessions.classList.remove('secondary-btn');
                 tabSessions && tabSessions.classList.add('primary-btn');
                 loadSessions();
@@ -1314,9 +1549,19 @@ Trân trọng,
                 if (permSection) permSection.style.display = 'none';
                 if (sessionsSection) sessionsSection.style.display = 'none';
                 if (backupSection) backupSection.style.display = 'block';
+                if (deploymentMachinesSection) deploymentMachinesSection.style.display = 'none';
                 tabBackup && tabBackup.classList.remove('secondary-btn');
                 tabBackup && tabBackup.classList.add('primary-btn');
                 loadBackupFileList();
+            } else if (tab === 'deployment_machines') {
+                if (userTable) userTable.style.display = 'none';
+                if (permSection) permSection.style.display = 'none';
+                if (sessionsSection) sessionsSection.style.display = 'none';
+                if (backupSection) backupSection.style.display = 'none';
+                if (deploymentMachinesSection) deploymentMachinesSection.style.display = 'block';
+                tabDeploymentMachines && tabDeploymentMachines.classList.remove('secondary-btn');
+                tabDeploymentMachines && tabDeploymentMachines.classList.add('primary-btn');
+                loadDeploymentMachines();
             }
         }
 

@@ -1,0 +1,93 @@
+{
+  "name": "phong-kham-dai-anh-desktop",
+  "version": "1.0.0",
+  "description": "Desktop wrapper for Phong Kham Dai Anh",
+  "main": "main.js",
+  "author": "Phong Kham Dai Anh",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "runtime:build": "powershell -ExecutionPolicy Bypass -File .\\scripts\\build_python_runtime.ps1",
+    "dist": "npm run runtime:build && electron-builder --win nsis",
+    "dist:quick": "electron-builder --win nsis",
+    "dist:portable": "electron-builder --win portable",
+    "postinstall": "echo Electron dependencies installed."
+  },
+  "build": {
+    "appId": "vn.phongkham.daianh.desktop",
+    "productName": "Phong Kham Dai Anh",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "./runtime/python",
+        "to": "python-runtime",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../",
+        "to": "app-src",
+        "filter": [
+          "**/*",
+          "!**/.git/**",
+          "!**/.cursor/**",
+          "!**/desktop-electron/**",
+          "!**/node_modules/**",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyo",
+          "!**/.pytest_cache/**",
+          "!**/build/**",
+          "!**/releases/**",
+          "!**/backups/**",
+          "!**/uploads/**",
+          "!**/ultrasound-media/**",
+          "!**/qr-ads-media/**",
+          "!**/qr-ads-doctor-images/**",
+          "!**/*.log",
+          "!**/*.db-shm",
+          "!**/*.db-wal",
+          "!**/clinic.db",
+          "!**/mwl.db",
+          "!**/security_test_report.json",
+          "!**/test_*.py",
+          "!**/*_debug*.py"
+        ]
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "PhongKhamDaiAnh-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Phong Kham Dai Anh"
+    }
+  },
+  "devDependencies": {
+    "electron": "^38.3.0",
+    "electron-builder": "^26.0.12",
+    "wait-on": "^8.0.4"
+  }
+}
