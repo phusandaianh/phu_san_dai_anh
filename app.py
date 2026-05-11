@@ -2535,7 +2535,7 @@ def ensure_clinical_service_sync_columns():
         db.session.rollback()
 
 def ensure_work_schedule_columns():
-    """Ensure new columns exist on work_schedule: is_locked (bool), slot_minutes (int)."""
+    """Ensure new columns exist on work_schedule: is_locked, slot_minutes, is_closed, external_id."""
     try:
         result = db.session.execute(text('PRAGMA table_info(work_schedule)'))
         columns = [row[1] for row in result.fetchall()]
@@ -2545,6 +2545,10 @@ def ensure_work_schedule_columns():
             db.session.execute(text('ALTER TABLE work_schedule ADD COLUMN slot_minutes INTEGER DEFAULT 10'))
         if 'is_closed' not in columns:
             db.session.execute(text('ALTER TABLE work_schedule ADD COLUMN is_closed BOOLEAN DEFAULT 0'))
+        if 'external_id' not in columns:
+            db.session.execute(text('ALTER TABLE work_schedule ADD COLUMN external_id VARCHAR(36)'))
+        db.session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_work_schedule_external_id ON work_schedule(external_id)"))
+        db.session.execute(text("UPDATE work_schedule SET external_id = lower(hex(randomblob(16))) WHERE external_id IS NULL OR TRIM(external_id) = ''"))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -2751,6 +2755,97 @@ def _mirror_appointment_create_to_peer(payload: dict) -> None:
     except Exception:
         # Không làm hỏng luồng đăng ký gốc nếu peer lỗi mạng.
         pass
+
+def _mirror_appointment_delete_to_peer(global_id: str) -> None:
+    """Best-effort mirror xóa đăng ký khám sang node peer theo global_id."""
+    try:
+        gid = (global_id or '').strip()
+        if not gid:
+            return
+        peer_base = (os.environ.get('SYNC_PEER_APPOINTMENTS_URL') or app.config.get('SYNC_PEER_APPOINTMENTS_URL') or '').strip().rstrip('/')
+        if not peer_base:
+            return
+        token = (os.environ.get('SYNC_PEER_TOKEN') or app.config.get('SYNC_PEER_TOKEN') or '').strip()
+        headers = {'X-Appointment-Mirror': '1'}
+        if token:
+            headers['X-Sync-Token'] = token
+        _http_json(
+            'DELETE',
+            f"{peer_base}/api/appointments/by-global-id/{urllib.parse.quote(gid, safe='')}",
+            headers=headers,
+            timeout_s=10,
+        )
+    except Exception:
+        # Không làm hỏng luồng xóa gốc nếu peer lỗi mạng.
+        pass
+
+def _work_schedule_payload(ws: "WorkSchedule") -> dict:
+    return {
+        'external_id': (getattr(ws, 'external_id', None) or '').strip(),
+        'date': ws.date,
+        'start_time': ws.start_time,
+        'end_time': ws.end_time,
+        'doctor_name': ws.doctor_name,
+        'is_locked': bool(getattr(ws, 'is_locked', False)),
+        'slot_minutes': int(getattr(ws, 'slot_minutes', 10) or 10),
+        'is_closed': bool(getattr(ws, 'is_closed', False)),
+    }
+
+def _mirror_work_schedule_upsert_to_peer(payload: dict) -> None:
+    """Best-effort mirror upsert ca khám theo external_id sang node peer."""
+    try:
+        ext_id = ((payload or {}).get('external_id') or '').strip()
+        if not ext_id:
+            return
+        peer_base = (os.environ.get('SYNC_PEER_APPOINTMENTS_URL') or app.config.get('SYNC_PEER_APPOINTMENTS_URL') or '').strip().rstrip('/')
+        if not peer_base:
+            return
+        token = (os.environ.get('SYNC_PEER_TOKEN') or app.config.get('SYNC_PEER_TOKEN') or '').strip()
+        headers = {'X-Work-Schedule-Mirror': '1'}
+        if token:
+            headers['X-Sync-Token'] = token
+        _http_json(
+            'PUT',
+            f"{peer_base}/api/admin/work-schedule/by-external-id/{urllib.parse.quote(ext_id, safe='')}",
+            headers=headers,
+            body_obj=payload or {},
+            timeout_s=10,
+        )
+    except Exception:
+        pass
+
+def _mirror_work_schedule_delete_to_peer(external_id: str) -> None:
+    """Best-effort mirror xóa ca khám theo external_id sang node peer."""
+    try:
+        ext_id = (external_id or '').strip()
+        if not ext_id:
+            return
+        peer_base = (os.environ.get('SYNC_PEER_APPOINTMENTS_URL') or app.config.get('SYNC_PEER_APPOINTMENTS_URL') or '').strip().rstrip('/')
+        if not peer_base:
+            return
+        token = (os.environ.get('SYNC_PEER_TOKEN') or app.config.get('SYNC_PEER_TOKEN') or '').strip()
+        headers = {'X-Work-Schedule-Mirror': '1'}
+        if token:
+            headers['X-Sync-Token'] = token
+        _http_json(
+            'DELETE',
+            f"{peer_base}/api/admin/work-schedule/by-external-id/{urllib.parse.quote(ext_id, safe='')}",
+            headers=headers,
+            timeout_s=10,
+        )
+    except Exception:
+        pass
+
+def _run_background_best_effort(task_fn, *args, **kwargs) -> None:
+    """Run non-critical task in daemon thread to avoid blocking API response."""
+    def _runner():
+        try:
+            task_fn(*args, **kwargs)
+        except Exception:
+            pass
+    t = threading.Thread(target=_runner)
+    t.daemon = True
+    t.start()
 
 def _notify_new_appointment_via_zalo_webhook(appointment, patient) -> bool:
     """Gửi thông báo đăng ký khám mới qua webhook trung gian Zalo (nếu cấu hình)."""
@@ -3312,6 +3407,7 @@ def ensure_patient_record_template_snapshot_table():
 
 class WorkSchedule(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    external_id = db.Column(db.String(36), unique=True, index=True)
     date = db.Column(db.String(10), nullable=False)  # yyyy-mm-dd
     start_time = db.Column(db.String(5), nullable=False)  # HH:MM
     end_time = db.Column(db.String(5), nullable=False)    # HH:MM
@@ -4039,7 +4135,7 @@ def schedule_page():
     return send_from_directory('templates', 'schedule.html')
 @app.route('/api/appointments', methods=['POST'])
 def create_appointment():
-    data = request.json
+    data = request.json or {}
     # Ensure sync columns exist (best-effort migration)
     ensure_appointment_doctor_column()
     ensure_appointment_expected_delivery_date_column()
@@ -4132,20 +4228,17 @@ def create_appointment():
         db.session.add(appointment)
         db.session.commit()
 
-        # Mirror trực tiếp sang peer (2 chiều), chỉ chạy ở request gốc để tránh loop.
-        if not is_mirrored_request:
-            mirror_payload = {
-                'name': patient.name,
-                'phone': patient.phone,
-                'date_of_birth': patient.date_of_birth.isoformat() if patient.date_of_birth else data.get('date_of_birth'),
-                'address': patient.address or data.get('address'),
-                'service_type': appointment.service_type,
-                'appointment_date': appointment.appointment_date.strftime('%Y-%m-%d'),
-                'appointment_time': appointment.appointment_date.strftime('%H:%M'),
-                'doctor_name': getattr(appointment, 'doctor_name', None) or doctor_name,
-                'global_id': appointment.global_id,
-            }
-            _mirror_appointment_create_to_peer(mirror_payload)
+        mirror_payload = {
+            'name': patient.name,
+            'phone': patient.phone,
+            'date_of_birth': patient.date_of_birth.isoformat() if patient.date_of_birth else data.get('date_of_birth'),
+            'address': patient.address or data.get('address'),
+            'service_type': appointment.service_type,
+            'appointment_date': appointment.appointment_date.strftime('%Y-%m-%d'),
+            'appointment_time': appointment.appointment_date.strftime('%H:%M'),
+            'doctor_name': getattr(appointment, 'doctor_name', None) or doctor_name,
+            'global_id': appointment.global_id,
+        }
 
         # Emit sync event (best-effort)
         try:
@@ -4167,20 +4260,14 @@ def create_appointment():
         except Exception:
             pass
 
-        # Khi có chỉ định siêu âm, đồng bộ MWL realtime ngay
-        try:
-            if _is_ultrasound_text(appointment.service_type):
-                _mark_appointment_Maysieuam_pending(appointment.id)
-                _sync_appointment_ultrasound_worklist(appointment.id)
-                _kick_Maysieuam_sync_now(appointment.id)
-        except Exception as sync_error:
-            print(f"Error syncing with ultrasound machine: {sync_error}")
-
-        # Gửi thông báo có phiếu đăng ký khám qua webhook Zalo (best-effort)
-        try:
-            _notify_new_appointment_via_zalo_webhook(appointment, patient)
-        except Exception as zalo_error:
-            print(f"[ZALO_NOTIFY] Failed to send notification: {zalo_error}")
+        # Trả phản hồi nhanh cho booking; các tác vụ mạng/đồng bộ chạy nền.
+        if not is_mirrored_request:
+            _run_background_best_effort(_mirror_appointment_create_to_peer, mirror_payload)
+        if _is_ultrasound_text(appointment.service_type):
+            _run_background_best_effort(_mark_appointment_Maysieuam_pending, appointment.id)
+            _run_background_best_effort(_sync_appointment_ultrasound_worklist, appointment.id)
+            _run_background_best_effort(_kick_Maysieuam_sync_now, appointment.id)
+        _run_background_best_effort(_notify_new_appointment_via_zalo_webhook, appointment, patient)
 
         return jsonify({'message': 'Đăng ký lịch khám thành công', 'appointment_id': appointment.id})
     except Exception as e:
@@ -4727,14 +4814,18 @@ def delete_clinic_doctor(doctor_id):
 @app.route('/api/appointments/<int:appointment_id>', methods=['DELETE'])
 def delete_appointment(appointment_id: int):
     try:
+        is_mirrored_request = (request.headers.get('X-Appointment-Mirror') or '').strip() == '1'
         ensure_appointment_change_request_columns()
         ensure_clinical_service_sync_columns()
         # Tìm appointment cần xóa
         appointment = _get_or_404(Appointment, appointment_id)
+        if not appointment.global_id:
+            appointment.global_id = str(uuid.uuid4())
         
         # Lưu thông tin để trả về
         patient_name = appointment.patient.name
         appointment_time = appointment.appointment_date.strftime('%H:%M')
+        deleted_global_id = appointment.global_id
         
         # Xóa bản ghi con trước để tránh DB cũ bị lỗi NOT NULL/FK khi ORM set NULL.
         AppointmentChangeRequest.query.filter_by(appointment_id=appointment_id).delete(synchronize_session=False)
@@ -4755,6 +4846,21 @@ def delete_appointment(appointment_id: int):
         # Xóa appointment sau cùng
         db.session.delete(appointment)
         db.session.commit()
+
+        # Mirror xóa trực tiếp sang peer (2 chiều), chỉ chạy ở request gốc để tránh loop.
+        if not is_mirrored_request:
+            _mirror_appointment_delete_to_peer(deleted_global_id)
+
+        # Emit sync event (best-effort) để node còn lại luôn bắt kịp trạng thái xóa.
+        try:
+            _emit_sync_event('appointment', deleted_global_id, 'appointment.deleted', {
+                'appointment': {
+                    'global_id': deleted_global_id,
+                    'deleted_at': datetime.utcnow().isoformat(),
+                }
+            })
+        except Exception:
+            pass
         
         return jsonify({
             'message': 'Đã xóa bệnh nhân thành công',
@@ -4764,6 +4870,17 @@ def delete_appointment(appointment_id: int):
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Lỗi khi xóa bệnh nhân: {str(e)}'}), 500
+
+@app.route('/api/appointments/by-global-id/<string:global_id>', methods=['DELETE'])
+def delete_appointment_by_global_id(global_id: str):
+    """Delete appointment by global_id for mirror/sync usage."""
+    gid = (global_id or '').strip()
+    if not gid:
+        return jsonify({'message': 'Thiếu global_id'}), 400
+    appt = Appointment.query.filter_by(global_id=gid).first()
+    if not appt:
+        return jsonify({'message': 'Không tìm thấy lịch hẹn theo global_id'}), 404
+    return delete_appointment(appt.id)
 
 # patients/by-phone -> đã chuyển sang api/v1/patients.py
 
@@ -4962,7 +5079,7 @@ def print_ultrasound(appointment_id):
 # Mobile App API Endpoints
 @app.route('/api/mobile/login', methods=['POST'])
 def mobile_login():
-    data = request.json
+    data = request.json or {}
     phone = data.get('phone')
     password = data.get('password')
     
@@ -5216,6 +5333,90 @@ def _apply_sync_event(event_type: str, payload_obj: dict) -> None:
                     appt.updated_at = datetime.fromisoformat(ap.get('updated_at'))
                 except Exception:
                     pass
+            db.session.commit()
+            return
+
+        if event_type == 'appointment.deleted':
+            ap = (payload_obj or {}).get('appointment') or {}
+            global_id = (ap.get('global_id') or '').strip()
+            if not global_id:
+                return
+            appt = Appointment.query.filter_by(global_id=global_id).first()
+            if not appt:
+                return
+
+            AppointmentChangeRequest.query.filter_by(appointment_id=appt.id).delete(synchronize_session=False)
+            Notification.query.filter_by(appointment_id=appt.id).delete(synchronize_session=False)
+            MedicalRecord.query.filter_by(appointment_id=appt.id).delete(synchronize_session=False)
+            TestResult.query.filter_by(appointment_id=appt.id).delete(synchronize_session=False)
+            PatientVital.query.filter_by(appointment_id=appt.id).delete(synchronize_session=False)
+            LabOrder.query.filter_by(appointment_id=appt.id).delete(synchronize_session=False)
+            for cs in ClinicalService.query.filter_by(appointment_id=appt.id).all():
+                try:
+                    LabOrder.query.filter_by(clinical_service_id=cs.id).delete(synchronize_session=False)
+                except Exception:
+                    pass
+                db.session.delete(cs)
+            db.session.delete(appt)
+            db.session.commit()
+            return
+
+        if event_type == 'work_schedule.upsert':
+            ensure_work_schedule_columns()
+            ws = (payload_obj or {}).get('work_schedule') or {}
+            external_id = (ws.get('external_id') or '').strip()
+            if not external_id:
+                return
+            row = WorkSchedule.query.filter_by(external_id=external_id).first()
+            if not row:
+                row = WorkSchedule(external_id=external_id)
+                db.session.add(row)
+            row.date = ws.get('date') or row.date or datetime.now().strftime('%Y-%m-%d')
+            row.start_time = ws.get('start_time') or row.start_time or '00:00'
+            row.end_time = ws.get('end_time') or row.end_time or '00:00'
+            row.doctor_name = ws.get('doctor_name') or row.doctor_name or 'PK Đại Anh'
+            row.is_locked = bool(ws.get('is_locked', False))
+            try:
+                row.slot_minutes = int(ws.get('slot_minutes', 10) or 10)
+            except Exception:
+                row.slot_minutes = 10
+            row.is_closed = bool(ws.get('is_closed', False))
+            db.session.commit()
+            return
+
+        if event_type == 'work_schedule.deleted':
+            ensure_work_schedule_columns()
+            ws = (payload_obj or {}).get('work_schedule') or {}
+            external_id = (ws.get('external_id') or '').strip()
+            if not external_id:
+                return
+            row = WorkSchedule.query.filter_by(external_id=external_id).first()
+            if not row:
+                return
+            db.session.delete(row)
+            db.session.commit()
+            return
+
+        if event_type == 'work_schedule.day_closed':
+            ensure_work_schedule_columns()
+            ws = (payload_obj or {}).get('work_schedule') or {}
+            date = (ws.get('date') or '').strip()
+            is_closed = bool(ws.get('is_closed', True))
+            if not date:
+                return
+            updated = WorkSchedule.query.filter_by(date=date).update({WorkSchedule.is_closed: is_closed})
+            if updated == 0 and is_closed:
+                row = WorkSchedule(
+                    external_id=str(uuid.uuid4()),
+                    date=date,
+                    start_time='00:00',
+                    end_time='23:59',
+                    doctor_name='Nghỉ',
+                    is_locked=True,
+                    is_closed=True,
+                    slot_minutes=10,
+                )
+                db.session.add(row)
             db.session.commit()
             return
 
@@ -7408,6 +7609,7 @@ def admin_get_work_schedule():
     return jsonify([
         {
             'id': s.id,
+            'external_id': (getattr(s, 'external_id', None) or ''),
             'date': s.date,
             'start_time': s.start_time,
             'end_time': s.end_time,
@@ -7421,8 +7623,30 @@ def admin_get_work_schedule():
 @app.route('/api/admin/work-schedule', methods=['POST'])
 def admin_add_work_schedule():
     ensure_work_schedule_columns()
-    data = request.json
+    is_mirrored_request = (request.headers.get('X-Work-Schedule-Mirror') or '').strip() == '1'
+    data = request.json or {}
+    external_id = (data.get('external_id') or '').strip() or str(uuid.uuid4())
+    exists = WorkSchedule.query.filter_by(external_id=external_id).first()
+    if exists:
+        exists.date = data.get('date', exists.date)
+        exists.start_time = data.get('start_time', exists.start_time)
+        exists.end_time = data.get('end_time', exists.end_time)
+        exists.doctor_name = data.get('doctor_name', exists.doctor_name)
+        exists.is_locked = bool(data.get('is_locked', exists.is_locked))
+        try:
+            exists.slot_minutes = int(data.get('slot_minutes', exists.slot_minutes or 10) or 10)
+        except Exception:
+            pass
+        exists.is_closed = bool(data.get('is_closed', exists.is_closed))
+        db.session.commit()
+        payload = _work_schedule_payload(exists)
+        if not is_mirrored_request:
+            _mirror_work_schedule_upsert_to_peer(payload)
+            _emit_sync_event('work_schedule', external_id, 'work_schedule.upsert', {'work_schedule': payload})
+        return jsonify({'message': 'Đã thêm ca khám!', 'id': exists.id, 'external_id': external_id})
+
     ws = WorkSchedule(
+        external_id=external_id,
         date=data['date'],
         start_time=data['start_time'],
         end_time=data['end_time'],
@@ -7433,12 +7657,19 @@ def admin_add_work_schedule():
     )
     db.session.add(ws)
     db.session.commit()
-    return jsonify({'message': 'Đã thêm ca khám!', 'id': ws.id})
+    payload = _work_schedule_payload(ws)
+    if not is_mirrored_request:
+        _mirror_work_schedule_upsert_to_peer(payload)
+        _emit_sync_event('work_schedule', external_id, 'work_schedule.upsert', {'work_schedule': payload})
+    return jsonify({'message': 'Đã thêm ca khám!', 'id': ws.id, 'external_id': external_id})
 
 @app.route('/api/admin/work-schedule/<int:id>', methods=['PUT'])
 def admin_update_work_schedule(id):
     ensure_work_schedule_columns()
+    is_mirrored_request = (request.headers.get('X-Work-Schedule-Mirror') or '').strip() == '1'
     ws = _get_or_404(WorkSchedule, id)
+    if not ws.external_id:
+        ws.external_id = str(uuid.uuid4())
     data = request.json
     ws.date = data.get('date', ws.date)
     ws.start_time = data.get('start_time', ws.start_time)
@@ -7454,14 +7685,54 @@ def admin_update_work_schedule(id):
     if 'is_closed' in data:
         ws.is_closed = bool(data.get('is_closed'))
     db.session.commit()
+    payload = _work_schedule_payload(ws)
+    if not is_mirrored_request:
+        _mirror_work_schedule_upsert_to_peer(payload)
+        _emit_sync_event('work_schedule', ws.external_id, 'work_schedule.upsert', {'work_schedule': payload})
     return jsonify({'message': 'Đã cập nhật ca khám!'})
 
 @app.route('/api/admin/work-schedule/<int:id>', methods=['DELETE'])
 def admin_delete_work_schedule(id):
+    is_mirrored_request = (request.headers.get('X-Work-Schedule-Mirror') or '').strip() == '1'
     ws = _get_or_404(WorkSchedule, id)
+    external_id = (ws.external_id or '').strip() or str(uuid.uuid4())
+    ws.external_id = external_id
     db.session.delete(ws)
     db.session.commit()
+    if not is_mirrored_request:
+        _mirror_work_schedule_delete_to_peer(external_id)
+        _emit_sync_event('work_schedule', external_id, 'work_schedule.deleted', {'work_schedule': {'external_id': external_id}})
     return jsonify({'message': 'Đã xóa ca khám!'})
+
+@app.route('/api/admin/work-schedule/by-external-id/<string:external_id>', methods=['PUT', 'DELETE'])
+def admin_work_schedule_by_external_id(external_id: str):
+    ensure_work_schedule_columns()
+    ext_id = (external_id or '').strip()
+    if not ext_id:
+        return jsonify({'message': 'Thiếu external_id'}), 400
+    if request.method == 'DELETE':
+        ws = WorkSchedule.query.filter_by(external_id=ext_id).first()
+        if not ws:
+            return jsonify({'message': 'Không tìm thấy ca khám theo external_id'}), 404
+        return admin_delete_work_schedule(ws.id)
+
+    data = request.json or {}
+    ws = WorkSchedule.query.filter_by(external_id=ext_id).first()
+    if not ws:
+        ws = WorkSchedule(
+            external_id=ext_id,
+            date=data.get('date') or datetime.now().strftime('%Y-%m-%d'),
+            start_time=data.get('start_time') or '00:00',
+            end_time=data.get('end_time') or '00:00',
+            doctor_name=data.get('doctor_name') or 'PK Đại Anh',
+            is_locked=bool(data.get('is_locked', False)),
+            slot_minutes=int(data.get('slot_minutes', 10) or 10),
+            is_closed=bool(data.get('is_closed', False)),
+        )
+        db.session.add(ws)
+        db.session.commit()
+        return jsonify({'message': 'Đã thêm ca khám!', 'id': ws.id, 'external_id': ext_id})
+    return admin_update_work_schedule(ws.id)
 
 STAFF_HOURLY_RATE_KEY = 'staff_hourly_rate'
 
@@ -7586,6 +7857,7 @@ def sync_work_schedule():
 def close_work_schedule_day():
     """Mark an entire day as closed. If no shifts exist, create a placeholder closed shift."""
     ensure_work_schedule_columns()
+    is_mirrored_request = (request.headers.get('X-Work-Schedule-Mirror') or '').strip() == '1'
     data = request.json or {}
     date = data.get('date')
     is_closed = bool(data.get('is_closed', True))
@@ -7597,6 +7869,7 @@ def close_work_schedule_day():
         if updated == 0 and is_closed:
             # Create a placeholder closed shift covering the day
             ws = WorkSchedule(
+                external_id=str(uuid.uuid4()),
                 date=date,
                 start_time='00:00',
                 end_time='23:59',
@@ -7607,6 +7880,8 @@ def close_work_schedule_day():
             )
             db.session.add(ws)
         db.session.commit()
+        if not is_mirrored_request:
+            _emit_sync_event('work_schedule', date, 'work_schedule.day_closed', {'work_schedule': {'date': date, 'is_closed': is_closed}})
         return jsonify({'message': 'Đã cập nhật trạng thái nghỉ của ngày', 'date': date, 'is_closed': is_closed})
     except Exception as e:
         db.session.rollback()

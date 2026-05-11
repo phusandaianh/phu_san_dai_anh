@@ -671,6 +671,8 @@
     // Gửi form đăng ký
     document.getElementById('register-form').onsubmit = async function(e) {
       e.preventDefault();
+      const submitBtn = this.querySelector('.register-btn');
+      const originalSubmitText = submitBtn ? submitBtn.innerHTML : '';
       const name = document.getElementById('patient-name').value;
       const phone = document.getElementById('patient-phone').value;
       const dob = document.getElementById('patient-dob').value;
@@ -697,33 +699,46 @@
       if (bookingPidRaw && !Number.isNaN(bookingPatientIdNum)) {
         payload.patient_id = bookingPatientIdNum;
       }
-      const res = await fetch('/api/appointments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        const dataRes = await res.json();
-        const nameDisplay = name.trim().toUpperCase();
-        console.log('Đăng ký khám thành công, hiển thị popup...');
-        // Hiển thị phiếu đăng ký thành công
-        if (window.showSuccessTicket) {
-          console.log('Gọi hàm showSuccessTicket...');
-          window.showSuccessTicket({
-            name: nameDisplay,
-            phone,
-            date,
-            time,
-            doctor,
-            appointmentId: dataRes.appointment_id
-          });
-        } else {
-          console.log('Hàm showSuccessTicket không tồn tại, hiển thị alert...');
-          alert('Đăng ký thành công! Tên: ' + nameDisplay + ', SĐT: ' + phone + ', Ngày: ' + date + ', Giờ: ' + time + ', Bác sĩ: ' + doctor);
+      try {
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xác nhận...';
         }
-      } else {
-        const data = await res.json();
-        alert(data.message || 'Có lỗi khi đăng ký');
+        const res = await fetch('/api/appointments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const dataRes = await res.json();
+          const nameDisplay = name.trim().toUpperCase();
+          console.log('Đăng ký khám thành công, hiển thị popup...');
+          // Hiển thị phiếu đăng ký thành công
+          if (window.showSuccessTicket) {
+            console.log('Gọi hàm showSuccessTicket...');
+            window.showSuccessTicket({
+              name: nameDisplay,
+              phone,
+              date,
+              time,
+              doctor,
+              appointmentId: dataRes.appointment_id
+            });
+          } else {
+            console.log('Hàm showSuccessTicket không tồn tại, hiển thị alert...');
+            alert('Đăng ký thành công! Tên: ' + nameDisplay + ', SĐT: ' + phone + ', Ngày: ' + date + ', Giờ: ' + time + ', Bác sĩ: ' + doctor);
+          }
+        } else {
+          const data = await res.json();
+          alert(data.message || 'Có lỗi khi đăng ký');
+        }
+      } catch (error) {
+        alert('Có lỗi kết nối khi đăng ký. Vui lòng thử lại.');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalSubmitText || 'Xác nhận đăng ký';
+        }
       }
     };
 
