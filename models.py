@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from extensions import db
 class Appointment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
