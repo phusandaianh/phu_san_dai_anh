@@ -1,6 +1,5 @@
 from flask import Blueprint, request, jsonify
-from models import Appointment
-from app import db
+from app import Appointment, db
 
 sync_bp = Blueprint("sync", __name__)
 
