@@ -2049,7 +2049,7 @@ Trân trọng,
 
         async function cancelLoginDevice(deviceId) {
             if (!deviceId) return;
-            if (!confirm('Hủy đăng nhập từ thiết bị/IP này? Thiết bị sẽ không đăng nhập được nếu chưa được phê duyệt lại.')) return;
+            if (!confirm('Từ chối đăng nhập từ thiết bị/IP này? Dòng này sẽ bị xóa khỏi danh sách; máy đó phải đăng nhập lại và chờ phê duyệt nếu cần.')) return;
             try {
                 const response = await fetch(`/api/login-device-history/${encodeURIComponent(deviceId)}/cancel-login`, {
                     method: 'POST',

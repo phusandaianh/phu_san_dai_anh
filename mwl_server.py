@@ -78,9 +78,11 @@ SERVER_IP = str(_CFG.get('mwl_server_ip', '10.17.2.2') or '10.17.2.2')
 STATION_AE_TITLE = str(_CFG.get('modality_station_ae_title', 'MAY_SIEU_AM')).encode('ascii', errors='ignore') or b'MAY_SIEU_AM'
 STATION_NAME = str(_CFG.get('modality_station_name', 'US1') or 'US1')
 
-# Danh sách worklist entries
+# Danh sách worklist entries (cache; C-FIND luôn reload từ mwl.db trước mỗi truy vấn)
 worklist_entries = []
+_worklist_entries_lock = threading.Lock()
 WORKLIST_JSON = 'worklist.json'
+MWL_RELOAD_SIGNAL = 'mwl_reload.signal'
 
 
 def load_worklist_from_db():
@@ -125,6 +127,28 @@ def load_worklist_from_db():
         return []
 
 
+def reload_worklist_from_db_now():
+    """Nạp lại worklist từ mwl.db vào RAM (dùng ngay sau sync hoặc trước C-FIND)."""
+    global worklist_entries
+    entries = load_worklist_from_db()
+    with _worklist_entries_lock:
+        worklist_entries = entries
+    return len(entries)
+
+
+def _maybe_reload_from_signal():
+    """Reload ngay khi app ghi file tín hiệu sau lưu lịch."""
+    try:
+        if os.path.exists(MWL_RELOAD_SIGNAL):
+            reload_worklist_from_db_now()
+            try:
+                os.remove(MWL_RELOAD_SIGNAL)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 def start_worklist_watcher(interval=10):
     """Start a background thread to reload worklist.json periodically."""
     def watcher():
@@ -136,14 +160,15 @@ def start_worklist_watcher(interval=10):
         pending_json_mtime = None
         while True:
             try:
+                _maybe_reload_from_signal()
                 # Prefer loading from DB (mwl.db) if available
                 if os.path.exists('mwl.db'):
                     mtime = os.path.getmtime('mwl.db')
                     now_ts = time.time()
                     if last_mtime is None:
                         # first load immediately
-                        worklist_entries = load_worklist_from_db()
-                        _safe_print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {len(worklist_entries)} worklist entries from {os.path.abspath('mwl.db')}")
+                        n = reload_worklist_from_db_now()
+                        _safe_print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {n} worklist entries from {os.path.abspath('mwl.db')}")
                         last_mtime = mtime
                         pending_mwl_reload_at = None
                         pending_mwl_mtime = None
@@ -155,8 +180,8 @@ def start_worklist_watcher(interval=10):
                         # only reload when mtime remains stable at pending value
                         current_mtime = os.path.getmtime('mwl.db')
                         if pending_mwl_mtime is None or current_mtime == pending_mwl_mtime:
-                            worklist_entries = load_worklist_from_db()
-                            _safe_print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {len(worklist_entries)} worklist entries from {os.path.abspath('mwl.db')}")
+                            n = reload_worklist_from_db_now()
+                            _safe_print(f"[{datetime.now().strftime('%H:%M:%S')}] Loaded {n} worklist entries from {os.path.abspath('mwl.db')}")
                             last_mtime = current_mtime
                             pending_mwl_reload_at = None
                             pending_mwl_mtime = None
@@ -259,7 +284,8 @@ def start_auto_sync_scheduler(interval_minutes=3):
                 result = subprocess.run(['python', 'mwl_sync.py'], 
                                       capture_output=True, text=True, timeout=30)
                 if result.returncode == 0:
-                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Auto-sync completed successfully")
+                    n = reload_worklist_from_db_now()
+                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Auto-sync completed successfully (MWL entries in RAM: {n})")
                 else:
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] Auto-sync failed: {result.stderr}")
             except Exception as e:
@@ -271,6 +297,7 @@ def start_auto_sync_scheduler(interval_minutes=3):
 
 def handle_find(event):
     """Xử lý C-FIND request"""
+    reload_worklist_from_db_now()
     ds = event.identifier
     remote_ae = event.assoc.remote['ae_title']
     
@@ -320,7 +347,9 @@ def handle_find(event):
         return e == qn
 
     # Trả đúng cấu trúc MWL với ScheduledProcedureStepSequence
-    for entry in worklist_entries:
+    with _worklist_entries_lock:
+        entries_snapshot = list(worklist_entries)
+    for entry in entries_snapshot:
         try:
             entry_modality = str(getattr(entry, 'Modality', 'US') or 'US').strip().upper()
             entry_date = str(getattr(entry, 'ScheduledProcedureStepStartDate', '') or '').strip()

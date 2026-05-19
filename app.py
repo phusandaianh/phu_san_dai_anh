@@ -1545,7 +1545,7 @@ def api_deny_login_device_by_admin(device_id):
 
 @app.route('/api/login-device-history/<int:device_id>/cancel-login', methods=['POST'])
 def api_cancel_login_device_by_admin(device_id):
-    """Admin hủy đăng nhập từ thiết bị/IP: từ chối phê duyệt và ngắt các phiên cùng user/IP (nếu có)."""
+    """Admin từ chối/hủy đăng nhập thiết bị/IP chờ duyệt: ngắt phiên (nếu có) và xóa khỏi danh sách."""
     auth_header = request.headers.get('Authorization', '')
     token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
     admin_user_id = get_user_from_token(token)
@@ -1559,15 +1559,15 @@ def api_cancel_login_device_by_admin(device_id):
             if not rec:
                 return jsonify({'error': 'Không tìm thấy thiết bị/IP'}), 404
 
-            rec.is_approved = False
-            rec.approved_at = None
+            target_user_id = rec.user_id
+            target_ip = rec.ip_address
 
             now = datetime.utcnow()
             revoked_count = 0
             try:
                 rows = AuthSession.query.filter(
-                    AuthSession.user_id == rec.user_id,
-                    AuthSession.ip_address == rec.ip_address,
+                    AuthSession.user_id == target_user_id,
+                    AuthSession.ip_address == target_ip,
                     AuthSession.revoked == False,  # noqa: E712
                     AuthSession.expires_at >= now
                 ).all()
@@ -1577,10 +1577,12 @@ def api_cancel_login_device_by_admin(device_id):
             except Exception:
                 pass
 
+            db.session.delete(rec)
             db.session.commit()
             return jsonify({
-                'message': 'Đã hủy đăng nhập từ thiết bị/IP này.',
-                'revoked_sessions': revoked_count
+                'message': 'Đã từ chối và xóa thiết bị/IP khỏi danh sách.',
+                'revoked_sessions': revoked_count,
+                'deleted': True
             })
         except OperationalError as ex:
             last_oe = ex
@@ -4265,7 +4267,7 @@ def create_appointment():
             _run_background_best_effort(_mirror_appointment_create_to_peer, mirror_payload)
         if _is_ultrasound_text(appointment.service_type):
             _run_background_best_effort(_mark_appointment_Maysieuam_pending, appointment.id)
-            _run_background_best_effort(_sync_appointment_ultrasound_worklist, appointment.id)
+            _run_background_best_effort(_auto_mwl_sync_after_appointment, appointment.id)
             _run_background_best_effort(_kick_Maysieuam_sync_now, appointment.id)
         _run_background_best_effort(_notify_new_appointment_via_zalo_webhook, appointment, patient)
 
@@ -4385,7 +4387,7 @@ def update_appointment(appointment_id: int):
             # Nếu đổi lý do khám liên quan siêu âm thì cập nhật MWL ngay
             try:
                 if reason:
-                    _sync_appointment_ultrasound_worklist(appt.id)
+                    _run_background_best_effort(_auto_mwl_sync_after_appointment, appt.id)
                     if _is_ultrasound_text(appt.service_type):
                         _mark_appointment_Maysieuam_pending(appt.id)
                         _kick_Maysieuam_sync_now(appt.id)
@@ -4478,10 +4480,10 @@ def update_appointment(appointment_id: int):
         appt.updated_at = datetime.utcnow()
         db.session.commit()
 
-        # Đổi ngày/giờ khám -> cập nhật lại ScheduledProcedureStep trong MWL
+        # Đổi ngày/giờ khám -> đồng bộ MWL tự động (nền)
         try:
-            sync_stat = _sync_appointment_ultrasound_worklist(appt.id)
-            if (sync_stat.get('upserted', 0) > 0) or _is_ultrasound_text(appt.service_type):
+            _run_background_best_effort(_auto_mwl_sync_after_appointment, appt.id)
+            if _is_ultrasound_text(appt.service_type):
                 _mark_appointment_Maysieuam_pending(appt.id)
                 _kick_Maysieuam_sync_now(appt.id)
         except Exception as mwl_err:
@@ -4529,7 +4531,7 @@ def update_appointment_reason(appointment_id: int):
 
         # Realtime MWL theo "lý do khám" (và ưu tiên service-level nếu có)
         try:
-            _sync_appointment_ultrasound_worklist(appointment_id)
+            _run_background_best_effort(_auto_mwl_sync_after_appointment, appointment_id)
             if _is_ultrasound_text(reason):
                 _kick_Maysieuam_sync_now(appointment_id)
         except Exception as mwl_err:
@@ -8692,6 +8694,41 @@ def _delete_mwl_entry_by_accession(accession_number: str) -> bool:
         print(f"Realtime MWL delete failed: {e}")
         return False
 
+
+MWL_RELOAD_SIGNAL_NAME = 'mwl_reload.signal'
+
+
+def _touch_mwl_reload_signal():
+    """Báo mwl_server nạp lại mwl.db ngay (file signal + C-FIND luôn đọc DB)."""
+    try:
+        root = Path(app.root_path) if app and app.root_path else Path(__file__).resolve().parent
+        signal_path = root / MWL_RELOAD_SIGNAL_NAME
+        signal_path.write_text(datetime.utcnow().isoformat(timespec='seconds'), encoding='utf-8')
+    except Exception as e:
+        print(f"MWL reload signal failed: {e}")
+
+
+def _auto_mwl_sync_after_appointment(appointment_id=None):
+    """
+    Sau lưu/sửa lịch: full sync clinic.db -> mwl.db + báo mwl_server reload.
+    Chạy nền (best-effort); không cần bấm Đồng bộ ngay.
+    """
+    with app.app_context():
+        try:
+            _ensure_mwl_server_running()
+            _cleanup_outdated_mwl_entries()
+            import mwl_sync
+            stats = mwl_sync.sync_mwl_db()
+            _touch_mwl_reload_signal()
+            if stats.get('changed'):
+                print(
+                    f"[MWL-AUTO] synced {stats.get('imported', 0)} entries"
+                    + (f" (appointment_id={appointment_id})" if appointment_id is not None else '')
+                )
+        except Exception as e:
+            print(f"[MWL-AUTO] sync failed (appointment_id={appointment_id}): {e}")
+
+
 def _sync_appointment_ultrasound_worklist(appointment_id: int) -> dict:
     """Đồng bộ realtime MWL cho một lịch khám."""
     result = {'upserted': 0, 'deleted': 0}
@@ -8900,17 +8937,7 @@ def add_appointment_clinical_service(appointment_id):
 
         # Chỉ đồng bộ realtime sau khi DB commit thành công
         if is_ultrasound_service:
-            _upsert_mwl_entry_for_appointment(
-                appointment,
-                study_description=service.name,
-                accession_number=_mwl_accession_for_appointment(appointment_id, f"svc{service.id}")
-            )
-            # fallback accession theo appointment/service_type (cho luồng reason-based)
-            _upsert_mwl_entry_for_appointment(
-                appointment,
-                study_description=appointment.service_type or service.name,
-                accession_number=_mwl_accession_for_appointment(appointment_id)
-            )
+            _run_background_best_effort(_auto_mwl_sync_after_appointment, appointment_id)
             _kick_Maysieuam_sync_now(appointment_id, clinical_service_id=clinical_service.id)
 
         return jsonify({'message': 'Service added successfully'})
@@ -8954,8 +8981,7 @@ def remove_all_appointment_clinical_services(appointment_id):
         # Best-effort cleanup realtime sync for ultrasound services
         try:
             if ultrasound_service_ids:
-                for sid in ultrasound_service_ids:
-                    _delete_mwl_entry_by_accession(_mwl_accession_for_appointment(appointment_id, f"svc{sid}"))
+                _run_background_best_effort(_auto_mwl_sync_after_appointment, appointment_id)
                 _mark_appointment_Maysieuam_pending(appointment_id)
                 _kick_Maysieuam_sync_now(appointment_id)
         except Exception:
@@ -9000,7 +9026,7 @@ def remove_appointment_clinical_service(appointment_id, service_id):
         db.session.commit()
 
         if is_ultrasound_service:
-            _delete_mwl_entry_by_accession(_mwl_accession_for_appointment(appointment_id, f"svc{service_id}"))
+            _run_background_best_effort(_auto_mwl_sync_after_appointment, appointment_id)
             _mark_appointment_Maysieuam_pending(appointment_id)
             _kick_Maysieuam_sync_now(appointment_id, clinical_service_id=cs_id)
         
@@ -9206,6 +9232,7 @@ def api_trigger_mwl_sync():
         mwl_store.clear_all()
         for e in entries:
             mwl_store.upsert_entry(e)
+        _touch_mwl_reload_signal()
         return jsonify({
             'success': True,
             'imported': len(entries),
@@ -15915,7 +15942,1076 @@ def analyze_and_improve_patterns():
         print(f"Error analyzing patterns: {e}")
         db.session.rollback()
 
+
+# ==================== AI ASSISTANT GLOBAL SEARCH ====================
+
+_AI_VI_SEARCH_STOPWORDS = frozenset({
+    'tìm', 'tìm kiếm', 'kiếm', 'tra', 'cứu', 'search', 'find', 'cho', 'tôi', 'là', 'có', 'gì',
+    'về', 'của', 'và', 'với', 'mở', 'xem', 'thông', 'tin', 'bệnh nhân', 'bn', 'ai', 'ơi', 'hãy',
+    'giúp', 'muốn', 'cần', 'trong', 'hệ', 'thống', 'phần', 'mềm', 'ứng', 'dụng', 'nào', 'đâu',
+    'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'của', 'một', 'các', 'như', 'thế', 'nào',
+})
+
+_AI_APP_PAGE_INDEX = [
+    {'name': 'Trang chủ', 'url': '/', 'terms': 'trang chủ home dashboard màn hình chính'},
+    {'name': 'Danh sách khám', 'url': '/examination-list.html', 'terms': 'danh sách khám examination khám bệnh ds khám'},
+    {'name': 'Lịch làm việc / Đặt lịch', 'url': '/schedule.html', 'terms': 'lịch làm việc schedule calendar đặt lịch hẹn'},
+    {'name': 'Đặt lịch công khai', 'url': '/booking.html', 'terms': 'booking đặt hẹn đăng ký khám online'},
+    {'name': 'Hồ sơ bệnh án', 'url': '/patient-records.html', 'terms': 'hồ sơ bệnh án patient records bệnh án'},
+    {'name': 'VR PACS / Siêu âm', 'url': '/vr-pacs.html', 'terms': 'vr pacs siêu âm ultrasound dicom ảnh'},
+    {'name': 'Quản trị', 'url': '/admin.html', 'terms': 'admin quản trị thiết lập cấu hình'},
+    {'name': 'Quản lý đơn thuốc', 'url': '/prescription-management.html', 'terms': 'đơn thuốc prescription thuốc kê đơn'},
+    {'name': 'Xét nghiệm', 'url': '/lab-tests.html', 'terms': 'xét nghiệm lab tests máu'},
+    {'name': 'Người dùng / Phiên đăng nhập', 'url': '/users.html', 'terms': 'users tài khoản đăng nhập phiên ip thiết bị'},
+    {'name': 'Lịch bác sĩ', 'url': '/doctor-schedule.html', 'terms': 'lịch bác sĩ doctor schedule'},
+    {'name': 'Check-in QR', 'url': '/qr-checkin.html', 'terms': 'checkin qr điểm danh'},
+    {'name': 'Trợ lý AI (cài đặt)', 'url': '/ai-assistant-admin.html', 'terms': 'trợ lý ai assistant knowledge base'},
+    {'name': 'Dịch vụ lâm sàng', 'url': '/clinical-services-admin.html', 'terms': 'dịch vụ lâm sàng clinical services giá'},
+    {'name': 'Phác đồ điều trị', 'url': '/treatment-plans.html', 'terms': 'phác đồ điều trị treatment plan'},
+    {'name': 'Siêu âm / Phân tích', 'url': '/ultrasound-analysis.html', 'terms': 'siêu âm phân tích ultrasound analysis'},
+    {'name': 'CTG', 'url': '/ctg-analysis.html', 'terms': 'ctg tim thai'},
+    {'name': 'Tiện ích thai kỳ', 'url': '/pregnancy-utilities.html', 'terms': 'tiện ích thai kỳ pregnancy utilities'},
+    {'name': 'Mẫu phiếu CLS', 'url': '/clinical-form-templates.html', 'terms': 'mẫu phiếu chỉ định kết quả cận lâm sàng template'},
+    {'name': 'Mẫu đặc biệt / XN', 'url': '/improved-lab-request-template.html', 'terms': 'mẫu xét nghiệm phiếu chỉ định special template'},
+    {'name': 'Ý nghĩa XN', 'url': '/test-meanings.html', 'terms': 'ý nghĩa xét nghiệm test meanings'},
+    {'name': 'XN theo bệnh', 'url': '/disease-tests.html', 'terms': 'xét nghiệm bệnh disease tests'},
+    {'name': 'Giá XN / Bảng giá', 'url': '/lab-tests-dai-anh.html', 'terms': 'giá xét nghiệm bảng giá lab price nipt pdf'},
+    {'name': 'Bảng biểu y khoa', 'url': '/medical-charts.html', 'terms': 'bảng biểu chart y khoa'},
+    {'name': 'Nội dung trang chủ', 'url': '/home-content.html', 'terms': 'nội dung trang chủ hero banner'},
+    {'name': 'Chấm công', 'url': '/staff-attendance.html', 'terms': 'chấm công attendance nhân viên'},
+    {'name': 'Lịch công tác', 'url': '/staff-work-calendar.html', 'terms': 'lịch công tác work calendar'},
+    {'name': 'Liên kết hữu ích', 'url': '/links.html', 'terms': 'links liên kết website'},
+]
+
+_AI_CLINICAL_FORM_TYPE_LABELS = {
+    'lab-request': 'Mẫu phiếu chỉ định xét nghiệm',
+    'lab-result': 'Mẫu phiếu kết quả xét nghiệm',
+}
+
+_AI_PRICING_FILE_TYPE_LABELS = {
+    'nipt_pricing': 'Bảng giá NIPT (PDF)',
+    'treatment_plans': 'Phác đồ / file điều trị (PDF)',
+}
+
+_AI_SETTING_KEY_LABELS = {
+    'ai_assistant_wake_words': 'Từ đánh thức trợ lý AI',
+    'ai_assistant_default_response': 'Câu trả lời mặc định trợ lý AI',
+    'login_approval_host_rules': 'Host tin cậy đăng nhập',
+    'permission_pages': 'Phân quyền trang',
+    'art_cycle_default_offset_days': 'Chu kỳ ART mặc định',
+    'default_slot_minutes': 'Số phút mỗi slot lịch hẹn',
+}
+
+_AI_UI_INDEX_CACHE = {'mtime': 0.0, 'entries': []}
+
+
+def _ai_normalize_vn_text(s):
+    if not s:
+        return ''
+    s = unicodedata.normalize('NFC', str(s).strip().lower())
+    return s
+
+
+def _ai_extract_global_search_query(message, message_lower, keywords_dict=None):
+    """Trích cụm từ / từ khóa cần tra cứu từ câu người dùng."""
+    q = (message or '').strip()
+    q_lower = (message_lower or q.lower()).strip()
+    if not q_lower:
+        return ''
+
+    strip_patterns = [
+        r'^(?:tìm\s*kiếm|tìm|tra\s*cứu|tra|search|kiếm)\s+(?:toàn\s*bộ|trong\s+hệ\s+thống|mọi\s+thứ|tất\s+cả|thông\s+tin)?\s*',
+        r'^(?:thông\s+tin|dữ\s*liệu)\s+(?:về|của|liên\s+quan)?\s*',
+        r'^(?:cho\s+tôi\s+biết|tôi\s+muốn\s+tìm|hãy\s+tìm)\s+',
+        r'^(?:có\s+)?(?:ai|gì|đâu)\s+(?:tên|là|gọi)?\s*',
+    ]
+    for pat in strip_patterns:
+        q_lower = re.sub(pat, '', q_lower, flags=re.IGNORECASE).strip()
+
+    # Bỏ nhãn lệnh điều hướng nếu còn sót
+    nav_noise = [
+        'trang chủ', 'danh sách khám', 'lịch làm việc', 'đặt lịch', 'hồ sơ', 'vr pacs',
+        'admin', 'quản trị', 'giúp tôi', 'help', 'mở trang', 'đi tới', 'chuyển đến',
+    ]
+    for noise in nav_noise:
+        if q_lower == noise:
+            return ''
+
+    if keywords_dict:
+        for kw_list in keywords_dict.values():
+            for kw in kw_list:
+                if len(kw) > 3 and q_lower == kw:
+                    return ''
+
+    q_lower = q_lower.strip('.,!?;:').strip()
+    if len(q_lower) < 2:
+        return ''
+
+    words = [w for w in re.split(r'[\s,;.!?]+', q_lower) if len(w) >= 2]
+    meaningful = [w for w in words if w not in _AI_VI_SEARCH_STOPWORDS]
+    if not meaningful and len(q_lower) < 4:
+        return ''
+    return q_lower
+
+
+def _ai_search_tokens(query):
+    q = _ai_normalize_vn_text(query)
+    if not q:
+        return []
+    tokens = [t for t in re.split(r'[\s,;.!?]+', q) if len(t) >= 2 and t not in _AI_VI_SEARCH_STOPWORDS]
+    out = []
+    if len(q) >= 2:
+        out.append(q)
+    out.extend(tokens)
+    seen = set()
+    merged = []
+    for t in out:
+        if t not in seen:
+            seen.add(t)
+            merged.append(t)
+    return merged[:8]
+
+
+def _ai_sql_ilike_any(columns, tokens):
+    if not tokens:
+        return None
+    parts = []
+    for tok in tokens:
+        pat = f'%{tok}%'
+        for col in columns:
+            parts.append(col.ilike(pat))
+    return or_(*parts) if parts else None
+
+
+def _ai_score_hit(text, tokens):
+    if not text:
+        return 0
+    t = _ai_normalize_vn_text(text)
+    score = 0
+    for tok in tokens:
+        if tok in t:
+            score += 10 if t == tok else (5 if t.startswith(tok) else 2)
+    return score
+
+
+def _ai_strip_html(html, max_len=500):
+    if not html:
+        return ''
+    text = re.sub(r'<script[^>]*>[\s\S]*?</script>', ' ', html, flags=re.IGNORECASE)
+    text = re.sub(r'<style[^>]*>[\s\S]*?</style>', ' ', text, flags=re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    if max_len and len(text) > max_len:
+        return text[:max_len].rstrip() + '…'
+    return text
+
+
+def _ai_extract_html_field_labels(html):
+    """Trích tên cột / nhãn / data-field từ HTML mẫu."""
+    if not html:
+        return []
+    labels = []
+    seen = set()
+
+    def _add(raw):
+        lbl = _ai_strip_html(raw, max_len=80)
+        key = lbl.lower()
+        if lbl and len(lbl) >= 2 and key not in seen:
+            seen.add(key)
+            labels.append(lbl)
+
+    for m in re.finditer(r'<th[^>]*>([\s\S]*?)</th>', html, re.IGNORECASE):
+        _add(m.group(1))
+    for m in re.finditer(r'<label[^>]*>([\s\S]*?)</label>', html, re.IGNORECASE):
+        _add(m.group(1))
+    for m in re.finditer(r'data-field=["\']([^"\']+)["\']', html, re.IGNORECASE):
+        _add(m.group(1).replace('_', ' '))
+    for m in re.finditer(r'placeholder=["\']([^"\']+)["\']', html, re.IGNORECASE):
+        _add(m.group(1))
+    for m in re.finditer(r'<caption[^>]*>([\s\S]*?)</caption>', html, re.IGNORECASE):
+        _add(m.group(1))
+    return labels[:40]
+
+
+def _ai_resolve_upload_path(file_path):
+    if not file_path:
+        return ''
+    fp = str(file_path).strip()
+    if os.path.isabs(fp) and os.path.isfile(fp):
+        return fp
+    root = app.root_path
+    for candidate in (fp, os.path.join(root, fp), os.path.join(root, 'uploads', 'pricing', os.path.basename(fp))):
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    return ''
+
+
+def _ai_try_read_pdf_text(file_path, max_chars=8000):
+    """Đọc nội dung PDF (nếu có thư viện); không thì trích chuỗi chữ từ bytes."""
+    path = _ai_resolve_upload_path(file_path)
+    if not path:
+        return ''
+    try:
+        try:
+            from pypdf import PdfReader  # type: ignore
+        except ImportError:
+            from PyPDF2 import PdfReader  # type: ignore
+        reader = PdfReader(path)
+        chunks = []
+        for page in reader.pages[:10]:
+            chunks.append(page.extract_text() or '')
+        text = '\n'.join(chunks)
+        if text.strip():
+            return text[:max_chars]
+    except Exception:
+        pass
+    try:
+        raw = Path(path).read_bytes()
+        found = re.findall(rb'[\x20-\x7E\u00C0-\u1EF9]{4,}', raw)
+        text = ' '.join(s.decode('utf-8', errors='ignore') for s in found[:400])
+        return text[:max_chars]
+    except Exception:
+        return ''
+
+
+def _ai_get_ui_field_index():
+    """Chỉ mục tên cột / nhãn / placeholder trên các trang HTML (cache theo mtime)."""
+    global _AI_UI_INDEX_CACHE
+    root = Path(app.root_path)
+    html_files = [
+        p for p in root.glob('*.html')
+        if p.is_file() and 'desktop-electron' not in str(p)
+    ]
+    max_mtime = max((p.stat().st_mtime for p in html_files), default=0.0)
+    if _AI_UI_INDEX_CACHE.get('mtime') == max_mtime and _AI_UI_INDEX_CACHE.get('entries'):
+        return _AI_UI_INDEX_CACHE['entries']
+
+    entries = []
+    title_re = re.compile(r'<title[^>]*>([\s\S]*?)</title>', re.IGNORECASE)
+    h1_re = re.compile(r'<h1[^>]*>([\s\S]*?)</h1>', re.IGNORECASE)
+
+    for fpath in html_files:
+        try:
+            content = fpath.read_text(encoding='utf-8', errors='ignore')
+        except Exception:
+            continue
+        page_url = '/' + fpath.name
+        m_title = title_re.search(content)
+        m_h1 = h1_re.search(content)
+        if m_title:
+            page_title = _ai_strip_html(m_title.group(1), max_len=120)
+        elif m_h1:
+            page_title = _ai_strip_html(m_h1.group(1), max_len=120)
+        else:
+            page_title = fpath.stem
+        labels = _ai_extract_html_field_labels(content)
+        for lbl in labels:
+            entries.append({
+                'label': lbl,
+                'page': page_url,
+                'page_title': page_title,
+            })
+
+    _AI_UI_INDEX_CACHE = {'mtime': max_mtime, 'entries': entries}
+    return entries
+
+
+def _ai_append_hit(hits, seen_keys, category, title, detail, url, tokens, blob, score_bonus=0, action=None):
+    key = (category, title, detail[:60])
+    if key in seen_keys:
+        return
+    sc = _ai_score_hit(blob, tokens) + score_bonus
+    if sc <= 0:
+        return
+    seen_keys.add(key)
+    item = {
+        'category': category,
+        'title': title,
+        'detail': detail,
+        'url': url,
+        'score': sc,
+    }
+    if action:
+        item['action'] = action
+    hits.append(item)
+
+
+def _ai_search_extended_named_content(hits, tokens, per_cat, seen_keys):
+    """Mẫu HTML, PDF giá, tên mục/cột, cấu hình và nội dung có tên cụ thể."""
+    if not tokens:
+        return
+
+    # --- Mẫu phiếu CLS (HTML) ---
+    try:
+        for tpl in ClinicalFormTemplate.query.order_by(ClinicalFormTemplate.updated_at.desc()).limit(20).all():
+            type_label = _AI_CLINICAL_FORM_TYPE_LABELS.get(tpl.template_type or '', tpl.template_type or 'Mẫu CLS')
+            labels = _ai_extract_html_field_labels((tpl.header_html or '') + (tpl.content_html or ''))
+            plain = _ai_strip_html((tpl.header_html or '') + ' ' + (tpl.content_html or ''), max_len=600)
+            blob = f"{type_label} {' '.join(labels)} {plain}"
+            if _ai_score_hit(blob, tokens) <= 0:
+                continue
+            detail = f"Loại: {tpl.template_type or '—'}"
+            if labels:
+                detail += f" | Cột/nhãn: {', '.join(labels[:6])}"
+            if plain:
+                detail += f" | …{plain[:80]}"
+            _ai_append_hit(
+                hits, seen_keys, 'form_template', type_label, detail[:220],
+                '/clinical-form-templates.html', tokens, blob, 14,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search clinical form templates: %s', ex)
+
+    # --- Mẫu đặc biệt / mẫu kết quả XN (HTML) ---
+    try:
+        for tpl in SpecialTemplate.query.order_by(SpecialTemplate.updated_at.desc()).limit(per_cat).all():
+            labels = _ai_extract_html_field_labels(tpl.content_html or '')
+            plain = _ai_strip_html(tpl.content_html or '', max_len=500)
+            blob = f"{tpl.name} {tpl.description or ''} {' '.join(labels)} {plain}"
+            if _ai_score_hit(blob, tokens) <= 0:
+                continue
+            detail = (tpl.description or '')[:80]
+            if labels:
+                detail = (detail + ' | Nhãn: ' + ', '.join(labels[:5])).strip(' |')
+            _ai_append_hit(
+                hits, seen_keys, 'html_template', f"Mẫu đặc biệt — {tpl.name}",
+                detail[:200] or plain[:120], '/improved-lab-request-template.html', tokens, blob, 13,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search special templates: %s', ex)
+
+    try:
+        for tpl in LabResultTemplate.query.order_by(LabResultTemplate.updated_at.desc()).limit(per_cat).all():
+            labels = _ai_extract_html_field_labels(tpl.content_html or '')
+            plain = _ai_strip_html(tpl.content_html or '', max_len=500)
+            blob = f"{tpl.name} {tpl.category or ''} {tpl.description or ''} {' '.join(labels)} {plain}"
+            if _ai_score_hit(blob, tokens) <= 0:
+                continue
+            detail = f"{tpl.category or ''} {(tpl.description or '')[:60]}"
+            if labels:
+                detail += f" | Cột: {', '.join(labels[:5])}"
+            _ai_append_hit(
+                hits, seen_keys, 'html_template', f"Mẫu KQ XN — {tpl.name}",
+                detail[:200], '/clinical-form-templates.html', tokens, blob, 13,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search lab result templates: %s', ex)
+
+    # --- Snapshot mẫu hồ sơ BN ---
+    try:
+        cond = _ai_sql_ilike_any(
+            [PatientRecordTemplateSnapshot.template_name, PatientRecordTemplateSnapshot.content_html],
+            tokens,
+        )
+        if cond is not None:
+            for snap in PatientRecordTemplateSnapshot.query.filter(cond).order_by(
+                PatientRecordTemplateSnapshot.updated_at.desc()
+            ).limit(per_cat).all():
+                labels = _ai_extract_html_field_labels(snap.content_html or '')
+                plain = _ai_strip_html(snap.content_html or '', max_len=300)
+                blob = f"{snap.template_name} {' '.join(labels)} {plain}"
+                _ai_append_hit(
+                    hits, seen_keys, 'record_snapshot',
+                    snap.template_name or 'Snapshot mẫu hồ sơ',
+                    (', '.join(labels[:4]) or plain[:100])[:180],
+                    '/patient-records.html', tokens, blob, 11,
+                )
+    except Exception as ex:
+        app.logger.debug('ai search record snapshots: %s', ex)
+
+    # --- Đơn thuốc mẫu: cả nội dung HTML trong medications JSON nếu có ---
+    try:
+        for t in PrescriptionTemplate.query.limit(50).all():
+            blob = f"{t.name} {t.description or ''} {t.category or ''} {t.medications or ''}"
+            if _ai_score_hit(blob, tokens) <= 0:
+                continue
+            _ai_append_hit(
+                hits, seen_keys, 'template',
+                f"Mẫu đơn — {t.name}",
+                (t.description or t.category or '')[:120],
+                '/prescription-management.html', tokens, blob, 7,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search prescription template body: %s', ex)
+
+    # --- File PDF bảng giá / phác đồ ---
+    try:
+        for pf in PricingFile.query.order_by(PricingFile.uploaded_at.desc()).limit(20).all():
+            type_label = _AI_PRICING_FILE_TYPE_LABELS.get(pf.file_type or '', pf.file_type or 'File PDF')
+            pdf_text = _ai_try_read_pdf_text(pf.file_path)
+            blob = f"{type_label} {pf.original_filename} {pf.filename} {pf.file_type} {pdf_text[:2000]}"
+            if _ai_score_hit(blob, tokens) <= 0:
+                continue
+            detail = pf.original_filename or pf.filename or ''
+            if pdf_text:
+                snippet = pdf_text.replace('\n', ' ')[:100]
+                detail += f" | Trong PDF: …{snippet}"
+            url = '/treatment-plans.html' if pf.file_type == 'treatment_plans' else '/admin.html'
+            _ai_append_hit(
+                hits, seen_keys, 'pricing_pdf', type_label, detail[:220], url, tokens, blob, 12,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search pricing pdf: %s', ex)
+
+    try:
+        for tp in TreatmentPlan.query.order_by(TreatmentPlan.updated_at.desc()).limit(per_cat).all():
+            pdf_text = _ai_try_read_pdf_text(tp.file_path)
+            blob = f"{tp.name} {tp.hospital} {tp.category} {tp.tags or ''} {tp.file_name} {pdf_text[:2000]}"
+            if _ai_score_hit(blob, tokens) <= 0:
+                continue
+            detail = f"{tp.hospital or ''} | {tp.category or ''} | {tp.file_name or ''}"
+            if pdf_text:
+                detail += f" | …{pdf_text.replace(chr(10), ' ')[:80]}"
+            _ai_append_hit(
+                hits, seen_keys, 'treatment_pdf', f"Phác đồ — {tp.name}",
+                detail[:220], '/treatment-plans.html', tokens, blob, 12,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search treatment plans: %s', ex)
+
+    # --- Dịch vụ lâm sàng (tên nhóm, đơn vị) ---
+    try:
+        cond = _ai_sql_ilike_any(
+            [
+                ClinicalServiceSetting.name,
+                ClinicalServiceSetting.description,
+                ClinicalServiceSetting.service_group,
+                ClinicalServiceSetting.provider_unit,
+            ],
+            tokens,
+        )
+        if cond is not None:
+            for s in ClinicalServiceSetting.query.filter(cond).limit(per_cat).all():
+                blob = f"{s.name} {s.description} {s.service_group} {s.provider_unit}"
+                _ai_append_hit(
+                    hits, seen_keys, 'clinical_service',
+                    s.name or 'Dịch vụ CLS',
+                    f"{s.service_group or ''} | {s.provider_unit or ''} | {int(s.price or 0):,} đ".replace(',', '.'),
+                    '/clinical-services-admin.html', tokens, blob, 9,
+                )
+    except Exception as ex:
+        app.logger.debug('ai search clinical service settings: %s', ex)
+
+    try:
+        cond = _ai_sql_ilike_any(
+            [ClinicalServicePackage.name, ClinicalServicePackage.description],
+            tokens,
+        )
+        if cond is not None:
+            for pkg in ClinicalServicePackage.query.filter(cond).limit(per_cat).all():
+                blob = f"{pkg.name} {pkg.description}"
+                _ai_append_hit(
+                    hits, seen_keys, 'service_package',
+                    f"Gói CLS — {pkg.name}",
+                    (pkg.description or '')[:120],
+                    '/clinical-services-admin.html', tokens, blob, 8,
+                )
+    except Exception as ex:
+        app.logger.debug('ai search clinical packages: %s', ex)
+
+    # --- Giá xét nghiệm ---
+    try:
+        cond = _ai_sql_ilike_any([LabPrice.name, LabPrice.unit, LabPrice.note], tokens)
+        if cond is not None:
+            for lp in LabPrice.query.filter(cond).limit(per_cat).all():
+                blob = f"{lp.name} {lp.unit} {lp.note}"
+                _ai_append_hit(
+                    hits, seen_keys, 'lab_price',
+                    lp.name or 'Giá XN',
+                    f"{lp.unit or ''} | {int(lp.price or 0):,} đ | {(lp.note or '')[:60]}".replace(',', '.'),
+                    '/lab-tests-dai-anh.html', tokens, blob, 9,
+                )
+    except Exception as ex:
+        app.logger.debug('ai search lab prices: %s', ex)
+
+    # --- Ý nghĩa XN / XN theo bệnh ---
+    try:
+        cond = _ai_sql_ilike_any(
+            [TestMeaning.name, TestMeaning.meaning, TestMeaning.normal_range, TestMeaning.indications, TestMeaning.notes],
+            tokens,
+        )
+        if cond is not None:
+            for tm in TestMeaning.query.filter(cond).limit(per_cat).all():
+                blob = f"{tm.name} {tm.meaning} {tm.normal_range} {tm.category}"
+                _ai_append_hit(
+                    hits, seen_keys, 'test_meaning',
+                    tm.name or 'Xét nghiệm',
+                    f"{tm.category or ''} | {(tm.meaning or '')[:80]}",
+                    '/test-meanings.html', tokens, blob, 10,
+                )
+    except Exception as ex:
+        app.logger.debug('ai search test meanings: %s', ex)
+
+    try:
+        cond = _ai_sql_ilike_any(
+            [DiseaseTest.name, DiseaseTest.description, DiseaseTest.notes, DiseaseTest.category],
+            tokens,
+        )
+        if cond is not None:
+            for dt in DiseaseTest.query.filter(cond).limit(per_cat).all():
+                blob = f"{dt.name} {dt.description} {dt.category}"
+                _ai_append_hit(
+                    hits, seen_keys, 'disease_test',
+                    dt.name or 'Bệnh',
+                    f"{dt.category or ''} | {(dt.description or '')[:90]}",
+                    '/disease-tests.html', tokens, blob, 10,
+                )
+    except Exception as ex:
+        app.logger.debug('ai search disease tests: %s', ex)
+
+    # --- Kết quả CLS / đơn XN ---
+    try:
+        cond = _ai_sql_ilike_any(
+            [LabOrder.patient_name, LabOrder.patient_phone, LabOrder.test_type, LabOrder.note, LabOrder.provider_unit],
+            tokens,
+        )
+        if cond is not None:
+            for lo in LabOrder.query.filter(cond).order_by(LabOrder.test_date.desc()).limit(per_cat).all():
+                blob = f"{lo.patient_name} {lo.test_type} {lo.note}"
+                _ai_append_hit(
+                    hits, seen_keys, 'lab_order',
+                    f"XN — {lo.patient_name}",
+                    f"{lo.test_type or ''} | {lo.status or ''} | {lo.test_date}",
+                    '/lab-tests.html', tokens, blob, 9,
+                )
+    except Exception as ex:
+        app.logger.debug('ai search lab orders: %s', ex)
+
+    try:
+        cond = _ai_sql_ilike_any(
+            [ClinicalResult.service_name, ClinicalResult.result_text, ClinicalResult.notes, ClinicalResult.fields_data],
+            tokens,
+        )
+        if cond is not None:
+            for cr in ClinicalResult.query.filter(cond).order_by(ClinicalResult.exam_date.desc()).limit(per_cat).all():
+                p = Patient.query.get(cr.patient_id) if cr.patient_id else None
+                pname = p.name if p else ''
+                blob = f"{pname} {cr.service_name} {cr.result_text} {cr.notes} {cr.fields_data}"
+                _ai_append_hit(
+                    hits, seen_keys, 'clinical_result',
+                    f"KQ CLS — {cr.service_name}",
+                    f"{pname} | {(cr.result_text or cr.notes or '')[:80]}",
+                    '/consultation-results.html', tokens, blob, 9,
+                )
+    except Exception as ex:
+        app.logger.debug('ai search clinical results: %s', ex)
+
+    # --- Bảng biểu / tiện ích / liên kết / nội dung trang ---
+    try:
+        cond = _ai_sql_ilike_any([MedicalChart.name, MedicalChart.description, MedicalChart.category, MedicalChart.chart_data], tokens)
+        if cond is not None:
+            for ch in MedicalChart.query.filter(cond).limit(per_cat).all():
+                blob = f"{ch.name} {ch.description} {ch.category}"
+                _ai_append_hit(
+                    hits, seen_keys, 'medical_chart',
+                    ch.name or 'Bảng biểu',
+                    f"{ch.category or ''} | {(ch.description or '')[:80]}",
+                    '/medical-charts.html', tokens, blob, 8,
+                )
+    except Exception as ex:
+        app.logger.debug('ai search medical charts: %s', ex)
+
+    try:
+        for row in PregnancyUtility.query.order_by(PregnancyUtility.updated_at.desc()).limit(30).all():
+            blob = f"{row.title} {row.type} {row.description} {row.notes}"
+            if _ai_score_hit(blob, tokens) <= 0:
+                continue
+            _ai_append_hit(
+                hits, seen_keys, 'pregnancy_utility',
+                row.title or 'Tiện ích thai kỳ',
+                f"{row.type or ''} | {(row.description or '')[:80]}",
+                '/pregnancy-utilities.html', tokens, blob, 7,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search pregnancy utilities: %s', ex)
+
+    try:
+        cond = _ai_sql_ilike_any([QuickLink.title, QuickLink.url, QuickLink.category, QuickLink.description], tokens)
+        if cond is not None:
+            for ql in QuickLink.query.filter(cond).limit(per_cat).all():
+                blob = f"{ql.title} {ql.url} {ql.category} {ql.description}"
+                _ai_append_hit(
+                    hits, seen_keys, 'quick_link',
+                    ql.title or 'Liên kết',
+                    f"{ql.category or ''} | {ql.url or ''}",
+                    '/links.html', tokens, blob, 6,
+                )
+    except Exception as ex:
+        app.logger.debug('ai search quick links: %s', ex)
+
+    try:
+        for hc in HomeContent.query.limit(3).all():
+            blob = f"{hc.hero_title} {hc.hero_description} {hc.clinic_summary}"
+            if _ai_score_hit(blob, tokens) <= 0:
+                continue
+            _ai_append_hit(
+                hits, seen_keys, 'home_content',
+                hc.hero_title or 'Nội dung trang chủ',
+                (hc.clinic_summary or hc.hero_description or '')[:120],
+                '/home-content.html', tokens, blob, 6,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search home content: %s', ex)
+
+    try:
+        for ci in ContactInfo.query.limit(20).all():
+            blob = f"{ci.type} {ci.value}"
+            if _ai_score_hit(blob, tokens) <= 0:
+                continue
+            _ai_append_hit(
+                hits, seen_keys, 'contact',
+                f"Liên hệ — {ci.type}",
+                ci.value or '', '/admin.html', tokens, blob, 5,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search contact info: %s', ex)
+
+    try:
+        for doc in ClinicDoctor.query.limit(30).all():
+            blob = f"{doc.degree} {doc.name}"
+            if _ai_score_hit(blob, tokens) <= 0:
+                continue
+            _ai_append_hit(
+                hits, seen_keys, 'doctor',
+                f"{doc.degree} {doc.name}".strip(),
+                'Danh sách bác sĩ phòng khám',
+                '/doctor-schedule.html', tokens, blob, 6,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search clinic doctors: %s', ex)
+
+    try:
+        for dt in DoctorTemplate.query.limit(20).all():
+            if _ai_score_hit(dt.name or '', tokens) <= 0:
+                continue
+            _ai_append_hit(
+                hits, seen_keys, 'doctor_template',
+                dt.name or 'Mẫu bác sĩ',
+                'Mẫu tên bác sĩ theo ca',
+                '/doctor-schedule.html', tokens, dt.name or '', 5,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search doctor templates: %s', ex)
+
+    try:
+        for grp in LabResultGroup.query.limit(30).all():
+            blob = f"{grp.name} {grp.id}"
+            if _ai_score_hit(blob, tokens) <= 0:
+                continue
+            _ai_append_hit(
+                hits, seen_keys, 'lab_group',
+                grp.name or 'Nhóm XN',
+                f"Mã nhóm: {grp.id}",
+                '/clinical-form-templates.html', tokens, blob, 5,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search lab groups: %s', ex)
+
+    # --- Cài đặt hệ thống (tên mục cấu hình) ---
+    try:
+        for setting in AppSetting.query.limit(200).all():
+            label = _AI_SETTING_KEY_LABELS.get(setting.key or '', setting.key or '')
+            blob = f"{label} {setting.key} {setting.value or ''}"
+            if _ai_score_hit(blob, tokens) <= 0:
+                continue
+            val_preview = (setting.value or '')[:80]
+            _ai_append_hit(
+                hits, seen_keys, 'setting',
+                label,
+                f"Khóa: {setting.key} | {val_preview}",
+                '/admin.html', tokens, blob, 4,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search app settings: %s', ex)
+
+    # --- Tên cột / nhãn trên giao diện HTML ---
+    try:
+        for entry in _ai_get_ui_field_index():
+            lbl = entry.get('label') or ''
+            if _ai_score_hit(lbl, tokens) <= 0:
+                continue
+            page = entry.get('page') or '/'
+            page_title = entry.get('page_title') or page
+            _ai_append_hit(
+                hits, seen_keys, 'ui_label',
+                f"Cột/nhãn: {lbl}",
+                f"Trang: {page_title} ({page})",
+                page, tokens, f"{lbl} {page_title}", 11,
+            )
+    except Exception as ex:
+        app.logger.debug('ai search ui labels: %s', ex)
+
+
+def _ai_assistant_global_search(query, limit_per_category=6, max_total=40):
+    """
+    Tìm theo từ / cụm từ trong dữ liệu và chức năng phần mềm.
+    Trả về danh sách dict: category, title, detail, url, score.
+    """
+    tokens = _ai_search_tokens(query)
+    if not tokens:
+        return []
+
+    hits = []
+    seen_keys = set()
+    per_cat = max(1, int(limit_per_category or 6))
+
+    try:
+        cond = _ai_sql_ilike_any(
+            [Patient.name, Patient.phone, Patient.patient_id, Patient.address],
+            tokens,
+        )
+        if cond is not None:
+            for p in Patient.query.filter(cond).order_by(Patient.id.desc()).limit(per_cat).all():
+                dob = p.date_of_birth.strftime('%d/%m/%Y') if p.date_of_birth else ''
+                detail = f"SĐT: {p.phone or '—'}"
+                if p.patient_id:
+                    detail += f" | Mã: {p.patient_id}"
+                if dob:
+                    detail += f" | NS: {dob}"
+                hits.append({
+                    'category': 'patient',
+                    'title': p.name or 'Bệnh nhân',
+                    'detail': detail,
+                    'url': '/examination-list.html',
+                    'score': _ai_score_hit(f"{p.name} {p.phone} {p.patient_id}", tokens) + 20,
+                    'action': {
+                        'type': 'search',
+                        'selector': '#searchInput, input[placeholder*="tìm"], input[placeholder*="search"], #search-patient',
+                        'value': p.name or query,
+                    },
+                })
+    except Exception as ex:
+        app.logger.debug('ai search patients: %s', ex)
+
+    try:
+        cond = _ai_sql_ilike_any(
+            [
+                PatientRecord.patient_name,
+                PatientRecord.patient_phone,
+                PatientRecord.service_type,
+                PatientRecord.doctor_name,
+                PatientRecord.notes,
+                PatientRecord.status,
+            ],
+            tokens,
+        )
+        if cond is not None:
+            for r in PatientRecord.query.filter(cond).order_by(PatientRecord.appointment_date.desc()).limit(per_cat).all():
+                dt = r.appointment_date.strftime('%d/%m/%Y %H:%M') if r.appointment_date else ''
+                hits.append({
+                    'category': 'patient_record',
+                    'title': r.patient_name or 'Hồ sơ',
+                    'detail': f"{r.service_type or '—'} | {dt} | {r.patient_phone or ''} | {r.status or ''}",
+                    'url': '/patient-records.html',
+                    'score': _ai_score_hit(
+                        f"{r.patient_name} {r.patient_phone} {r.service_type} {r.notes}", tokens
+                    ) + 15,
+                    'action': {
+                        'type': 'navigate',
+                        'url': '/patient-records.html',
+                    },
+                })
+    except Exception as ex:
+        app.logger.debug('ai search patient records: %s', ex)
+
+    try:
+        appt_cond = _ai_sql_ilike_any(
+            [
+                Patient.name,
+                Patient.phone,
+                Patient.patient_id,
+                Appointment.service_type,
+                Appointment.doctor_name,
+                Appointment.status,
+            ],
+            tokens,
+        )
+        if appt_cond is not None:
+            rows = (
+                Appointment.query.join(Patient, Appointment.patient_id == Patient.id)
+                .filter(appt_cond)
+                .order_by(Appointment.appointment_date.desc())
+                .limit(per_cat)
+                .all()
+            )
+            for a in rows:
+                p = a.patient
+                dt = a.appointment_date.strftime('%d/%m/%Y %H:%M') if a.appointment_date else ''
+                hits.append({
+                    'category': 'appointment',
+                    'title': f"{p.name if p else 'Lịch hẹn'} — {a.service_type or 'Khám'}",
+                    'detail': f"{dt} | {a.status or ''} | BS: {a.doctor_name or '—'}",
+                    'url': '/examination-list.html',
+                    'score': _ai_score_hit(
+                        f"{p.name if p else ''} {a.service_type} {a.doctor_name}", tokens
+                    ) + 12,
+                })
+    except Exception as ex:
+        app.logger.debug('ai search appointments: %s', ex)
+
+    try:
+        cond = _ai_sql_ilike_any(
+            [Prescription.patient_name, Prescription.patient_phone, Prescription.diagnosis, Prescription.notes, Prescription.doctor_name],
+            tokens,
+        )
+        if cond is not None:
+            for rx in Prescription.query.filter(cond).order_by(Prescription.prescription_date.desc()).limit(per_cat).all():
+                dt = rx.prescription_date.strftime('%d/%m/%Y') if rx.prescription_date else ''
+                hits.append({
+                    'category': 'prescription',
+                    'title': f"Đơn — {rx.patient_name or '—'}",
+                    'detail': f"{rx.diagnosis or '—'} | {dt} | BS: {rx.doctor_name or ''}",
+                    'url': '/prescription-management.html',
+                    'score': _ai_score_hit(
+                        f"{rx.patient_name} {rx.diagnosis} {rx.notes}", tokens
+                    ) + 10,
+                })
+    except Exception as ex:
+        app.logger.debug('ai search prescriptions: %s', ex)
+
+    try:
+        cond = _ai_sql_ilike_any(
+            [Medication.name, Medication.ingredient, Medication.category, Medication.notes, Medication.dosage],
+            tokens,
+        )
+        if cond is not None:
+            for m in Medication.query.filter(cond).order_by(Medication.name).limit(per_cat).all():
+                hits.append({
+                    'category': 'medication',
+                    'title': m.name or 'Thuốc',
+                    'detail': f"{m.ingredient or ''} | {m.category or ''} | {m.unit or ''}",
+                    'url': '/prescription-management.html',
+                    'score': _ai_score_hit(f"{m.name} {m.ingredient} {m.notes}", tokens) + 8,
+                })
+    except Exception as ex:
+        app.logger.debug('ai search medications: %s', ex)
+
+    try:
+        cond = _ai_sql_ilike_any([Service.name, Service.category], tokens)
+        if cond is not None:
+            for s in Service.query.filter(cond).order_by(Service.name).limit(per_cat).all():
+                hits.append({
+                    'category': 'service',
+                    'title': s.name or 'Dịch vụ',
+                    'detail': f"{s.category or ''} | Giá: {int(s.price or 0):,} đ".replace(',', '.'),
+                    'url': '/clinical-services-admin.html',
+                    'score': _ai_score_hit(f"{s.name} {s.category}", tokens) + 8,
+                })
+    except Exception as ex:
+        app.logger.debug('ai search services: %s', ex)
+
+    try:
+        cond = _ai_sql_ilike_any(
+            [PrescriptionTemplate.name, PrescriptionTemplate.description, PrescriptionTemplate.category],
+            tokens,
+        )
+        if cond is not None:
+            for t in PrescriptionTemplate.query.filter(cond).limit(per_cat).all():
+                hits.append({
+                    'category': 'template',
+                    'title': t.name or 'Mẫu đơn',
+                    'detail': (t.description or t.category or '')[:120],
+                    'url': '/prescription-management.html',
+                    'score': _ai_score_hit(f"{t.name} {t.description}", tokens) + 6,
+                })
+    except Exception as ex:
+        app.logger.debug('ai search templates: %s', ex)
+
+    try:
+        cond = _ai_sql_ilike_any(
+            [MedicalRecord.diagnosis, MedicalRecord.prescription, MedicalRecord.notes],
+            tokens,
+        )
+        if cond is not None:
+            for mr in (
+                MedicalRecord.query.filter(cond)
+                .order_by(MedicalRecord.created_at.desc())
+                .limit(per_cat)
+                .all()
+            ):
+                p = Patient.query.get(mr.patient_id) if mr.patient_id else None
+                pname = p.name if p else 'Bệnh nhân'
+                hits.append({
+                    'category': 'medical_record',
+                    'title': f"Bệnh án — {pname}",
+                    'detail': (mr.diagnosis or mr.notes or '')[:140],
+                    'url': '/patient-records.html',
+                    'score': _ai_score_hit(f"{pname} {mr.diagnosis} {mr.notes}", tokens) + 10,
+                })
+    except Exception as ex:
+        app.logger.debug('ai search medical records: %s', ex)
+
+    try:
+        cond = _ai_sql_ilike_any(
+            [User.username, User.full_name, User.email],
+            tokens,
+        )
+        if cond is not None:
+            for u in User.query.filter(cond).limit(3).all():
+                hits.append({
+                    'category': 'user',
+                    'title': u.full_name or u.username,
+                    'detail': f"@{u.username} | {u.email or ''} | {u.status or ''}",
+                    'url': '/users.html',
+                    'score': _ai_score_hit(f"{u.username} {u.full_name} {u.email}", tokens) + 5,
+                })
+    except Exception as ex:
+        app.logger.debug('ai search users: %s', ex)
+
+    try:
+        for kb in AIKnowledgeBase.query.order_by(AIKnowledgeBase.accuracy.desc()).limit(200).all():
+            blob = f"{kb.question_pattern or ''} {kb.response or ''}"
+            if _ai_score_hit(blob, tokens) > 0:
+                hits.append({
+                    'category': 'knowledge',
+                    'title': (kb.question_pattern or 'Câu hỏi')[:80],
+                    'detail': (kb.response or '')[:160],
+                    'url': '/ai-assistant-admin.html',
+                    'score': _ai_score_hit(blob, tokens) + int((kb.accuracy or 0) * 5),
+                })
+    except Exception as ex:
+        app.logger.debug('ai search knowledge: %s', ex)
+
+    try:
+        _ai_search_extended_named_content(hits, tokens, per_cat, seen_keys)
+    except Exception as ex:
+        app.logger.debug('ai search extended named content: %s', ex)
+
+    for page in _AI_APP_PAGE_INDEX:
+        blob = f"{page['name']} {page['terms']}"
+        if _ai_score_hit(blob, tokens) > 0:
+            hits.append({
+                'category': 'page',
+                'title': page['name'],
+                'detail': 'Chức năng / trang trong phần mềm',
+                'url': page['url'],
+                'score': _ai_score_hit(blob, tokens) + 3,
+                'action': {'type': 'navigate', 'url': page['url']},
+            })
+
+    hits.sort(key=lambda x: x.get('score', 0), reverse=True)
+    return hits[:max_total]
+
+
+def _ai_format_global_search_response(query, results):
+    if not results:
+        return (
+            f'Không tìm thấy kết quả cho **"{query}"** trong hệ thống.\n\n'
+            'Gợi ý:\n• Tên BN, SĐT, mã PID, tên thuốc/dịch vụ\n'
+            '• Tên cột trên màn hình, mẫu phiếu HTML, file PDF giá\n'
+            '• "Tìm bệnh nhân Nguyễn Văn A" để lọc nhanh danh sách khám'
+        )
+
+    cat_labels = {
+        'patient': '👤 Bệnh nhân',
+        'appointment': '📅 Lịch hẹn / Khám',
+        'patient_record': '📋 Hồ sơ khám',
+        'prescription': '💊 Đơn thuốc',
+        'medication': '💊 Thuốc / Hoạt chất',
+        'service': '🏥 Dịch vụ',
+        'template': '📝 Mẫu đơn thuốc',
+        'medical_record': '🩺 Bệnh án',
+        'user': '👥 Người dùng',
+        'knowledge': '📚 Kiến thức trợ lý',
+        'page': '📄 Trang / Chức năng',
+        'form_template': '📄 Mẫu phiếu CLS (HTML)',
+        'html_template': '📋 Mẫu HTML (phiếu XN)',
+        'record_snapshot': '📋 Snapshot mẫu hồ sơ',
+        'pricing_pdf': '💰 File PDF giá / NIPT',
+        'treatment_pdf': '📑 Phác đồ PDF',
+        'clinical_service': '🏥 Dịch vụ cận lâm sàng',
+        'service_package': '📦 Gói dịch vụ',
+        'lab_price': '💵 Giá xét nghiệm',
+        'test_meaning': '🔬 Ý nghĩa XN',
+        'disease_test': '🦠 XN theo bệnh',
+        'lab_order': '🧪 Chỉ định XN',
+        'clinical_result': '📊 Kết quả CLS',
+        'medical_chart': '📈 Bảng biểu y khoa',
+        'pregnancy_utility': '🤰 Tiện ích thai kỳ',
+        'quick_link': '🔗 Liên kết',
+        'home_content': '🏠 Nội dung trang chủ',
+        'contact': '📞 Liên hệ',
+        'doctor': '👨‍⚕️ Bác sĩ',
+        'doctor_template': '👨‍⚕️ Mẫu tên BS',
+        'lab_group': '🧪 Nhóm XN',
+        'setting': '⚙️ Cài đặt hệ thống',
+        'ui_label': '🏷️ Tên cột / nhãn giao diện',
+    }
+
+    grouped = {}
+    for item in results:
+        grouped.setdefault(item.get('category', 'other'), []).append(item)
+
+    lines = [f'🔍 Tìm thấy **{len(results)}** kết quả cho **"{query}"**：']
+    shown = 0
+    for cat, items in grouped.items():
+        label = cat_labels.get(cat, cat)
+        lines.append(f'\n**{label}** ({len(items)}):')
+        for it in items[:5]:
+            shown += 1
+            if shown > 20:
+                break
+            title = it.get('title') or '—'
+            detail = it.get('detail') or ''
+            url = it.get('url') or ''
+            line = f'• {title}'
+            if detail:
+                line += f' — {detail}'
+            if url:
+                line += f'\n  → {url}'
+            lines.append(line)
+        if shown > 20:
+            lines.append('• _(Còn kết quả khác — hãy thu hẹp từ khóa)_')
+            break
+
+    lines.append('\n_Bấm link hoặc nói "mở [tên trang]" để chuyển trang. Kết quả bệnh nhân đầu tiên sẽ tự điền ô tìm nếu bạn đang ở danh sách khám._')
+    return '\n'.join(lines)
+
+
+def _ai_knowledge_base_search(message_lower, tokens=None):
+    """Tìm câu trả lời trong knowledge base theo từ / cụm từ."""
+    tokens = tokens or _ai_search_tokens(message_lower)
+    if not tokens:
+        return None
+    best = None
+    best_score = 0
+    try:
+        for kb in AIKnowledgeBase.query.order_by(AIKnowledgeBase.accuracy.desc()).all():
+            blob = f"{kb.question_pattern or ''} {kb.response or ''}".lower()
+            score = _ai_score_hit(blob, tokens)
+            if kb.accuracy:
+                score += int(kb.accuracy * 3)
+            if score > best_score:
+                best_score = score
+                best = kb
+        if best and best_score >= 4:
+            best.usage_count = (best.usage_count or 0) + 1
+            db.session.commit()
+            return best
+    except Exception:
+        db.session.rollback()
+    return None
+
+
 # ==================== AI ASSISTANT ROUTES ====================
+
+@app.route('/api/ai-assistant/search', methods=['GET'])
+def ai_assistant_search():
+    """Tra cứu toàn hệ thống theo từ / cụm từ (dùng cho trợ lý AI và tích hợp khác)."""
+    q = (request.args.get('q') or request.args.get('query') or '').strip()
+    if not q:
+        return jsonify({'error': 'Thiếu tham số q'}), 400
+    try:
+        limit = min(20, max(1, int(request.args.get('limit', 15))))
+    except (TypeError, ValueError):
+        limit = 15
+    results = _ai_assistant_global_search(q, limit_per_category=5, max_total=limit)
+    return jsonify({
+        'query': q,
+        'count': len(results),
+        'results': results,
+    })
+
 
 @app.route('/api/ai-assistant/chat', methods=['POST'])
 def ai_assistant_chat():
@@ -15935,8 +17031,9 @@ def ai_assistant_chat():
         
         # Từ điển từ khóa mở rộng cho tiếng Việt (hỗ trợ nhiều cách nói)
         keywords = {
-            'search_patient': ['tìm', 'tìm kiếm', 'search', 'bệnh nhân', 'patient', 'tìm bn', 'tìm bệnh nhân', 
-                              'kiếm', 'tra cứu', 'tìm kiếm bệnh nhân', 'kiếm bệnh nhân'],
+            'search_patient': [
+                'bệnh nhân', 'patient', 'tìm bn', 'tìm bệnh nhân', 'kiếm bệnh nhân', 'tìm kiếm bệnh nhân',
+            ],
             'home': ['trang chủ', 'home', 'chủ', 'index', 'màn hình chính', 'màn hình đầu'],
             'examination': ['danh sách khám', 'examination', 'khám bệnh', 'list', 'danh sách', 'danh sách bệnh nhân',
                            'ds khám', 'ds bệnh nhân', 'lịch khám'],
@@ -15950,7 +17047,12 @@ def ai_assistant_chat():
             'services': ['dịch vụ', 'services', 'khám gì', 'làm gì', 'có dịch vụ gì', 'phòng khám có gì'],
             'contact': ['liên hệ', 'contact', 'địa chỉ', 'address', 'số điện thoại', 'phone', 'thông tin liên hệ'],
             'greeting': ['xin chào', 'hello', 'hi', 'chào', 'helo', 'chào bạn', 'xin chào bạn'],
-            'help': ['giúp', 'help', 'hỗ trợ', 'làm gì', 'có thể', 'giúp tôi', 'hướng dẫn']
+            'help': ['giúp', 'help', 'hỗ trợ', 'làm gì', 'có thể', 'giúp tôi', 'hướng dẫn'],
+            'global_search': [
+                'tra cứu', 'tra cứu toàn bộ', 'tìm trong hệ thống', 'tìm mọi', 'tìm tất cả',
+                'tìm thông tin', 'tìm kiếm toàn bộ', 'search all', 'tìm ở đâu', 'có ai tên',
+                'thông tin về', 'dữ liệu về', 'kiếm trong phần mềm', 'tìm trong phần mềm',
+            ],
         }
         
         # Hàm kiểm tra keyword với fuzzy matching
@@ -16048,8 +17150,19 @@ def ai_assistant_chat():
         confidence_score = 0.8  # Default
         
         # Xử lý các lệnh tiếng Việt phổ biến
-        # Tìm kiếm bệnh nhân
-        if has_keyword(message_lower, keywords['search_patient']) or (learned_intent == 'search_patient' and learned_confidence > 0.5):
+        # Tìm kiếm bệnh nhân (lệnh rõ ràng hoặc "tìm Họ Tên" ≥ 2 từ)
+        _patient_quick = re.search(
+            r'^(?:tìm|kiếm)\s+(?!trong\s+hệ\s+thống|toàn\s+bộ|mọi\s+thứ|thông\s+tin\s+)([A-Za-zÀ-ỹ][A-Za-zÀ-ỹ\s]{1,})$',
+            (message or '').strip(),
+            re.IGNORECASE,
+        )
+        _is_patient_search = (
+            has_keyword(message_lower, keywords['search_patient'])
+            or (learned_intent == 'search_patient' and learned_confidence > 0.5)
+            or re.search(r'\d{8,}', message or '')
+            or (_patient_quick and len(_patient_quick.group(1).split()) >= 2)
+        )
+        if _is_patient_search:
             detected_intent = 'search_patient'
             confidence_score = learned_confidence if learned_intent == 'search_patient' else 0.9
             # Trích xuất tên bệnh nhân từ message
@@ -16169,9 +17282,10 @@ Bạn muốn xem bản đồ không? Tôi có thể mở trang bản đồ cho b
             detected_intent = 'help'
             confidence_score = learned_confidence if learned_intent == 'help' else 0.9
             response_text = '''Tôi có thể giúp bạn:
-🔍 **Tìm kiếm**
-• Tìm kiếm bệnh nhân
-• Tìm thông tin hồ sơ
+🔍 **Tìm kiếm thông minh**
+• Tra cứu từ / cụm từ: BN, hồ sơ, thuốc, mẫu HTML, PDF giá, tên cột màn hình…
+• Ví dụ: "tra cứu NIPT", "cột ngày khám", "mẫu phiếu chỉ định"
+• "Tìm bệnh nhân [tên]" để lọc nhanh trên danh sách khám
 
 🗺️ **Điều hướng**
 • Mở các trang: Trang chủ, Danh sách khám, Lịch làm việc, Đặt lịch, VR PACS, v.v.
@@ -16180,33 +17294,62 @@ Bạn muốn xem bản đồ không? Tôi có thể mở trang bản đồ cho b
 • Giờ làm việc, dịch vụ, liên hệ
 
 Bạn chỉ cần nói hoặc nhập lệnh bằng tiếng Việt!'''
+
+        # Tra cứu toàn hệ thống (từ khóa rõ ràng)
+        elif has_keyword(message_lower, keywords['global_search']):
+            detected_intent = 'global_search'
+            confidence_score = 0.92
+            search_q = _ai_extract_global_search_query(message, message_lower, keywords)
+            if not search_q:
+                response_text = (
+                    'Bạn muốn tra cứu gì? Nhập từ hoặc cụm từ, ví dụ:\n'
+                    '• "tra cứu Nguyễn Thị Lan"\n• "tìm trong hệ thống siêu âm 5d"\n'
+                    '• "0912345678" hoặc mã PID bệnh nhân'
+                )
+            else:
+                results = _ai_assistant_global_search(search_q)
+                response_text = _ai_format_global_search_response(search_q, results)
+                if results and results[0].get('action'):
+                    action = results[0]['action']
         
-        # Mặc định - không hiểu (chỉ khi chưa có intent nào được phát hiện)
+        # Mặc định - thử tra cứu toàn hệ thống / knowledge base
         if not detected_intent:
-            # Thử tìm trong knowledge base trước
-            try:
-                kb_entry = AIKnowledgeBase.query.filter(
-                    AIKnowledgeBase.question_pattern.like(f'%{message_lower[:50]}%')
-                ).order_by(AIKnowledgeBase.accuracy.desc()).first()
-                
-                if kb_entry and kb_entry.accuracy > 0.5:
+            search_q = _ai_extract_global_search_query(message, message_lower, keywords)
+            search_tokens = _ai_search_tokens(search_q) if search_q else []
+            tried_search = False
+
+            if search_q and (len(search_q) >= 2 or search_tokens):
+                tried_search = True
+                try:
+                    results = _ai_assistant_global_search(search_q)
+                    if results:
+                        response_text = _ai_format_global_search_response(search_q, results)
+                        detected_intent = 'global_search'
+                        confidence_score = 0.75
+                        if results[0].get('action'):
+                            action = results[0]['action']
+                except Exception as e:
+                    print(f"Error in global search: {e}")
+
+            if not detected_intent:
+                kb_entry = _ai_knowledge_base_search(message_lower, search_tokens or _ai_search_tokens(message_lower))
+                if kb_entry:
                     response_text = kb_entry.response
                     detected_intent = 'knowledge_base'
-                    confidence_score = kb_entry.accuracy
-                    # Tăng usage count
-                    kb_entry.usage_count += 1
-                    db.session.commit()
+                    confidence_score = kb_entry.accuracy or 0.7
+                elif tried_search:
+                    response_text = _ai_format_global_search_response(search_q, [])
+                    detected_intent = 'global_search'
+                    confidence_score = 0.3
                 else:
-                    # Fallback về message mặc định
-                    response_text = f'Xin lỗi, tôi chưa hiểu lệnh "{message}".\n\nBạn có thể thử:\n• "Tìm bệnh nhân..."\n• "Mở trang chủ"\n• "Xem lịch làm việc"\n• "Giúp tôi" để xem các lệnh có sẵn.'
+                    response_text = (
+                        f'Xin lỗi, tôi chưa hiểu lệnh "{message}".\n\n'
+                        'Bạn có thể thử:\n'
+                        '• Tra cứu: "Nguyễn Văn A", số điện thoại, tên thuốc/dịch vụ\n'
+                        '• "Tìm bệnh nhân ..." | "Mở trang chủ" | "Giúp tôi"'
+                    )
                     detected_intent = 'unknown'
                     confidence_score = 0.0
-            except Exception as e:
-                print(f"Error querying knowledge base: {e}")
-                # Fallback về message mặc định
-                response_text = f'Xin lỗi, tôi chưa hiểu lệnh "{message}".\n\nBạn có thể thử:\n• "Tìm bệnh nhân..."\n• "Mở trang chủ"\n• "Xem lịch làm việc"\n• "Giúp tôi" để xem các lệnh có sẵn.'
-                detected_intent = 'unknown'
-                confidence_score = 0.0
         
         # Xác định success
         is_success = (response_text and 'lỗi' not in response_text.lower() and 

@@ -82,10 +82,10 @@ class AIAssistant {
                         <div class="ai-message-content">
                             <div>Xin chào! Tôi là trợ lý AI của Phòng khám Đại Anh. Tôi có thể giúp bạn:</div>
                             <ul style="margin: 8px 0 0 20px; padding: 0;">
-                                <li>Tìm kiếm bệnh nhân</li>
-                                <li>Xem thông tin phòng khám</li>
+                                <li>Tra cứu: BN, mẫu HTML, PDF giá, tên cột…</li>
+                                <li>Tìm bệnh nhân, hồ sơ, thuốc, dịch vụ</li>
                                 <li>Điều hướng đến các trang</li>
-                                <li>Trả lời câu hỏi</li>
+                                <li>Trả lời câu hỏi thường gặp</li>
                             </ul>
                             <div class="timestamp">${this.getTimeStamp()}</div>
                         </div>
@@ -93,8 +93,11 @@ class AIAssistant {
                 </div>
                 
                 <div class="ai-assistant-quick-actions">
-                    <button class="ai-quick-action-btn" onclick="aiAssistant.sendQuickCommand('tìm kiếm bệnh nhân')">
-                        <i class="fas fa-search"></i> Tìm bệnh nhân
+                    <button class="ai-quick-action-btn" onclick="aiAssistant.sendQuickCommand('tra cứu ')">
+                        <i class="fas fa-search"></i> Tra cứu
+                    </button>
+                    <button class="ai-quick-action-btn" onclick="aiAssistant.sendQuickCommand('tìm bệnh nhân ')">
+                        <i class="fas fa-user"></i> Tìm BN
                     </button>
                     <button class="ai-quick-action-btn" onclick="aiAssistant.sendQuickCommand('xem danh sách khám')">
                         <i class="fas fa-list"></i> Danh sách khám
@@ -112,7 +115,7 @@ class AIAssistant {
                         <textarea 
                             id="aiAssistantInput" 
                             class="ai-assistant-input" 
-                            placeholder="Nhập câu hỏi hoặc nhấn vào biểu tượng mic để nói..."
+                            placeholder="Tra cứu từ khóa, tên BN, SĐT, thuốc... hoặc nói lệnh"
                             rows="1"
                             onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); aiAssistant.sendMessage(); }"
                             oninput="this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 100) + 'px';"
@@ -843,6 +846,12 @@ class AIAssistant {
                     refreshData();
                 } else {
                     window.location.reload();
+                }
+                break;
+            case 'navigate_search':
+                if (action.url) {
+                    const q = action.query ? encodeURIComponent(action.query) : '';
+                    window.location.href = q ? `${action.url}?q=${q}` : action.url;
                 }
                 break;
         }

@@ -11,7 +11,7 @@
   "allowed_calling_ae_titles": [],
   "modality_station_ae_title": "VOLUSON_E10",
   "modality_station_name": "US1",
-  "integration_mode": "mwl_query_only",
+  "integration_mode": "mwl_plus_store",
   "database_path": "clinic.db",
   "sync_interval": 30,
   "retry_attempts": 3,

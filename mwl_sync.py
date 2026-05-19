@@ -207,18 +207,26 @@ def _normalize_entries(entries):
     return norm
 
 
-if __name__ == '__main__':
+def sync_mwl_db():
+    """
+    Đồng bộ clinic.db -> mwl.db (logic giống chạy trực tiếp mwl_sync.py).
+    Trả về dict: changed, imported, skipped.
+    """
     entries = build_worklist_entries()
-    # Ensure mwl DB exists
     mwl_store.init_db()
     existing = mwl_store.get_all_entries()
     if _normalize_entries(existing) == _normalize_entries(entries):
-        print(f"No changes detected. Skip sync (entries={len(entries)})")
-        print('Done')
-        raise SystemExit(0)
-    # Upsert entries into mwl.db only when changed
+        return {'changed': False, 'imported': len(entries), 'skipped': True}
     mwl_store.clear_all()
     for e in entries:
         mwl_store.upsert_entry(e)
-    print(f"Inserted/updated {len(entries)} entries into mwl.db")
+    return {'changed': True, 'imported': len(entries), 'skipped': False}
+
+
+if __name__ == '__main__':
+    result = sync_mwl_db()
+    if result.get('skipped'):
+        print(f"No changes detected. Skip sync (entries={result.get('imported', 0)})")
+    else:
+        print(f"Inserted/updated {result.get('imported', 0)} entries into mwl.db")
     print('Done')
