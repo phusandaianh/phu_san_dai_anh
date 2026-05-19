@@ -1,5 +1,6 @@
 from flask import Flask, render_template, send_from_directory, request, jsonify, send_file, Response, abort, after_this_request
 from flask_sqlalchemy import SQLAlchemy
+from sync_api import sync_bp
 from sqlalchemy import or_, inspect, func, text, bindparam, cast, Integer
 from sqlalchemy.exc import IntegrityError, OperationalError
 from datetime import datetime, timedelta, timezone
@@ -52,7 +53,7 @@ sys.modules.setdefault('app', sys.modules[__name__])
 
 app = Flask(__name__, static_folder='.', template_folder='')
 
-
+app.register_blueprint(sync_bp)
 def _clinic_now():
     """Giờ hiện tại theo múi giờ phòng khám (mặc định Việt Nam)."""
     tz_name = (os.environ.get('CLINIC_TIMEZONE') or 'Asia/Ho_Chi_Minh').strip() or 'Asia/Ho_Chi_Minh'
