@@ -10,17 +10,20 @@
 #
 services:
   - type: web
-    name: phong-kham-dai-anh
+    name: phong-kham-booking
     runtime: python
-    
-    buildCommand: pip install -r requirements.txt && mkdir -p uploads/treatment-plans uploads/pricing uploads/ctg-images instance
+
+    buildCommand: pip install -r requirements.txt
+
     startCommand: gunicorn -b 0.0.0.0:$PORT wsgi:app
-    
+
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+
       - key: FLASK_ENV
         value: production
+
       - key: SYNC_ROLE
         value: online
       # Thêm thủ công trên Render:
