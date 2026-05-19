@@ -302,10 +302,104 @@
       d.setHours(+h, +m, 0, 0);
       return now > d;
     }
+    function addMinutesToTime(hhmm, minutes) {
+      const [h, m] = hhmm.split(':').map(Number);
+      const total = h * 60 + m + minutes;
+      const nh = Math.floor(total / 60) % 24;
+      const nm = total % 60;
+      return String(nh).padStart(2, '0') + ':' + String(nm).padStart(2, '0');
+    }
+    // Lịch tạm để bệnh nhân đặt thử — đặt USE_TRIAL_SCHEDULES = false khi dùng API thật
+    const USE_TRIAL_SCHEDULES = true;
+    const schedules = [
+      {
+        date: '2026-05-19',
+        weekday: 'Thứ ba',
+        slots: [
+          { time: '08:00', service: 'Siêu âm thai' },
+          { time: '08:30', service: 'Khám phụ khoa' }
+        ]
+      }
+    ];
+    function renderTrialSchedules(scheduleList) {
+      const todayDate = new Date();
+      schedules.forEach(day => {
+        const card = document.createElement('div');
+        card.className = 'schedule-card';
+        const current = new Date(day.date);
+        const isToday = todayDate.toDateString() === current.toDateString();
+        const weekday = day.weekday || getVietnameseDay(day.date);
+        let html = `<div class='schedule-info'>`;
+        if (isToday) {
+          html += `<div style="font-size:1.1rem;background:#ffe0e0;color:#1565c0;padding:6px 10px;border-radius:8px;font-weight:bold;margin-bottom:6px;">
+            <i class="fas fa-calendar-alt" style="margin-right:6px;"></i>Hôm nay, ${weekday}, ngày ${formatDate(day.date)}
+          </div>`;
+        } else {
+          html += `<div class='schedule-date' style="color:#1565c0;">
+            ${weekday}, Ngày <span style="color:#1565c0;font-weight:bold;">${formatDate(day.date)}</span>
+          </div>`;
+        }
+        if (!day.slots || !day.slots.length) {
+          html += `<div style='color:#e53935;font-weight:bold;margin-top:8px;'>Hiện tại chưa có lịch khám</div>`;
+        } else {
+          day.slots.forEach(slot => {
+            const slotEnd = addMinutesToTime(slot.time, 30);
+            const hetGio = isPast(slotEnd, day.date);
+            html += `<div style='margin:10px 0 0 0;padding:10px 0;border-top:1px dashed #b3e5fc;'>
+              <div class='schedule-time'><b>Giờ:</b> <b>${slot.time}</b></div>
+              <div class='schedule-doctor'>Dịch vụ: <b>${slot.service}</b></div>
+              ${hetGio ? `
+                <button class='register-btn' disabled style='opacity:1;background:#ffcccc;color:#c62828;cursor:not-allowed;white-space:normal;line-height:1.4;'>
+                  Đã hết giờ khám. Quý khách vui lòng đăng ký khám vào buổi khám tiếp theo. Trân trọng cảm ơn!
+                </button>
+              ` : `
+                <button class='register-btn' data-trial-slot='1' data-date='${day.date}' data-time='${slot.time}' data-service='${slot.service.replace(/'/g, '&#39;')}'>Đăng ký khám</button>
+              `}
+            </div>`;
+          });
+        }
+        html += `</div>`;
+        card.innerHTML = html;
+        scheduleList.appendChild(card);
+      });
+      document.querySelectorAll('.register-btn[data-trial-slot]').forEach(btn => {
+        btn.onclick = function() {
+          document.getElementById('register-modal').classList.remove('hidden');
+          const dateStr = this.dataset.date;
+          const timeStr = this.dataset.time;
+          const service = this.dataset.service;
+          const weekday = getVietnameseDay(dateStr);
+          document.getElementById('modal-date').textContent = `${weekday}, ngày ${formatDate(dateStr)}`;
+          document.getElementById('modal-time').textContent = `Giờ: ${timeStr}`;
+          document.getElementById('modal-doctor').textContent = `Dịch vụ: ${service}`;
+          const form = document.getElementById('register-form');
+          form.dataset.date = dateStr;
+          form.dataset.start = timeStr;
+          form.dataset.end = addMinutesToTime(timeStr, 30);
+          form.dataset.doctor = 'PK Đại Anh';
+          document.getElementById('patient-reason').value = service;
+          const select = document.getElementById('appointment-time');
+          select.innerHTML = '';
+          const opt = document.createElement('option');
+          opt.value = timeStr;
+          opt.textContent = timeStr;
+          opt.selected = true;
+          select.appendChild(opt);
+          if (typeof window.__bookingRefreshLookupIfRepeat === 'function') {
+            window.__bookingRefreshLookupIfRepeat();
+          }
+        };
+      });
+    }
     // Render lịch làm việc động
     async function renderSchedule() {
   const scheduleList = document.getElementById('schedule-list');
   scheduleList.innerHTML = '';
+  if (USE_TRIAL_SCHEDULES) {
+    renderTrialSchedules(scheduleList);
+    checkRegisterButtonsVisibility();
+    return;
+  }
   const res = await fetch('/api/work-schedule');
   const data = await res.json();
 
