@@ -14758,7 +14758,17 @@ def initialize_user_management():
 @app.errorhandler(413)
 def too_large(e):
     return jsonify({'success': False, 'message': 'File quá lớn! Kích thước tối đa 500MB.'}), 413
+@app.route("/api/sync/appointment", methods=["POST"])
+def sync_appointment():
 
+    data = request.json
+
+    print("SYNC RECEIVED:", data)
+
+    return jsonify({
+        "success": True,
+        "received": data
+    })
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
