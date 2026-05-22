@@ -63,22 +63,62 @@ def mark_failed(sync_id):
 
 def sync_to_cloud(row):
 
-    payload = {
-        "token": SYNC_TOKEN,
-        "table_name": row["table_name"],
-        "record_id": row["record_id"],
-        "action": row["action"],
-        "payload": json.loads(row["payload"])
-    }
+    data = json.loads(row["payload"])
 
-    response = requests.post(
-        CLOUD_API,
-        json=payload,
-        timeout=20
-    )
+    # =========================
+    # APPOINTMENT
+    # =========================
+    if row["table_name"] == "appointment":
 
-    if response.status_code == 200:
-        return True
+        payload = {
+            "token": SYNC_TOKEN,
+            "table_name": row["table_name"],
+            "record_id": row["record_id"],
+            "action": row["action"],
+            "payload": data
+        }
+
+        response = requests.post(
+            "https://booking.phusandaianh.io.vn/api/sync/appointment",
+            json=payload,
+            timeout=20
+        )
+
+        return response.status_code == 200
+
+    # =========================
+    # WORK SCHEDULE
+    # =========================
+    elif row["table_name"] == "work_schedule":
+
+        if row["action"] == "insert":
+
+            response = requests.post(
+                "https://booking.phusandaianh.io.vn/api/sync/work_schedule",
+                json=data,
+                timeout=20
+            )
+
+        elif row["action"] == "update":
+
+            response = requests.put(
+                "https://booking.phusandaianh.io.vn/api/sync/work_schedule",
+                json=data,
+                timeout=20
+            )
+
+        elif row["action"] == "delete":
+
+            response = requests.delete(
+                "https://booking.phusandaianh.io.vn/api/sync/work_schedule",
+                json=data,
+                timeout=20
+            )
+
+        else:
+            return False
+
+        return response.status_code == 200
 
     return False
 
