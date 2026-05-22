@@ -17923,3 +17923,54 @@ if __name__ == '__main__':
     else:
         print(f'[HTTP] http://0.0.0.0:{_run_kw["port"]}/')
     app.run(**_run_kw)
+    @app.route('/api/sync/appointment', methods=['POST'])
+def sync_appointment():
+
+    data = request.json
+
+    global_id = data.get('global_id')
+
+    if not global_id:
+        return jsonify({
+            'success': False,
+            'message': 'missing global_id'
+        }), 400
+
+    existing = Appointment.query.filter_by(
+        global_id=global_id
+    ).first()
+
+    if existing:
+
+        existing.patient_id = data.get('patient_id')
+        existing.appointment_date = datetime.fromisoformat(
+            data.get('appointment_date')
+        )
+        existing.service_type = data.get('service_type')
+        existing.status = data.get('status')
+        existing.doctor_name = data.get('doctor_name')
+
+        existing.updated_at = datetime.utcnow()
+        existing.version = existing.version + 1
+
+    else:
+
+        appointment = Appointment(
+            patient_id=data.get('patient_id'),
+            appointment_date=datetime.fromisoformat(
+                data.get('appointment_date')
+            ),
+            service_type=data.get('service_type'),
+            status=data.get('status'),
+            doctor_name=data.get('doctor_name'),
+            global_id=global_id,
+            source='online'
+        )
+
+        db.session.add(appointment)
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True
+    })
