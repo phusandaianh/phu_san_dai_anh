@@ -14769,6 +14769,86 @@ def sync_appointment():
         "success": True,
         "received": data
     })
+
+# =========================
+# WORK SCHEDULE INSERT
+# =========================
+@app.route("/api/sync/work_schedule", methods=["POST"])
+def sync_work_schedule_insert():
+
+    data = request.json
+
+    existing = WorkSchedule.query.filter_by(id=data["id"]).first()
+
+    if not existing:
+
+        item = WorkSchedule(
+            id=data["id"],
+            date=data["date"],
+            start_time=data["start_time"],
+            end_time=data["end_time"],
+            doctor_name=data["doctor_name"]
+        )
+
+        db.session.add(item)
+
+    else:
+
+        existing.date = data["date"]
+        existing.start_time = data["start_time"]
+        existing.end_time = data["end_time"]
+        existing.doctor_name = data["doctor_name"]
+
+    db.session.commit()
+
+    return jsonify({"success": True})
+
+
+# =========================
+# WORK SCHEDULE UPDATE
+# =========================
+@app.route("/api/sync/work_schedule", methods=["PUT"])
+def sync_work_schedule_update():
+
+    data = request.json
+
+    item = WorkSchedule.query.filter_by(id=data["id"]).first()
+
+    if item:
+
+        item.date = data["date"]
+        item.start_time = data["start_time"]
+        item.end_time = data["end_time"]
+        item.doctor_name = data["doctor_name"]
+
+        db.session.commit()
+
+    return jsonify({"success": True})
+
+
+# =========================
+# WORK SCHEDULE DELETE
+# =========================
+@app.route("/api/sync/work_schedule", methods=["DELETE"])
+def sync_work_schedule_delete():
+
+    data = request.json
+
+    item = WorkSchedule.query.filter_by(id=data["id"]).first()
+
+    if item:
+
+        db.session.delete(item)
+
+        db.session.commit()
+
+    return jsonify({"success": True})
+
+
+
+
+
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
