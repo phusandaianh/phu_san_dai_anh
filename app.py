@@ -1,5 +1,6 @@
 from flask import Flask, render_template, send_from_directory, request, jsonify, send_file, Response, abort, after_this_request
-from flask_sqlalchemy import SQLAlchemy
+from extensions import db
+from sync_api import sync_bp
 from sqlalchemy import or_, inspect, func, text, bindparam, cast, Integer
 from sqlalchemy.exc import IntegrityError, OperationalError
 from datetime import datetime, timedelta, timezone
@@ -16,6 +17,8 @@ from reportlab.lib.units import inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from io import BytesIO
+from models import Appointment
+from sync_api import sync_bp
 import base64
 import schedule
 import time
@@ -52,7 +55,7 @@ sys.modules.setdefault('app', sys.modules[__name__])
 
 app = Flask(__name__, static_folder='.', template_folder='')
 
-
+app.register_blueprint(sync_bp)
 def _clinic_now():
     """Giờ hiện tại theo múi giờ phòng khám (mặc định Việt Nam)."""
     tz_name = (os.environ.get('CLINIC_TIMEZONE') or 'Asia/Ho_Chi_Minh').strip() or 'Asia/Ho_Chi_Minh'
@@ -168,7 +171,7 @@ if not app.config.get('TWILIO_PHONE_NUMBER'):
 app.config['CORS_ALLOWED_ORIGINS'] = os.environ.get('ALLOWED_ORIGINS', '').split(',') if os.environ.get('ALLOWED_ORIGINS') else []
 
 # SQLAlchemy - phải tạo TRƯỚC khi đăng ký blueprint để tránh lỗi "app not registered"
-db = SQLAlchemy(app)
+db.init_app(app)
 
 # Đăng ký REST API (Blueprint) - dễ mở rộng, nâng cấp
 try:
@@ -2215,28 +2218,6 @@ class Patient(db.Model):
     date_of_birth = db.Column(db.Date)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-class Appointment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False)
-    appointment_date = db.Column(db.DateTime, nullable=False)
-    service_type = db.Column(db.String(100), nullable=False)
-    status = db.Column(db.String(20), default='pending')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    # ===== Sync giữa ONLINE (Render) và LOCAL (phòng khám) =====
-    # global_id dùng để upsert giữa 2 DB khác nhau.
-    global_id = db.Column(db.String(36), unique=True, index=True)
-    source = db.Column(db.String(20), default='local')  # local | online
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    version = db.Column(db.Integer, default=1)
-    last_modified_by = db.Column(db.String(20), default='clinic')  # clinic | patient | system
-    # Optional: assigned doctor for clinical forms
-    doctor_name = db.Column(db.String(100), default='PK Đại Anh')
-    # Optional obstetric field (yyyy-mm-dd)
-    expected_delivery_date = db.Column(db.Date)
-    # Ultrasound machine sync fields
-    Maysieuam_synced = db.Column(db.Boolean, default=False)
-    Maysieuam_sync_time = db.Column(db.DateTime)
-    patient = db.relationship('Patient', backref=db.backref('appointments', lazy=True))
 
 class AppointmentChangeRequest(db.Model):
     """Yêu cầu đổi giờ / hủy do bệnh nhân (phòng khám sẽ duyệt)."""
