@@ -2665,12 +2665,63 @@ def ensure_appointment_change_request_columns():
     except Exception:
         db.session.rollback()
 
-def _sync_token_ok(req) -> bool:
+def _sync_token_ok(req, body: dict = None) -> bool:
     expected = (os.environ.get('SYNC_TOKEN') or app.config.get('SYNC_TOKEN') or '').strip()
     if not expected:
         return False
-    got = (req.headers.get('X-Sync-Token') or '').strip()
+    got = (req.headers.get('X-Sync-Token') or (body or {}).get('token') or '').strip()
+    if not got:
+        return False
     return hmac.compare_digest(got.encode('utf-8'), expected.encode('utf-8'))
+
+
+def _parse_appointment_datetime(value):
+    if value is None or value == '':
+        return None
+    s = str(value).strip().replace('Z', '+00:00')
+    try:
+        return datetime.fromisoformat(s)
+    except Exception:
+        pass
+    for fmt in ('%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(s[:26], fmt)
+        except Exception:
+            continue
+    return None
+
+
+def _apply_legacy_sync_appointment_payload(appt_data: dict, action: str = 'insert') -> None:
+    """Áp dụng lịch khám từ sync_queue hoặc POST /api/sync/appointment (định dạng cũ)."""
+    appt_data = appt_data or {}
+    global_id = (appt_data.get('global_id') or '').strip()
+    if not global_id:
+        raise ValueError('missing global_id')
+
+    patient = None
+    pid = appt_data.get('patient_id')
+    if pid is not None:
+        try:
+            patient = Patient.query.get(int(pid))
+        except Exception:
+            patient = None
+    if not patient:
+        raise ValueError('patient not found')
+
+    appt_dt = _parse_appointment_datetime(appt_data.get('appointment_date'))
+    event_type = 'appointment.updated' if (action or '').lower() == 'update' else 'appointment.created'
+    payload = {
+        'appointment': {
+            'global_id': global_id,
+            'appointment_date': appt_dt.isoformat() if appt_dt else appt_data.get('appointment_date'),
+            'service_type': appt_data.get('service_type'),
+            'status': appt_data.get('status'),
+            'doctor_name': appt_data.get('doctor_name'),
+            'source': appt_data.get('source') or 'local',
+        },
+        'patient': _sync_patient_payload(patient),
+    }
+    _apply_sync_event(event_type, payload)
 
 def _emit_sync_event(entity: str, global_id: str, event_type: str, payload_obj: dict) -> None:
     """Ghi event để đồng bộ (best-effort)."""
@@ -5542,37 +5593,38 @@ def run_sync_loop_local():
 
     while True:
         try:
-            # 1) Pull remote -> local
-            last_pulled = int(AppSetting.get_value('sync_last_pulled_seq', 0) or 0)
-            code, resp = _http_json('GET', f"{remote}/api/sync/pull?since_seq={last_pulled}&limit=500", headers=headers, timeout_s=20)
-            if code == 200 and isinstance(resp, dict):
-                latest = resp.get('latest_seq') or last_pulled
-                events = resp.get('events') or []
-                if events:
-                    latest2 = _store_and_apply_remote_events(events)
-                    if int(latest2) > last_pulled:
-                        AppSetting.set_value('sync_last_pulled_seq', str(int(latest2)))
-                    print(f"[SYNC] pulled {len(events)} event(s). latest_seq={latest}")
-                _sync_state_set(last_pull_at_utc=_utc_iso_now(), last_ok_at_utc=_utc_iso_now())
+            with app.app_context():
+                # 1) Pull remote -> local
+                last_pulled = int(AppSetting.get_value('sync_last_pulled_seq', 0) or 0)
+                code, resp = _http_json('GET', f"{remote}/api/sync/pull?since_seq={last_pulled}&limit=500", headers=headers, timeout_s=20)
+                if code == 200 and isinstance(resp, dict):
+                    latest = resp.get('latest_seq') or last_pulled
+                    events = resp.get('events') or []
+                    if events:
+                        latest2 = _store_and_apply_remote_events(events)
+                        if int(latest2) > last_pulled:
+                            AppSetting.set_value('sync_last_pulled_seq', str(int(latest2)))
+                        print(f"[SYNC] pulled {len(events)} event(s). latest_seq={latest}")
+                    _sync_state_set(last_pull_at_utc=_utc_iso_now(), last_ok_at_utc=_utc_iso_now())
 
-            # 2) Push local -> remote
-            last_pushed = int(AppSetting.get_value('sync_last_pushed_seq', 0) or 0)
-            to_push = SyncEvent.query.filter(SyncEvent.id > last_pushed).order_by(SyncEvent.id.asc()).limit(500).all()
-            if to_push:
-                payload_events = [{
-                    'seq': r.id,
-                    'event_id': r.event_id,
-                    'entity': r.entity,
-                    'global_id': r.global_id,
-                    'event_type': r.event_type,
-                    'payload': r.payload,
-                } for r in to_push]
+                # 2) Push local -> remote
+                last_pushed = int(AppSetting.get_value('sync_last_pushed_seq', 0) or 0)
+                to_push = SyncEvent.query.filter(SyncEvent.id > last_pushed).order_by(SyncEvent.id.asc()).limit(500).all()
+                if to_push:
+                    payload_events = [{
+                        'seq': r.id,
+                        'event_id': r.event_id,
+                        'entity': r.entity,
+                        'global_id': r.global_id,
+                        'event_type': r.event_type,
+                        'payload': r.payload,
+                    } for r in to_push]
 
-                code2, resp2 = _http_json('POST', f"{remote}/api/sync/push", headers=headers, body_obj={'events': payload_events}, timeout_s=20)
-                if code2 == 200:
-                    AppSetting.set_value('sync_last_pushed_seq', str(to_push[-1].id))
-                    print(f"[SYNC] pushed {len(to_push)} event(s). latest_seq={to_push[-1].id}")
-                    _sync_state_set(last_push_at_utc=_utc_iso_now(), last_ok_at_utc=_utc_iso_now())
+                    code2, resp2 = _http_json('POST', f"{remote}/api/sync/push", headers=headers, body_obj={'events': payload_events}, timeout_s=20)
+                    if code2 == 200:
+                        AppSetting.set_value('sync_last_pushed_seq', str(to_push[-1].id))
+                        print(f"[SYNC] pushed {len(to_push)} event(s). latest_seq={to_push[-1].id}")
+                        _sync_state_set(last_push_at_utc=_utc_iso_now(), last_ok_at_utc=_utc_iso_now())
         except Exception as e:
             print(f"[SYNC] loop error: {e}")
             _sync_state_set(last_error=str(e), last_error_at_utc=_utc_iso_now())
@@ -14741,15 +14793,29 @@ def too_large(e):
     return jsonify({'success': False, 'message': 'File quá lớn! Kích thước tối đa 500MB.'}), 413
 @app.route("/api/sync/appointment", methods=["POST"])
 def sync_appointment():
+    """Nhận đồng bộ lịch từ node local (sync_service / sync_queue)."""
+    data = request.json or {}
+    if not _sync_token_ok(request, data):
+        return jsonify({'success': False, 'message': 'Forbidden'}), 403
 
-    data = request.json
+    inner = data.get('payload')
+    if isinstance(inner, dict) and inner.get('global_id'):
+        appt_data = inner
+        action = (data.get('action') or 'insert').lower()
+    elif data.get('global_id'):
+        appt_data = data
+        action = 'insert'
+    else:
+        return jsonify({'success': False, 'message': 'invalid payload'}), 400
 
-    print("SYNC RECEIVED:", data)
-
-    return jsonify({
-        "success": True,
-        "received": data
-    })
+    try:
+        _apply_legacy_sync_appointment_payload(appt_data, action=action)
+        return jsonify({'success': True})
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 # =========================
 # WORK SCHEDULE INSERT
@@ -17994,54 +18060,3 @@ if __name__ == '__main__':
     else:
         print(f'[HTTP] http://0.0.0.0:{_run_kw["port"]}/')
     app.run(**_run_kw)
-    @app.route('/api/sync/appointment', methods=['POST'])
-def sync_appointment():
-
-    data = request.json
-
-    global_id = data.get('global_id')
-
-    if not global_id:
-        return jsonify({
-            'success': False,
-            'message': 'missing global_id'
-        }), 400
-
-    existing = Appointment.query.filter_by(
-        global_id=global_id
-    ).first()
-
-    if existing:
-
-        existing.patient_id = data.get('patient_id')
-        existing.appointment_date = datetime.fromisoformat(
-            data.get('appointment_date')
-        )
-        existing.service_type = data.get('service_type')
-        existing.status = data.get('status')
-        existing.doctor_name = data.get('doctor_name')
-
-        existing.updated_at = datetime.utcnow()
-        existing.version = existing.version + 1
-
-    else:
-
-        appointment = Appointment(
-            patient_id=data.get('patient_id'),
-            appointment_date=datetime.fromisoformat(
-                data.get('appointment_date')
-            ),
-            service_type=data.get('service_type'),
-            status=data.get('status'),
-            doctor_name=data.get('doctor_name'),
-            global_id=global_id,
-            source='online'
-        )
-
-        db.session.add(appointment)
-
-    db.session.commit()
-
-    return jsonify({
-        'success': True
-    })

@@ -309,8 +309,8 @@
       const nm = total % 60;
       return String(nh).padStart(2, '0') + ':' + String(nm).padStart(2, '0');
     }
-    // Lịch tạm để bệnh nhân đặt thử — đặt USE_TRIAL_SCHEDULES = false khi dùng API thật
-    const USE_TRIAL_SCHEDULES = true;
+    // Lịch tạm để bệnh nhân đặt thử — đặt true chỉ khi test không cần DB
+    const USE_TRIAL_SCHEDULES = false;
     const schedules = [
       {
         date: '2026-05-19',

@@ -1,5 +1,4 @@
 @echo off
-
-cd /d D:\phusandaianh\DU_AN_AI\phongkham
-
-"C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\python.exe" run_waitress.py
+chcp 65001 >nul
+cd /d "%~dp0"
+call "%~dp0run_local_sync.bat"

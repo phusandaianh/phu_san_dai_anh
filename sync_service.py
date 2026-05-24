@@ -1,13 +1,15 @@
-import sqlite3
-import requests
 import json
+import os
+import sqlite3
 import time
 
-LOCAL_DB = r"D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh\clinic.db"
+import requests
 
-CLOUD_API = "https://booking.phusandaianh.io.vn/api/sync/appointment"
-
-SYNC_TOKEN = "pkps_sync_secret"
+_BASE = os.path.dirname(os.path.abspath(__file__))
+LOCAL_DB = os.environ.get("CLINIC_DB", os.path.join(_BASE, "clinic.db"))
+_REMOTE = (os.environ.get("SYNC_REMOTE_URL") or "https://phusandaianh.io.vn").rstrip("/")
+CLOUD_API = f"{_REMOTE}/api/sync/appointment"
+SYNC_TOKEN = os.environ.get("SYNC_TOKEN", "phongkham_2026_secure_sync")
 
 
 def get_pending_sync():
@@ -65,9 +67,6 @@ def sync_to_cloud(row):
 
     data = json.loads(row["payload"])
 
-    # =========================
-    # APPOINTMENT
-    # =========================
     if row["table_name"] == "appointment":
 
         payload = {
@@ -75,44 +74,41 @@ def sync_to_cloud(row):
             "table_name": row["table_name"],
             "record_id": row["record_id"],
             "action": row["action"],
-            "payload": data
+            "payload": data,
         }
 
         response = requests.post(
-            "https://booking.phusandaianh.io.vn/api/sync/appointment",
+            CLOUD_API,
             json=payload,
-            timeout=20
+            timeout=20,
         )
 
         return response.status_code == 200
 
-    # =========================
-    # WORK SCHEDULE
-    # =========================
     elif row["table_name"] == "work_schedule":
 
         if row["action"] == "insert":
 
             response = requests.post(
-                "https://booking.phusandaianh.io.vn/api/sync/work_schedule",
+                f"{_REMOTE}/api/sync/work_schedule",
                 json=data,
-                timeout=20
+                timeout=20,
             )
 
         elif row["action"] == "update":
 
             response = requests.put(
-                "https://booking.phusandaianh.io.vn/api/sync/work_schedule",
+                f"{_REMOTE}/api/sync/work_schedule",
                 json=data,
-                timeout=20
+                timeout=20,
             )
 
         elif row["action"] == "delete":
 
             response = requests.delete(
-                "https://booking.phusandaianh.io.vn/api/sync/work_schedule",
+                f"{_REMOTE}/api/sync/work_schedule",
                 json=data,
-                timeout=20
+                timeout=20,
             )
 
         else:
