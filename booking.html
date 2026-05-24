@@ -311,8 +311,8 @@
       const nm = total % 60;
       return String(nh).padStart(2, '0') + ':' + String(nm).padStart(2, '0');
     }
-    // Lịch tạm để bệnh nhân đặt thử — đặt true chỉ khi test không cần DB
-    const USE_TRIAL_SCHEDULES = false;
+    // Lịch tạm CHỈ khi test: booking.html?trial=1 — production luôn dùng /api/work-schedule
+    const USE_TRIAL_SCHEDULES = new URLSearchParams(window.location.search).get('trial') === '1';
     const schedules = [
       {
         date: '2026-05-19',
