@@ -1,0 +1,38 @@
+﻿[2026-05-29 21:19:30] Launcher started (user=Phong sieu am)
+[2026-05-29 21:19:32] Starting server: C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\python.exe D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh\run_waitress.py
+[2026-05-29 21:19:36] Server ready
+[2026-05-29 21:19:36] Opening browser: http://127.0.0.1:5000/
+[2026-05-29 21:19:36] Done
+[2026-05-29 21:22:45] Launcher started (user=Phong sieu am)
+[2026-05-29 21:22:47] Starting server: C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\python.exe D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh\run_waitress.py
+[2026-05-29 21:22:49] Server ready
+[2026-05-29 21:22:49] Opening browser: http://127.0.0.1:5000/
+[2026-05-29 21:22:49] Done
+[2026-05-29 21:26:58] Launcher started (user=Phong sieu am)
+[2026-05-29 21:26:59] Server already running on port 5000
+[2026-05-29 21:26:59] Opening browser: http://127.0.0.1:5000/
+[2026-05-29 21:26:59] Done
+[2026-05-29 21:30:04] Launcher started (user=Phong sieu am)
+[2026-05-29 21:30:04] Server already running on port 5000
+[2026-05-29 21:30:04] Opening browser: http://127.0.0.1:5000/
+[2026-05-29 21:30:04] Done
+[2026-05-29 21:30:09] Launcher started (user=Phong sieu am)
+[2026-05-29 21:30:11] Starting server ngam (C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\pythonw.exe) -> clinic_server.log
+[2026-05-29 21:30:19] Server ready
+[2026-05-29 21:30:19] Opening browser: http://127.0.0.1:5000/
+[2026-05-29 21:30:19] Done
+[2026-05-30 07:32:24] Launcher started (user=Phong sieu am)
+[2026-05-30 07:32:31] Starting server ngam (C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\pythonw.exe) -> clinic_server.log
+[2026-05-30 07:32:47] Server ready
+[2026-05-30 07:32:47] Opening browser: http://127.0.0.1:5000/
+[2026-05-30 07:32:47] Done
+[2026-05-31 07:27:29] Launcher started (user=Phong sieu am)
+[2026-05-31 07:27:33] Starting server ngam (C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\pythonw.exe) -> clinic_server.log
+[2026-05-31 07:27:47] Server ready
+[2026-05-31 07:27:47] Opening browser: http://127.0.0.1:5000/
+[2026-05-31 07:27:47] Done
+[2026-06-01 15:17:42] Launcher started (user=Phong sieu am)
+[2026-06-01 15:17:45] Starting server ngam (C:\Users\Phong sieu am\AppData\Local\Programs\Python\Python311\pythonw.exe) -> clinic_server.log
+[2026-06-01 15:17:54] Server ready
+[2026-06-01 15:17:54] Opening browser: http://127.0.0.1:5000/
+[2026-06-01 15:17:54] Done

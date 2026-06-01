@@ -1,7 +1,7 @@
-{
+﻿{
   "Name": "PhongKhamDaiAnh-Orthanc",
-  "StorageDirectory": "J:/DU_AN_AI/Phong_kham_dai_anh/orthanc/db/storage",
-  "IndexDirectory": "J:/DU_AN_AI/Phong_kham_dai_anh/orthanc/db/index",
+  "StorageDirectory": "D:/phusandaianh/DU_AN_AI/Phong_kham_dai_anh/orthanc/db/storage",
+  "IndexDirectory": "D:/phusandaianh/DU_AN_AI/Phong_kham_dai_anh/orthanc/db/index",
   "DicomServerEnabled": true,
   "DicomAet": "CLINIC_PACS",
   "DicomPort": 4242,
@@ -17,7 +17,7 @@
   "MaximumStorageSize": 0,
   "MaximumPatientCount": 0,
   "Plugins": [
-    "J:/DU_AN_AI/Phong_kham_dai_anh/orthanc/plugins/OrthancExplorer2.dll"
+    "D:/phusandaianh/DU_AN_AI/Phong_kham_dai_anh/orthanc/plugins/OrthancExplorer2.dll"
   ],
   "DicomModalities": {
     "ULTRASOUND_MACHINE": [

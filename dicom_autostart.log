@@ -1,0 +1,40 @@
+﻿[2026-05-29 21:33:05] DICOM launcher started (user=Phong sieu am, dir=D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh)
+[2026-05-29 21:33:05] Dong bo worklist tu clinic.db (mwl_sync.py)...
+[2026-05-29 21:33:07] mwl_sync exit code: 0
+[2026-05-29 21:33:07] MWL Worklist : da lang nghe port 104
+[2026-05-29 21:33:09] DICOM C-STORE : khoi dong ngam dicom_receiver.py (port 11112)
+[2026-05-29 21:33:10] DICOM launcher started (user=Phong sieu am, dir=D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh)
+[2026-05-29 21:33:10] Dong bo worklist tu clinic.db (mwl_sync.py)...
+[2026-05-29 21:33:11] DICOM C-STORE : san sang port 11112
+[2026-05-29 21:33:12] mwl_sync exit code: 0
+[2026-05-29 21:33:12] MWL Worklist : da lang nghe port 104
+[2026-05-29 21:33:12] DICOM C-STORE : da lang nghe port 11112
+[2026-05-29 21:33:13] Orthanc: da cap nhat duong dan trong orthanc.json -> D:/phusandaianh/DU_AN_AI/Phong_kham_dai_anh
+[2026-05-29 21:33:13] Orthanc: khoi dong ngam (DICOM :4242 AE=CLINIC_PACS)
+[2026-05-29 21:33:13] Hoan tat. MWL :104 | C-STORE :11112 | Orthanc :4242 (neu co)
+[2026-05-29 21:33:14] Orthanc: khoi dong ngam (DICOM :4242 AE=CLINIC_PACS)
+[2026-05-29 21:33:14] Hoan tat. MWL :104 | C-STORE :11112 | Orthanc :4242 (neu co)
+[2026-05-30 07:33:07] DICOM launcher started (user=Phong sieu am, dir=D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh)
+[2026-05-30 07:33:07] Dong bo worklist tu clinic.db (mwl_sync.py)...
+[2026-05-30 07:33:12] mwl_sync exit code: 0
+[2026-05-30 07:33:13] MWL Worklist : da lang nghe port 104
+[2026-05-30 07:33:15] DICOM C-STORE : khoi dong ngam dicom_receiver.py (port 11112)
+[2026-05-30 07:33:17] DICOM C-STORE : san sang port 11112
+[2026-05-30 07:33:19] Orthanc: khoi dong ngam (DICOM :4242 AE=CLINIC_PACS)
+[2026-05-30 07:33:19] Hoan tat. MWL :104 | C-STORE :11112 | Orthanc :4242 (neu co)
+[2026-05-31 07:28:07] DICOM launcher started (user=Phong sieu am, dir=D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh)
+[2026-05-31 07:28:07] Dong bo worklist tu clinic.db (mwl_sync.py)...
+[2026-05-31 07:28:10] mwl_sync exit code: 0
+[2026-05-31 07:28:10] MWL Worklist : da lang nghe port 104
+[2026-05-31 07:28:12] DICOM C-STORE : khoi dong ngam dicom_receiver.py (port 11112)
+[2026-05-31 07:28:14] DICOM C-STORE : san sang port 11112
+[2026-05-31 07:28:16] Orthanc: khoi dong ngam (DICOM :4242 AE=CLINIC_PACS)
+[2026-05-31 07:28:16] Hoan tat. MWL :104 | C-STORE :11112 | Orthanc :4242 (neu co)
+[2026-06-01 15:18:24] DICOM launcher started (user=Phong sieu am, dir=D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh)
+[2026-06-01 15:18:24] Dong bo worklist tu clinic.db (mwl_sync.py)...
+[2026-06-01 15:18:30] mwl_sync exit code: 0
+[2026-06-01 15:18:30] MWL Worklist : da lang nghe port 104
+[2026-06-01 15:18:32] DICOM C-STORE : khoi dong ngam dicom_receiver.py (port 11112)
+[2026-06-01 15:18:34] DICOM C-STORE : san sang port 11112
+[2026-06-01 15:18:36] Orthanc: khoi dong ngam (DICOM :4242 AE=CLINIC_PACS)
+[2026-06-01 15:18:36] Hoan tat. MWL :104 | C-STORE :11112 | Orthanc :4242 (neu co)

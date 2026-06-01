@@ -16,4 +16,28 @@ Starting Modality Worklist SCP on 0.0.0.0:104
 ^CStarted auto-sync scheduler (every 3 minutes)
 Starting Modality Worklist SCP on 0.0.0.0:104
 [07:25:05] Loaded 2 worklist entries from mwl.db
+^C^CStarted auto-sync scheduler (every 3 minutes)
+MWL process cwd: D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh
+mwl.db resolved path: D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh\mwl.db (exists=True)
+Starting Modality Worklist SCP on 0.0.0.0:104
+[07:57:58] Loaded 0 worklist entries from D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh\mwl.db
+[08:00:57] Auto-syncing worklist from clinic.db...
+[08:00:59] Auto-sync completed successfully (MWL entries in RAM: 0)
+^CStarted auto-sync scheduler (every 3 minutes)
+MWL process cwd: D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh
+mwl.db resolved path: D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh\mwl.db (exists=True)
+Starting Modality Worklist SCP on 0.0.0.0:104
+[08:01:16] Loaded 0 worklist entries from D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh\mwl.db
+^CStarted auto-sync scheduler (every 3 minutes)
+MWL process cwd: D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh
+mwl.db resolved path: D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh\mwl.db (exists=True)
+Starting Modality Worklist SCP on 0.0.0.0:104
+[16:38:18] Loaded 0 worklist entries from D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh\mwl.db
+^C^CStarted auto-sync scheduler (every 3 minutes)
+[21:26:36] Loaded 0 worklist entries from D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh\mwl.db
+MWL process cwd: D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh
+mwl.db resolved path: D:\phusandaianh\DU_AN_AI\Phong_kham_dai_anh\mwl.db (exists=True)
+Starting Modality Worklist SCP on 0.0.0.0:104
+[21:29:35] Auto-syncing worklist from clinic.db...
+[21:29:38] Auto-sync completed successfully (MWL entries in RAM: 0)
 ^C
