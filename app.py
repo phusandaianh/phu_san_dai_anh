@@ -4218,6 +4218,31 @@ def _ensure_mwl_server_running() -> bool:
             return False
     return False
 
+
+def _request_hostname():
+    """Hostname không gồm port (vd. dangki.phusandaianh.io.vn)."""
+    return (request.host or '').split(':', 1)[0].lower()
+
+
+def _is_patient_booking_host():
+    """
+    Subdomain đăng ký khám công khai (URL giữ nguyên trên thanh địa chỉ).
+    Mặc định: dangki.* — cấu hình thêm bằng BOOKING_HOST_PREFIXES (phân tách bằng dấu phẩy).
+    """
+    host = _request_hostname()
+    raw = (os.environ.get('BOOKING_HOST_PREFIXES') or 'dangki.').strip()
+    for prefix in raw.split(','):
+        prefix = prefix.strip().lower()
+        if prefix and host.startswith(prefix):
+            return True
+    return False
+
+
+def _serve_patient_booking_page():
+    """Trang đặt lịch bệnh nhân (booking.html ở thư mục gốc app)."""
+    return send_from_directory('.', 'booking.html')
+
+
 @app.before_request
 def auto_start_mwl_for_main_pages():
     """
@@ -4242,6 +4267,8 @@ def index():
         _ensure_mwl_server_running()
     except Exception as e:
         print(f"[MWL-AUTOSTART] Lỗi khi kiểm tra/khởi động MWL: {e}")
+    if _is_patient_booking_host():
+        return _serve_patient_booking_page()
     return render_template('index.html')
 
 @app.route('/api/health')
