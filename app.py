@@ -2870,6 +2870,106 @@ def _mirror_work_schedule_delete_to_peer(external_id: str) -> None:
     except Exception:
         pass
 
+
+def _today_local_date():
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo('Asia/Ho_Chi_Minh')).date()
+    except Exception:
+        return datetime.now().date()
+
+
+def _collect_work_schedule_rows(shifts=None, start_date=None, end_date=None):
+    ensure_work_schedule_columns()
+    if shifts:
+        rows = []
+        seen = set()
+        for s in shifts:
+            row = None
+            sid = s.get('id')
+            if sid is not None:
+                try:
+                    row = WorkSchedule.query.get(int(sid))
+                except Exception:
+                    row = None
+            if row and row.id not in seen:
+                seen.add(row.id)
+                rows.append(row)
+        return rows
+    today = _today_local_date()
+    if not start_date:
+        start_date = today.strftime('%Y-%m-%d')
+    if not end_date:
+        end_date = (today + timedelta(days=30)).strftime('%Y-%m-%d')
+    return WorkSchedule.query.filter(
+        WorkSchedule.date >= start_date,
+        WorkSchedule.date <= end_date,
+    ).order_by(WorkSchedule.date, WorkSchedule.start_time).all()
+
+
+def _reconcile_work_schedules_on_peer(start_date: str, end_date: str, keep_external_ids: list) -> dict:
+    peer_base = (os.environ.get('SYNC_PEER_APPOINTMENTS_URL') or app.config.get('SYNC_PEER_APPOINTMENTS_URL') or '').strip().rstrip('/')
+    if not peer_base or not start_date or not end_date:
+        return {'deleted': 0, 'skipped': True}
+    token = (os.environ.get('SYNC_PEER_TOKEN') or app.config.get('SYNC_PEER_TOKEN') or '').strip()
+    headers = {'X-Work-Schedule-Mirror': '1', 'Content-Type': 'application/json'}
+    if token:
+        headers['X-Sync-Token'] = token
+    code, resp = _http_json(
+        'POST',
+        f"{peer_base}/api/sync/work-schedule/reconcile",
+        headers=headers,
+        body_obj={
+            'start_date': start_date,
+            'end_date': end_date,
+            'external_ids': keep_external_ids or [],
+        },
+        timeout_s=30,
+    )
+    if code == 200 and isinstance(resp, dict):
+        return resp
+    return {'deleted': 0, 'error': resp, 'http_code': code}
+
+
+def _sync_work_schedules_to_peer_and_events(shifts=None, start_date=None, end_date=None) -> dict:
+    rows = _collect_work_schedule_rows(shifts=shifts, start_date=start_date, end_date=end_date)
+    if not rows and (start_date or end_date):
+        today = _today_local_date()
+        start_date = start_date or today.strftime('%Y-%m-%d')
+        end_date = end_date or (today + timedelta(days=30)).strftime('%Y-%m-%d')
+    elif rows:
+        start_date = start_date or rows[0].date
+        end_date = end_date or rows[-1].date
+
+    external_ids = []
+    mirrored = 0
+    for ws in rows:
+        if not (getattr(ws, 'external_id', None) or '').strip():
+            ws.external_id = str(uuid.uuid4())
+            db.session.commit()
+        payload = _work_schedule_payload(ws)
+        external_ids.append(payload['external_id'])
+        _mirror_work_schedule_upsert_to_peer(payload)
+        _emit_sync_event(
+            'work_schedule',
+            payload['external_id'],
+            'work_schedule.upsert',
+            {'work_schedule': payload},
+        )
+        mirrored += 1
+
+    reconcile = {}
+    if start_date and end_date:
+        reconcile = _reconcile_work_schedules_on_peer(start_date, end_date, external_ids)
+
+    return {
+        'mirrored': mirrored,
+        'reconcile': reconcile,
+        'start_date': start_date,
+        'end_date': end_date,
+    }
+
+
 def _run_background_best_effort(task_fn, *args, **kwargs) -> None:
     """Run non-critical task in daemon thread to avoid blocking API response."""
     def _runner():
@@ -5579,6 +5679,31 @@ def api_sync_push():
         accepted += 1
     return jsonify({'message': 'OK', 'accepted': accepted})
 
+
+@app.route('/api/sync/work-schedule/reconcile', methods=['POST'])
+def api_sync_work_schedule_reconcile():
+    if not _sync_token_ok(request, request.json):
+        return jsonify({'error': 'Forbidden'}), 403
+    data = request.json or {}
+    start_date = (data.get('start_date') or '').strip()
+    end_date = (data.get('end_date') or '').strip()
+    keep = {(x or '').strip() for x in (data.get('external_ids') or []) if (x or '').strip()}
+    if not start_date or not end_date:
+        return jsonify({'error': 'start_date and end_date required'}), 400
+    ensure_work_schedule_columns()
+    deleted = 0
+    for row in WorkSchedule.query.filter(
+        WorkSchedule.date >= start_date,
+        WorkSchedule.date <= end_date,
+    ).all():
+        ext = (getattr(row, 'external_id', None) or '').strip()
+        if ext and ext not in keep:
+            db.session.delete(row)
+            deleted += 1
+    db.session.commit()
+    return jsonify({'deleted': deleted, 'start_date': start_date, 'end_date': end_date})
+
+
 def run_sync_loop_local():
     """LOCAL chạy nền: pull từ ONLINE + push event local."""
     import time as _time
@@ -7590,7 +7715,7 @@ def update_booking_content(**kwargs):
 @app.route('/api/work-schedule', methods=['GET'])
 def get_work_schedule():
     ensure_work_schedule_columns()
-    today = datetime.now().date()
+    today = _today_local_date()
     days = []
     # Lấy tất cả lịch trong 15 ngày tới (hôm nay + 14 ngày sau — đồng bộ trang đặt lịch & nhắc admin)
     all_schedules = WorkSchedule.query.filter(
@@ -7883,9 +8008,18 @@ def copy_work_schedule_week():
 @app.route('/api/work-schedule/sync', methods=['POST'])
 def sync_work_schedule():
     try:
-        # Logic đồng bộ lịch làm việc
-        return jsonify({'message': 'Đã đồng bộ lịch làm việc thành công'})
+        data = request.json or {}
+        today = _today_local_date()
+        start_date = (data.get('start_date') or '').strip() or today.strftime('%Y-%m-%d')
+        end_date = (data.get('end_date') or '').strip() or (today + timedelta(days=30)).strftime('%Y-%m-%d')
+        result = _sync_work_schedules_to_peer_and_events(
+            shifts=data.get('shifts'),
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return jsonify({'message': 'Đã đồng bộ lịch làm việc thành công', **result})
     except Exception as e:
+        db.session.rollback()
         return jsonify({'message': f'Đã xảy ra lỗi khi đồng bộ lịch làm việc: {str(e)}'}), 500
 
 @app.route('/api/admin/work-schedule/close-day', methods=['POST'])

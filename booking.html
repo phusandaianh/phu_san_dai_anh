@@ -282,6 +282,8 @@
     <div id="ws-copy-week-modal" class="modal hidden" ...>
     </div>
     <script>
+    // Lịch/đăng ký qua API host hiện tại (booking online). pk đồng bộ lịch + hẹn qua sync/mirror khi tunnel bật.
+    let scheduleRefreshSeconds = 45;
     // Hàm lấy thứ tiếng Việt
     function getVietnameseDay(dateStr) {
       const d = new Date(dateStr);
@@ -309,8 +311,8 @@
       const nm = total % 60;
       return String(nh).padStart(2, '0') + ':' + String(nm).padStart(2, '0');
     }
-    // Lịch tạm để bệnh nhân đặt thử — đặt true chỉ khi test không cần DB
-    const USE_TRIAL_SCHEDULES = false;
+    // Lịch tạm CHỈ khi test: booking.html?trial=1 — production luôn dùng /api/work-schedule
+    const USE_TRIAL_SCHEDULES = new URLSearchParams(window.location.search).get('trial') === '1';
     const schedules = [
       {
         date: '2026-05-19',
@@ -400,7 +402,7 @@
     checkRegisterButtonsVisibility();
     return;
   }
-  const res = await fetch('/api/work-schedule');
+  const res = await fetch('/api/work-schedule', { cache: 'no-store' });
   const data = await res.json();
 
   // Lấy ngày hôm nay
@@ -488,11 +490,11 @@
       // Tải danh sách slot trống
       try {
         // Tìm slot_minutes từ lịch trong data đã render (không có sẵn trên DOM), nên gọi API admin theo ngày để tìm ca khớp
-        const res = await fetch(`/api/admin/work-schedule?date=${dateStr}`);
+        const res = await fetch(`/api/admin/work-schedule?date=${dateStr}`, { cache: 'no-store' });
         const shifts = await res.json();
         const matched = shifts.find(s => s.start_time === this.dataset.start && s.end_time === this.dataset.end && s.doctor_name === this.dataset.doctor);
         const slotMinutes = matched && matched.slot_minutes ? matched.slot_minutes : 10;
-        const slotRes = await fetch(`/api/available-slots?date=${dateStr}&start=${this.dataset.start}&end=${this.dataset.end}&slot_minutes=${slotMinutes}`);
+        const slotRes = await fetch(`/api/available-slots?date=${dateStr}&start=${this.dataset.start}&end=${this.dataset.end}&slot_minutes=${slotMinutes}`, { cache: 'no-store' });
         const slotData = await slotRes.json();
         const select = document.getElementById('appointment-time');
         select.innerHTML = '<option value="" disabled selected>Vui lòng chọn</option>';
@@ -526,7 +528,7 @@
     // Tải danh sách lý do khám từ trang quản trị
     async function loadReasons() {
       try {
-        const res = await fetch('/api/booking-content');
+        const res = await fetch('/api/booking-content', { cache: 'no-store' });
         const data = await res.json();
         const reasons = Array.isArray(data.reasons) ? data.reasons : [];
         const dl = document.getElementById('reasons-list');
@@ -543,7 +545,7 @@
     // Load clinic summary from API
     async function loadClinicSummary() {
         try {
-            const response = await fetch('/api/home-content');
+            const response = await fetch('/api/home-content', { cache: 'no-store' });
             const data = await response.json();
             if (data.clinicSummary) {
                 document.getElementById('clinic-summary').textContent = data.clinicSummary;
@@ -558,14 +560,25 @@
         setInterval(loadClinicSummary, 30000); // Refresh every 30 seconds
     }
 
-    document.addEventListener('DOMContentLoaded',()=>{
-      renderSchedule();
+    function startScheduleAutoRefresh() {
+      const ms = Math.max(15000, (scheduleRefreshSeconds || 45) * 1000);
+      setInterval(function () {
+        renderSchedule().catch(function (e) { console.warn('refresh schedule', e); });
+      }, ms);
+    }
+
+    document.addEventListener('DOMContentLoaded', function (){
+      fetch('/api/public-config', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (cfg) {
+        if (cfg && cfg.schedule_refresh_seconds) scheduleRefreshSeconds = cfg.schedule_refresh_seconds;
+      }).catch(function () {}).finally(function () {
+        renderSchedule();
+        startScheduleAutoRefresh();
+      });
       loadReasons();
-      loadClinicSummary(); // Load clinic summary from API
-      startClinicSummaryRefresh(); // Start auto-refresh
-      setupSuccessTicket(); // Khởi tạo modal phiếu xác nhận
+      loadClinicSummary();
+      startClinicSummaryRefresh();
+      setupSuccessTicket();
       initDobWheelPicker();
-      // Kiểm tra và áp dụng trạng thái ẩn/hiện nút đăng ký
       checkRegisterButtonsVisibility();
     });
 
