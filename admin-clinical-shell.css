@@ -1,0 +1,123 @@
+/* Shell giao diện đồng bộ admin.html cho các trang lâm sàng */
+:root {
+    --admin-btn-bg: #0369a1;
+    --admin-btn-hover: #0284c7;
+    --admin-btn-active: #0c4a6e;
+    --admin-accent: #e0f2fe;
+    --admin-border: #bae6fd;
+    --admin-text: #0c4a6e;
+}
+
+.admin-header {
+    background: linear-gradient(135deg, #0c4a6e 0%, #0369a1 50%, #0ea5e9 100%);
+    color: white;
+    padding: 1rem 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.admin-header .logo {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.admin-header .logo img {
+    height: 50px;
+    width: auto;
+    margin-right: 0;
+}
+
+.admin-header .logo-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.admin-header .logo-text h1 {
+    color: white;
+    font-size: 1.15rem;
+    margin: 0;
+    font-weight: bold;
+}
+
+.admin-header .admin-slogan {
+    color: #ffeb3b;
+    font-size: 0.9rem;
+    margin: 5px 0 0 0;
+    font-weight: bold;
+}
+
+.admin-header .page-subtitle {
+    margin: 4px 0 0;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.92);
+    font-weight: 600;
+}
+
+.admin-header nav {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.admin-header .nav-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+}
+
+.admin-header .back-link {
+    color: white;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.admin-header .back-link.btn.secondary-btn,
+.header-nav-btn {
+    background-color: var(--admin-btn-bg);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: white;
+    padding: 8px 14px;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.admin-header .back-link.btn.secondary-btn:hover,
+.header-nav-btn:hover {
+    background-color: var(--admin-btn-hover);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(14, 165, 233, 0.4);
+}
+
+.header-nav-btn.active {
+    background-color: var(--admin-btn-bg);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
+@media (max-width: 768px) {
+    .admin-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

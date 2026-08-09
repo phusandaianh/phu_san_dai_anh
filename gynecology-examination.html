@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phiếu khám Phụ khoa - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="admin-clinical-shell.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --pk-primary: #0369a1;
+            --pk-primary-dark: #0c4a6e;
+            --pk-accent: #e0f2fe;
+            --pk-border: #bae6fd;
+        }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(ellipse 80% 50% at 10% 0%, rgba(3, 105, 161, 0.10), transparent),
+                radial-gradient(ellipse 60% 40% at 100% 10%, rgba(14, 165, 233, 0.08), transparent),
+                #f8fafc;
+            font-family: Roboto, "Segoe UI", sans-serif;
+        }
+        .admin-main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; }
+        .page-intro {
+            background: #fff; border-radius: 14px; padding: 1.25rem 1.5rem;
+            margin-bottom: 1.25rem; border: 1px solid var(--pk-border);
+        }
+        .page-intro h2 { margin: 0 0 0.35rem; color: var(--pk-primary-dark); font-size: 1.4rem; }
+        .page-intro p { margin: 0; color: #475569; }
+        .exam-form {
+            background: #fff; border-radius: 14px; padding: 1.5rem; margin-bottom: 1.25rem;
+            border: 1px solid var(--pk-border); box-shadow: 0 8px 24px rgba(3, 105, 161, 0.08);
+        }
+        .exam-form h3 {
+            margin: 0 0 1rem; color: var(--pk-primary-dark); font-size: 1.15rem;
+            display: flex; align-items: center; gap: 8px; padding-bottom: 0.6rem;
+            border-bottom: 2px solid var(--pk-accent);
+        }
+        .form-row {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px; margin-bottom: 14px;
+        }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group.full { grid-column: 1 / -1; }
+        .form-group label { font-weight: 600; color: #334155; font-size: 0.92rem; }
+        .form-group input, .form-group select, .form-group textarea {
+            padding: 10px 12px; border: 1.5px solid #e2e8f0; border-radius: 8px;
+            font-size: 0.98rem; background: #fff;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none; border-color: var(--pk-primary);
+            box-shadow: 0 0 0 3px rgba(3, 105, 161, 0.15);
+        }
+        .form-group textarea { min-height: 80px; resize: vertical; }
+        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+        .btn {
+            border: none; border-radius: 8px; padding: 11px 18px; font-weight: 600;
+            cursor: pointer; display: inline-flex; align-items: center; gap: 8px; color: #fff;
+            background: linear-gradient(135deg, var(--pk-primary), var(--pk-primary-dark));
+        }
+        .btn:hover { filter: brightness(1.05); }
+        .btn-secondary { background: #64748b; }
+        .history-panel {
+            background: #fff; border-radius: 14px; padding: 1.25rem 1.5rem; border: 1px solid var(--pk-border);
+        }
+        .history-panel h3 { margin: 0 0 1rem; color: var(--pk-primary-dark); }
+        .history-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+        .history-table th, .history-table td {
+            text-align: left; padding: 10px 8px; border-bottom: 1px solid #e2e8f0;
+        }
+        .history-table th { background: var(--pk-accent); color: #0c4a6e; }
+        .history-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .history-actions button {
+            border: none; border-radius: 6px; padding: 6px 10px; cursor: pointer;
+            font-size: 0.82rem; color: #fff;
+        }
+        .btn-load { background: var(--pk-primary); }
+        .btn-del { background: #ef4444; }
+        .empty-history { color: #94a3b8; text-align: center; padding: 1.5rem; }
+        .toast {
+            position: fixed; right: 20px; bottom: 20px; background: #0369a1; color: #fff;
+            padding: 12px 16px; border-radius: 8px; z-index: 2000;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2); display: none;
+        }
+        .toast.error { background: #b91c1c; }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.PNG" alt="Phòng khám Phụ Sản Đại Anh" onerror="this.style.display='none'">
+            <div class="logo-text">
+                <h1>Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                <p class="admin-slogan">Uy Tín - Chất Lượng</p>
+                <p class="page-subtitle">Phiếu khám phụ khoa</p>
+            </div>
+        </div>
+        <nav>
+            <div class="nav-row">
+                <a href="admin.html" class="header-nav-btn"><i class="fas fa-cog"></i> Admin</a>
+                <a href="examination-list.html" class="header-nav-btn" title="Danh sách lịch hẹn trong ngày"><i class="fas fa-calendar-check"></i> Danh sách khám</a>
+                <a href="cervical-examination-analysis.html" class="header-nav-btn"><i class="fas fa-search-plus"></i> Soi cổ tử cung</a>
+                <a href="gynecology-records.html" class="header-nav-btn" title="Quản lý bệnh lý phụ khoa và theo dõi điều trị"><i class="fas fa-venus"></i> Phụ khoa</a>
+                <a href="gynecology-examination.html" class="header-nav-btn active" title="Phiếu khám phụ khoa có cấu trúc"><i class="fas fa-notes-medical"></i> Phiếu khám PK</a>
+                <a href="obstetric-examination.html" class="header-nav-btn" title="Phiếu khám sản định kỳ (ANC)"><i class="fas fa-baby"></i> Phiếu khám sản</a>
+                <a href="follicle-monitoring.html" class="header-nav-btn" title="Theo dõi nang vô sinh"><i class="fas fa-circle-notch"></i> Theo dõi nang</a>
+                <a href="andrology-examination.html" class="header-nav-btn" title="Nam khoa / tinh dịch đồ"><i class="fas fa-mars"></i> Nam khoa</a>
+                <a href="infertility-couple.html" class="header-nav-btn" title="Hồ sơ cặp vợ chồng vô sinh"><i class="fas fa-user-friends"></i> Cặp VS</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="admin-main">
+        <div class="page-intro">
+            <h2>Phiếu khám lâm sàng phụ khoa</h2>
+            <p>Lý do khám, tiền sử, khám ngoài/trong, chẩn đoán, điều trị và hẹn tái khám. Siêu âm số đo dùng trang <a href="ultrasound-gynecology.html">SA phụ khoa</a>.</p>
+        </div>
+
+        <form class="exam-form" id="gyn-exam-form" onsubmit="return false;">
+            <input type="hidden" id="result-id" value="">
+            <input type="hidden" id="appointment-id" value="">
+
+            <h3><i class="fas fa-user"></i> Hành chính</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="patient-select">Bệnh nhân *</label>
+                    <select id="patient-select" required>
+                        <option value="">-- Chọn bệnh nhân --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="exam-date">Ngày khám *</label>
+                    <input type="datetime-local" id="exam-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="doctor-name">Bác sĩ</label>
+                    <input type="text" id="doctor-name" placeholder="PK Đại Anh">
+                </div>
+                <div class="form-group">
+                    <label for="chief-complaint">Lý do khám</label>
+                    <input type="text" id="chief-complaint" placeholder="Đau hạ vị, huyết trắng, rong kinh...">
+                </div>
+            </div>
+
+            <h3><i class="fas fa-history"></i> Tiền sử / kinh nguyệt</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="lmp-date">Ngày kinh cuối (LMP)</label>
+                    <input type="date" id="lmp-date">
+                </div>
+                <div class="form-group">
+                    <label for="menstrual-day">Ngày vòng kinh</label>
+                    <input type="number" id="menstrual-day" min="1" max="60">
+                </div>
+                <div class="form-group">
+                    <label for="cycle-pattern">Chu kỳ</label>
+                    <select id="cycle-pattern">
+                        <option value="">-- Chọn --</option>
+                        <option value="regular">Đều</option>
+                        <option value="irregular">Không đều</option>
+                        <option value="amenorrhea">Vô kinh</option>
+                        <option value="menopause">Mãn kinh</option>
+                        <option value="hormone">Đang dùng hormone</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="gravida">Gravida</label>
+                    <input type="number" id="gravida" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="para">Para</label>
+                    <input type="text" id="para" placeholder="VD: 1-0-0-1">
+                </div>
+                <div class="form-group">
+                    <label for="contraception">Tránh thai</label>
+                    <input type="text" id="contraception" placeholder="Không / Vòng / Viên...">
+                </div>
+                <div class="form-group">
+                    <label for="allergies">Dị ứng</label>
+                    <input type="text" id="allergies">
+                </div>
+                <div class="form-group full">
+                    <label for="past-gyn-history">Tiền sử phụ khoa</label>
+                    <textarea id="past-gyn-history" placeholder="HPV, CTC, phẫu thuật, viêm..."></textarea>
+                </div>
+            </div>
+
+            <h3><i class="fas fa-stethoscope"></i> Khám lâm sàng</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="pain-vas">Đau VAS (0–10)</label>
+                    <input type="number" id="pain-vas" min="0" max="10">
+                </div>
+                <div class="form-group">
+                    <label for="discharge-character">Huyết trắng</label>
+                    <select id="discharge-character">
+                        <option value="">-- Chọn --</option>
+                        <option value="normal">Bình thường</option>
+                        <option value="white">Trắng sữa</option>
+                        <option value="curd">Vón cục (nấm)</option>
+                        <option value="yellow">Vàng</option>
+                        <option value="green">Xanh</option>
+                        <option value="bloody">Máu / loãng máu</option>
+                        <option value="foul">Hôi</option>
+                    </select>
+                </div>
+                <div class="form-group full">
+                    <label for="general-exam">Toàn thân / bụng</label>
+                    <textarea id="general-exam"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="vagina-findings">Âm đạo</label>
+                    <textarea id="vagina-findings"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="cervix-findings">Cổ tử cung</label>
+                    <textarea id="cervix-findings"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="uterus-bimanual">Tử cung (hai tay)</label>
+                    <textarea id="uterus-bimanual" placeholder="To, mềm, đau, di động..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="adnexa-findings">Phần phụ</label>
+                    <textarea id="adnexa-findings"></textarea>
+                </div>
+                <div class="form-group full">
+                    <label for="exam-findings">Tóm tắt khám</label>
+                    <textarea id="exam-findings"></textarea>
+                </div>
+            </div>
+
+            <h3><i class="fas fa-file-medical"></i> Kết luận &amp; điều trị</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="diagnosis">Chẩn đoán</label>
+                    <textarea id="diagnosis"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="treatment-plan">Hướng điều trị</label>
+                    <textarea id="treatment-plan" placeholder="Thuốc, thủ thuật, chỉ định CLS..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="recommendations">Khuyến nghị</label>
+                    <textarea id="recommendations"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="follow-up-date">Ngày tái khám</label>
+                    <input type="date" id="follow-up-date">
+                </div>
+                <div class="form-group">
+                    <label for="follow-up-notes">Ghi chú tái khám</label>
+                    <input type="text" id="follow-up-notes">
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button type="button" class="btn" onclick="saveResult()"><i class="fas fa-save"></i> Lưu phiếu</button>
+                <button type="button" class="btn btn-secondary" id="print-btn" style="display:none;" onclick="printResult()"><i class="fas fa-print"></i> In PDF</button>
+                <button type="button" class="btn btn-secondary" onclick="resetForm()"><i class="fas fa-eraser"></i> Làm mới</button>
+                <button type="button" class="btn btn-secondary" onclick="openLinkedUltrasound()"><i class="fas fa-venus"></i> Mở SA phụ khoa</button>
+            </div>
+        </form>
+
+        <section class="history-panel">
+            <h3><i class="fas fa-history"></i> Lịch sử phiếu khám phụ khoa</h3>
+            <div id="history-container" class="empty-history">Chọn bệnh nhân để xem lịch sử.</div>
+        </section>
+    </main>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        let currentEditingId = null;
+        const FIELD_MAP = {
+            'doctor-name': 'doctor_name',
+            'chief-complaint': 'chief_complaint',
+            'lmp-date': 'lmp_date',
+            'menstrual-day': 'menstrual_day',
+            'cycle-pattern': 'cycle_pattern',
+            'gravida': 'gravida',
+            'para': 'para',
+            'contraception': 'contraception',
+            'allergies': 'allergies',
+            'past-gyn-history': 'past_gyn_history',
+            'general-exam': 'general_exam',
+            'vagina-findings': 'vagina_findings',
+            'cervix-findings': 'cervix_findings',
+            'uterus-bimanual': 'uterus_bimanual',
+            'adnexa-findings': 'adnexa_findings',
+            'discharge-character': 'discharge_character',
+            'pain-vas': 'pain_vas',
+            'exam-findings': 'exam_findings',
+            'diagnosis': 'diagnosis',
+            'treatment-plan': 'treatment_plan',
+            'recommendations': 'recommendations',
+            'follow-up-date': 'follow_up_date',
+            'follow-up-notes': 'follow_up_notes',
+        };
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            setDefaultExamDate();
+            await loadPatients();
+            const params = new URLSearchParams(location.search);
+            if (params.get('appointment_id')) {
+                document.getElementById('appointment-id').value = params.get('appointment_id');
+                await resolveFromAppointment(params.get('appointment_id'));
+            }
+            if (params.get('patient_id')) {
+                document.getElementById('patient-select').value = params.get('patient_id');
+            } else if (params.get('phone')) {
+                await selectPatientByPhone(params.get('phone'));
+            }
+            if (document.getElementById('patient-select').value) await loadHistory();
+            if (params.get('result_id')) await loadResult(params.get('result_id'));
+            document.getElementById('patient-select').addEventListener('change', loadHistory);
+            updatePrintButton();
+        });
+
+        function setDefaultExamDate() {
+            const el = document.getElementById('exam-date');
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            el.value = now.toISOString().slice(0, 16);
+        }
+
+        function showToast(msg, isError) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.toggle('error', !!isError);
+            t.style.display = 'block';
+            setTimeout(() => { t.style.display = 'none'; }, 3200);
+        }
+
+        function numOrNull(v) {
+            if (v === '' || v == null) return null;
+            const n = Number(v);
+            return Number.isFinite(n) ? n : null;
+        }
+
+        function updatePrintButton() {
+            const btn = document.getElementById('print-btn');
+            if (btn) btn.style.display = currentEditingId ? 'inline-flex' : 'none';
+        }
+
+        async function loadPatients() {
+            try {
+                const res = await fetch('/api/patients');
+                if (!res.ok) throw new Error('Không tải được danh sách bệnh nhân');
+                const patients = await res.json();
+                const select = document.getElementById('patient-select');
+                const list = Array.isArray(patients) ? patients : (patients.data || patients.patients || []);
+                list.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    const name = p.full_name || p.name || ('BN #' + p.id);
+                    const phone = p.phone ? ` — ${p.phone}` : '';
+                    opt.textContent = `${name}${phone}`;
+                    select.appendChild(opt);
+                });
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        async function resolveFromAppointment(appointmentId) {
+            try {
+                const res = await fetch(`/api/appointments/${appointmentId}`);
+                if (!res.ok) return;
+                const appt = await res.json();
+                if (appt.patient_id) document.getElementById('patient-select').value = appt.patient_id;
+                if (appt.doctor_name && !document.getElementById('doctor-name').value) {
+                    document.getElementById('doctor-name').value = appt.doctor_name;
+                }
+                if (appt.service_type && !document.getElementById('chief-complaint').value) {
+                    document.getElementById('chief-complaint').value = appt.service_type;
+                }
+            } catch (e) {
+                console.warn(e);
+            }
+        }
+
+        async function selectPatientByPhone(phone) {
+            if (!phone) return;
+            const select = document.getElementById('patient-select');
+            const match = Array.from(select.options).find(opt => (opt.textContent || '').includes(phone));
+            if (match) select.value = match.value;
+        }
+
+        function getFormData() {
+            const data = {
+                patient_id: numOrNull(document.getElementById('patient-select').value),
+                appointment_id: numOrNull(document.getElementById('appointment-id').value),
+                exam_date: document.getElementById('exam-date').value,
+                analysis_source: 'manual_input',
+            };
+            Object.entries(FIELD_MAP).forEach(([domId, key]) => {
+                const el = document.getElementById(domId);
+                if (!el) return;
+                let val = el.value;
+                if (['menstrual_day', 'gravida', 'pain_vas'].includes(key)) val = numOrNull(val);
+                data[key] = val === '' ? null : val;
+            });
+            return data;
+        }
+
+        function fillForm(data) {
+            if (data.patient_id) document.getElementById('patient-select').value = data.patient_id;
+            if (data.appointment_id) document.getElementById('appointment-id').value = data.appointment_id;
+            if (data.exam_date) {
+                const d = new Date(data.exam_date);
+                d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+                document.getElementById('exam-date').value = d.toISOString().slice(0, 16);
+            }
+            Object.entries(FIELD_MAP).forEach(([domId, key]) => {
+                const el = document.getElementById(domId);
+                if (!el || data[key] == null) return;
+                el.value = data[key];
+            });
+            currentEditingId = data.id || null;
+            document.getElementById('result-id').value = currentEditingId || '';
+            updatePrintButton();
+        }
+
+        function resetForm(keepPatient) {
+            const patientId = keepPatient ? document.getElementById('patient-select').value : '';
+            const appointmentId = keepPatient ? document.getElementById('appointment-id').value : '';
+            document.getElementById('gyn-exam-form').reset();
+            document.getElementById('appointment-id').value = appointmentId;
+            if (patientId) document.getElementById('patient-select').value = patientId;
+            currentEditingId = null;
+            document.getElementById('result-id').value = '';
+            setDefaultExamDate();
+            updatePrintButton();
+        }
+
+        function openLinkedUltrasound() {
+            const params = new URLSearchParams();
+            const pid = document.getElementById('patient-select').value;
+            const aid = document.getElementById('appointment-id').value;
+            if (pid) params.set('patient_id', pid);
+            if (aid) params.set('appointment_id', aid);
+            window.open(`/ultrasound-gynecology.html?${params.toString()}`, '_blank');
+        }
+
+        function printResult() {
+            if (!currentEditingId) {
+                showToast('Hãy lưu phiếu trước khi in', true);
+                return;
+            }
+            window.open(`/api/print_gyn_exam/${currentEditingId}`, '_blank');
+        }
+
+        async function saveResult() {
+            const data = getFormData();
+            if (!data.patient_id) {
+                showToast('Vui lòng chọn bệnh nhân', true);
+                return;
+            }
+            try {
+                const url = currentEditingId
+                    ? `/api/gyn-exam-results/${currentEditingId}`
+                    : '/api/gyn-exam-results';
+                const method = currentEditingId ? 'PUT' : 'POST';
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+                const body = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(body.message || 'Lưu thất bại');
+                if (body.id) currentEditingId = body.id;
+                if (body.result && body.result.id) currentEditingId = body.result.id;
+                document.getElementById('result-id').value = currentEditingId || '';
+                updatePrintButton();
+                showToast(body.message || 'Đã lưu');
+                await loadHistory();
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        async function loadHistory() {
+            const patientId = document.getElementById('patient-select').value;
+            const box = document.getElementById('history-container');
+            if (!patientId) {
+                box.className = 'empty-history';
+                box.textContent = 'Chọn bệnh nhân để xem lịch sử.';
+                return;
+            }
+            try {
+                const res = await fetch(`/api/gyn-exam-results?patient_id=${patientId}`);
+                const rows = await res.json();
+                if (!res.ok) throw new Error(rows.message || 'Lỗi tải lịch sử');
+                if (!rows.length) {
+                    box.className = 'empty-history';
+                    box.textContent = 'Chưa có phiếu khám phụ khoa.';
+                    return;
+                }
+                box.className = '';
+                box.innerHTML = `
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Ngày</th>
+                                <th>Lý do</th>
+                                <th>Chẩn đoán</th>
+                                <th>Tái khám</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map(r => `
+                                <tr>
+                                    <td>${r.exam_date ? new Date(r.exam_date).toLocaleString('vi-VN') : ''}</td>
+                                    <td>${r.chief_complaint || '—'}</td>
+                                    <td>${r.diagnosis || '—'}</td>
+                                    <td>${r.follow_up_date || '—'}</td>
+                                    <td class="history-actions">
+                                        <button type="button" class="btn-load" onclick="loadResult(${r.id})">Mở</button>
+                                        <button type="button" class="btn-load" onclick="window.open('/api/print_gyn_exam/${r.id}','_blank')">In</button>
+                                        <button type="button" class="btn-del" onclick="deleteResult(${r.id})">Xóa</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (e) {
+                box.className = 'empty-history';
+                box.textContent = e.message;
+            }
+        }
+
+        async function loadResult(id) {
+            try {
+                const res = await fetch(`/api/gyn-exam-results/${id}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.message || 'Không tải được phiếu');
+                fillForm(data);
+                showToast('Đã tải phiếu #' + id);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        async function deleteResult(id) {
+            if (!confirm('Xóa phiếu khám phụ khoa #' + id + '?')) return;
+            try {
+                const res = await fetch(`/api/gyn-exam-results/${id}`, { method: 'DELETE' });
+                const body = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(body.message || 'Xóa thất bại');
+                if (String(currentEditingId) === String(id)) resetForm(true);
+                showToast(body.message || 'Đã xóa');
+                await loadHistory();
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+    </script>
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

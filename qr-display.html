@@ -2,7 +2,8 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#020617">
     <title>Bảng gọi khám - Phòng khám Phụ Sản Đại Anh</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
@@ -15,14 +16,27 @@
             --text-main: #e5e7eb;
             --text-muted: #9ca3af;
             --danger: #f97373;
+            --tv-safe-x: clamp(20px, 3vw, 48px);
+            --tv-safe-y: clamp(20px, 3vh, 48px);
         }
 
         * {
             box-sizing: border-box;
         }
 
+        html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg-main);
+        }
+
         body {
             margin: 0;
+            width: 100%;
+            height: 100%;
+            min-height: 100vh;
+            min-height: 100dvh;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             background: radial-gradient(circle at top, #0f172a 0, #020617 55%, #000 100%);
             color: var(--text-main);
@@ -35,34 +49,47 @@
             inset: 0;
             z-index: 9999;
             display: none;
+            width: 100%;
+            height: 100%;
             background: radial-gradient(circle at top, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.98));
         }
         .idle-ads-overlay.show {
-            display: grid;
+            display: flex;
+            flex-direction: column;
         }
         .idle-ads-grid {
-            display: grid;
-            grid-template-columns: 1.6fr 1fr;
-            grid-template-rows: auto 1fr auto;
-            gap: 18px;
-            padding: 22px 26px;
-            height: 100vh;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            min-height: 100dvh;
+            padding: var(--tv-safe-y) 0;
+            gap: clamp(14px, 2vh, 24px);
+            overflow: hidden;
         }
         .idle-ads-top {
-            grid-column: 1 / -1;
-            display: flex;
+            flex-shrink: 0;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             align-items: center;
-            justify-content: space-between;
             gap: 16px;
+            padding-left: clamp(12px, 1.5vw, 20px);
+            padding-right: clamp(12px, 1.5vw, 20px);
+        }
+        .idle-ads-overlay .idle-ads-card,
+        .idle-ads-overlay .idle-ads-footer {
+            border-radius: 0;
+            border-left-color: transparent;
+            border-right-color: transparent;
         }
         .idle-ads-top-right {
             display: flex;
             align-items: center;
             gap: 16px;
-            justify-content: flex-end;
+            justify-content: stretch;
             min-width: 0;
-            /* Ngang kích thước cột lịch làm việc (cột phải) */
-            width: clamp(420px, 38vw, 720px);
+            width: 100%;
         }
         .idle-ads-title {
             display: flex;
@@ -72,7 +99,7 @@
         }
         .idle-ads-title h2 {
             margin: 0;
-            font-size: 34px;
+            font-size: clamp(22px, 2.8vw, 40px);
             letter-spacing: 0.03em;
             white-space: nowrap;
             overflow: hidden;
@@ -84,198 +111,539 @@
             letter-spacing: 0.08em;
             font-weight: 700;
             text-transform: uppercase;
-            font-size: 14px;
+            font-size: clamp(12px, 1.2vw, 16px);
         }
-        .idle-ads-clock {
-            color: var(--text-muted);
-            font-size: 16px;
-            letter-spacing: 0.05em;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-        .idle-ads-slide {
-            border-radius: 18px;
-            border: 1px solid rgba(56, 189, 248, 0.22);
-            background: rgba(15, 23, 42, 0.55);
-            overflow: hidden;
-            position: relative;
-            min-height: 380px;
-        }
-        .idle-ads-slide img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
-        .idle-ads-slide video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
-        .idle-ads-slide iframe {
-            width: 100%;
-            height: 100%;
-            display: block;
-            border: 0;
-        }
-        .idle-ads-slide::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(to top, rgba(2,6,23,0.86), rgba(2,6,23,0.1) 55%, rgba(2,6,23,0));
-            pointer-events: none;
-        }
-        .idle-ads-services {
-            position: absolute;
-            left: 18px;
-            right: 18px;
-            bottom: 14px;
-            padding: 12px 14px;
-            border-radius: 14px;
-            background: rgba(2,6,23,0.62);
-            border: 1px solid rgba(56,189,248,0.20);
-            color: var(--text-main);
-            font-size: 18px;
-            line-height: 1.35;
-        }
-        .idle-ads-services .label {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-weight: 800;
-            letter-spacing: 0.08em;
-            color: var(--accent);
-            margin-bottom: 6px;
-            text-transform: uppercase;
-            font-size: 13px;
-        }
-        .idle-ads-right {
+        .idle-ads-main {
+            flex: 0 0 auto;
             display: grid;
-            gap: 14px;
-            align-content: start;
+            grid-template-columns: 1fr;
+            gap: clamp(14px, 1.8vw, 22px);
+            align-items: start;
         }
-        .idle-ads-schedule-row {
-            display: flex;
-            gap: 14px;
-            align-items: stretch;
+        .idle-ads-main .idle-ads-card {
+            height: auto;
+            min-height: 0;
         }
-        .idle-ads-schedule-row .idle-ads-schedule-card {
-            flex: 1;
-            min-width: 0;
+        @media (max-width: 900px) and (orientation: portrait) {
+            .idle-ads-top {
+                grid-template-columns: 1fr;
+            }
+            .idle-ads-top-right {
+                width: 100%;
+            }
         }
-        .idle-ads-doctor-photo-card {
-            flex: 0 0 clamp(210px, 24vw, 280px);
+        /* Trình chiếu ảnh/video full màn hình (luân phiên với layout overlay) */
+        .idle-ads-overlay.is-fullscreen-slideshow {
+            background: #000;
+        }
+        .idle-ads-overlay.is-fullscreen-slideshow .idle-ads-top,
+        .idle-ads-overlay.is-fullscreen-slideshow .idle-ads-main,
+        .idle-ads-overlay.is-fullscreen-slideshow .idle-ads-footer-label,
+        .idle-ads-overlay.is-fullscreen-slideshow .idle-ads-footer-text-col {
+            display: none !important;
+        }
+        .idle-ads-overlay.is-fullscreen-slideshow .idle-ads-grid {
+            padding: 0;
+            gap: 0;
+            min-height: 100dvh;
+        }
+        .idle-ads-overlay.is-fullscreen-slideshow .idle-ads-footer {
+            flex: 1 1 auto;
+            min-height: 100dvh;
+            margin: 0;
+            padding: 0;
+            border: none;
+            border-radius: 0;
+            background: #000;
+        }
+        .idle-ads-overlay.is-fullscreen-slideshow .idle-ads-footer-content {
+            grid-template-columns: 1fr;
+            height: 100%;
+            min-height: 100dvh;
+            gap: 0;
+        }
+        .idle-ads-overlay.is-fullscreen-slideshow .idle-ads-footer-media-col {
+            min-height: 100dvh;
+            border: none;
+            border-radius: 0;
+            background: #000;
+            align-self: stretch;
+            aspect-ratio: auto;
+            max-height: none;
+            height: 100%;
+        }
+        .idle-ads-overlay.is-fullscreen-slideshow .idle-ads-footer-media-frame {
+            min-height: 100dvh;
+            border-radius: 0;
+        }
+        .idle-ads-overlay.is-fullscreen-slideshow .idle-ads-footer-media-frame > #idleAdsFooterMediaImg,
+        .idle-ads-overlay.is-fullscreen-slideshow .idle-ads-footer-media-frame > #idleAdsFooterMediaVideo,
+        .idle-ads-overlay.is-fullscreen-slideshow .idle-ads-footer-media-frame > #idleAdsFooterMediaYoutube {
+            object-fit: contain;
         }
         .idle-ads-card {
             border-radius: 18px;
             border: 1px solid rgba(56, 189, 248, 0.22);
             background: rgba(15, 23, 42, 0.55);
-            padding: 16px 16px;
+            padding: clamp(14px, 1.8vw, 22px);
+            display: flex;
+            flex-direction: column;
         }
         .idle-ads-card h3 {
-            margin: 0 0 10px;
-            font-size: 18px;
+            margin: 0;
+            font-size: clamp(16px, 1.6vw, 22px);
             letter-spacing: 0.06em;
             text-transform: uppercase;
             color: var(--accent);
             display: flex;
             align-items: center;
             gap: 10px;
-        }
-        .idle-ads-row {
-            display: flex;
-            gap: 14px;
-            align-items: center;
-        }
-        .idle-ads-info {
-            display: grid;
-            gap: 10px;
-            flex: 1;
+            flex-shrink: 0;
             min-width: 0;
         }
-        .idle-ads-info .line {
+        .tv-schedule-head {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            align-items: center;
+            gap: clamp(12px, 2vw, 24px);
+            margin-bottom: clamp(8px, 1vh, 14px);
+            flex-shrink: 0;
+        }
+        .tv-schedule-head .tv-schedule-head-title,
+        .tv-schedule-head h3 {
+            margin: 0;
             display: flex;
-            gap: 10px;
-            align-items: flex-start;
-            color: var(--text-main);
-            font-size: 18px;
-            line-height: 1.25;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
         }
-        .idle-ads-info .line i {
-            color: var(--accent);
-            margin-top: 2px;
-            flex: 0 0 auto;
-            width: 20px;
-            text-align: center;
-        }
-        .idle-ads-info .value {
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .idle-ads-footer {
-            grid-column: 1 / -1;
-            border-radius: 999px;
-            border: 1px solid rgba(56,189,248,0.30);
-            background: rgba(15,23,42,0.55);
-            padding: 10px 16px;
-            color: var(--text-muted);
+        .tv-schedule-head-left {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 14px;
+            gap: clamp(8px, 1vw, 14px);
+            min-width: 0;
+            padding-right: clamp(8px, 1.2vw, 16px);
+        }
+        .tv-schedule-head-left .tv-schedule-head-title,
+        .tv-schedule-head-left h3 {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+        .tv-schedule-head-left .tv-schedule-datetime {
+            flex-shrink: 0;
+            text-align: right;
+        }
+        .tv-card-header.tv-schedule-head {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            align-items: center;
+            gap: clamp(12px, 2vw, 24px);
+            margin-bottom: clamp(8px, 1vh, 14px);
+        }
+        .tv-schedule-head .tv-schedule-half {
+            border-right: none;
+            padding-left: clamp(8px, 1.2vw, 16px);
+            padding-right: 0;
+        }
+        .tv-schedule-datetime {
+            color: var(--text-main);
+            font-weight: 650;
+            font-size: clamp(14px, 1.4vw, 22px);
+            white-space: nowrap;
+            text-align: right;
+            flex-shrink: 0;
+            letter-spacing: 0.02em;
+        }
+        .idle-ads-main .tv-schedule-datetime {
+            font-size: clamp(15px, 1.5vw, 24px);
+        }
+        .tv-schedule-notice-half {
+            justify-content: flex-start;
+            align-items: baseline;
+            gap: clamp(8px, 1vw, 12px);
+        }
+        .tv-schedule-half .tv-schedule-v.tv-schedule-notice-text {
+            flex: 1;
+            min-width: 0;
+            white-space: pre-line;
+            line-height: 1.35;
+            text-align: left;
+            overflow: hidden;
+        }
+        .tv-schedule-notice-char {
+            display: inline-block;
+            will-change: transform;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        @keyframes sched-notice-waveText {
+            0%, 100% { transform: translate3d(0, 0, 0); }
+            50% { transform: translate3d(0, -5px, 0); }
+        }
+        .tv-schedule-notice-fx--waveText .tv-schedule-notice-char {
+            animation: sched-notice-waveText 1.6s ease-in-out infinite;
+        }
+        @keyframes sched-notice-glowPulse {
+            0%, 100% {
+                opacity: 1;
+                text-shadow: 0 0 2px currentColor;
+            }
+            50% {
+                opacity: 0.82;
+                text-shadow:
+                    0 0 8px currentColor,
+                    0 0 16px currentColor,
+                    0 0 24px currentColor;
+            }
+        }
+        .tv-schedule-notice-fx--glowPulse {
+            animation: sched-notice-glowPulse 2.2s ease-in-out infinite;
+            will-change: opacity, text-shadow;
+        }
+        @keyframes sched-notice-fadeOut {
+            0%, 16% { opacity: 1; }
+            50% { opacity: 0.1; }
+            84%, 100% { opacity: 1; }
+        }
+        .tv-schedule-notice-fx--fadeOut {
+            animation: sched-notice-fadeOut 3.6s ease-in-out infinite;
+            will-change: opacity;
+        }
+        @keyframes sched-notice-luxury3d-char {
+            0%, 100% {
+                transform: translate3d(0, 0, 0) rotateX(0deg) scale(1);
+                filter: brightness(1);
+            }
+            50% {
+                transform: translate3d(0, -4px, 10px) rotateX(10deg) scale(1.015);
+                filter: brightness(1.08);
+            }
+        }
+        .tv-schedule-notice-fx--luxury3d {
+            perspective: 720px;
+            transform-style: preserve-3d;
+            overflow: visible;
+        }
+        .tv-schedule-notice-fx--luxury3d .tv-schedule-notice-char {
+            display: inline-block;
+            transform-style: preserve-3d;
+            transform-origin: center bottom;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            will-change: transform, filter;
+            animation: sched-notice-luxury3d-char 4.2s cubic-bezier(0.45, 0.05, 0.25, 1) infinite;
+            text-shadow:
+                0 1px 0 rgba(255, 255, 255, 0.42),
+                0 2px 1px rgba(0, 0, 0, 0.22),
+                0 4px 6px rgba(0, 0, 0, 0.28),
+                0 8px 14px rgba(0, 0, 0, 0.22),
+                0 0 22px rgba(255, 255, 255, 0.1),
+                0 0 36px rgba(148, 163, 184, 0.18);
+        }
+        .tv-schedule-notice-fx--snowParticles {
+            position: relative;
+            color: transparent !important;
+            overflow: visible;
+            min-height: 1.35em;
+        }
+        .tv-schedule-notice-particle-canvas {
+            position: relative;
+            display: block;
+            max-width: 100%;
+            pointer-events: none;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            html:not(.tv-mode) .tv-schedule-notice-fx--waveText .tv-schedule-notice-char,
+            html:not(.tv-mode) .tv-schedule-notice-fx--glowPulse,
+            html:not(.tv-mode) .tv-schedule-notice-fx--fadeOut,
+            html:not(.tv-mode) .tv-schedule-notice-fx--luxury3d .tv-schedule-notice-char {
+                animation: none !important;
+            }
+        }
+        /* TV: tắt hiệu ứng chữ nặng để giảm giật khi chạy ticker + video */
+        html.tv-mode .tv-schedule-notice-fx--waveText .tv-schedule-notice-char,
+        html.tv-mode .tv-schedule-notice-fx--glowPulse,
+        html.tv-mode .tv-schedule-notice-fx--fadeOut,
+        html.tv-mode .tv-schedule-notice-fx--luxury3d .tv-schedule-notice-char {
+            animation: none !important;
+            filter: none !important;
+            transform: none !important;
+        }
+        .idle-ads-footer {
+            flex: 1;
+            min-height: clamp(72px, 14vh, 160px);
+            border-radius: 18px;
+            border: 1px solid rgba(56,189,248,0.30);
+            background: rgba(15,23,42,0.55);
+            padding: clamp(14px, 2.2vh, 24px) clamp(16px, 2vw, 28px);
+            color: var(--text-muted);
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: flex-start;
+            gap: clamp(8px, 1.2vh, 14px);
             font-weight: 700;
             letter-spacing: 0.05em;
+            margin-top: 0;
+            overflow: visible;
         }
         .idle-ads-footer strong {
             color: var(--text-main);
-        }
-        .idle-ads-footer-left {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            flex: 1;
-            min-width: 0;
         }
         .idle-ads-footer-label {
             display: flex;
             align-items: center;
             gap: 10px;
-            white-space: nowrap;
-            flex: 0 0 auto;
+            flex-shrink: 0;
+            text-transform: uppercase;
         }
-        .idle-ads-footer-text-wrap {
+        .idle-ads-footer-content {
             flex: 1;
-            overflow: hidden;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: clamp(10px, 1.4vw, 16px);
+            align-items: stretch;
+        }
+        .idle-ads-footer-text-col {
             min-width: 0;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .idle-ads-footer-media-col {
+            min-width: 0;
+            min-height: 0;
+            border-radius: 12px;
+            border: 1px solid rgba(56, 189, 248, 0.22);
+            background: rgba(2, 6, 23, 0.5);
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-self: center;
+            justify-self: center;
+            width: 100%;
+            max-width: 100%;
+            max-height: 100%;
+            height: auto;
+            aspect-ratio: var(--footer-media-ar, 16 / 9);
+            box-sizing: border-box;
+        }
+        .idle-ads-footer-media-frame {
+            width: 100%;
+            height: 100%;
+            flex: 1 1 auto;
+            min-height: 0;
+            position: relative;
+            overflow: hidden;
+            border-radius: inherit;
+        }
+        .idle-ads-footer-media-frame > #idleAdsFooterMediaImg,
+        .idle-ads-footer-media-frame > #idleAdsFooterMediaVideo,
+        .idle-ads-footer-media-frame > #idleAdsFooterMediaYoutube {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            border: 0;
+        }
+        .idle-ads-footer-media-frame > #idleAdsFooterMediaImg {
+            object-fit: contain;
+        }
+        .idle-ads-footer-media-frame > #idleAdsFooterMediaVideo {
+            object-fit: contain;
+            pointer-events: none;
+        }
+        .idle-ads-footer-media-frame > #idleAdsFooterMediaYoutube {
+            object-fit: contain;
+        }
+        .idle-ads-footer-media-frame > #idleAdsFooterMediaVideo::-webkit-media-controls {
+            display: none !important;
+        }
+        .idle-ads-footer-media-frame > #idleAdsFooterMediaVideo::-webkit-media-controls-start-playback-button {
+            display: none !important;
+        }
+        .idle-ads-patient-name-mask {
+            position: absolute;
+            left: var(--us-name-mask-left, 5.5%);
+            top: var(--us-name-mask-top, 1.8%);
+            width: var(--us-name-mask-width, 34%);
+            height: var(--us-name-mask-height, 7.2%);
+            z-index: 7;
+            pointer-events: none;
+            display: none;
+            border-radius: 3px;
+            overflow: hidden;
+            background: rgba(0, 0, 0, 0.92);
+            box-shadow: 0 0 10px 6px rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+        }
+        .idle-ads-patient-name-mask.is-on {
+            display: block;
+        }
+        .idle-ads-patient-name-mask::after {
+            content: '';
+            position: absolute;
+            inset: -20%;
+            background: inherit;
+            filter: blur(8px);
+            opacity: 0.95;
+        }
+        .idle-ads-video-caption {
+            position: absolute;
+            left: clamp(8px, 1.4vw, 18px);
+            bottom: clamp(8px, 1.6vh, 20px);
+            z-index: 9;
+            max-width: min(72%, 520px);
+            padding: clamp(6px, 1vh, 12px) clamp(10px, 1.2vw, 16px);
+            border-radius: 10px;
+            background: rgba(2, 6, 23, 0.72);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            color: #fbbf24;
+            font-size: clamp(14px, 1.6vw, 22px);
+            font-weight: 700;
+            line-height: 1.35;
+            letter-spacing: 0.02em;
+            white-space: pre-wrap;
+            word-break: break-word;
+            pointer-events: none;
+            display: none;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+        }
+        .idle-ads-video-caption.is-on {
+            display: block;
+        }
+        .idle-ads-overlay.is-fullscreen-slideshow .idle-ads-video-caption {
+            left: clamp(14px, 2vw, 28px);
+            bottom: clamp(14px, 2.4vh, 36px);
+            max-width: min(58%, 640px);
+        }
+        .idle-ads-footer-media-logo-wrap {
+            position: absolute;
+            top: clamp(6px, 1vh, 12px);
+            left: clamp(6px, 1vw, 12px);
+            width: var(--media-logo-size, 18%);
+            max-width: 48%;
+            z-index: 8;
+            pointer-events: none;
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            line-height: 0;
+        }
+        .idle-ads-footer-media-logo-flip {
+            transform-style: preserve-3d;
+            -webkit-transform-style: preserve-3d;
+            transform-origin: center center;
+            will-change: transform;
+        }
+        .idle-ads-footer-media-logo {
+            display: block;
+            width: 100%;
+            height: auto;
+            object-fit: contain;
+            border-radius: clamp(14px, 2vw, 24px);
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+        }
+        @-webkit-keyframes media-logo-flip-y-left {
+            0% { -webkit-transform: perspective(1000px) rotateY(0deg); }
+            100% { -webkit-transform: perspective(1000px) rotateY(-360deg); }
+        }
+        @keyframes media-logo-flip-y-left {
+            0% { transform: perspective(1000px) rotateY(0deg); }
+            100% { transform: perspective(1000px) rotateY(-360deg); }
+        }
+        @-webkit-keyframes media-logo-flip-y-right {
+            0% { -webkit-transform: perspective(1000px) rotateY(0deg); }
+            100% { -webkit-transform: perspective(1000px) rotateY(360deg); }
+        }
+        @keyframes media-logo-flip-y-right {
+            0% { transform: perspective(1000px) rotateY(0deg); }
+            100% { transform: perspective(1000px) rotateY(360deg); }
+        }
+        .idle-ads-footer-media-logo-flip.is-flip-left {
+            -webkit-animation: media-logo-flip-y-left var(--media-logo-flip-duration, 10s) linear infinite;
+            animation: media-logo-flip-y-left var(--media-logo-flip-duration, 10s) linear infinite;
+        }
+        .idle-ads-footer-media-logo-flip.is-flip-right {
+            -webkit-animation: media-logo-flip-y-right var(--media-logo-flip-duration, 10s) linear infinite;
+            animation: media-logo-flip-y-right var(--media-logo-flip-duration, 10s) linear infinite;
+        }
+        html.tv-mode .idle-ads-footer-media-logo-flip.is-flip-left,
+        html.tv-mode .idle-ads-footer-media-logo-flip.is-flip-right {
+            -webkit-animation-play-state: running !important;
+            animation-play-state: running !important;
+        }
+        .idle-ads-footer-media-empty {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: clamp(11px, 1vw, 14px);
+            text-align: center;
+            padding: 12px;
+            letter-spacing: 0.03em;
+        }
+        @media (max-width: 640px) and (orientation: portrait) {
+            .idle-ads-footer-content {
+                grid-template-columns: 1fr;
+            }
+        }
+        .idle-ads-footer-body {
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
         }
         .idle-ads-footer-scroll {
             display: flex;
-            white-space: nowrap;
-            animation: idle-footer-scroll 30s linear infinite;
-            align-items: center;
+            flex-direction: column;
+            flex-shrink: 0;
+            animation: idle-footer-scroll-up var(--idle-footer-scroll-duration, 40s) linear infinite;
+            will-change: transform;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
         }
-        .idle-ads-footer-scroll span {
-            display: inline-block;
-            padding-right: 70px; /* tạo khoảng trống để nối vòng mượt */
+        .idle-ads-footer-block {
+            flex-shrink: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.55;
+            letter-spacing: 0.02em;
+            font-weight: 500;
+            padding-bottom: calc(var(--idle-footer-gap-lines, 1) * 1.55em);
         }
-        @keyframes idle-footer-scroll {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
+        @keyframes idle-footer-scroll-up {
+            0%   { transform: translate3d(0, 0, 0); }
+            100% { transform: translate3d(0, -50%, 0); }
         }
 
         .tv-layout {
             display: grid;
             grid-template-rows: auto auto 1fr auto;
-            height: 100vh;
-            padding: 16px 24px 12px;
+            width: 100%;
+            height: 100%;
+            min-height: 100dvh;
+            padding: var(--tv-safe-y) 0 clamp(10px, 1.5vh, 16px);
             gap: 10px;
+            overflow: hidden;
         }
 
         .tv-header {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             align-items: center;
-            justify-content: space-between;
             gap: 16px;
         }
 
@@ -283,8 +651,7 @@
             display: flex;
             align-items: center;
             gap: 14px;
-            flex: 1;
-            min-width: 0; /* cho phép co lại để không đè lên ô bên phải */
+            min-width: 0;
         }
 
         .tv-logo {
@@ -322,12 +689,10 @@
         }
 
         .tv-header-right {
-            /* Bám sát cạnh phải, không che tiêu đề */
-            margin-left: auto;
             display: flex;
-            justify-content: flex-end;
-            /* Mở rộng để "Dịch vụ mới" ngang với cột lịch làm việc */
-            width: clamp(420px, 46vw, 650px);
+            justify-content: stretch;
+            min-width: 0;
+            width: 100%;
         }
 
         .tv-new-service {
@@ -371,8 +736,11 @@
         .tv-new-service-scroll {
             display: flex;
             white-space: nowrap;
-            animation: new-service-scroll 26s linear infinite;
+            animation: new-service-scroll var(--new-service-scroll-duration, 26s) linear infinite;
             align-items: center;
+            will-change: transform;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
         }
 
         .tv-new-service-text {
@@ -381,100 +749,157 @@
         }
 
         @keyframes new-service-scroll {
-            0%   { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
+            0%   { transform: translate3d(0, 0, 0); }
+            100% { transform: translate3d(-50%, 0, 0); }
         }
 
         .tv-stats-row {
             display: grid;
-            grid-template-columns: 2fr 1.2fr 1.6fr;
+            grid-template-columns: 1fr 1fr;
             gap: 12px;
         }
 
-        .tv-doctor-card {
-            display: none;
-        }
-
-        .tv-stats-row.doctor-active {
-            /* Col 1 = Col 3 (giống yêu cầu: diện tích ô số đang khám = ô lịch làm việc) */
-            grid-template-columns: 1.6fr 1.2fr 1.6fr 1.2fr;
-        }
-        .tv-stats-row.doctor-active .tv-doctor-card {
-            display: block;
-        }
-
-        .tv-stats-row.doctor-active .tv-current-number-main {
-            /* Khi cột bị thu hẹp thì giảm size để không bị tràn */
-            font-size: 72px;
-        }
-
-        .tv-doctor-photo {
-            width: 100%;
-            height: 100%;
-            min-height: 140px;
-            border-radius: 14px;
-            overflow: hidden;
-            background: rgba(56,189,248,0.10);
-            border: 1px solid rgba(148,163,184,0.30);
+        .tv-stats-group {
             display: grid;
-            place-items: center;
-            padding: 8px;
+            grid-template-columns: 1.6fr 1.2fr;
+            gap: 12px;
+            min-width: 0;
         }
-        .tv-doctor-photo.no-photo {
-            background: transparent;
-            border-color: transparent;
-            padding: 0;
-        }
-        .tv-doctor-photo img {
-            height: 90%;
-            width: auto;
-            max-width: 90%;
-            object-fit: cover;
-            display: block;
-            border-radius: 10px;
-        }
-        /* Màn hình có bệnh nhân: ảnh vừa khít ô, không tràn */
-        #doctorPhotoWrap.tv-doctor-photo {
-            overflow: hidden;
-            display: flex;
-            align-items: flex-start;
-            justify-content: center;
-            border: none;
-            background: transparent;
-            padding: 0;
-        }
-        #doctorPhotoWrap.tv-doctor-photo img {
-            width: 90%;
-            height: 90%;
-            max-width: 90%;
-            max-height: 90%;
-            object-fit: contain;
-            object-position: center;
-            border-radius: 2;
-        }
-        /* Overlay quảng cáo: ảnh bác sĩ vừa khít ô, không tràn */
-        #adsDoctorPhotoCard .tv-doctor-photo {
-            overflow: hidden;
-            border: none;
-            background: transparent;
-            padding: 0;
-            display: flex;
-    align-items: flex-start;
-    justify-content: center;
-        }
-        #adsDoctorPhotoCard .tv-doctor-photo img {
-            height: 90%;
-            width: auto;
-            max-width: 90%;
-            object-fit: contain;
-            border-radius: 0;
-            margin-top: 0px;
+
+        .tv-stats-row .tv-schedule-card {
+            min-width: 0;
         }
 
         .tv-schedule-lines {
             display: grid;
             gap: 6px;
             margin-top: 6px;
+        }
+
+        /* Màn hình chờ khám: 4 dòng lịch xếp dọc */
+        .tv-layout .tv-schedule-stack {
+            display: flex;
+            flex-direction: column;
+            gap: clamp(8px, 1vh, 12px);
+            min-width: 0;
+        }
+        .tv-layout .tv-schedule-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: clamp(10px, 1.2vw, 18px);
+            min-width: 0;
+            border-top: 1px dashed rgba(148, 163, 184, 0.28);
+            padding-top: clamp(8px, 1vh, 12px);
+        }
+        .tv-layout .tv-schedule-row:first-child {
+            border-top: none;
+            padding-top: 0;
+        }
+        .tv-layout .tv-schedule-row--title .tv-schedule-head-title {
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1 1 auto;
+            min-width: 0;
+            font-size: clamp(13px, 1.25vw, 17px);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--accent);
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .tv-layout .tv-schedule-row .tv-schedule-k {
+            flex-shrink: 0;
+            margin-bottom: 0;
+            white-space: nowrap;
+            font-size: clamp(12px, 1.1vw, 15px);
+        }
+        .tv-layout .tv-schedule-row .tv-schedule-v {
+            flex: 1 1 auto;
+            min-width: 0;
+            text-align: right;
+            line-height: 1.35;
+            white-space: normal;
+            overflow: visible;
+            text-overflow: unset;
+            word-break: break-word;
+        }
+        .tv-layout .tv-schedule-row--notice {
+            align-items: flex-start;
+        }
+        .tv-layout .tv-schedule-row--notice .tv-schedule-v {
+            text-align: right;
+        }
+        .tv-schedule-row--notice.is-notice-label-hidden .tv-schedule-k,
+        .tv-schedule-notice-half.is-notice-label-hidden > .tv-schedule-k {
+            display: none;
+        }
+        .tv-layout .tv-schedule-row--notice.is-notice-label-hidden .tv-schedule-v {
+            flex: 1 1 100%;
+            max-width: 100%;
+        }
+        .tv-schedule-notice-half.is-notice-label-hidden .tv-schedule-v {
+            flex: 1 1 100%;
+            max-width: 100%;
+        }
+        .tv-layout .tv-schedule-row--title .tv-schedule-datetime {
+            flex-shrink: 0;
+            white-space: nowrap;
+            font-size: clamp(13px, 1.2vw, 18px);
+        }
+
+        .tv-schedule-split {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            border-top: 1px dashed rgba(148,163,184,0.25);
+            padding-top: clamp(8px, 1vh, 14px);
+            min-height: 0;
+        }
+
+        .tv-schedule-half {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: clamp(8px, 1vw, 14px);
+            min-width: 0;
+            padding: 0 clamp(8px, 1.2vw, 16px);
+        }
+
+        .tv-schedule-half:first-child {
+            border-right: 1px dashed rgba(148,163,184,0.25);
+            padding-left: 0;
+        }
+
+        .tv-schedule-half:last-child {
+            padding-right: 0;
+        }
+
+        .tv-schedule-half .tv-schedule-k {
+            flex-shrink: 0;
+            margin-bottom: 0;
+            white-space: nowrap;
+        }
+
+        .tv-schedule-half .tv-schedule-datetime-inline {
+            flex: 1;
+            min-width: 0;
+            text-align: right;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tv-schedule-half .tv-schedule-v {
+            flex: 1;
+            min-width: 0;
+            text-align: right;
+            line-height: 1.35;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .tv-schedule-line {
@@ -493,11 +918,17 @@
         }
 
         .tv-schedule-v {
-            font-size: 15px;
+            font-size: clamp(14px, 1.4vw, 20px);
             font-weight: 650;
             color: var(--text-main);
             text-align: right;
-            white-space: pre-line; /* cho phép hiển thị nhiều ca bằng xuống dòng */
+            white-space: pre-line;
+        }
+        .idle-ads-main .tv-schedule-k {
+            font-size: clamp(13px, 1.2vw, 18px);
+        }
+        .idle-ads-main .tv-schedule-v {
+            font-size: clamp(15px, 1.5vw, 22px);
         }
 
         .tv-card {
@@ -584,7 +1015,7 @@
 
         .tv-main {
             display: grid;
-            grid-template-columns: 1.5fr 2fr;
+            grid-template-columns: 1fr 1fr;
             gap: 14px;
             margin-top: 4px;
             min-height: 0;
@@ -799,8 +1230,11 @@
         .tv-ticker-scroll {
             display: flex;
             white-space: nowrap;
-            animation: ticker-scroll 30s linear infinite;
+            animation: ticker-scroll var(--ticker-scroll-duration, 30s) linear infinite;
             align-items: center;
+            will-change: transform;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
         }
 
         .tv-ticker-text {
@@ -809,14 +1243,14 @@
         }
 
         @keyframes ticker-scroll {
-            0%   { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
+            0%   { transform: translate3d(0, 0, 0); }
+            100% { transform: translate3d(-50%, 0, 0); }
         }
 
         /* TV optimization: Full HD and larger */
         @media (min-width: 1600px) and (min-height: 900px) {
             .tv-layout {
-                padding: 18px 30px 14px;
+                padding: 18px 0 14px;
                 gap: 12px;
             }
             .tv-title-block h1 {
@@ -855,7 +1289,7 @@
                 font-size: 17px;
             }
             .idle-ads-grid {
-                padding: 26px 32px;
+                padding: 26px 0;
                 gap: 20px;
             }
         }
@@ -863,7 +1297,7 @@
         /* 4K TV readability */
         @media (min-width: 2560px) and (min-height: 1400px) {
             .tv-layout {
-                padding: 26px 40px 18px;
+                padding: 26px 0 18px;
             }
             .tv-title-block h1 {
                 font-size: 42px;
@@ -888,7 +1322,7 @@
         /* Responsive tweaks */
         @media (max-width: 1024px) {
             .tv-layout {
-                padding: 10px 12px 14px;
+                padding: 10px 0 14px;
                 gap: 8px;
             }
             .tv-main {
@@ -906,6 +1340,110 @@
             .tv-current-number-main {
                 font-size: 64px;
             }
+        }
+
+        /* Chế độ TV (?tv=1): full màn hình, layout giống máy tính */
+        html.tv-mode {
+            --tv-safe-x: clamp(6px, 0.55vw, 12px);
+            --tv-safe-y: clamp(6px, 0.55vh, 12px);
+        }
+        html.tv-mode,
+        html.tv-mode body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        html.tv-mode .tv-layout,
+        html.tv-mode .idle-ads-overlay {
+            width: 100vw;
+            max-width: 100vw;
+        }
+        html.tv-mode .tv-layout {
+            padding-left: 0;
+            padding-right: 0;
+        }
+        html.tv-mode .tv-stats-group > .tv-card:first-child,
+        html.tv-mode .tv-main > .tv-panel:first-child {
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+        html.tv-mode .tv-stats-row > .tv-schedule-card,
+        html.tv-mode .tv-main > .tv-panel:last-child {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+        html.tv-mode .tv-ticker {
+            border-radius: 0;
+        }
+        html.tv-mode .idle-ads-grid {
+            width: 100%;
+            min-height: 100vh;
+            min-height: 100dvh;
+            /* Giống trang không ?tv=1: chỉ đệm dọc, không thu hẹp khung media */
+            padding: var(--tv-safe-y) 0;
+        }
+        html.tv-mode .idle-ads-top {
+            padding-left: 0;
+            padding-right: 0;
+            grid-template-columns: 1fr 1fr;
+        }
+        /* Khung ảnh/video: giữ đúng layout như qr-display.html (không tv) */
+        html.tv-mode .idle-ads-footer-content {
+            grid-template-columns: 1fr 1fr;
+            align-items: stretch;
+        }
+        html.tv-mode .idle-ads-footer-media-col {
+            /* Không ghi đè size — dùng cùng rule .idle-ads-footer-media-col */
+            align-self: center;
+            justify-self: center;
+            width: 100%;
+            max-width: 100%;
+            max-height: 100%;
+            height: auto;
+            aspect-ratio: var(--footer-media-ar, 16 / 9);
+        }
+        html.tv-mode .idle-ads-footer-media-frame {
+            width: 100%;
+            height: 100%;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+        html.tv-mode .idle-ads-footer-media-frame > #idleAdsFooterMediaImg,
+        html.tv-mode .idle-ads-footer-media-frame > #idleAdsFooterMediaVideo,
+        html.tv-mode .idle-ads-footer-media-frame video,
+        html.tv-mode .idle-ads-footer-media-frame > #idleAdsFooterMediaYoutube {
+            object-fit: contain;
+        }
+        html.tv-mode .idle-ads-footer-media-logo,
+        html.tv-mode #idleAdsFooterMediaLogo {
+            width: 100% !important;
+            height: auto !important;
+            max-width: none !important;
+            object-fit: contain !important;
+        }
+        html.tv-mode .idle-ads-footer-scroll,
+        html.tv-mode .tv-ticker-scroll,
+        html.tv-mode .tv-new-service-scroll {
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+            contain: layout style;
+        }
+        html.tv-mode .tv-ticker-text-wrap,
+        html.tv-mode .tv-new-service-text-wrap,
+        html.tv-mode .idle-ads-footer-body {
+            contain: layout style paint;
+            overflow: hidden;
+        }
+        html.tv-mode .idle-ads-footer-media-frame {
+            /* Tránh contain:paint / isolation — một số WebView TV bị đen khung video */
+            contain: layout style;
+        }
+        html.tv-mode .idle-ads-footer-media-frame > #idleAdsFooterMediaVideo {
+            background: #000;
+        }
+        html.tv-mode .idle-ads-overlay .idle-ads-card,
+        html.tv-mode .idle-ads-overlay .idle-ads-footer {
+            border-radius: 10px;
         }
     </style>
 </head>
@@ -940,68 +1478,61 @@
                 </div>
             </div>
 
-            <div class="idle-ads-slide" id="idleAdsSlideWrap">
-                <img id="idleAdsSlideImg" alt="Quảng cáo phòng khám" style="display:none;">
-                <video id="idleAdsSlideVideo" style="display:none;" muted autoplay loop playsinline></video>
-                <iframe id="idleAdsSlideYoutube" style="display:none;" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
-            </div>
-
-            <div class="idle-ads-right">
-                <div class="idle-ads-schedule-row">
-                    <div class="idle-ads-card idle-ads-schedule-card">
-                        <h3><i class="fas fa-calendar-day"></i> Lịch làm việc hôm nay</h3>
-                        <div class="tv-schedule-lines" style="margin-top: 10px;">
-                            <div class="tv-schedule-line">
-                                <div class="tv-schedule-k">Ngày</div>
-                                <div class="tv-schedule-v" id="adsSchedDate">--</div>
-                            </div>
-                            <div class="tv-schedule-line">
-                                <div class="tv-schedule-k">Giờ khám</div>
-                                <div class="tv-schedule-v" id="adsSchedTime">--</div>
-                            </div>
-                            <div class="tv-schedule-line">
-                                <div class="tv-schedule-k">Bác sĩ</div>
-                                <div class="tv-schedule-v" id="adsSchedDoctor">--</div>
-                            </div>
+            <div class="idle-ads-main">
+                <div class="idle-ads-card idle-ads-schedule-card">
+                    <div class="tv-schedule-head">
+                        <div class="tv-schedule-head-left">
+                            <h3 class="tv-schedule-head-title"><i class="fas fa-calendar-day"></i> Lịch làm việc hôm nay</h3>
+                            <span class="tv-schedule-datetime" id="adsSchedDate">--</span>
+                        </div>
+                        <div class="tv-schedule-half">
+                            <div class="tv-schedule-k">Giờ khám</div>
+                            <div class="tv-schedule-v" id="adsSchedTime">--</div>
                         </div>
                     </div>
-
-                    <div class="idle-ads-card idle-ads-doctor-photo-card" id="adsDoctorPhotoCard">
-                        <h3><i class="fas fa-user-md"></i> Bác sĩ đang khám</h3>
-                        <div class="tv-doctor-photo" style="min-height: 130px;">
-                            <img id="adsDoctorPhotoImg" alt="Ảnh bác sĩ" style="display:none;">
-                            <div id="adsDoctorPhotoName" style="display:none;"></div>
+                    <div class="tv-schedule-split">
+                        <div class="tv-schedule-half tv-schedule-notice-half">
+                            <div class="tv-schedule-k" id="adsSchedNoticeLabel">Thông báo</div>
+                            <div class="tv-schedule-v tv-schedule-notice-text" id="adsSchedNotice">--</div>
                         </div>
-                    </div>
-                </div>
-                <div class="idle-ads-card">
-                    <h3><i class="fas fa-phone-volume"></i> Liên hệ</h3>
-                    <div class="idle-ads-row">
-                        <div class="idle-ads-info">
-                            <div class="line"><i class="fas fa-phone"></i><div class="value"><strong>Hotline:</strong> <span id="idleAdsHotlineValue">--</span></div></div>
-                            <div class="line"><i class="fas fa-map-marker-alt"></i><div class="value"><strong>Địa chỉ:</strong> <span id="idleAdsAddressValue">--</span></div></div>
+                        <div class="tv-schedule-half">
+                            <div class="tv-schedule-k">Bác sĩ khám</div>
+                            <div class="tv-schedule-v" id="adsSchedDoctor">--</div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <div class="idle-ads-footer">
-                <div class="idle-ads-footer-left">
-                    <div class="idle-ads-footer-label">
-                        <span id="idleAdsFooterIcon" style="font-weight:900; font-size:18px; line-height:1;">*</span>
-                        <strong id="idleAdsFooterLabelText">DỊCH VỤ NỔI BẬT</strong>:
+                <div class="idle-ads-footer-label">
+                    <span id="idleAdsFooterIcon" style="font-weight:900; font-size:18px; line-height:1;">*</span>
+                    <strong id="idleAdsFooterLabelText">DỊCH VỤ PHÒNG KHÁM</strong>
+                </div>
+                <div class="idle-ads-footer-content">
+                    <div class="idle-ads-footer-text-col">
+                        <div class="idle-ads-footer-body" id="idleAdsFooterText"></div>
                     </div>
-                    <div class="idle-ads-footer-text-wrap">
-                        <div class="idle-ads-footer-scroll" aria-hidden="true">
-                            <span id="idleAdsFooterText1"></span>
-                            <span id="idleAdsFooterText2"></span>
+                    <div class="idle-ads-footer-media-col" id="idleAdsFooterMediaCol">
+                        <div class="idle-ads-footer-media-frame" id="idleAdsFooterMediaFrame">
+                            <img id="idleAdsFooterMediaImg" alt="" style="display:none;">
+                            <video id="idleAdsFooterMediaVideo" style="display:none;" playsinline webkit-playsinline muted preload="auto" disablepictureinpicture></video>
+                            <iframe id="idleAdsFooterMediaYoutube" style="display:none;" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" title="YouTube trình chiếu"></iframe>
+                            <div class="idle-ads-patient-name-mask" id="idleAdsPatientNameMask" aria-hidden="true" title="Đã che họ tên bệnh nhân"></div>
+                            <div class="idle-ads-video-caption" id="idleAdsVideoCaption" aria-hidden="true"></div>
+                            <div class="idle-ads-footer-media-empty" id="idleAdsFooterMediaEmpty">Chưa có ảnh/video trình chiếu</div>
+                        </div>
+                        <div id="idleAdsFooterMediaLogoWrap" class="idle-ads-footer-media-logo-wrap" style="display:none;" aria-hidden="true">
+                            <div id="idleAdsFooterMediaLogoFlip" class="idle-ads-footer-media-logo-flip">
+                                <img id="idleAdsFooterMediaLogo" class="idle-ads-footer-media-logo" alt="Logo phòng khám">
+                            </div>
                         </div>
                     </div>
                 </div>
-                <!-- removed: chữ cập nhật thời gian -->
             </div>
         </div>
     </div>
+
+    <audio id="idleAdsBgm" loop playsinline preload="auto" style="display:none;" aria-hidden="true"></audio>
 
     <div class="tv-layout" id="tvLayout">
         <header class="tv-header">
@@ -1010,7 +1541,7 @@
                     <img src="logo_phu_san_dai_anh.PNG" alt="Logo Phòng khám Đại Anh" onerror="this.style.display='none';">
                 </div>
                 <div class="tv-title-block">
-                    <h1>PHÒNG KHÁM CHUYÊN KHOA PHỤ SẢN ĐẠI ANH</h1>
+                    <h1 id="tvClinicName">PHÒNG KHÁM CHUYÊN KHOA PHỤ SẢN ĐẠI ANH</h1>
                     <p>UY TÍN - CHẤT LƯỢNG</p>
                 </div>
             </div>
@@ -1033,6 +1564,7 @@
         </header>
 
         <section class="tv-stats-row">
+            <div class="tv-stats-group">
             <div class="tv-card">
                 <div class="tv-card-header">
                     <div class="tv-card-title">Số đang khám</div>
@@ -1058,34 +1590,25 @@
                 <div class="tv-stat-value" id="waitingCountDisplay">0</div>
                 <div class="tv-stat-label">Vui lòng chuẩn bị giấy tờ để khám</div>
             </div>
-            <div class="tv-card">
-                <div class="tv-card-header">
-                    <div class="tv-card-title">Lịch làm việc hôm nay</div>
-                    <div class="tv-card-icon"><i class="fas fa-calendar-day"></i></div>
-                </div>
-                <div class="tv-schedule-lines">
-                    <div class="tv-schedule-line">
-                        <div class="tv-schedule-k">Ngày</div>
-                        <div class="tv-schedule-v" id="schedDate">--</div>
+            </div>
+            <div class="tv-card tv-schedule-card">
+                <div class="tv-schedule-stack">
+                    <div class="tv-schedule-row tv-schedule-row--title">
+                        <div class="tv-schedule-head-title"><i class="fas fa-calendar-day"></i> Lịch làm việc hôm nay</div>
+                        <span class="tv-schedule-datetime" id="schedDate">--</span>
                     </div>
-                    <div class="tv-schedule-line">
+                    <div class="tv-schedule-row">
                         <div class="tv-schedule-k">Giờ khám</div>
                         <div class="tv-schedule-v" id="schedTime">--</div>
                     </div>
-                    <div class="tv-schedule-line">
-                        <div class="tv-schedule-k">Bác sĩ</div>
+                    <div class="tv-schedule-row">
+                        <div class="tv-schedule-k">Bác sĩ khám</div>
                         <div class="tv-schedule-v" id="schedDoctor">--</div>
                     </div>
-                </div>
-            </div>
-            <div class="tv-card tv-doctor-card" id="doctorPhotoCard">
-                <div class="tv-card-header">
-                    <div class="tv-card-title">Bác sĩ đang khám</div>
-                    <div class="tv-card-icon"><i class="fas fa-user-md"></i></div>
-                </div>
-                <div class="tv-doctor-photo" id="doctorPhotoWrap">
-                    <img id="doctorPhotoImg" alt="Ảnh bác sĩ" style="display:none;">
-                    <div id="doctorPhotoName" style="display:none;"></div>
+                    <div class="tv-schedule-row tv-schedule-row--notice">
+                        <div class="tv-schedule-k" id="schedNoticeLabel">Thông báo</div>
+                        <div class="tv-schedule-v tv-schedule-notice-text" id="schedNotice">--</div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -1163,6 +1686,7 @@
         </div>
     </div>
 
+    <script src="schedule-notice-snow-fx.js"></script>
     <script>
         // ===== DOM cache (giảm query lặp) =====
         const $ = (id) => document.getElementById(id);
@@ -1175,12 +1699,16 @@
                 'servingListBody',
                 'waitingListBody',
                 'lastUpdatedLabel',
-                'schedDate',
-                'schedTime',
-                'schedDoctor',
                 'adsSchedDate',
                 'adsSchedTime',
+                'adsSchedNotice',
+                'adsSchedNoticeLabel',
                 'adsSchedDoctor',
+                'schedDate',
+                'schedTime',
+                'schedNotice',
+                'schedNoticeLabel',
+                'schedDoctor',
                 'tvTickerText',
                 'tvTickerTextCopy',
                 'tvTickerLabel',
@@ -1190,10 +1718,6 @@
                 'adsNewServiceText',
                 'adsNewServiceTextCopy',
                 'adsNewServiceLabel',
-                'doctorPhotoImg',
-                'doctorPhotoName',
-                'adsDoctorPhotoImg',
-                'adsDoctorPhotoName',
             ].forEach((id) => (els[id] = $(id)));
         }
 
@@ -1219,7 +1743,8 @@
         }
 
         async function fetchJson(url, options) {
-            const res = await fetch(url, options);
+            const reqOptions = { cache: 'no-store', ...(options || {}) };
+            const res = await fetch(url, reqOptions);
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
             return data;
@@ -1230,11 +1755,16 @@
             const now = new Date();
             const timeNow = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
             const dateNow = now.toLocaleDateString('vi-VN', { day: 'numeric', month: 'numeric', year: 'numeric' });
-            if (els.schedDate) els.schedDate.textContent = `${dateNow}. ${timeNow}`;
-            if (els.adsSchedDate) els.adsSchedDate.textContent = `${dateNow}. ${timeNow}`;
+            if (els.schedDate) els.schedDate.textContent = `${dateNow} ${timeNow}`;
+            if (els.adsSchedDate) els.adsSchedDate.textContent = `${dateNow} ${timeNow}`;
         }
 
         // ===== Data loaders =====
+        function parsePositiveInt(value) {
+            const n = parseInt(String(value ?? '').trim(), 10);
+            return Number.isFinite(n) && n > 0 ? n : 0;
+        }
+
         async function loadStatsForTv() {
             try {
                 const stats = await fetchJson('/api/checkin/stats');
@@ -1245,9 +1775,11 @@
                         ? `Mời bệnh nhân có số ${stats.current_queue} chuẩn bị vào phòng khám.`
                         : 'Chưa có bệnh nhân nào đang khám.';
                 }
-                cachedStatsActive = !!stats.current_queue;
+                const servingQueue = parsePositiveInt(stats.current_queue);
+                const waitingCount = parsePositiveInt(stats.waiting_count);
+                // "Active" when there is currently serving or still has waiting patients.
+                cachedStatsActive = servingQueue > 0 || waitingCount > 0;
                 evaluateIdleOverlay();
-                updateDoctorSessionUI();
             } catch (err) {
                 console.error('Lỗi load stats (TV):', err);
             }
@@ -1296,7 +1828,6 @@
                 }
                 cachedServingActive = serving.length > 0;
                 evaluateIdleOverlay();
-                updateDoctorSessionUI();
             } catch (err) {
                 console.error('Lỗi load waiting list (TV):', err);
                 renderEmpty(els.waitingListBody, 'Không thể tải danh sách. Vui lòng kiểm tra kết nối.');
@@ -1321,8 +1852,6 @@
                     if (els.schedDoctor) els.schedDoctor.textContent = '--';
                     if (els.adsSchedTime) els.adsSchedTime.textContent = '--';
                     if (els.adsSchedDoctor) els.adsSchedDoctor.textContent = '--';
-                    cachedSessionDoctorName = '';
-                    cachedDoctorsArray = [];
                     return;
                 }
 
@@ -1332,8 +1861,6 @@
                     if (els.schedDoctor) els.schedDoctor.textContent = 'Nghỉ';
                     if (els.adsSchedTime) els.adsSchedTime.textContent = 'Nghỉ';
                     if (els.adsSchedDoctor) els.adsSchedDoctor.textContent = 'Nghỉ';
-                    cachedSessionDoctorName = '';
-                    cachedDoctorsArray = [];
                     return;
                 }
 
@@ -1346,30 +1873,26 @@
                     .filter((t) => t.start && t.end)
                     .sort((a, b) => a.start.localeCompare(b.start));
 
-                // Hiển thị đầy đủ từng ca: 1 ca → "08:00-12:00"; 2+ ca → mỗi ca 1 dòng: "Ca 1: 16:00-20:30\nCa 2: 21:01-23:30"
+                // 2+ ca: cùng 1 hàng, nối bằng " + "
                 const scheduleParts = times.map((t, i) =>
                     times.length >= 2 ? `Ca ${i + 1}: ${t.start}-${t.end}` : `${t.start}-${t.end}`
                 );
-                const timesText = scheduleParts.length ? scheduleParts.join('\n') : '';
+                const timesText = scheduleParts.length ? scheduleParts.join(' + ') : '';
 
                 const doctors = Array.from(new Set(
                     openShifts.flatMap((s) =>
                         String(s.doctor_name || '').split(/\s*\+\s*/).map((d) => d.trim()).filter(Boolean)
                     )
                 ));
-                cachedSessionDoctorName = openShifts.length && openShifts[0] ? String(openShifts[0].doctor_name || '').trim() : (doctors.length ? doctors[0] : '');
-                cachedDoctorsArray = doctors;
-
-                // 1 bác sĩ → "BS A"; 2+ bác sĩ → mỗi bác sĩ 1 dòng (không có nhãn Ca/Bác sĩ)
+                // 2+ bác sĩ: cùng 1 hàng bên phải nhãn
                 const doctorsText = doctors.length
-                    ? (doctors.length >= 2 ? doctors.join('\n') : doctors[0])
+                    ? (doctors.length >= 2 ? doctors.join(' + ') : doctors[0])
                     : '';
 
                 if (els.schedTime) els.schedTime.textContent = timesText ? timesText : '--';
                 if (els.schedDoctor) els.schedDoctor.textContent = doctorsText || '--';
                 if (els.adsSchedTime) els.adsSchedTime.textContent = timesText ? timesText : '--';
                 if (els.adsSchedDoctor) els.adsSchedDoctor.textContent = doctorsText || '--';
-                updateDoctorSessionUI();
             } catch (err) {
                 console.error('Lỗi load lịch khám hôm nay (TV):', err);
             }
@@ -1377,20 +1900,32 @@
 
         // ===== Settings from server =====
         let qrDisplaySettings = null;
-        let adsContact = {
-            clinicName: '',
-            phone: '',
-            address: ''
-        };
         let lastActiveAt = Date.now();
         let idleOverlayShowing = false;
-        let adsSlideTimer = null;
+        let overlayPresentationMode = 'layout';
+        let overlayModeTimer = null;
+        let overlayModeSwitchGraceUntil = 0;
+        let overlayModeConfigKey = '';
         let adsClockTimer = null;
-        let adsSlideIdx = 0;
+        let footerMediaTimer = null;
+        let footerMediaIndex = 0;
+        let footerMediaSlides = [];
+        let footerMediaSoundUnlocked = false;
+        let footerVideoRetryTimer = null;
+        let footerMediaHealthTimer = null;
+        let footerMediaConfigKey = '';
+        let footerMediaSlideShownAt = 0;
+        let footerVideoLastProgressAt = 0;
+        let footerVideoLastTime = -1;
+        let footerVideoPlayGen = 0;
+        let footerVideoUnmuteTimers = [];
+        let footerVideoSrcListeners = null;
+        let bgmPlaybackUnlocked = false;
         let cachedStatsActive = false;
         let cachedServingActive = false;
-        let cachedSessionDoctorName = '';
-        let cachedDoctorsArray = [];
+        let lastTickerSettingsKey = '';
+        let lastNewServiceSettingsKey = '';
+        let lastFooterScrollSettingsKey = '';
 
         function _parseBool(v, fallback = false) {
             if (v === true || v === false) return v;
@@ -1400,138 +1935,81 @@
             return fallback;
         }
 
-        function _parseSlides(v) {
-            const raw = String(v ?? '').trim();
-            if (!raw) return [];
-            return raw.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
-        }
-
-        function _normalizeYouTubeUrl(u) {
-            if (!u) return '';
-            let s = String(u).trim();
-            if (!s) return '';
-            // allow plain ID
-            if (/^[a-zA-Z0-9_-]{11}$/.test(s)) return s;
-            // prepend scheme if missing
-            if (/^www\.youtube\.com\//i.test(s)) s = 'https://' + s;
-            if (/^www\.youtu\.be\//i.test(s)) s = 'https://' + s;
-            if (/^youtu\.be\//i.test(s) && !/^https?:\/\//i.test(s)) s = 'https://' + s;
-            if (/^youtube\.com\//i.test(s) && !/^https?:\/\//i.test(s)) s = 'https://' + s;
-            return s;
-        }
-
-        function _extractYouTubeId(u) {
-            const s = _normalizeYouTubeUrl(u);
-            if (!s) return '';
-            if (/^[a-zA-Z0-9_-]{11}$/.test(s)) return s;
-            // URL-based extraction
-            try {
-                const url = new URL(s);
-                const host = url.hostname.replace(/^www\./i, '').toLowerCase();
-                if (host === 'youtu.be') {
-                    const id = url.pathname.split('/').filter(Boolean)[0];
-                    if (id && /^[a-zA-Z0-9_-]{11}$/.test(id)) return id;
-                }
-                if (host.endsWith('youtube.com')) {
-                    // watch?v=
-                    const v = url.searchParams.get('v');
-                    if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return v;
-                    // /embed/ID or /shorts/ID
-                    const m = url.pathname.match(/\/(embed|shorts)\/([a-zA-Z0-9_-]{11})/);
-                    if (m && m[2]) return m[2];
-                    // /live/ID
-                    const m2 = url.pathname.match(/\/live\/([a-zA-Z0-9_-]{11})/);
-                    if (m2 && m2[1]) return m2[1];
-                }
-            } catch (e) {
-                // fallback regex
-            }
-            // Regex fallback
-            const m3 = String(s).match(/(?:v=|\/embed\/|\/shorts\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-            if (m3 && m3[1]) return m3[1];
-            return '';
-        }
-
-        function _getSlideKind(url) {
-            const s = String(url || '').trim();
-            if (!s) return 'none';
-            const isYoutube = /youtube\.com|youtu\.be/i.test(s);
-            if (isYoutube || /^[a-zA-Z0-9_-]{11}$/.test(s)) return 'youtube';
-            if (/\.(mp4|webm)(\?.*)?$/i.test(s)) return 'video';
-            return 'image';
-        }
-
-        function _toYouTubeEmbedSrc(url) {
-            const id = _extractYouTubeId(url);
-            if (!id) return '';
-            const normalized = _normalizeYouTubeUrl(url).toLowerCase();
-            // Heuristic:
-            // - Watch/youtu.be page links sometimes cannot autoplay on TV browsers.
-            // - For these, we omit autoplay so at least thumbnail/video frame is shown.
-            const isWatchPage = normalized.includes('youtube.com/watch') || normalized.includes('youtu.be/');
-
-            const commonParams = `controls=0&rel=0&modestbranding=1&playsinline=1&loop=1&playlist=${id}`;
-            if (isWatchPage) {
-                // No autoplay: show poster/frame, user gesture may be needed.
-                return `https://www.youtube-nocookie.com/embed/${id}?mute=1&${commonParams}`;
-            }
-
-            // Autoplay-friendly for embed/shorts style links.
-            return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&${commonParams}`;
-        }
-
-        function _normalizeDigits(s) {
-            return String(s || '').replace(/[^\d]/g, '');
-        }
-
         function _pickContactValue(items, matcher) {
             if (!Array.isArray(items)) return '';
             const found = items.find((x) => matcher(String((x && x.type) || '')));
             return found && found.value ? String(found.value).trim() : '';
         }
 
-        function _slugifyDoctorKey(s) {
-            const raw = String(s || '').trim().toLowerCase();
-            if (!raw) return '';
-            // Vietnamese diacritics removal
-            const normalized = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-            const withoutĐ = normalized.replace(/đ/g, 'd').replace(/Đ/g, 'd');
-            return withoutĐ.replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
-        }
+        let cachedClinicNameFromHome = '';
 
         async function loadAdsContactFromHomeContent() {
             try {
                 const data = await fetchJson('/api/home-content');
                 const contact = Array.isArray(data.contactInfo) ? data.contactInfo : [];
-
-                const clinicName =
+                cachedClinicNameFromHome =
                     _pickContactValue(contact, (t) => /tên\s*phòng\s*khám/i.test(t)) ||
                     (data && data.heroTitle ? String(data.heroTitle).trim() : '');
-                const address = _pickContactValue(contact, (t) => /địa\s*chỉ/i.test(t));
-                const phone = _pickContactValue(contact, (t) => /(điện\s*thoại|số\s*điện\s*thoại|hotline)/i.test(t));
-
-                adsContact = { clinicName, address, phone };
-
-                const nameEl = document.getElementById('idleAdsClinicName');
-                if (nameEl && clinicName) nameEl.textContent = clinicName.toUpperCase();
-
-                // Update visible fields on overlay
-                const hotlineEl = document.getElementById('idleAdsHotlineValue');
-                if (hotlineEl) hotlineEl.textContent = phone || '--';
-                const addressEl = document.getElementById('idleAdsAddressValue');
-                if (addressEl) addressEl.textContent = address || '--';
-
             } catch (e) {
-                // ignore (overlay will show placeholders)
+                // ignore
             }
+            applyClinicNameSettings();
+        }
+
+        function applyClinicNameSettings() {
+            const s = qrDisplaySettings || {};
+            const configuredName = (s.qrClinicNameText || '').trim();
+            const fallbackName = cachedClinicNameFromHome
+                ? cachedClinicNameFromHome.toUpperCase()
+                : 'PHÒNG KHÁM CHUYÊN KHOA PHỤ SẢN ĐẠI ANH';
+            const displayName = configuredName || fallbackName;
+            const color = s.qrClinicNameColor || '#e5e7eb';
+            const fontFamily = s.qrClinicNameFontFamily ||
+                'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+            const fontSize = parseInt(s.qrClinicNameFontSize || '28', 10) || 28;
+
+            ['idleAdsClinicName', 'tvClinicName'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.textContent = displayName;
+                el.style.color = color;
+                el.style.fontFamily = fontFamily;
+                el.style.fontSize = Math.max(14, Math.min(48, fontSize)) + 'px';
+            });
+        }
+
+        function readLocalQrDisplaySettings() {
+            try {
+                const raw = localStorage.getItem('qrDisplaySettings');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && typeof parsed === 'object') return parsed;
+                }
+            } catch (e) {
+                // ignore
+            }
+            return {};
+        }
+
+        function mergeQrDisplaySettings(serverSettings, localSettings) {
+            const merged = { ...(serverSettings || {}) };
+            for (const [key, value] of Object.entries(localSettings || {})) {
+                const current = merged[key];
+                const hasCurrent = current !== null && current !== undefined && String(current).trim() !== '';
+                const hasLocal = value !== null && value !== undefined && String(value).trim() !== '';
+                if (!hasCurrent && hasLocal) merged[key] = value;
+            }
+            return merged;
         }
 
         async function loadQrDisplaySettings() {
             try {
                 const data = await fetchJson('/api/qr-display-settings');
-                qrDisplaySettings = data?.success ? (data.settings || {}) : null;
+                const serverSettings = data?.success ? (data.settings || {}) : {};
+                qrDisplaySettings = mergeQrDisplaySettings(serverSettings, readLocalQrDisplaySettings());
             } catch (e) {
-                qrDisplaySettings = null;
+                const local = readLocalQrDisplaySettings();
+                qrDisplaySettings = Object.keys(local).length ? local : null;
             }
         }
 
@@ -1543,10 +2021,1227 @@
         }
 
         function stopAdsTimers() {
-            if (adsSlideTimer) clearInterval(adsSlideTimer);
-            adsSlideTimer = null;
             if (adsClockTimer) clearInterval(adsClockTimer);
             adsClockTimer = null;
+            stopFooterMediaSlideshow();
+            resetOverlayPresentationMode();
+        }
+
+        function getOverlayFullscreenMinutes() {
+            const s = qrDisplaySettings || {};
+            const n = parseInt(s.qrAdsFullscreenSlideshowMinutes || '0', 10);
+            if (!Number.isFinite(n) || n < 0) return 0;
+            return Math.min(1440, n);
+        }
+
+        function clearOverlayModeTimer() {
+            if (overlayModeTimer) {
+                clearTimeout(overlayModeTimer);
+                overlayModeTimer = null;
+            }
+        }
+
+        function getOverlayModeConfigKey() {
+            const minutes = getOverlayFullscreenMinutes();
+            const slides = parseFooterSlides((qrDisplaySettings || {}).qrAdsSlides);
+            return `${minutes}|${slides.join('\n')}`;
+        }
+
+        function resetOverlayPresentationMode() {
+            overlayPresentationMode = 'layout';
+            overlayModeConfigKey = '';
+            clearOverlayModeTimer();
+            const overlay = document.getElementById('idleAdsOverlay');
+            if (overlay) overlay.classList.remove('is-fullscreen-slideshow');
+        }
+
+        function setOverlayPresentationMode(mode) {
+            const next = mode === 'fullscreen' ? 'fullscreen' : 'layout';
+            const video = document.getElementById('idleAdsFooterMediaVideo');
+            const videoActive = !!(video && video.style.display !== 'none' && video.dataset.slideSrc);
+            const savedTime = videoActive && Number.isFinite(video.currentTime) ? video.currentTime : null;
+            const wasPlaying = videoActive && !video.paused && !video.ended;
+
+            overlayPresentationMode = next;
+            overlayModeSwitchGraceUntil = Date.now() + 4000;
+            const overlay = document.getElementById('idleAdsOverlay');
+            if (overlay) overlay.classList.toggle('is-fullscreen-slideshow', next === 'fullscreen');
+            applyMediaLogoSettings();
+            requestAnimationFrame(() => {
+                reapplyCurrentFooterMediaAspect();
+                // Sau đổi layout: giữ đúng vị trí đang phát, không phát lại từ đầu.
+                if (!videoActive || savedTime == null) return;
+                try {
+                    if (Math.abs((video.currentTime || 0) - savedTime) > 0.35) {
+                        video.currentTime = savedTime;
+                    }
+                } catch (e) {
+                    // ignore
+                }
+                noteFooterVideoProgress(video);
+                if (wasPlaying && video.paused && !video.ended) {
+                    resumeFooterVideoPlayback(video);
+                } else if (wasPlaying && wantsFooterMediaSound() && video.muted) {
+                    unmuteFooterVideoAndPlay(video);
+                }
+            });
+        }
+
+        function reapplyCurrentFooterMediaAspect() {
+            const img = document.getElementById('idleAdsFooterMediaImg');
+            const video = document.getElementById('idleAdsFooterMediaVideo');
+            if (img && img.style.display !== 'none' && img.naturalWidth > 0) {
+                syncFooterMediaAspectRatio(img.naturalWidth, img.naturalHeight);
+                return;
+            }
+            if (video && video.style.display !== 'none' && video.videoWidth > 0) {
+                syncFooterMediaAspectRatio(video.videoWidth, video.videoHeight);
+                return;
+            }
+            const iframe = document.getElementById('idleAdsFooterMediaYoutube');
+            if (iframe && iframe.style.display !== 'none') {
+                syncFooterMediaAspectRatio(16, 9);
+            }
+        }
+
+        function scheduleOverlayModeSwitch() {
+            clearOverlayModeTimer();
+            const minutes = getOverlayFullscreenMinutes();
+            if (!idleOverlayShowing || minutes <= 0) return;
+            const slides = parseFooterSlides((qrDisplaySettings || {}).qrAdsSlides);
+            if (!slides.length) return;
+            overlayModeTimer = setTimeout(() => {
+                const next = overlayPresentationMode === 'layout' ? 'fullscreen' : 'layout';
+                setOverlayPresentationMode(next);
+                scheduleOverlayModeSwitch();
+            }, minutes * 60 * 1000);
+        }
+
+        function startOverlayModeRotation() {
+            resetOverlayPresentationMode();
+            const key = getOverlayModeConfigKey();
+            const minutes = getOverlayFullscreenMinutes();
+            const slides = parseFooterSlides((qrDisplaySettings || {}).qrAdsSlides);
+            if (minutes <= 0 || !slides.length) return;
+            overlayModeConfigKey = key;
+            scheduleOverlayModeSwitch();
+        }
+
+        function syncOverlayPresentationMode() {
+            if (!idleOverlayShowing) {
+                resetOverlayPresentationMode();
+                return;
+            }
+            const minutes = getOverlayFullscreenMinutes();
+            const slides = parseFooterSlides((qrDisplaySettings || {}).qrAdsSlides);
+            if (minutes <= 0 || !slides.length) {
+                resetOverlayPresentationMode();
+                return;
+            }
+            const overlay = document.getElementById('idleAdsOverlay');
+            if (overlay) overlay.classList.toggle('is-fullscreen-slideshow', overlayPresentationMode === 'fullscreen');
+
+            const key = getOverlayModeConfigKey();
+            if (key !== overlayModeConfigKey) {
+                overlayModeConfigKey = key;
+                scheduleOverlayModeSwitch();
+            }
+        }
+
+        function parseFooterSlides(raw) {
+            return String(raw || '')
+                .split(/\r?\n/)
+                .map((s) => normalizeMediaUrl(s.trim()))
+                .filter(Boolean);
+        }
+
+        function parseSlideClipSpec(url) {
+            const raw = String(url || '').trim();
+            let start = null;
+            let end = null;
+            let rate = 1;
+            let mediaUrl = raw;
+            try {
+                const u = new URL(raw, window.location.origin);
+                const s = u.searchParams.get('start');
+                const e = u.searchParams.get('end');
+                const r = u.searchParams.get('rate');
+                if (s != null && s !== '') {
+                    const sv = parseFloat(s);
+                    if (Number.isFinite(sv)) start = Math.max(0, sv);
+                }
+                if (e != null && e !== '') {
+                    const ev = parseFloat(e);
+                    if (Number.isFinite(ev)) end = Math.max(0, ev);
+                }
+                if (r != null && r !== '') {
+                    const rv = parseFloat(r);
+                    if (Number.isFinite(rv) && rv > 0) rate = Math.max(0.25, Math.min(4, rv));
+                }
+                u.searchParams.delete('start');
+                u.searchParams.delete('end');
+                u.searchParams.delete('rate');
+                // bỏ cache-bust cũ nếu có
+                u.searchParams.delete('_tv');
+                const q = u.searchParams.toString();
+                mediaUrl = u.pathname + (q ? `?${q}` : '');
+            } catch (err) {
+                mediaUrl = raw.split('#')[0].split('?')[0] || raw;
+            }
+            return { raw, mediaUrl, start, end, rate };
+        }
+
+        function normalizeMediaUrl(url) {
+            const raw = String(url || '').trim();
+            if (!raw) return '';
+            if (raw.startsWith('/')) return raw;
+            try {
+                const parsed = new URL(raw, window.location.origin);
+                const path = parsed.pathname + parsed.search;
+                if (path.startsWith('/qr-ads-media/')) {
+                    return path;
+                }
+                if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+                    return path;
+                }
+            } catch (e) {
+                // ignore
+            }
+            return raw;
+        }
+
+        function parseYouTubeVideoId(url) {
+            const raw = String(url || '').trim();
+            if (!raw) return '';
+            if (/^[\w-]{11}$/.test(raw)) return raw;
+            try {
+                const parsed = new URL(raw, window.location.origin);
+                const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+                if (host === 'youtu.be') {
+                    return (parsed.pathname.split('/').filter(Boolean)[0] || '').slice(0, 11);
+                }
+                if (host === 'youtube.com' || host === 'youtube-nocookie.com' || host === 'm.youtube.com') {
+                    if (parsed.pathname === '/watch' || parsed.pathname.startsWith('/watch')) {
+                        return (parsed.searchParams.get('v') || '').slice(0, 11);
+                    }
+                    const parts = parsed.pathname.split('/').filter(Boolean);
+                    if (parts[0] === 'embed' || parts[0] === 'shorts' || parts[0] === 'live') {
+                        return (parts[1] || '').slice(0, 11);
+                    }
+                }
+            } catch (e) {
+                // ignore
+            }
+            const match = raw.match(/(?:v=|\/embed\/|youtu\.be\/|\/shorts\/|\/live\/)([\w-]{11})/i);
+            return match ? match[1] : '';
+        }
+
+        function isFooterMediaSoundEnabled() {
+            const s = qrDisplaySettings || {};
+            return _parseBool(s.qrAdsMediaSoundEnabled, false);
+        }
+
+        // TV kiosk không có chuột: tự coi như đã unlock khi setting bật tiếng.
+        function armFooterMediaSoundForDisplay() {
+            if (!isFooterMediaSoundEnabled()) return;
+            if (shouldUseTvMediaPlayback()) {
+                footerMediaSoundUnlocked = true;
+                bgmPlaybackUnlocked = true;
+            }
+        }
+
+        function wantsFooterMediaSound() {
+            armFooterMediaSoundForDisplay();
+            return isFooterMediaSoundEnabled() && footerMediaSoundUnlocked;
+        }
+
+        function isFooterVideoHoldingAudioSlot() {
+            if (!wantsFooterMediaSound()) return false;
+            const video = document.getElementById('idleAdsFooterMediaVideo');
+            const iframe = document.getElementById('idleAdsFooterMediaYoutube');
+            const videoOn = !!(video && video.style.display !== 'none' && !video.ended);
+            const ytOn = !!(iframe && iframe.style.display !== 'none');
+            return videoOn || ytOn;
+        }
+
+        function applyFooterVideoSound(videoEl) {
+            if (!videoEl) return;
+            const soundOn = wantsFooterMediaSound();
+            if (soundOn) {
+                videoEl.removeAttribute('muted');
+                videoEl.defaultMuted = false;
+                videoEl.muted = false;
+                videoEl.volume = 1;
+            } else {
+                videoEl.setAttribute('muted', '');
+                videoEl.defaultMuted = true;
+                videoEl.muted = true;
+                // Giữ volume=1 khi mute — một số WebView TV không khôi phục được sau volume=0
+                if (videoEl.volume < 0.01) videoEl.volume = 1;
+            }
+        }
+
+        function clearFooterVideoUnmuteTimers() {
+            if (!footerVideoUnmuteTimers.length) return;
+            footerVideoUnmuteTimers.forEach((id) => clearTimeout(id));
+            footerVideoUnmuteTimers = [];
+        }
+
+        /** TV thường chỉ cho 1 nguồn âm: video/YouTube đang chiếu + bật tiếng → không chạy BGM. */
+        function syncAdAudioFocus(kind) {
+            const mediaHasSound = wantsFooterMediaSound() && (kind === 'video' || kind === 'youtube');
+            if (mediaHasSound || isFooterVideoHoldingAudioSlot()) {
+                stopBgmPlayback();
+                return;
+            }
+            if (isBgmEnabled()) {
+                setTimeout(() => tryPlayBgm(), 120);
+            }
+        }
+
+        function unmuteFooterVideoAndPlay(videoEl) {
+            if (!videoEl || !wantsFooterMediaSound()) return Promise.resolve();
+            const gen = footerVideoPlayGen;
+            applyFooterVideoSound(videoEl);
+            stopBgmPlayback();
+            // Đang phát rồi thì chỉ unmute — không gọi play() lại (tránh AbortError / mất tiếng)
+            if (!videoEl.paused && !videoEl.ended) {
+                return Promise.resolve();
+            }
+            try {
+                const p = videoEl.play();
+                if (p && typeof p.then === 'function') {
+                    return p.catch(() => {
+                        if (gen !== footerVideoPlayGen) return;
+                        applyFooterVideoSound(videoEl);
+                        if (!videoEl.paused) return;
+                        return videoEl.play().catch(() => {});
+                    });
+                }
+            } catch (e) {
+                // ignore
+            }
+            return Promise.resolve();
+        }
+
+        function scheduleFooterVideoUnmuteRetries(videoEl) {
+            if (!videoEl || !wantsFooterMediaSound()) return;
+            clearFooterVideoUnmuteTimers();
+            const gen = footerVideoPlayGen;
+            // Ít lần hơn: tránh bão unmute/play chồng chéo trên TV
+            [700, 2200].forEach((ms) => {
+                const id = setTimeout(() => {
+                    if (gen !== footerVideoPlayGen) return;
+                    if (!idleOverlayShowing || videoEl.style.display === 'none') return;
+                    if (!wantsFooterMediaSound()) return;
+                    if (!videoEl.muted && videoEl.volume > 0.5) return;
+                    unmuteFooterVideoAndPlay(videoEl);
+                }, ms);
+                footerVideoUnmuteTimers.push(id);
+            });
+        }
+
+        function resumeFooterVideoPlayback(videoEl) {
+            if (!videoEl) return Promise.resolve();
+            const gen = footerVideoPlayGen;
+            const tryPlay = (withSound) => {
+                if (withSound) {
+                    applyFooterVideoSound(videoEl);
+                    stopBgmPlayback();
+                } else {
+                    videoEl.setAttribute('muted', '');
+                    videoEl.defaultMuted = true;
+                    videoEl.muted = true;
+                }
+                if (!videoEl.paused && !videoEl.ended) {
+                    return Promise.resolve();
+                }
+                return videoEl.play();
+            };
+            const wantSound = wantsFooterMediaSound();
+            const p = tryPlay(wantSound);
+            if (!p || typeof p.catch !== 'function') {
+                if (!wantSound) syncAdAudioFocus('video');
+                return Promise.resolve();
+            }
+            return p.then(() => {
+                if (gen !== footerVideoPlayGen) return;
+                if (wantSound) scheduleFooterVideoUnmuteRetries(videoEl);
+                else syncAdAudioFocus('video');
+            }).catch(() => tryPlay(false).then(() => {
+                if (gen !== footerVideoPlayGen) return;
+                if (wantSound) scheduleFooterVideoUnmuteRetries(videoEl);
+                else syncAdAudioFocus('video');
+            }).catch(() => {
+                if (gen !== footerVideoPlayGen) return;
+                syncAdAudioFocus('video');
+            }));
+        }
+
+        function isBgmEnabled() {
+            const s = qrDisplaySettings || {};
+            return _parseBool(s.qrAdsBgmEnabled, false) && !!(s.qrAdsBgmUrl || '').trim();
+        }
+
+        function getBgmVolume() {
+            const s = qrDisplaySettings || {};
+            const v = parseInt(s.qrAdsBgmVolume || '40', 10);
+            const pct = Math.max(0, Math.min(100, Number.isFinite(v) ? v : 40));
+            return pct / 100;
+        }
+
+        function stopBgmPlayback() {
+            const audio = document.getElementById('idleAdsBgm');
+            if (!audio) return;
+            try {
+                audio.pause();
+            } catch (e) {
+                // ignore
+            }
+        }
+
+        function tryPlayBgm() {
+            const audio = document.getElementById('idleAdsBgm');
+            if (!audio || !isBgmEnabled()) return;
+            // Video/YouTube đang giữ slot âm thanh (kể cả lúc còn muted chờ unmute) → không chạy BGM
+            if (isFooterVideoHoldingAudioSlot()) {
+                stopBgmPlayback();
+                return;
+            }
+            audio.volume = getBgmVolume();
+            audio.loop = true;
+            const playPromise = audio.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => {
+                    // Chờ tương tác người dùng (TV/Chrome autoplay policy)
+                });
+            }
+        }
+
+        function applyBgmSettings() {
+            const audio = document.getElementById('idleAdsBgm');
+            if (!audio) return;
+            const enabled = isBgmEnabled();
+            const url = ((qrDisplaySettings || {}).qrAdsBgmUrl || '').trim();
+            audio.volume = getBgmVolume();
+            audio.loop = true;
+
+            if (!enabled || !url) {
+                stopBgmPlayback();
+                audio.removeAttribute('src');
+                delete audio.dataset.bgmSrc;
+                return;
+            }
+
+            if (audio.dataset.bgmSrc !== url) {
+                audio.dataset.bgmSrc = url;
+                audio.src = url;
+                audio.load();
+            }
+
+            tryPlayBgm();
+        }
+
+        function unlockBgmPlayback() {
+            if (!isBgmEnabled()) return;
+            bgmPlaybackUnlocked = true;
+            tryPlayBgm();
+        }
+
+        function unlockFooterMediaSound() {
+            if (!isFooterMediaSoundEnabled() && !isBgmEnabled()) return;
+            if (isFooterMediaSoundEnabled()) footerMediaSoundUnlocked = true;
+            const iframe = document.getElementById('idleAdsFooterMediaYoutube');
+            const video = document.getElementById('idleAdsFooterMediaVideo');
+            const videoOn = video && video.style.display !== 'none';
+            const ytOn = iframe && iframe.style.display !== 'none';
+            if (wantsFooterMediaSound() && (videoOn || ytOn)) {
+                stopBgmPlayback();
+                if (ytOn) tryYouTubeUnmute(iframe);
+                if (videoOn) unmuteFooterVideoAndPlay(video);
+                // Không remount slideshow khi chỉ mở tiếng — tránh đen màn / cắt tiếng
+                return;
+            }
+            unlockBgmPlayback();
+            if (idleOverlayShowing && !videoOn && !ytOn) startFooterMediaSlideshow();
+        }
+
+        function isTvDisplayMode() {
+            return document.documentElement.classList.contains('tv-mode');
+        }
+
+        function looksLikeTvBrowser() {
+            const ua = String(navigator.userAgent || '');
+            return /SmartTV|Smart-TV|HbbTV|NetCast|webOS|Tizen|BRAVIA|GoogleTV|CrKey|AFTB|AFTM|AppleTV|TV Safari/i.test(ua);
+        }
+
+        function shouldUseTvMediaPlayback() {
+            return isTvDisplayMode() || looksLikeTvBrowser();
+        }
+
+        function getFooterMediaConfigKey() {
+            const s = qrDisplaySettings || {};
+            // Không đưa sound vào key — đổi bật/tắt tiếng chỉ apply in-place, không remount video
+            return JSON.stringify({
+                slides: parseFooterSlides(s.qrAdsSlides),
+                interval: String(s.qrAdsSlideIntervalSeconds || '8'),
+            });
+        }
+
+        function startFooterMediaHealthWatch() {
+            if (footerMediaHealthTimer) return;
+            const intervalMs = shouldUseTvMediaPlayback() ? 20000 : 12000;
+            footerMediaHealthTimer = setInterval(() => {
+                ensureFooterMediaPlayback();
+            }, intervalMs);
+        }
+
+        function stopFooterMediaHealthWatch() {
+            if (footerMediaHealthTimer) {
+                clearInterval(footerMediaHealthTimer);
+                footerMediaHealthTimer = null;
+            }
+        }
+
+        function reloadCurrentFooterMediaSlide() {
+            if (!footerMediaSlides.length) return;
+            showFooterMediaSlide(footerMediaIndex, { forceReload: true });
+        }
+
+        function noteFooterVideoProgress(video) {
+            if (!video) return;
+            const t = video.currentTime || 0;
+            if (t > footerVideoLastTime + 0.02 || video.readyState >= 3) {
+                footerVideoLastTime = t;
+                footerVideoLastProgressAt = Date.now();
+            }
+        }
+
+        function isFooterVideoActuallyStuck(video, stuckMs) {
+            if (!video || video.paused || video.ended) return false;
+            noteFooterVideoProgress(video);
+            const sinceProgress = Date.now() - (footerVideoLastProgressAt || footerMediaSlideShownAt || 0);
+            const tvThreshold = shouldUseTvMediaPlayback() ? 25000 : 15000;
+            if (sinceProgress < tvThreshold) return false;
+            return stuckMs > tvThreshold;
+        }
+
+        function ensureFooterMediaPlayback() {
+            if (!idleOverlayShowing || !footerMediaSlides.length) return;
+
+            const url = footerMediaSlides[footerMediaIndex];
+            if (!url) return;
+            const kind = getFooterSlideKind(url);
+            const video = document.getElementById('idleAdsFooterMediaVideo');
+            const iframe = document.getElementById('idleAdsFooterMediaYoutube');
+            const stuckMs = Date.now() - (footerMediaSlideShownAt || 0);
+            const inModeSwitchGrace = Date.now() < overlayModeSwitchGraceUntil;
+
+            if (kind === 'video' && video && video.style.display !== 'none') {
+                noteFooterVideoProgress(video);
+                if (video.error) {
+                    if (!inModeSwitchGrace) reloadCurrentFooterMediaSlide();
+                    return;
+                }
+                if (!video.ended && video.paused && video.readyState >= 2) {
+                    resumeFooterVideoPlayback(video).then(() => {
+                        if (inModeSwitchGrace) return;
+                        if (video.paused && isFooterVideoActuallyStuck(video, stuckMs)) {
+                            reloadCurrentFooterMediaSlide();
+                        }
+                    });
+                    return;
+                }
+                // Buffering (readyState 2–3) hoặc vừa seek — không forceReload
+                if (video.readyState >= 2 && !video.paused) {
+                    return;
+                }
+                if (!inModeSwitchGrace && video.readyState < 2 && isFooterVideoActuallyStuck(video, stuckMs)) {
+                    reloadCurrentFooterMediaSlide();
+                }
+                return;
+            }
+
+            if (kind === 'youtube' && iframe && iframe.style.display !== 'none') {
+                if (inModeSwitchGrace) return;
+                const slideMs = getFooterSlideIntervalMs();
+                if (shouldUseTvMediaPlayback() && stuckMs > Math.max(slideMs * 1.5, 30000)) {
+                    reloadCurrentFooterMediaSlide();
+                }
+            }
+        }
+
+        function clearFooterVideoRetry() {
+            if (footerVideoRetryTimer) {
+                clearInterval(footerVideoRetryTimer);
+                footerVideoRetryTimer = null;
+            }
+            clearFooterVideoUnmuteTimers();
+        }
+
+        function prepareFooterVideoElement(video) {
+            if (!video) return;
+            video.setAttribute('playsinline', '');
+            video.setAttribute('webkit-playsinline', '');
+            video.setAttribute('preload', 'auto');
+            video.setAttribute('autoplay', '');
+            video.setAttribute('muted', '');
+            video.setAttribute('disablepictureinpicture', '');
+            video.playsInline = true;
+            video.autoplay = true;
+            video.controls = false;
+            video.muted = true;
+        }
+
+        function appendVideoCacheBust(url) {
+            const spec = parseSlideClipSpec(url);
+            const sep = String(spec.mediaUrl).includes('?') ? '&' : '?';
+            return `${spec.mediaUrl}${sep}_tv=${Date.now()}`;
+        }
+
+        function getVideoMimeType(url) {
+            const path = String(url || '').toLowerCase().split('?')[0].split('#')[0];
+            const ext = path.split('.').pop();
+            if (ext === 'webm') return 'video/webm';
+            if (ext === 'mov') return 'video/quicktime';
+            return 'video/mp4';
+        }
+
+        function clearFooterVideoClipWatch(video) {
+            if (!video) return;
+            if (video._clipTimeHandler) {
+                video.removeEventListener('timeupdate', video._clipTimeHandler);
+                video._clipTimeHandler = null;
+            }
+        }
+
+        function bindFooterVideoClipWatch(video, start, end) {
+            clearFooterVideoClipWatch(video);
+            const hasStart = Number.isFinite(start) && start >= 0;
+            const hasEnd = Number.isFinite(end) && end > 0;
+            if (!hasStart && !hasEnd) return;
+            const handler = () => {
+                if (!idleOverlayShowing || video.style.display === 'none') return;
+                if (hasStart && video.currentTime < start - 0.35) {
+                    try { video.currentTime = start; } catch (e) {}
+                    return;
+                }
+                if (hasEnd && video.currentTime >= end - 0.05) {
+                    clearFooterVideoRetry();
+                    clearFooterVideoClipWatch(video);
+                    showFooterMediaSlide(footerMediaIndex + 1);
+                }
+            };
+            video._clipTimeHandler = handler;
+            video.addEventListener('timeupdate', handler);
+        }
+
+        function playFooterVideoSlide(video, url, options = {}) {
+            const forceReload = !!options.forceReload;
+            const clip = parseSlideClipSpec(url);
+            const mediaUrl = clip.mediaUrl || url;
+            const clipStart = clip.start;
+            const clipEnd = clip.end;
+            const clipRate = clip.rate || 1;
+            const sameSrcReady = !forceReload
+                && video.dataset.slideSrc === url
+                && video.style.display !== 'none'
+                && video.readyState >= 2
+                && !video.error;
+
+            // Cùng video đang chiếu: tiếp tục từ vị trí hiện tại (không seek/load lại).
+            if (sameSrcReady) {
+                video.style.display = 'block';
+                video.playbackRate = clipRate;
+                video.onended = () => {
+                    clearFooterVideoRetry();
+                    clearFooterVideoClipWatch(video);
+                    showFooterMediaSlide(footerMediaIndex + 1);
+                };
+                video.onerror = () => {
+                    console.warn('Footer video error:', url);
+                    clearFooterVideoRetry();
+                    clearFooterVideoClipWatch(video);
+                    scheduleFooterMediaNext(800);
+                };
+                bindFooterVideoClipWatch(video, clipStart, clipEnd);
+                const t = video.currentTime || 0;
+                if (Number.isFinite(clipStart) && t < clipStart - 0.35) {
+                    try { video.currentTime = clipStart; } catch (e) {}
+                }
+                if (video.paused && !video.ended) {
+                    resumeFooterVideoPlayback(video);
+                } else if (wantsFooterMediaSound() && video.muted) {
+                    unmuteFooterVideoAndPlay(video);
+                }
+                if (!footerVideoRetryTimer) {
+                    footerVideoRetryTimer = setInterval(() => {
+                        if (!idleOverlayShowing || video.style.display === 'none') {
+                            clearFooterVideoRetry();
+                            return;
+                        }
+                        noteFooterVideoProgress(video);
+                        if (video.paused && !video.ended && video.readyState >= 2) {
+                            video.playbackRate = clipRate;
+                            resumeFooterVideoPlayback(video);
+                        } else if (!video.paused && wantsFooterMediaSound() && video.muted) {
+                            unmuteFooterVideoAndPlay(video);
+                        }
+                    }, shouldUseTvMediaPlayback() ? 4000 : 2500);
+                }
+                return;
+            }
+
+            prepareFooterVideoElement(video);
+            clearFooterVideoRetry();
+            clearFooterVideoClipWatch(video);
+            footerVideoLastTime = -1;
+            footerVideoLastProgressAt = Date.now();
+            video.style.display = 'block';
+            video.playbackRate = clipRate;
+            video.onended = () => {
+                clearFooterVideoRetry();
+                clearFooterVideoClipWatch(video);
+                showFooterMediaSlide(footerMediaIndex + 1);
+            };
+            video.onerror = () => {
+                console.warn('Footer video error:', url);
+                clearFooterVideoRetry();
+                clearFooterVideoClipWatch(video);
+                scheduleFooterMediaNext(800);
+            };
+
+            const attemptPlay = (forceMute = false) => {
+                const wantSound = !forceMute && wantsFooterMediaSound();
+                if (wantSound) {
+                    applyFooterVideoSound(video);
+                    stopBgmPlayback();
+                } else {
+                    video.setAttribute('muted', '');
+                    video.defaultMuted = true;
+                    video.muted = true;
+                }
+                video.playbackRate = clipRate;
+                if (!video.paused && !video.ended) return Promise.resolve();
+                return video.play();
+            };
+
+            const runPlayback = () => {
+                let tries = 0;
+                const tryOnce = (forceMute = false) => {
+                    tries += 1;
+                    const p = attemptPlay(forceMute);
+                    if (!p || typeof p.catch !== 'function') {
+                        if (!forceMute && wantsFooterMediaSound()) scheduleFooterVideoUnmuteRetries(video);
+                        else syncAdAudioFocus('video');
+                        return;
+                    }
+                    p.then(() => {
+                        if (!forceMute && wantsFooterMediaSound()) {
+                            scheduleFooterVideoUnmuteRetries(video);
+                        } else if (forceMute && wantsFooterMediaSound()) {
+                            // Đã play muted vì autoplay — mở tiếng + play lại.
+                            unmuteFooterVideoAndPlay(video);
+                            scheduleFooterVideoUnmuteRetries(video);
+                        } else {
+                            syncAdAudioFocus('video');
+                        }
+                    }).catch(() => {
+                        // Autoplay policy: thử muted rồi mở tiếng lại khi được phép.
+                        if (!forceMute && wantsFooterMediaSound()) {
+                            const mutedPlay = attemptPlay(true);
+                            if (mutedPlay && typeof mutedPlay.then === 'function') {
+                                mutedPlay.then(() => {
+                                    unmuteFooterVideoAndPlay(video);
+                                    scheduleFooterVideoUnmuteRetries(video);
+                                }).catch(() => {
+                                    syncAdAudioFocus('video');
+                                });
+                            } else {
+                                syncAdAudioFocus('video');
+                            }
+                        } else {
+                            syncAdAudioFocus('video');
+                        }
+                        if (tries < 6) {
+                            setTimeout(() => {
+                                if (video.paused && !video.ended) tryOnce(true);
+                            }, 400 * tries);
+                        } else if (video.paused) {
+                            scheduleFooterMediaNext(getFooterSlideIntervalMs());
+                        }
+                    });
+                };
+                tryOnce(false);
+            };
+
+            let loadWatchdog = null;
+
+            const seekToClipStart = () => {
+                if (!Number.isFinite(clipStart) || clipStart <= 0) return;
+                try {
+                    if (Math.abs((video.currentTime || 0) - clipStart) > 0.2) {
+                        video.currentTime = clipStart;
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            };
+
+            const detachVideoSrcListeners = () => {
+                if (!footerVideoSrcListeners) return;
+                const { onReady, onStalled, onTimeUpdate } = footerVideoSrcListeners;
+                video.removeEventListener('canplay', onReady);
+                video.removeEventListener('loadeddata', onReady);
+                video.removeEventListener('stalled', onStalled);
+                video.removeEventListener('waiting', onStalled);
+                video.removeEventListener('timeupdate', onTimeUpdate);
+                footerVideoSrcListeners = null;
+            };
+
+            const loadVideoSrc = (srcUrl) => {
+                footerVideoPlayGen += 1;
+                clearFooterVideoUnmuteTimers();
+                detachVideoSrcListeners();
+                video.pause();
+                video.onended = () => {
+                    clearFooterVideoRetry();
+                    clearFooterVideoClipWatch(video);
+                    showFooterMediaSlide(footerMediaIndex + 1);
+                };
+                video.removeAttribute('src');
+                while (video.firstChild) video.removeChild(video.firstChild);
+
+                if (shouldUseTvMediaPlayback()) {
+                    video.src = srcUrl;
+                } else {
+                    const source = document.createElement('source');
+                    source.src = srcUrl;
+                    source.type = getVideoMimeType(srcUrl);
+                    video.appendChild(source);
+                }
+                video.dataset.slideSrc = url;
+                video.playbackRate = clipRate;
+                video.load();
+                bindFooterVideoClipWatch(video, clipStart, clipEnd);
+
+                const onReady = () => {
+                    if (loadWatchdog) {
+                        clearTimeout(loadWatchdog);
+                        loadWatchdog = null;
+                    }
+                    detachVideoSrcListeners();
+                    footerVideoLastProgressAt = Date.now();
+                    seekToClipStart();
+                    video.playbackRate = clipRate;
+                    runPlayback();
+                };
+                const onStalled = () => {
+                    if (!idleOverlayShowing || video.style.display === 'none' || video.ended) return;
+                    noteFooterVideoProgress(video);
+                    if (!video.paused) return;
+                    setTimeout(() => {
+                        if (!idleOverlayShowing || video.style.display === 'none' || video.ended) return;
+                        if (!video.paused) return;
+                        video.playbackRate = clipRate;
+                        resumeFooterVideoPlayback(video);
+                    }, 800);
+                };
+                const onTimeUpdate = () => noteFooterVideoProgress(video);
+                footerVideoSrcListeners = { onReady, onStalled, onTimeUpdate };
+                video.addEventListener('canplay', onReady);
+                video.addEventListener('loadeddata', onReady);
+                video.addEventListener('stalled', onStalled);
+                video.addEventListener('waiting', onStalled);
+                video.addEventListener('timeupdate', onTimeUpdate);
+
+                const waitMs = shouldUseTvMediaPlayback() ? 15000 : 5000;
+                loadWatchdog = setTimeout(() => {
+                    loadWatchdog = null;
+                    if (!idleOverlayShowing || video.style.display === 'none') return;
+                    if (video.paused && video.readyState < 2 && isFooterVideoActuallyStuck(video, Date.now() - footerMediaSlideShownAt)) {
+                        loadVideoSrc(appendVideoCacheBust(url));
+                        return;
+                    }
+                    if (video.paused && !video.ended) {
+                        seekToClipStart();
+                        runPlayback();
+                    }
+                }, waitMs);
+            };
+
+            const needsLoad = forceReload || video.dataset.slideSrc !== url;
+            if (needsLoad) {
+                loadVideoSrc(mediaUrl);
+            } else {
+                // Cùng URL nhưng chưa đủ readyState ở nhánh preserve: không kéo về đầu nếu đang giữa clip.
+                const t = video.currentTime || 0;
+                if (Number.isFinite(clipStart) && t < clipStart - 0.35) {
+                    seekToClipStart();
+                } else if (!Number.isFinite(clipStart) && t < 0.15 && video.paused) {
+                    // Mới load / về 0 thật sự — để yên
+                }
+                video.playbackRate = clipRate;
+                bindFooterVideoClipWatch(video, clipStart, clipEnd);
+                if (video.paused && !video.ended) {
+                    runPlayback();
+                } else if (wantsFooterMediaSound() && video.muted) {
+                    unmuteFooterVideoAndPlay(video);
+                }
+            }
+
+            footerVideoRetryTimer = setInterval(() => {
+                if (!idleOverlayShowing || video.style.display === 'none') {
+                    clearFooterVideoRetry();
+                    return;
+                }
+                noteFooterVideoProgress(video);
+                if (video.paused && !video.ended && video.readyState >= 2) {
+                    video.playbackRate = clipRate;
+                    resumeFooterVideoPlayback(video);
+                } else if (!video.paused && wantsFooterMediaSound() && video.muted) {
+                    unmuteFooterVideoAndPlay(video);
+                }
+            }, shouldUseTvMediaPlayback() ? 4000 : 2500);
+        }
+
+        function tryYouTubeUnmute(iframe) {
+            if (!iframe || !iframe.contentWindow || !wantsFooterMediaSound()) return;
+            ['unMute', 'setVolume'].forEach((func, i) => {
+                const args = func === 'setVolume' ? [100] : [];
+                iframe.contentWindow.postMessage(JSON.stringify({
+                    event: 'command',
+                    func,
+                    args,
+                }), '*');
+            });
+        }
+
+        function buildYouTubeEmbedUrl(videoId) {
+            const soundOn = wantsFooterMediaSound();
+            const host = shouldUseTvMediaPlayback() ? 'www.youtube.com' : 'www.youtube-nocookie.com';
+            const params = new URLSearchParams({
+                autoplay: '1',
+                mute: soundOn ? '0' : '1',
+                controls: '0',
+                rel: '0',
+                playsinline: '1',
+                modestbranding: '1',
+                fs: '0',
+                enablejsapi: '1',
+                loop: '1',
+                playlist: videoId,
+                origin: window.location.origin,
+            });
+            return `https://${host}/embed/${videoId}?${params.toString()}`;
+        }
+
+        function hideFooterMediaElements(exceptKind) {
+            clearFooterVideoRetry();
+            const img = document.getElementById('idleAdsFooterMediaImg');
+            const video = document.getElementById('idleAdsFooterMediaVideo');
+            const iframe = document.getElementById('idleAdsFooterMediaYoutube');
+            if (img) {
+                img.style.display = 'none';
+                img.removeAttribute('src');
+            }
+            if (video && exceptKind !== 'video') {
+                footerVideoPlayGen += 1;
+                clearFooterVideoUnmuteTimers();
+                if (footerVideoSrcListeners) {
+                    const { onReady, onStalled, onTimeUpdate } = footerVideoSrcListeners;
+                    video.removeEventListener('canplay', onReady);
+                    video.removeEventListener('loadeddata', onReady);
+                    video.removeEventListener('stalled', onStalled);
+                    video.removeEventListener('waiting', onStalled);
+                    video.removeEventListener('timeupdate', onTimeUpdate);
+                    footerVideoSrcListeners = null;
+                }
+                clearFooterVideoClipWatch(video);
+                video.style.display = 'none';
+                video.onended = null;
+                video.onerror = null;
+                try {
+                    video.pause();
+                    video.removeAttribute('src');
+                    while (video.firstChild) video.removeChild(video.firstChild);
+                    delete video.dataset.slideSrc;
+                    video.playbackRate = 1;
+                    video.load();
+                } catch (e) {
+                    // ignore
+                }
+            }
+            if (iframe && exceptKind !== 'youtube') {
+                iframe.style.display = 'none';
+                iframe.removeAttribute('src');
+                delete iframe.dataset.slideSrc;
+            }
+        }
+
+        function slideHasPrivacyFlag(url) {
+            const raw = String(url || '');
+            const hash = (raw.split('#')[1] || '').toLowerCase();
+            if (/(^|[;&])privacy=0([;&]|$)/i.test(raw) || hash.includes('noprivacy')) return 'off';
+            if (/(^|[?&#])privacy=1([;&]|$)/i.test(raw) || /(^|[^a-z])privacy($|[^a-z])/i.test(hash)) return 'on';
+            return null;
+        }
+
+        function isPatientNameMaskEnabledGlobally() {
+            const s = qrDisplaySettings || {};
+            return String(s.qrAdsPatientNameMaskEnabled ?? 'true').toLowerCase() === 'true';
+        }
+
+        function shouldShowPatientNameMask(url, kind) {
+            if (kind !== 'image') return false;
+            const flag = slideHasPrivacyFlag(url);
+            if (flag === 'off') return false;
+            if (flag === 'on') return true;
+            return isPatientNameMaskEnabledGlobally();
+        }
+
+        function applyPatientNameMask(url, kind) {
+            const mask = document.getElementById('idleAdsPatientNameMask');
+            if (!mask) return;
+            const on = shouldShowPatientNameMask(url, kind);
+            mask.classList.toggle('is-on', on);
+            mask.setAttribute('aria-hidden', on ? 'false' : 'true');
+        }
+
+        function applyVideoCaptionSettings(kind) {
+            const box = document.getElementById('idleAdsVideoCaption');
+            if (!box) return;
+            const s = qrDisplaySettings || {};
+            const enabled = _parseBool(s.qrAdsVideoCaptionEnabled, false);
+            const text = String(s.qrAdsVideoCaptionText || '').trim();
+            const isVideoKind = kind === 'video' || kind === 'youtube';
+            const show = enabled && !!text && isVideoKind;
+            box.textContent = text;
+            box.style.color = s.qrAdsVideoCaptionColor || '#fbbf24';
+            const size = Math.max(12, Math.min(48, parseInt(s.qrAdsVideoCaptionFontSize || '20', 10) || 20));
+            box.style.fontSize = size + 'px';
+            box.style.fontFamily = s.qrAdsVideoCaptionFontFamily
+                || "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+            const opacityPct = Math.max(0, Math.min(100, parseInt(s.qrAdsVideoCaptionBgOpacity || '72', 10) || 72));
+            const alpha = Math.round((opacityPct / 100) * 1000) / 1000;
+            box.style.background = `rgba(2, 6, 23, ${alpha})`;
+            box.style.borderColor = alpha <= 0.05
+                ? 'transparent'
+                : `rgba(255, 255, 255, ${Math.min(0.28, 0.08 + alpha * 0.18)})`;
+            box.classList.toggle('is-on', show);
+            box.setAttribute('aria-hidden', show ? 'false' : 'true');
+        }
+
+        function getFooterSlideKind(url) {
+            if (parseYouTubeVideoId(url)) return 'youtube';
+            const u = String(url || '').toLowerCase().split('#')[0].split('?')[0];
+            if (/\.(mp4|webm|m4v|mov)$/.test(u)) return 'video';
+            return 'image';
+        }
+
+        function getFooterSlideIntervalMs() {
+            const s = qrDisplaySettings || {};
+            return Math.max(3, parseInt(s.qrAdsSlideIntervalSeconds || '8', 10) || 8) * 1000;
+        }
+
+        function syncFooterMediaAspectRatio(width, height, fallbackRatio = 16 / 9) {
+            const col = document.getElementById('idleAdsFooterMediaCol');
+            const parent = col && col.parentElement;
+            if (!col) return;
+            const overlay = document.getElementById('idleAdsOverlay');
+            const isFullscreen = !!(overlay && overlay.classList.contains('is-fullscreen-slideshow'));
+            if (isFullscreen) {
+                col.style.removeProperty('width');
+                col.style.removeProperty('height');
+                col.style.removeProperty('--footer-media-ar');
+                return;
+            }
+            const w = Number(width);
+            const h = Number(height);
+            const ratio = (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0)
+                ? Math.max(0.35, Math.min(3.2, w / h))
+                : fallbackRatio;
+            col.style.setProperty('--footer-media-ar', String(Math.round(ratio * 1000) / 1000));
+
+            // Đo theo ô cột grid (1/2 footer), không lấy full width parent — TV và máy tính cùng công thức.
+            col.style.width = '100%';
+            col.style.height = 'auto';
+            void col.offsetWidth;
+            const maxW = col.clientWidth || 0;
+            const maxH = parent ? parent.clientHeight : 0;
+            if (maxW > 8 && maxH > 8) {
+                let boxW = maxW;
+                let boxH = boxW / ratio;
+                if (boxH > maxH) {
+                    boxH = maxH;
+                    boxW = boxH * ratio;
+                }
+                col.style.width = `${Math.max(1, Math.round(boxW))}px`;
+                col.style.height = `${Math.max(1, Math.round(boxH))}px`;
+            } else {
+                col.style.width = '100%';
+                col.style.height = 'auto';
+            }
+        }
+
+        function bindFooterMediaAspectFromImage(img) {
+            if (!img) return;
+            const apply = () => {
+                if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                    syncFooterMediaAspectRatio(img.naturalWidth, img.naturalHeight);
+                }
+            };
+            if (img.complete && img.naturalWidth > 0) apply();
+            else img.addEventListener('load', apply, { once: true });
+        }
+
+        function bindFooterMediaAspectFromVideo(video) {
+            if (!video) return;
+            const apply = () => {
+                if (video.videoWidth > 0 && video.videoHeight > 0) {
+                    syncFooterMediaAspectRatio(video.videoWidth, video.videoHeight);
+                }
+            };
+            if (video.readyState >= 1 && video.videoWidth > 0) apply();
+            else video.addEventListener('loadedmetadata', apply, { once: true });
+        }
+
+        function stopFooterMediaSlideshow() {
+            if (footerMediaTimer) {
+                clearTimeout(footerMediaTimer);
+                footerMediaTimer = null;
+            }
+            stopFooterMediaHealthWatch();
+            hideFooterMediaElements();
+        }
+
+        function scheduleFooterMediaNext(delayMs) {
+            if (footerMediaTimer) clearTimeout(footerMediaTimer);
+            footerMediaTimer = setTimeout(() => {
+                showFooterMediaSlide(footerMediaIndex + 1);
+            }, delayMs);
+        }
+
+        function showFooterMediaSlide(index, options = {}) {
+            const forceReload = !!options.forceReload;
+            const slides = footerMediaSlides;
+            const img = document.getElementById('idleAdsFooterMediaImg');
+            const video = document.getElementById('idleAdsFooterMediaVideo');
+            const iframe = document.getElementById('idleAdsFooterMediaYoutube');
+            const empty = document.getElementById('idleAdsFooterMediaEmpty');
+            if (!img || !video || !iframe) return;
+
+            if (!slides.length) {
+                hideFooterMediaElements();
+                if (empty) empty.style.display = 'block';
+                applyPatientNameMask('', '');
+                applyVideoCaptionSettings('');
+                applyMediaLogoSettings();
+                return;
+            }
+
+            footerMediaIndex = ((index % slides.length) + slides.length) % slides.length;
+            const url = slides[footerMediaIndex];
+            const kind = getFooterSlideKind(url);
+            footerMediaSlideShownAt = Date.now();
+            if (empty) empty.style.display = 'none';
+            const sameVideoSlide = kind === 'video'
+                && video
+                && video.style.display !== 'none'
+                && video.dataset.slideSrc === url
+                && !video.error;
+            const sameYoutubeSlide = kind === 'youtube'
+                && iframe
+                && iframe.style.display !== 'none'
+                && iframe.dataset.slideSrc === url;
+            const keepVideoVisible = sameVideoSlide || (!!forceReload && kind === 'video');
+            const keepYoutubeVisible = sameYoutubeSlide || (!!forceReload && kind === 'youtube');
+            if (keepVideoVisible) {
+                hideFooterMediaElements('video');
+            } else if (keepYoutubeVisible) {
+                hideFooterMediaElements('youtube');
+            } else {
+                hideFooterMediaElements(null);
+            }
+            syncAdAudioFocus(kind);
+
+            if (kind === 'youtube') {
+                const videoId = parseYouTubeVideoId(url);
+                if (!videoId) {
+                    scheduleFooterMediaNext(500);
+                    applyPatientNameMask(url, kind);
+                    applyVideoCaptionSettings(kind);
+                    applyMediaLogoSettings();
+                    return;
+                }
+                syncFooterMediaAspectRatio(16, 9);
+                iframe.style.display = 'block';
+                const embedUrl = buildYouTubeEmbedUrl(videoId);
+                if (iframe.dataset.slideSrc !== url || forceReload) {
+                    iframe.dataset.slideSrc = url;
+                    iframe.onload = () => {
+                        if (wantsFooterMediaSound()) {
+                            stopBgmPlayback();
+                            tryYouTubeUnmute(iframe);
+                            setTimeout(() => tryYouTubeUnmute(iframe), 800);
+                            setTimeout(() => tryYouTubeUnmute(iframe), 2000);
+                        } else {
+                            syncAdAudioFocus('youtube');
+                        }
+                    };
+                    iframe.src = forceReload ? `${embedUrl}&_tv=${Date.now()}` : embedUrl;
+                } else if (wantsFooterMediaSound()) {
+                    stopBgmPlayback();
+                    tryYouTubeUnmute(iframe);
+                }
+                scheduleFooterMediaNext(getFooterSlideIntervalMs());
+                applyPatientNameMask(url, kind);
+                applyVideoCaptionSettings(kind);
+                applyMediaLogoSettings();
+                return;
+            }
+
+            if (kind === 'video') {
+                playFooterVideoSlide(video, url, { forceReload });
+                bindFooterMediaAspectFromVideo(video);
+                applyPatientNameMask(url, kind);
+                applyVideoCaptionSettings(kind);
+                applyMediaLogoSettings();
+                return;
+            }
+
+            img.style.display = 'block';
+            img.onload = () => bindFooterMediaAspectFromImage(img);
+            img.src = String(url || '').split('#')[0];
+            bindFooterMediaAspectFromImage(img);
+            scheduleFooterMediaNext(getFooterSlideIntervalMs());
+            applyPatientNameMask(url, kind);
+            applyVideoCaptionSettings(kind);
+            applyMediaLogoSettings();
+        }
+
+        function startFooterMediaSlideshow(options = {}) {
+            const force = options.force === true;
+            const key = getFooterMediaConfigKey();
+            const s = qrDisplaySettings || {};
+            const slides = parseFooterSlides(s.qrAdsSlides);
+
+            if (!force && key === footerMediaConfigKey && slides.length && footerMediaSlides.length) {
+                ensureFooterMediaPlayback();
+                startFooterMediaHealthWatch();
+                return;
+            }
+
+            footerMediaConfigKey = key;
+            stopFooterMediaSlideshow();
+            footerMediaSlides = slides;
+            footerMediaIndex = 0;
+            if (!slides.length) {
+                showFooterMediaSlide(0);
+                return;
+            }
+            showFooterMediaSlide(0);
+            startFooterMediaHealthWatch();
         }
 
         function startAdsClock() {
@@ -1556,31 +3251,145 @@
             if (!adsClockTimer) adsClockTimer = setInterval(updateIdleOverlayClock, 1000);
         }
 
+        function parseScrollSpeed(value, defaultPx) {
+            const n = parseInt(String(value ?? ''), 10);
+            if (!Number.isFinite(n) || n <= 0) return defaultPx;
+            return Math.max(10, Math.min(120, n));
+        }
+
+        function parseGapLines(value, defaultLines) {
+            const n = parseFloat(String(value ?? ''));
+            if (!Number.isFinite(n) || n < 0) return defaultLines;
+            return Math.max(0, Math.min(8, n));
+        }
+
+        function parsePauseSeconds(value, defaultSec) {
+            const n = parseFloat(String(value ?? ''));
+            if (!Number.isFinite(n) || n < 0) return defaultSec;
+            return Math.max(0, Math.min(60, n));
+        }
+
+        function setFooterScrollKeyframes(scrollPct) {
+            let styleEl = document.getElementById('idle-footer-scroll-keyframes');
+            if (!styleEl) {
+                styleEl = document.createElement('style');
+                styleEl.id = 'idle-footer-scroll-keyframes';
+                document.head.appendChild(styleEl);
+            }
+            const pct = Math.max(0.01, Math.min(99.99, scrollPct));
+            styleEl.textContent = `
+                @keyframes idle-footer-scroll-up {
+                    0% { transform: translate3d(0, 0, 0); }
+                    ${pct}% { transform: translate3d(0, -50%, 0); }
+                    100% { transform: translate3d(0, -50%, 0); }
+                }
+            `;
+        }
+
+        function applyFooterScrollDuration(trackEl, pxPerSec, pauseSec, startDelaySec) {
+            if (!trackEl) return;
+            const block = trackEl.querySelector('.idle-ads-footer-block');
+            if (!block) return;
+            trackEl.style.animation = 'none';
+            void trackEl.offsetHeight;
+            const blockHeight = block.offsetHeight;
+            const speed = parseScrollSpeed(pxPerSec, 42);
+            const scrollSec = Math.max(5, Math.min(120, blockHeight / speed));
+            const pause = parsePauseSeconds(pauseSec, 1);
+            const startDelay = parsePauseSeconds(startDelaySec, 0);
+            const totalSec = scrollSec + pause;
+            const scrollPct = pause > 0 ? (scrollSec / totalSec) * 100 : 100;
+            setFooterScrollKeyframes(scrollPct);
+            trackEl.style.setProperty('--idle-footer-scroll-duration', totalSec + 's');
+            trackEl.style.animationDelay = startDelay > 0 ? startDelay + 's' : '';
+            trackEl.style.animation = '';
+        }
+
+        function applyNewServiceScrollDuration(scrollEl, pxPerSec) {
+            if (!scrollEl) return;
+            scrollEl.style.animation = 'none';
+            void scrollEl.offsetHeight;
+            const halfWidth = scrollEl.scrollWidth / 2;
+            const speed = parseScrollSpeed(pxPerSec, 60);
+            const duration = Math.max(8, Math.min(120, halfWidth / speed));
+            scrollEl.style.setProperty('--new-service-scroll-duration', duration + 's');
+            scrollEl.style.animation = '';
+        }
+
+        function applyTickerScrollDuration(scrollEl, pxPerSec) {
+            if (!scrollEl) return;
+            scrollEl.style.animation = 'none';
+            void scrollEl.offsetHeight;
+            const halfWidth = scrollEl.scrollWidth / 2;
+            const speed = parseScrollSpeed(pxPerSec, 42);
+            const duration = Math.max(8, Math.min(180, halfWidth / speed));
+            scrollEl.style.setProperty('--ticker-scroll-duration', duration + 's');
+            scrollEl.style.animation = '';
+        }
+
+        function renderFooterScrollContent(bodyEl, lines, style, pxPerSec, gapLines, pauseSec, startDelaySec) {
+            if (!bodyEl) return;
+            bodyEl.innerHTML = '';
+            const track = document.createElement('div');
+            track.className = 'idle-ads-footer-scroll';
+            const gap = parseGapLines(gapLines, 1);
+            track.style.setProperty('--idle-footer-gap-lines', String(gap));
+            for (let i = 0; i < 2; i += 1) {
+                const block = document.createElement('div');
+                block.className = 'idle-ads-footer-block';
+                if (i === 1) block.setAttribute('aria-hidden', 'true');
+                block.textContent = lines;
+                block.style.color = style.color;
+                block.style.fontFamily = style.fontFamily;
+                block.style.fontSize = style.fontSize;
+                block.style.fontWeight = style.fontWeight;
+                block.style.fontStyle = style.fontStyle;
+                track.appendChild(block);
+            }
+            bodyEl.appendChild(track);
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => applyFooterScrollDuration(track, pxPerSec, pauseSec, startDelaySec));
+            });
+        }
+
+        function formatFooterAdLines(text) {
+            const raw = String(text || '').trim();
+            if (!raw) return '';
+            if (/[-–—•·]\s+/.test(raw)) {
+                return raw
+                    .split(/\s*[-–—•·]\s+/)
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                    .join('\n');
+            }
+            return raw;
+        }
+
         function renderAdsOverlayFromSettings() {
             const s = qrDisplaySettings || {};
-            const slides = _parseSlides(s.qrAdsSlides);
-            const servicesText = String(s.qrAdsServicesText || '').trim();
 
-            // Removed overlay text inside the image frame (idleAdsServicesText)
-            // const servicesEl = document.getElementById('idleAdsServicesText');
-            // if (servicesEl) servicesEl.textContent = servicesText || '...';
-
-            // Footer text: label đứng im, nội dung chạy chữ
             const iconEl = document.getElementById('idleAdsFooterIcon');
             const labelEl = document.getElementById('idleAdsFooterLabelText');
-            const text1El = document.getElementById('idleAdsFooterText1');
-            const text2El = document.getElementById('idleAdsFooterText2');
+            const bodyEl = document.getElementById('idleAdsFooterText');
 
-            if (iconEl || labelEl || text1El || text2El) {
+            if (iconEl || labelEl || bodyEl) {
                 const tickerText = (s.qrAdText ||
                     'Phòng khám chuyên khoa Phụ Sản Đại Anh - Khám thai, siêu âm 5D, sàng lọc dị tật, khám phụ khoa, tư vấn vô sinh hiếm muộn...').trim();
-                const labelText = (s.qrAdLabelText || 'DỊCH VỤ NỔI BẬT').trim();
+                const labelText = (s.qrAdLabelText || 'DỊCH VỤ PHÒNG KHÁM').trim();
                 const textColor = s.qrAdColor || '#fbbf24';
                 const labelColor = s.qrAdLabelColor || '#38bdf8';
                 const fontSize = parseInt(s.qrAdFontSize || '20', 10) || 20;
                 const fontFamily = s.qrAdFontFamily || 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
                 const fontWeight = (s.qrAdFontWeight || 'normal') === 'bold' ? 'bold' : 'normal';
                 const fontStyle = (s.qrAdFontStyle || 'normal') === 'italic' ? 'italic' : 'normal';
+                const scrollSpeed = parseScrollSpeed(s.qrAdScrollSpeed, 42);
+                const gapLines = parseGapLines(s.qrAdScrollGapLines, 1);
+                const pauseSec = parsePauseSeconds(s.qrAdScrollPauseSeconds, 1);
+                const startDelaySec = parsePauseSeconds(s.qrAdScrollStartDelaySeconds, 0);
+                const footerScrollKey = JSON.stringify({
+                    tickerText, labelText, textColor, labelColor, fontSize, fontFamily, fontWeight, fontStyle,
+                    scrollSpeed, gapLines, pauseSec, startDelaySec,
+                });
 
                 if (iconEl) iconEl.style.color = labelColor;
                 if (labelEl) {
@@ -1589,120 +3398,108 @@
                     labelEl.style.fontFamily = fontFamily;
                 }
 
-                if (text1El) {
-                    text1El.textContent = tickerText;
-                    text1El.style.color = textColor;
-                    text1El.style.fontFamily = fontFamily;
-                    text1El.style.fontSize = fontSize + 'px';
-                    text1El.style.fontWeight = fontWeight;
-                    text1El.style.fontStyle = fontStyle;
-                }
-                if (text2El) {
-                    text2El.textContent = tickerText;
-                    text2El.style.color = textColor;
-                    text2El.style.fontFamily = fontFamily;
-                    text2El.style.fontSize = fontSize + 'px';
-                    text2El.style.fontWeight = fontWeight;
-                    text2El.style.fontStyle = fontStyle;
+                if (bodyEl && footerScrollKey !== lastFooterScrollSettingsKey) {
+                    lastFooterScrollSettingsKey = footerScrollKey;
+                    const lines = formatFooterAdLines(tickerText);
+                    renderFooterScrollContent(bodyEl, lines, {
+                        color: textColor,
+                        fontFamily,
+                        fontSize: fontSize + 'px',
+                        fontWeight,
+                        fontStyle,
+                    }, scrollSpeed, gapLines, pauseSec, startDelaySec);
                 }
             }
 
-            // Slides
-            const img = document.getElementById('idleAdsSlideImg');
-            const video = document.getElementById('idleAdsSlideVideo');
-            const frame = document.getElementById('idleAdsSlideYoutube');
-            const current = slides.length ? slides[Math.min(adsSlideIdx, slides.length - 1)] : '';
-            const kind = _getSlideKind(current);
+            if (idleOverlayShowing) startFooterMediaSlideshow();
+            else stopFooterMediaSlideshow();
+            applyMediaLogoSettings();
+            applyBgmSettings();
+        }
 
-            if (img) {
-                if (!current || kind !== 'image') {
-                    img.style.display = 'none';
-                    img.removeAttribute('src');
-                } else {
-                    img.style.display = 'block';
-                    img.src = current;
+        function normalizeMediaLogoSpinDir(value) {
+            const v = String(value || 'none').trim().toLowerCase();
+            return v === 'left' || v === 'right' ? v : 'none';
+        }
+
+        const CLINIC_LOGO_FILENAME = 'logo_phu_san_dai_anh.PNG';
+
+        function clinicLogoUrl(s) {
+            const settings = s || qrDisplaySettings || {};
+            const v = String(settings.clinicLogoVersion || '').trim();
+            return v ? `${CLINIC_LOGO_FILENAME}?v=${encodeURIComponent(v)}` : CLINIC_LOGO_FILENAME;
+        }
+
+        function applyClinicHeaderLogos() {
+            const url = clinicLogoUrl();
+            document.querySelectorAll('.tv-logo img').forEach((img) => {
+                if (img.dataset.clinicLogoSrc !== url) {
+                    img.dataset.clinicLogoSrc = url;
+                    img.src = url;
                 }
+            });
+        }
+
+        function isMediaLogoEnabled(s) {
+            const raw = s.qrAdsMediaLogoEnabled;
+            if (raw !== null && raw !== undefined && String(raw).trim() !== '') {
+                return _parseBool(raw, false);
             }
+            if ((s.qrAdsMediaLogoUrl || '').trim()) return true;
+            return _parseBool(s.qrAdsAlwaysOn, false);
+        }
 
-            if (video) {
-                const isVideo = kind === 'video';
-                if (!current || !isVideo) {
-                    video.pause?.();
-                    video.style.display = 'none';
-                    video.removeAttribute('src');
-                    video.load?.();
-                } else {
-                    video.style.display = 'block';
-                    video.src = current;
-                    video.play?.().catch(() => {});
-                }
+        function applyLogoFlipAnimation(flipEl, dir, flipSec) {
+            if (!flipEl) return;
+            flipEl.classList.remove('is-flip-left', 'is-flip-right');
+            flipEl.style.removeProperty('transform');
+            flipEl.style.removeProperty('animation');
+            flipEl.style.removeProperty('-webkit-animation');
+            if (dir !== 'left' && dir !== 'right') return;
+            void flipEl.offsetWidth;
+            const animName = dir === 'right' ? 'media-logo-flip-y-right' : 'media-logo-flip-y-left';
+            const className = dir === 'right' ? 'is-flip-right' : 'is-flip-left';
+            flipEl.style.setProperty('--media-logo-flip-duration', flipSec + 's');
+            flipEl.classList.add(className);
+            const animValue = animName + ' ' + flipSec + 's linear infinite';
+            flipEl.style.setProperty('-webkit-animation', animValue);
+            flipEl.style.setProperty('animation', animValue);
+        }
+
+        function applyMediaLogoSettings() {
+            const s = qrDisplaySettings || {};
+            const wrap = document.getElementById('idleAdsFooterMediaLogoWrap');
+            const flip = document.getElementById('idleAdsFooterMediaLogoFlip');
+            const el = document.getElementById('idleAdsFooterMediaLogo');
+            if (!wrap || !flip || !el) return;
+            const enabled = isMediaLogoEnabled(s);
+            if (!enabled) {
+                wrap.style.display = 'none';
+                wrap.setAttribute('aria-hidden', 'true');
+                el.removeAttribute('src');
+                flip.classList.remove('is-flip-left', 'is-flip-right');
+                flip.style.removeProperty('animation');
+                flip.style.removeProperty('-webkit-animation');
+                applyClinicHeaderLogos();
+                return;
             }
-
-            if (frame) {
-                if (!current || kind !== 'youtube') {
-                    frame.style.display = 'none';
-                    frame.removeAttribute('src');
-                } else {
-                    frame.style.display = 'block';
-                    const embedSrc = _toYouTubeEmbedSrc(current);
-                    if (embedSrc) frame.src = embedSrc;
-                }
+            const url = clinicLogoUrl(s);
+            const size = Math.max(5, Math.min(45, parseInt(s.qrAdsMediaLogoSizePercent || '18', 10) || 18));
+            const flipDir = normalizeMediaLogoSpinDir(s.qrAdsMediaLogoSpinDir);
+            const flipSec = Math.max(4, Math.min(120, parseFloat(s.qrAdsMediaLogoSpinSpeedSec || '10') || 10));
+            if (el.dataset.logoSrc !== url) {
+                el.dataset.logoSrc = url;
+                el.src = url;
             }
-
-            // slideshow timer (only when overlay is showing)
-            if (idleOverlayShowing && (img || video)) {
-                if (adsSlideTimer) clearInterval(adsSlideTimer);
-                adsSlideTimer = null;
-                const slideInterval = Math.max(3, parseInt(s.qrAdsSlideIntervalSeconds || '10', 10) || 10);
-                if (slides.length > 1) {
-                    adsSlideTimer = setInterval(() => {
-                        const s2 = qrDisplaySettings || {};
-                        const slides2 = _parseSlides(s2.qrAdsSlides);
-                        if (!slides2.length) return;
-                        adsSlideIdx = (adsSlideIdx + 1) % slides2.length;
-                        const next = slides2[adsSlideIdx];
-                        const kind2 = _getSlideKind(next);
-
-                        const img2 = document.getElementById('idleAdsSlideImg');
-                        const video2 = document.getElementById('idleAdsSlideVideo');
-                        const frame2 = document.getElementById('idleAdsSlideYoutube');
-
-                        if (img2) {
-                            if (kind2 !== 'image') {
-                                img2.style.display = 'none';
-                                img2.removeAttribute('src');
-                            } else {
-                                img2.style.display = 'block';
-                                img2.src = next;
-                            }
-                        }
-                        if (video2) {
-                            const isVideo2 = kind2 === 'video';
-                            if (!isVideo2) {
-                                video2.pause?.();
-                                video2.style.display = 'none';
-                                video2.removeAttribute('src');
-                                video2.load?.();
-                            } else {
-                                video2.style.display = 'block';
-                                video2.src = next;
-                                video2.play?.().catch(() => {});
-                            }
-                        }
-                        if (frame2) {
-                            if (kind2 !== 'youtube') {
-                                frame2.style.display = 'none';
-                                frame2.removeAttribute('src');
-                            } else {
-                                frame2.style.display = 'block';
-                                const embedSrc2 = _toYouTubeEmbedSrc(next);
-                                if (embedSrc2) frame2.src = embedSrc2;
-                            }
-                        }
-                    }, slideInterval * 1000);
-                }
-                startAdsClock();
-            }
+            wrap.style.display = 'block';
+            wrap.setAttribute('aria-hidden', 'false');
+            wrap.style.setProperty('--media-logo-size', size + '%');
+            wrap.style.width = size + '%';
+            const startFlip = () => applyLogoFlipAnimation(flip, flipDir, flipSec);
+            if (el.complete && el.naturalWidth > 0) startFlip();
+            else el.onload = startFlip;
+            startFlip();
+            applyClinicHeaderLogos();
         }
 
         function setIdleOverlayVisible(visible) {
@@ -1723,12 +3520,15 @@
                 }
                 renderAdsOverlayFromSettings();
                 startAdsClock();
+                applyBgmSettings();
+                startOverlayModeRotation();
             } else {
                 overlay.classList.remove('show');
                 overlay.setAttribute('aria-hidden', 'true');
                 layout.style.display = '';
                 idleOverlayShowing = false;
                 stopAdsTimers();
+                applyBgmSettings();
             }
         }
 
@@ -1760,78 +3560,6 @@
             }
         }
 
-        function setDoctorPhotoByNameTo(imgEl, nameEl, doctorName, photoKey) {
-            if (!imgEl || !nameEl) return;
-            const wrapEl = imgEl.parentElement;
-            const key = (photoKey !== undefined && photoKey !== null && String(photoKey).trim()) ? String(photoKey).trim() : _slugifyDoctorKey(doctorName);
-            nameEl.textContent = doctorName ? String(doctorName) : '--';
-            if (!key) {
-                imgEl.style.display = 'none';
-                imgEl.removeAttribute('src');
-                if (wrapEl) wrapEl.classList.add('no-photo');
-                return;
-            }
-
-            const exts = ['jpg', 'jpeg', 'png', 'webp'];
-            let idx = 0;
-
-            const tryNext = () => {
-                if (idx >= exts.length) {
-                    imgEl.style.display = 'none';
-                    imgEl.removeAttribute('src');
-                    if (wrapEl) wrapEl.classList.add('no-photo');
-                    return;
-                }
-                const ext = exts[idx++];
-                const src = `/qr-ads-doctor-images/${key}.${ext}`;
-                const probe = new Image();
-                probe.onload = () => {
-                    imgEl.src = src;
-                    imgEl.style.display = 'block';
-                    if (wrapEl) wrapEl.classList.remove('no-photo');
-                };
-                probe.onerror = () => {
-                    tryNext();
-                };
-                probe.src = src;
-            };
-
-            tryNext();
-        }
-
-        function updateDoctorSessionUI() {
-            const row = document.querySelector('.tv-stats-row');
-            // Hiển thị ảnh bác sĩ theo lịch làm việc (không phụ thuộc có/không có người chờ/đang khám)
-            const showDoctor = !!(cachedSessionDoctorName && String(cachedSessionDoctorName).trim());
-            if (row) row.classList.toggle('doctor-active', showDoctor);
-
-            if (!els.doctorPhotoImg || !els.doctorPhotoName) return;
-            if (!showDoctor) {
-                els.doctorPhotoImg.style.display = 'none';
-                els.doctorPhotoImg.removeAttribute('src');
-                els.doctorPhotoName.textContent = '--';
-                const wrap = document.getElementById('doctorPhotoWrap');
-                if (wrap) wrap.classList.add('no-photo');
-                return;
-            }
-            const displayName = cachedDoctorsArray.length >= 2 ? cachedDoctorsArray.join('\n') : (cachedSessionDoctorName || '');
-            const imgKey = cachedDoctorsArray.length >= 2 ? 'multiple' : null;
-            setDoctorPhotoByNameTo(els.doctorPhotoImg, els.doctorPhotoName, displayName, imgKey);
-
-            // Overlay (ads) doctor card
-            if (els.adsDoctorPhotoImg && els.adsDoctorPhotoName) {
-                if (!showDoctor) {
-                    els.adsDoctorPhotoImg.style.display = 'none';
-                    els.adsDoctorPhotoImg.removeAttribute('src');
-                    els.adsDoctorPhotoName.textContent = '--';
-                    const adsWrap = els.adsDoctorPhotoImg.parentElement;
-                    if (adsWrap) adsWrap.classList.add('no-photo');
-                } else {
-                    setDoctorPhotoByNameTo(els.adsDoctorPhotoImg, els.adsDoctorPhotoName, displayName, imgKey);
-                }
-            }
-        }
-
         function applyTickerSettings() {
             try {
                 const s = qrDisplaySettings || {};
@@ -1844,6 +3572,12 @@
                 const fontFamily = s.qrAdFontFamily || 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
                 const fontWeight = (s.qrAdFontWeight || 'normal') === 'bold' ? 'bold' : 'normal';
                 const fontStyle = (s.qrAdFontStyle || 'normal') === 'italic' ? 'italic' : 'normal';
+                const scrollSpeed = parseScrollSpeed(s.qrAdScrollSpeed, 42);
+                const settingsKey = JSON.stringify({
+                    text, color, labelText, labelColor, fontSize, fontFamily, fontWeight, fontStyle, scrollSpeed,
+                });
+                if (settingsKey === lastTickerSettingsKey) return;
+                lastTickerSettingsKey = settingsKey;
 
                 const style = { color, fontSize: (fontSize || 20) + 'px', fontFamily, fontWeight, fontStyle };
                 [els.tvTickerText, els.tvTickerTextCopy].forEach((el) => {
@@ -1859,9 +3593,139 @@
                     els.tvTickerLabel.style.color = labelColor;
                     els.tvTickerLabel.innerHTML = `<i class="fas fa-star"></i> ${labelText}`;
                 }
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        applyTickerScrollDuration($('tvTickerScroll'), scrollSpeed);
+                    });
+                });
             } catch (e) {
                 console.error('Lỗi apply ticker:', e);
             }
+        }
+
+        function applyScheduleNoticeSettings() {
+            const s = qrDisplaySettings || {};
+            const text = (s.qrScheduleNoticeText || '').trim();
+            const display = text || '--';
+            const color = s.qrScheduleNoticeColor || '#e5e7eb';
+            const fontSize = parseInt(s.qrScheduleNoticeFontSize || '18', 10) || 18;
+            const fontFamily = s.qrScheduleNoticeFontFamily || 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+            const fontWeight = (s.qrScheduleNoticeFontWeight || 'normal') === 'bold' ? 'bold' : 'normal';
+            const fontStyle = (s.qrScheduleNoticeFontStyle || 'normal') === 'italic' ? 'italic' : 'normal';
+            const effect = normalizeScheduleNoticeEffect(s.qrScheduleNoticeEffect);
+            const labelText = (s.qrScheduleNoticeLabelText || 'Thông báo').trim() || 'Thông báo';
+            const labelColor = s.qrScheduleNoticeLabelColor || '#94a3b8';
+            const labelFontSize = parseInt(s.qrScheduleNoticeLabelFontSize || '13', 10) || 13;
+            const labelFontFamily = s.qrScheduleNoticeLabelFontFamily || 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+            const labelFontWeight = (s.qrScheduleNoticeLabelFontWeight || 'normal') === 'bold' ? 'bold' : 'normal';
+            const labelFontStyle = (s.qrScheduleNoticeLabelFontStyle || 'normal') === 'italic' ? 'italic' : 'normal';
+            const labelHidden = _parseBool(s.qrScheduleNoticeLabelHidden, false);
+            [els.adsSchedNotice, els.schedNotice].forEach((el) => {
+                if (!el) return;
+                el.style.color = color;
+                el.style.fontSize = fontSize + 'px';
+                el.style.fontFamily = fontFamily;
+                el.style.fontWeight = fontWeight;
+                el.style.fontStyle = fontStyle;
+                renderScheduleNoticeContent(el, display, effect, {
+                    color,
+                    fontSize,
+                    fontFamily,
+                    fontWeight,
+                    fontStyle,
+                });
+            });
+            [els.adsSchedNoticeLabel, els.schedNoticeLabel].forEach((el) => {
+                if (!el) return;
+                el.textContent = labelText;
+                el.style.color = labelColor;
+                el.style.fontSize = labelFontSize + 'px';
+                el.style.fontFamily = labelFontFamily;
+                el.style.fontWeight = labelFontWeight;
+                el.style.fontStyle = labelFontStyle;
+                el.setAttribute('aria-hidden', labelHidden ? 'true' : 'false');
+                const row = el.closest('.tv-schedule-row--notice, .tv-schedule-notice-half');
+                if (row) row.classList.toggle('is-notice-label-hidden', labelHidden);
+            });
+        }
+
+        const SCHEDULE_NOTICE_FX_CLASSES = [
+            'tv-schedule-notice-fx--waveText',
+            'tv-schedule-notice-fx--glowPulse',
+            'tv-schedule-notice-fx--fadeOut',
+            'tv-schedule-notice-fx--luxury3d',
+            'tv-schedule-notice-fx--snowParticles',
+        ];
+
+        function normalizeScheduleNoticeEffect(value) {
+            const v = String(value || 'none').trim();
+            return ['waveText', 'glowPulse', 'fadeOut', 'luxury3d', 'snowParticles'].includes(v) ? v : 'none';
+        }
+
+        function destroyScheduleNoticeSnowFx(el) {
+            if (window.ScheduleNoticeSnowFx) ScheduleNoticeSnowFx.destroy(el);
+        }
+
+        function clearScheduleNoticeFxClasses(el) {
+            destroyScheduleNoticeSnowFx(el);
+            SCHEDULE_NOTICE_FX_CLASSES.forEach((cls) => el.classList.remove(cls));
+        }
+
+        function renderScheduleNoticeContent(el, text, effect, styleOpts) {
+            if (!el) return;
+            const style = styleOpts || {};
+            const sig = JSON.stringify({
+                text: String(text || ''),
+                effect,
+                color: style.color,
+                fontSize: style.fontSize,
+                fontFamily: style.fontFamily,
+                fontWeight: style.fontWeight,
+                fontStyle: style.fontStyle,
+            });
+            if (el.dataset.noticeFxSig === sig) return;
+            el.dataset.noticeFxSig = sig;
+            clearScheduleNoticeFxClasses(el);
+            const raw = String(text || '--');
+            if (effect === 'snowParticles' && raw !== '--') {
+                if (window.ScheduleNoticeSnowFx) {
+                    ScheduleNoticeSnowFx.mount(el, {
+                        text: raw,
+                        color: (styleOpts && styleOpts.color) || el.style.color || '#e5e7eb',
+                        fontSize: (styleOpts && styleOpts.fontSize) || 18,
+                        fontFamily: (styleOpts && styleOpts.fontFamily) || 'sans-serif',
+                        fontWeight: (styleOpts && styleOpts.fontWeight) || 'normal',
+                        fontStyle: (styleOpts && styleOpts.fontStyle) || 'normal',
+                    });
+                } else {
+                    el.textContent = raw;
+                }
+                return;
+            }
+            if ((effect === 'waveText' || effect === 'luxury3d') && raw !== '--') {
+                el.textContent = '';
+                el.classList.add(
+                    effect === 'waveText'
+                        ? 'tv-schedule-notice-fx--waveText'
+                        : 'tv-schedule-notice-fx--luxury3d'
+                );
+                let charIndex = 0;
+                raw.split('\n').forEach((line, lineIndex) => {
+                    if (lineIndex > 0) el.appendChild(document.createElement('br'));
+                    for (const ch of line) {
+                        const span = document.createElement('span');
+                        span.className = 'tv-schedule-notice-char';
+                        span.textContent = ch === ' ' ? '\u00a0' : ch;
+                        span.style.animationDelay = (charIndex * (effect === 'luxury3d' ? 0.07 : 0.08)) + 's';
+                        el.appendChild(span);
+                        charIndex += 1;
+                    }
+                });
+                return;
+            }
+            el.textContent = raw;
+            if (effect === 'glowPulse') el.classList.add('tv-schedule-notice-fx--glowPulse');
+            if (effect === 'fadeOut') el.classList.add('tv-schedule-notice-fx--fadeOut');
         }
 
         function applyNewServiceSettings() {
@@ -1876,6 +3740,12 @@
                 const fontFamily = s.qrNewServiceFontFamily || 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
                 const fontWeight = (s.qrNewServiceFontWeight || 'normal') === 'bold' ? 'bold' : 'normal';
                 const fontStyle = (s.qrNewServiceFontStyle || 'normal') === 'italic' ? 'italic' : 'normal';
+                const scrollSpeed = parseScrollSpeed(s.qrNewServiceScrollSpeed, 60);
+                const settingsKey = JSON.stringify({
+                    text, color, labelText, labelColor, fontSize, fontFamily, fontWeight, fontStyle, scrollSpeed,
+                });
+                if (settingsKey === lastNewServiceSettingsKey) return;
+                lastNewServiceSettingsKey = settingsKey;
 
                 [els.tvNewServiceText, els.tvNewServiceTextCopy].forEach((el) => {
                     if (!el) return;
@@ -1904,6 +3774,13 @@
                     els.adsNewServiceLabel.innerHTML = `<i class="fas fa-sparkles"></i> ${labelText}`;
                     els.adsNewServiceLabel.style.fontFamily = fontFamily;
                 }
+
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        applyNewServiceScrollDuration($('tvNewServiceScroll'), scrollSpeed);
+                        applyNewServiceScrollDuration($('adsNewServiceScroll'), scrollSpeed);
+                    });
+                });
             } catch (e) {
                 console.error('Lỗi apply dịch vụ mới:', e);
             }
@@ -1921,28 +3798,123 @@
             }, 10000);
         }
 
+        async function refreshDisplaySettingsSafe() {
+            try { await loadAdsContactFromHomeContent(); } catch (e) { console.error('Lỗi load home-content:', e); }
+            try { await loadQrDisplaySettings(); } catch (e) { console.error('Lỗi load qr-display-settings:', e); }
+            applyClinicNameSettings();
+            applyClinicHeaderLogos();
+            applyTickerSettings();
+            applyNewServiceSettings();
+            applyScheduleNoticeSettings();
+            renderAdsOverlayFromSettings();
+            applyBgmSettings();
+            armFooterMediaSoundForDisplay();
+            if (wantsFooterMediaSound()) {
+                const video = document.getElementById('idleAdsFooterMediaVideo');
+                if (video && video.style.display !== 'none') applyFooterVideoSound(video);
+                const iframe = document.getElementById('idleAdsFooterMediaYoutube');
+                if (iframe && iframe.style.display !== 'none') tryYouTubeUnmute(iframe);
+            }
+            {
+                const slides = footerMediaSlides || [];
+                const url = slides[footerMediaIndex] || '';
+                applyVideoCaptionSettings(url ? getFooterSlideKind(url) : '');
+            }
+            syncOverlayPresentationMode();
+            evaluateIdleOverlay();
+        }
+
         document.addEventListener('DOMContentLoaded', async function () {
             cacheEls();
+
+            ['pointerdown', 'keydown'].forEach((evt) => {
+                document.addEventListener(evt, unlockFooterMediaSound, { once: false, capture: true });
+            });
+
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden && idleOverlayShowing) {
+                    ensureFooterMediaPlayback();
+                }
+            });
+            window.addEventListener('pageshow', () => {
+                if (idleOverlayShowing) {
+                    ensureFooterMediaPlayback();
+                }
+            });
+            window.addEventListener('online', () => {
+                if (idleOverlayShowing) reloadCurrentFooterMediaSlide();
+            });
+
+            // Chế độ TV: ?tv=1 — full màn hình, viewport cố định để giống máy tính
+            (function initTvDisplayMode() {
+                const params = new URLSearchParams(location.search);
+                if (params.get('tv') !== '1') return;
+
+                document.documentElement.classList.add('tv-mode');
+                document.body.classList.add('tv-mode');
+                armFooterMediaSoundForDisplay();
+                unlockFooterMediaSound();
+
+                let viewportResizeTimer = null;
+                function applyTvViewport() {
+                    const w = Math.max(
+                        window.screen && window.screen.width ? window.screen.width : 0,
+                        window.innerWidth || 0,
+                        document.documentElement.clientWidth || 0
+                    );
+                    if (w < 720) return;
+                    const meta = document.querySelector('meta[name="viewport"]');
+                    if (!meta) return;
+                    meta.setAttribute(
+                        'content',
+                        `width=${w}, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover`
+                    );
+                }
+                function refreshTvLayout() {
+                    applyTvViewport();
+                    requestAnimationFrame(() => {
+                        renderAdsOverlayFromSettings();
+                        applyNewServiceSettings();
+                        if (idleOverlayShowing) {
+                            // Không remount slideshow khi chỉ resize — tránh đen video / mất tiếng
+                            ensureFooterMediaPlayback();
+                            reapplyCurrentFooterMediaAspect();
+                            syncOverlayPresentationMode();
+                        }
+                    });
+                }
+                applyTvViewport();
+                window.addEventListener('resize', () => {
+                    if (viewportResizeTimer) clearTimeout(viewportResizeTimer);
+                    viewportResizeTimer = setTimeout(() => {
+                        refreshTvLayout();
+                        reapplyCurrentFooterMediaAspect();
+                    }, 200);
+                });
+                window.addEventListener('orientationchange', () => {
+                    setTimeout(refreshTvLayout, 300);
+                });
+
+                const tryFullscreen = () => {
+                    const root = document.documentElement;
+                    if (root.requestFullscreen && !document.fullscreenElement) {
+                        root.requestFullscreen().catch(() => {});
+                    }
+                };
+                tryFullscreen();
+                document.addEventListener('click', tryFullscreen, { once: true });
+            })();
+
             updateClock();
             setInterval(updateClock, 1000);
 
             startAutoRefresh();
 
-            await loadAdsContactFromHomeContent();
-            await loadQrDisplaySettings();
-            applyTickerSettings();
-            applyNewServiceSettings();
-            renderAdsOverlayFromSettings();
-            evaluateIdleOverlay();
+            await refreshDisplaySettingsSafe();
 
             // Tự đồng bộ cấu hình từ server
             setInterval(async () => {
-                await loadAdsContactFromHomeContent();
-                await loadQrDisplaySettings();
-                applyTickerSettings();
-                applyNewServiceSettings();
-                renderAdsOverlayFromSettings();
-                evaluateIdleOverlay();
+                await refreshDisplaySettingsSafe();
             }, 30000);
         });
     </script>

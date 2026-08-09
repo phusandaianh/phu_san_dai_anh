@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hồ sơ cặp vợ chồng vô sinh - Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="admin-clinical-shell.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root { --c:#0369a1; --cd:#0c4a6e; --a:#e0f2fe; --b:#bae6fd; }
+        body { margin:0; min-height:100vh; background:radial-gradient(ellipse 70% 40% at 0% 0%,rgba(3,105,161,.10),transparent),#f8fafc; font-family:Roboto,"Segoe UI",sans-serif; }
+        .wrap { max-width:1180px; margin:0 auto; padding:20px 16px 40px; }
+        .card { background:#fff; border:1px solid var(--b); border-radius:14px; padding:1.25rem 1.5rem; margin-bottom:1rem; }
+        .card h2,.card h3 { margin:0 0 .8rem; color:var(--cd); }
+        .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:12px; }
+        label { font-weight:600; font-size:.9rem; color:#334155; display:block; margin-bottom:4px; }
+        input,select,textarea { width:100%; padding:9px 11px; border:1.5px solid #e2e8f0; border-radius:8px; box-sizing:border-box; }
+        textarea { min-height:70px; }
+        .btn { border:none; border-radius:8px; padding:10px 16px; font-weight:600; color:#fff; cursor:pointer; background:linear-gradient(135deg,var(--c),var(--cd)); display:inline-flex; align-items:center; gap:6px; }
+        .btn-sec { background:#64748b; }
+        .btns { display:flex; gap:8px; flex-wrap:wrap; }
+        .couple-item { border:1px solid var(--b); border-radius:12px; padding:12px 14px; margin-bottom:8px; cursor:pointer; display:flex; justify-content:space-between; gap:10px; align-items:center; }
+        .couple-item.active { border-color:var(--c); background:var(--a); }
+        .cols { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+        @media (max-width:900px){ .cols { grid-template-columns:1fr; } }
+        .panel { background:#fafafa; border:1px solid #eee; border-radius:12px; padding:12px; }
+        .panel h4 { margin:0 0 8px; color:#701a75; }
+        table { width:100%; border-collapse:collapse; font-size:.85rem; }
+        th,td { padding:6px 8px; border-bottom:1px solid #eee; text-align:left; }
+        th { background:var(--a); }
+        .muted { color:#64748b; }
+        .toast { position:fixed; right:16px; bottom:16px; background:var(--cd); color:#fff; padding:12px 14px; border-radius:8px; display:none; z-index:20; }
+        .toast.err { background:#b91c1c; }
+        .tag { display:inline-block; padding:2px 8px; border-radius:999px; background:#f5d0fe; color:#86198f; font-size:.75rem; font-weight:600; }
+        a.link { color:#a21caf; font-weight:600; }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.PNG" alt="Phòng khám Phụ Sản Đại Anh" onerror="this.style.display='none'">
+            <div class="logo-text">
+                <h1>Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                <p class="admin-slogan">Uy Tín - Chất Lượng</p>
+                <p class="page-subtitle">Hồ sơ cặp vợ chồng vô sinh</p>
+            </div>
+        </div>
+        <nav>
+            <div class="nav-row">
+                <a href="admin.html" class="header-nav-btn"><i class="fas fa-cog"></i> Admin</a>
+                <a href="examination-list.html" class="header-nav-btn" title="Danh sách lịch hẹn trong ngày"><i class="fas fa-calendar-check"></i> Danh sách khám</a>
+                <a href="cervical-examination-analysis.html" class="header-nav-btn"><i class="fas fa-search-plus"></i> Soi cổ tử cung</a>
+                <a href="gynecology-records.html" class="header-nav-btn" title="Quản lý bệnh lý phụ khoa và theo dõi điều trị"><i class="fas fa-venus"></i> Phụ khoa</a>
+                <a href="gynecology-examination.html" class="header-nav-btn" title="Phiếu khám phụ khoa có cấu trúc"><i class="fas fa-notes-medical"></i> Phiếu khám PK</a>
+                <a href="obstetric-examination.html" class="header-nav-btn" title="Phiếu khám sản định kỳ (ANC)"><i class="fas fa-baby"></i> Phiếu khám sản</a>
+                <a href="follicle-monitoring.html" class="header-nav-btn" title="Theo dõi nang vô sinh"><i class="fas fa-circle-notch"></i> Theo dõi nang</a>
+                <a href="andrology-examination.html" class="header-nav-btn" title="Nam khoa / tinh dịch đồ"><i class="fas fa-mars"></i> Nam khoa</a>
+                <a href="infertility-couple.html" class="header-nav-btn active" title="Hồ sơ cặp vợ chồng vô sinh"><i class="fas fa-user-friends"></i> Cặp VS</a>
+            </div>
+        </nav>
+    </header>
+<main class="wrap">
+    <div class="card">
+        <h2>Tạo / cập nhật cặp</h2>
+        <input type="hidden" id="couple-id">
+        <div class="row">
+            <div><label>Bệnh nhân nữ *</label><select id="female-select"><option value="">-- Chọn nữ --</option></select></div>
+            <div><label>Bệnh nhân nam *</label><select id="male-select"><option value="">-- Chọn nam --</option></select></div>
+            <div><label>Nhãn cặp</label><input id="couple-label" placeholder="VD: Vợ chồng Nguyễn"></div>
+            <div>
+                <label>Trạng thái</label>
+                <select id="couple-status">
+                    <option value="active">Đang điều trị</option>
+                    <option value="pregnant">Có thai</option>
+                    <option value="closed">Đóng</option>
+                </select>
+            </div>
+        </div>
+        <div class="row"><div style="grid-column:1/-1"><label>Ghi chú</label><textarea id="couple-notes"></textarea></div></div>
+        <div class="btns">
+            <button class="btn" type="button" onclick="saveCouple()"><i class="fas fa-save"></i> Lưu cặp</button>
+            <button class="btn btn-sec" type="button" onclick="resetCoupleForm()">Làm mới</button>
+            <button class="btn btn-sec" type="button" onclick="loadCouples()">Làm mới danh sách</button>
+        </div>
+        <div style="margin-top:12px">
+            <input id="search-q" placeholder="Tìm theo tên / SĐT / nhãn..." oninput="debounceLoad()">
+        </div>
+        <div id="couple-list" class="muted" style="margin-top:12px">Đang tải...</div>
+    </div>
+
+    <div class="card" id="summary-card" style="display:none">
+        <h2>Tóm tắt cặp <span id="summary-title"></span></h2>
+        <div class="btns" style="margin-bottom:12px">
+            <a class="btn" id="link-female-follicle" href="#" target="_blank"><i class="fas fa-circle-notch"></i> Theo dõi nang (nữ)</a>
+            <a class="btn" id="link-female-exam" href="#" target="_blank" style="background:#7c3aed"><i class="fas fa-notes-medical"></i> Phiếu khám PK</a>
+            <a class="btn" id="link-male-andro" href="#" target="_blank" style="background:#2563eb"><i class="fas fa-mars"></i> Tinh dịch đồ (nam)</a>
+        </div>
+        <div class="cols">
+            <div class="panel">
+                <h4><i class="fas fa-venus"></i> Nữ — theo dõi nang</h4>
+                <div id="female-follicle" class="muted">—</div>
+                <h4 style="margin-top:14px"><i class="fas fa-notes-medical"></i> Phiếu khám / SA PK gần đây</h4>
+                <div id="female-exams" class="muted">—</div>
+            </div>
+            <div class="panel">
+                <h4><i class="fas fa-mars"></i> Nam — tinh dịch đồ</h4>
+                <div id="male-andro" class="muted">—</div>
+            </div>
+        </div>
+    </div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+let patients = [];
+let currentCoupleId = null;
+let searchTimer = null;
+const params = new URLSearchParams(location.search);
+
+function toast(m,e){const t=document.getElementById('toast');t.textContent=m;t.className='toast'+(e?' err':'');t.style.display='block';setTimeout(()=>t.style.display='none',3000);}
+function debounceLoad(){ clearTimeout(searchTimer); searchTimer=setTimeout(loadCouples, 300); }
+
+async function loadPatients(){
+    const res = await fetch('/api/patients');
+    const data = await res.json();
+    patients = Array.isArray(data) ? data : (data.data || data.patients || []);
+    const female = document.getElementById('female-select');
+    const male = document.getElementById('male-select');
+    patients.forEach(p=>{
+        const label = `${p.full_name||p.name||('BN #'+p.id)}${p.phone?' — '+p.phone:''}`;
+        const o1=document.createElement('option'); o1.value=p.id; o1.textContent=label; female.appendChild(o1);
+        const o2=document.createElement('option'); o2.value=p.id; o2.textContent=label; male.appendChild(o2);
+    });
+}
+
+async function loadCouples(){
+    const q = document.getElementById('search-q').value.trim();
+    const url = '/api/infertility-couples' + (q ? `?q=${encodeURIComponent(q)}` : '');
+    const res = await fetch(url);
+    const rows = await res.json();
+    const box = document.getElementById('couple-list');
+    if(!res.ok){ box.textContent = rows.message||'Lỗi'; return; }
+    if(!rows.length){ box.className='muted'; box.textContent='Chưa có hồ sơ cặp.'; return; }
+    box.className='';
+    box.innerHTML = rows.map(c=>`
+        <div class="couple-item ${c.id===currentCoupleId?'active':''}" onclick="openCouple(${c.id})">
+            <div>
+                <strong>${c.couple_label || ('Cặp #'+c.id)}</strong>
+                <span class="tag">${c.status||''}</span>
+                <div class="muted">♀ ${c.female_name||'—'} (${c.female_phone||'—'}) · ♂ ${c.male_name||'—'} (${c.male_phone||'—'})</div>
+            </div>
+            <button class="btn btn-sec" type="button" onclick="event.stopPropagation(); deleteCouple(${c.id})">Xóa</button>
+        </div>`).join('');
+}
+
+function resetCoupleForm(){
+    currentCoupleId=null;
+    document.getElementById('couple-id').value='';
+    document.getElementById('female-select').value='';
+    document.getElementById('male-select').value='';
+    document.getElementById('couple-label').value='';
+    document.getElementById('couple-status').value='active';
+    document.getElementById('couple-notes').value='';
+    document.getElementById('summary-card').style.display='none';
+    loadCouples();
+}
+
+async function saveCouple(){
+    const female_patient_id = Number(document.getElementById('female-select').value);
+    const male_patient_id = Number(document.getElementById('male-select').value);
+    if(!female_patient_id || !male_patient_id) return toast('Chọn đủ bệnh nhân nữ và nam', true);
+    const body = {
+        female_patient_id, male_patient_id,
+        couple_label: document.getElementById('couple-label').value || null,
+        status: document.getElementById('couple-status').value || 'active',
+        notes: document.getElementById('couple-notes').value || null,
+    };
+    const id = document.getElementById('couple-id').value;
+    const url = id ? `/api/infertility-couples/${id}` : '/api/infertility-couples';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data = await res.json();
+    if(!res.ok) return toast(data.message||'Lỗi', true);
+    toast(data.message||'Đã lưu');
+    currentCoupleId = data.id || data.couple?.id || Number(id);
+    await loadCouples();
+    if(currentCoupleId) await openCouple(currentCoupleId);
+}
+
+async function openCouple(id){
+    currentCoupleId = id;
+    const res = await fetch(`/api/infertility-couples/${id}/summary`);
+    const data = await res.json();
+    if(!res.ok) return toast(data.message||'Lỗi', true);
+    const c = data.couple || {};
+    document.getElementById('couple-id').value = c.id;
+    document.getElementById('female-select').value = c.female_patient_id;
+    document.getElementById('male-select').value = c.male_patient_id;
+    document.getElementById('couple-label').value = c.couple_label||'';
+    document.getElementById('couple-status').value = c.status||'active';
+    document.getElementById('couple-notes').value = c.notes||'';
+    document.getElementById('summary-title').textContent = c.couple_label || ('#'+c.id);
+    document.getElementById('summary-card').style.display='block';
+    document.getElementById('link-female-follicle').href = `/follicle-monitoring.html?patient_id=${c.female_patient_id}`;
+    document.getElementById('link-female-exam').href = `/gynecology-examination.html?patient_id=${c.female_patient_id}`;
+    document.getElementById('link-male-andro').href = `/andrology-examination.html?patient_id=${c.male_patient_id}`;
+
+    const cycles = data.female?.follicle_cycles || [];
+    const fBox = document.getElementById('female-follicle');
+    if(!cycles.length) fBox.innerHTML = '<span class="muted">Chưa có chu kỳ theo dõi nang.</span>';
+    else fBox.innerHTML = `<table><thead><tr><th>Chu kỳ</th><th>Phác đồ</th><th>Lần</th><th>TT</th><th></th></tr></thead><tbody>
+        ${cycles.map(cy=>{
+            const last = (cy.entries||[])[(cy.entries||[]).length-1];
+            return `<tr>
+                <td>${cy.cycle_label||('#'+cy.id)}</td>
+                <td>${cy.protocol||'—'}</td>
+                <td>${cy.entry_count||0}</td>
+                <td>${cy.status||''}</td>
+                <td><a class="link" href="/follicle-monitoring.html?patient_id=${c.female_patient_id}&cycle_id=${cy.id}" target="_blank">Mở</a>
+                    ${last?` · trội ${last.dominant_follicle_mm??'—'}mm / NMTC ${last.endometrium_mm??'—'}`:''}</td>
+            </tr>`;
+        }).join('')}</tbody></table>`;
+
+    const exams = data.female?.gyn_exams || [];
+    const us = data.female?.gyn_ultrasounds || [];
+    const eBox = document.getElementById('female-exams');
+    eBox.innerHTML = `
+        <div class="muted" style="margin-bottom:6px">Khám PK: ${exams.length} · SA PK: ${us.length}</div>
+        <table><thead><tr><th>Loại</th><th>Ngày</th><th>Tóm tắt</th></tr></thead><tbody>
+        ${exams.slice(0,3).map(e=>`<tr><td>Khám</td><td>${e.exam_date?new Date(e.exam_date).toLocaleDateString('vi-VN'):''}</td><td>${e.diagnosis||e.chief_complaint||'—'}</td></tr>`).join('')}
+        ${us.slice(0,3).map(u=>`<tr><td>SA</td><td>${u.exam_date?new Date(u.exam_date).toLocaleDateString('vi-VN'):''}</td><td>NMTC ${u.endometrium_mm??'—'} · O-RADS ${u.orads_score||'—'}</td></tr>`).join('')}
+        ${(!exams.length && !us.length) ? '<tr><td colspan="3" class="muted">Chưa có</td></tr>' : ''}
+        </tbody></table>`;
+
+    const andro = data.male?.andrology_results || [];
+    const mBox = document.getElementById('male-andro');
+    if(!andro.length) mBox.innerHTML = '<span class="muted">Chưa có tinh dịch đồ.</span>';
+    else mBox.innerHTML = `<table><thead><tr><th>Ngày</th><th>Nồng độ</th><th>PR%</th><th>Varicocele</th><th></th></tr></thead><tbody>
+        ${andro.map(a=>`<tr>
+            <td>${a.exam_date?new Date(a.exam_date).toLocaleDateString('vi-VN'):''}</td>
+            <td>${a.sperm_concentration??'—'}</td>
+            <td>${a.progressive_motility??'—'}</td>
+            <td>${a.varicocele_grade||'—'}</td>
+            <td><a class="link" href="/andrology-examination.html?patient_id=${c.male_patient_id}&result_id=${a.id}" target="_blank">Mở</a>
+                · <a class="link" href="/api/print_andrology/${a.id}" target="_blank">In</a></td>
+        </tr>`).join('')}</tbody></table>`;
+
+    await loadCouples();
+}
+
+async function deleteCouple(id){
+    if(!confirm('Xóa hồ sơ cặp #'+id+'?')) return;
+    const res = await fetch(`/api/infertility-couples/${id}`,{method:'DELETE'});
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) return toast(data.message||'Lỗi', true);
+    toast('Đã xóa');
+    if(currentCoupleId===id) resetCoupleForm();
+    else await loadCouples();
+}
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+    await loadPatients();
+    await loadCouples();
+    if(params.get('couple_id')) await openCouple(Number(params.get('couple_id')));
+    if(params.get('female_patient_id')) document.getElementById('female-select').value = params.get('female_patient_id');
+    if(params.get('male_patient_id')) document.getElementById('male-select').value = params.get('male_patient_id');
+});
+</script>
+<script src="ai-assistant.js"></script>
+<script src="footer-loader.js"></script>
+</body>
+</html>

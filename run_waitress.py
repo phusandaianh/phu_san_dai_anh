@@ -32,6 +32,12 @@ from app import (
     ensure_user_status_column,
     ensure_user_security_columns,
     ensure_clinical_result_columns,
+    ensure_gyn_ultrasound_schema,
+    ensure_gyn_exam_schema,
+    ensure_general_ultrasound_schema,
+    ensure_obstetric_exam_schema,
+    ensure_fertility_andrology_schema,
+    ensure_infertility_couple_schema,
     initialize_default_doctors,
     initialize_default_medical_charts,
     initialize_default_templates,
@@ -57,6 +63,12 @@ def initialize_app_data() -> None:
         ensure_user_status_column()
         ensure_user_security_columns()
         ensure_clinical_result_columns()
+        ensure_gyn_ultrasound_schema()
+        ensure_gyn_exam_schema()
+        ensure_general_ultrasound_schema()
+        ensure_obstetric_exam_schema()
+        ensure_fertility_andrology_schema()
+        ensure_infertility_couple_schema()
         initialize_default_doctors()
         initialize_default_medical_charts()
         initialize_default_templates()
@@ -68,6 +80,13 @@ def initialize_app_data() -> None:
 
 
 if __name__ == "__main__":
+    # Sửa lỗi encoding tiếng Việt trong DB nếu phát hiện mojibake
+    try:
+        from fix_vietnamese_encoding import maybe_repair_on_startup
+        maybe_repair_on_startup()
+    except Exception as _vn_enc_err:
+        print("Vietnamese encoding check skipped:", _vn_enc_err)
+
     # Khởi tạo dữ liệu / bảng trước khi chạy server
     initialize_app_data()
 

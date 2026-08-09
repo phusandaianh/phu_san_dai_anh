@@ -1,5 +1,13 @@
-# Uploads - tránh commit file lớn lên GitHub (giới hạn 100MB)
+# Uploads / media lớn
 uploads/
+qr-ads-media/
+ultrasound-media/
+clinic-assets-media/
+doctor-hospital-schedules-media/
+fetal-guide-media/
+flowcharts-media/
+received_dicoms/
+node_modules/
 
 # Python
 __pycache__/
@@ -9,15 +17,35 @@ __pycache__/
 venv/
 .venv/
 
-# Database
+# Database & runtime local
 *.db
+*.db-shm
+*.db-wal
+*.db.bak*
 instance/
-
-# Backups
+mwl.db*
+clinic.db*
 backups/
 
-# IDE
+# Secrets / env máy phòng khám (không đẩy lên GitHub)
+sync_local.env
+.env.*
+!.env.example
+!render.env.example
+
+# Logs
+*.log
+orthanc/db/
+
+# IDE / OS
 .idea/
 .vscode/
 *.swp
 *.swo
+.DS_Store
+Thumbs.db
+
+# Desktop Electron build artifacts
+desktop-electron/dist/
+desktop-electron/runtime/
+desktop-electron/node_modules/

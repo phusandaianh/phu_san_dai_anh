@@ -2,17 +2,23 @@ services:
   - type: web
     name: phong-kham-booking
     runtime: python
-
+    plan: free
     buildCommand: pip install -r requirements.txt
-
     startCommand: gunicorn -b 0.0.0.0:$PORT wsgi:app
-
+    healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
-
       - key: FLASK_ENV
         value: production
-
       - key: SYNC_ROLE
         value: online
+      - key: SYNC_TOKEN
+        sync: false
+      - key: PUBLIC_BOOKING_URL
+        value: https://booking.phusandaianh.io.vn
+      - key: BOOKING_HOST_PREFIXES
+        value: booking.,dangki.
+      # Nên gắn PostgreSQL trên Render và set DATABASE_URL (tránh mất lịch hẹn khi redeploy)
+      - key: DATABASE_URL
+        sync: false

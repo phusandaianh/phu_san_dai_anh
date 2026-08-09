@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nam khoa / Tinh dịch đồ - Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="admin-clinical-shell.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root { --c:#0369a1; --cd:#0c4a6e; --a:#e0f2fe; --b:#bae6fd; }
+        body { margin:0; min-height:100vh; background:radial-gradient(ellipse 70% 40% at 0% 0%,rgba(3,105,161,.10),transparent),#f8fafc; font-family:Roboto,"Segoe UI",sans-serif; }
+        .wrap { max-width:1100px; margin:0 auto; padding:20px 16px 40px; }
+        .card { background:#fff; border:1px solid var(--b); border-radius:14px; padding:1.25rem 1.5rem; margin-bottom:1rem; }
+        .card h2,.card h3 { margin:0 0 .9rem; color:var(--cd); display:flex; align-items:center; gap:8px; border-bottom:2px solid var(--a); padding-bottom:.5rem; }
+        .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:12px; }
+        label { font-weight:600; font-size:.9rem; color:#334155; display:block; margin-bottom:4px; }
+        input,select,textarea { width:100%; padding:9px 11px; border:1.5px solid #e2e8f0; border-radius:8px; box-sizing:border-box; }
+        textarea { min-height:75px; resize:vertical; }
+        .hint { font-size:.8rem; color:#64748b; margin-top:2px; }
+        .btn { border:none; border-radius:8px; padding:10px 16px; font-weight:600; color:#fff; cursor:pointer; background:linear-gradient(135deg,var(--c),var(--cd)); display:inline-flex; align-items:center; gap:6px; }
+        .btn-sec { background:#64748b; }
+        .btns { display:flex; gap:8px; flex-wrap:wrap; }
+        table { width:100%; border-collapse:collapse; font-size:.9rem; }
+        th,td { padding:8px; border-bottom:1px solid #e2e8f0; text-align:left; }
+        th { background:var(--a); color:var(--cd); }
+        .toast { position:fixed; right:16px; bottom:16px; background:var(--cd); color:#fff; padding:12px 14px; border-radius:8px; display:none; z-index:20; }
+        .toast.err { background:#b91c1c; }
+        .muted { color:#64748b; text-align:center; padding:1rem; }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.PNG" alt="Phòng khám Phụ Sản Đại Anh" onerror="this.style.display='none'">
+            <div class="logo-text">
+                <h1>Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                <p class="admin-slogan">Uy Tín - Chất Lượng</p>
+                <p class="page-subtitle">Nam khoa / tinh dịch đồ</p>
+            </div>
+        </div>
+        <nav>
+            <div class="nav-row">
+                <a href="admin.html" class="header-nav-btn"><i class="fas fa-cog"></i> Admin</a>
+                <a href="examination-list.html" class="header-nav-btn" title="Danh sách lịch hẹn trong ngày"><i class="fas fa-calendar-check"></i> Danh sách khám</a>
+                <a href="cervical-examination-analysis.html" class="header-nav-btn"><i class="fas fa-search-plus"></i> Soi cổ tử cung</a>
+                <a href="gynecology-records.html" class="header-nav-btn" title="Quản lý bệnh lý phụ khoa và theo dõi điều trị"><i class="fas fa-venus"></i> Phụ khoa</a>
+                <a href="gynecology-examination.html" class="header-nav-btn" title="Phiếu khám phụ khoa có cấu trúc"><i class="fas fa-notes-medical"></i> Phiếu khám PK</a>
+                <a href="obstetric-examination.html" class="header-nav-btn" title="Phiếu khám sản định kỳ (ANC)"><i class="fas fa-baby"></i> Phiếu khám sản</a>
+                <a href="follicle-monitoring.html" class="header-nav-btn" title="Theo dõi nang vô sinh"><i class="fas fa-circle-notch"></i> Theo dõi nang</a>
+                <a href="andrology-examination.html" class="header-nav-btn active" title="Nam khoa / tinh dịch đồ"><i class="fas fa-mars"></i> Nam khoa</a>
+                <a href="infertility-couple.html" class="header-nav-btn" title="Hồ sơ cặp vợ chồng vô sinh"><i class="fas fa-user-friends"></i> Cặp VS</a>
+            </div>
+        </nav>
+    </header>
+<main class="wrap">
+<form class="card" id="andro-form" onsubmit="return false;">
+    <input type="hidden" id="result-id">
+    <input type="hidden" id="appointment-id">
+    <h2><i class="fas fa-user"></i> Hành chính</h2>
+    <div class="row">
+        <div><label>Bệnh nhân *</label><select id="patient-select"><option value="">-- Chọn --</option></select></div>
+        <div><label>Ngày khám *</label><input type="datetime-local" id="exam-date"></div>
+        <div><label>Bác sĩ</label><input id="doctor-name"></div>
+        <div><label>Lý do khám</label><input id="chief-complaint" placeholder="Vô sinh nam, đau bìu..."></div>
+        <div><label>Kiêng xuất tinh (ngày)</label><input type="number" id="abstinence-days" min="0"><div class="hint">Khuyến cáo 2–7 ngày</div></div>
+    </div>
+
+    <h3><i class="fas fa-stethoscope"></i> Khám lâm sàng</h3>
+    <div class="row">
+        <div><label>Tinh hoàn trái</label><input id="testis-left" placeholder="Bình thường / nhỏ / mềm..."></div>
+        <div><label>Tinh hoàn phải</label><input id="testis-right"></div>
+        <div>
+            <label>Giãn TM thừng tinh</label>
+            <select id="varicocele-grade">
+                <option value="">--</option>
+                <option value="none">Không</option>
+                <option value="0">Độ 0 (ẩn)</option>
+                <option value="1">Độ I</option>
+                <option value="2">Độ II</option>
+                <option value="3">Độ III</option>
+            </select>
+        </div>
+        <div><label>Mào tinh / khác</label><input id="epididymis-notes"></div>
+        <div style="grid-column:1/-1"><label>Nhận xét khám</label><textarea id="exam-findings"></textarea></div>
+    </div>
+
+    <h3><i class="fas fa-vial"></i> Tinh dịch đồ (WHO 2021)</h3>
+    <div class="row">
+        <div><label>Thể tích (mL)</label><input type="number" step="0.1" id="semen-volume-ml" oninput="syncTotal()"><div class="hint">≥ 1,4</div></div>
+        <div><label>pH</label><input type="number" step="0.1" id="semen-ph"><div class="hint">≥ 7,2</div></div>
+        <div><label>Nồng độ (triệu/mL)</label><input type="number" step="0.1" id="sperm-concentration" oninput="syncTotal()"><div class="hint">≥ 16</div></div>
+        <div><label>Tổng số (triệu)</label><input type="number" step="0.1" id="total-sperm-count"><div class="hint">≥ 39 (tự tính nếu để trống)</div></div>
+        <div><label>PR — di động tiến tới (%)</label><input type="number" step="0.1" id="progressive-motility"><div class="hint">≥ 30</div></div>
+        <div><label>Tổng di động (%)</label><input type="number" step="0.1" id="total-motility"><div class="hint">≥ 42</div></div>
+        <div><label>Tỷ lệ sống (%)</label><input type="number" step="0.1" id="vitality"><div class="hint">≥ 54</div></div>
+        <div><label>Hình dạng bình thường (%)</label><input type="number" step="0.1" id="normal-morphology"><div class="hint">≥ 4</div></div>
+        <div><label>Bạch cầu (triệu/mL)</label><input type="number" step="0.1" id="leukocytes"><div class="hint">&lt; 1</div></div>
+        <div style="grid-column:1/-1"><label>Ghi chú tinh dịch</label><textarea id="semen-notes"></textarea></div>
+    </div>
+
+    <h3><i class="fas fa-file-medical"></i> Kết luận</h3>
+    <div class="row">
+        <div><label>Chẩn đoán</label><textarea id="diagnosis"></textarea></div>
+        <div><label>Khuyến nghị</label><textarea id="recommendations"></textarea></div>
+    </div>
+    <div class="btns">
+        <button class="btn" type="button" onclick="saveResult()"><i class="fas fa-save"></i> Lưu</button>
+        <button class="btn btn-sec" type="button" id="print-btn" style="display:none" onclick="printResult()"><i class="fas fa-print"></i> In PDF</button>
+        <button class="btn btn-sec" type="button" onclick="resetForm()">Làm mới</button>
+    </div>
+</form>
+
+<section class="card">
+    <h3><i class="fas fa-history"></i> Lịch sử</h3>
+    <div id="history" class="muted">Chọn bệnh nhân để xem lịch sử.</div>
+</section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+let currentId = null;
+const params = new URLSearchParams(location.search);
+const FIELD_MAP = {
+    'doctor-name':'doctor_name','chief-complaint':'chief_complaint','abstinence-days':'abstinence_days',
+    'testis-left':'testis_left','testis-right':'testis_right','varicocele-grade':'varicocele_grade',
+    'epididymis-notes':'epididymis_notes','exam-findings':'exam_findings',
+    'semen-volume-ml':'semen_volume_ml','semen-ph':'semen_ph','sperm-concentration':'sperm_concentration',
+    'total-sperm-count':'total_sperm_count','progressive-motility':'progressive_motility',
+    'total-motility':'total_motility','vitality':'vitality','normal-morphology':'normal_morphology',
+    'leukocytes':'leukocytes','semen-notes':'semen_notes','diagnosis':'diagnosis','recommendations':'recommendations'
+};
+function toast(m,e){const t=document.getElementById('toast');t.textContent=m;t.className='toast'+(e?' err':'');t.style.display='block';setTimeout(()=>t.style.display='none',3000);}
+function num(v){if(v===''||v==null)return null;const n=Number(v);return Number.isFinite(n)?n:null;}
+function setNow(){const el=document.getElementById('exam-date');const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());el.value=d.toISOString().slice(0,16);}
+function syncTotal(){
+    const v=num(document.getElementById('semen-volume-ml').value);
+    const c=num(document.getElementById('sperm-concentration').value);
+    const tot=document.getElementById('total-sperm-count');
+    if(v!=null && c!=null && !tot.value) tot.value = Math.round(v*c*100)/100;
+}
+function updatePrint(){document.getElementById('print-btn').style.display=currentId?'inline-flex':'none';}
+
+async function loadPatients(){
+    const res=await fetch('/api/patients'); const patients=await res.json();
+    const list=Array.isArray(patients)?patients:(patients.data||patients.patients||[]);
+    const sel=document.getElementById('patient-select');
+    list.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=`${p.full_name||p.name||('BN #'+p.id)}${p.phone?' — '+p.phone:''}`;sel.appendChild(o);});
+}
+function getData(){
+    const data={patient_id:num(document.getElementById('patient-select').value),appointment_id:num(document.getElementById('appointment-id').value),exam_date:document.getElementById('exam-date').value,analysis_source:'manual_input'};
+    Object.entries(FIELD_MAP).forEach(([dom,key])=>{
+        let v=document.getElementById(dom).value;
+        if(['abstinence_days','semen_volume_ml','semen_ph','sperm_concentration','total_sperm_count','progressive_motility','total_motility','vitality','normal_morphology','leukocytes'].includes(key)) v=num(v);
+        data[key]=v===''?null:v;
+    });
+    return data;
+}
+function fill(data){
+    if(data.patient_id) document.getElementById('patient-select').value=data.patient_id;
+    if(data.appointment_id) document.getElementById('appointment-id').value=data.appointment_id;
+    if(data.exam_date){const d=new Date(data.exam_date);d.setMinutes(d.getMinutes()-d.getTimezoneOffset());document.getElementById('exam-date').value=d.toISOString().slice(0,16);}
+    Object.entries(FIELD_MAP).forEach(([dom,key])=>{if(data[key]!=null) document.getElementById(dom).value=data[key];});
+    currentId=data.id||null; document.getElementById('result-id').value=currentId||''; updatePrint();
+}
+function resetForm(keep){
+    const pid=keep?document.getElementById('patient-select').value:'';
+    const aid=keep?document.getElementById('appointment-id').value:'';
+    document.getElementById('andro-form').reset();
+    document.getElementById('appointment-id').value=aid;
+    if(pid) document.getElementById('patient-select').value=pid;
+    currentId=null; document.getElementById('result-id').value=''; setNow(); updatePrint();
+}
+async function saveResult(){
+    const data=getData(); if(!data.patient_id) return toast('Chọn bệnh nhân',true);
+    const url=currentId?`/api/andrology-results/${currentId}`:'/api/andrology-results';
+    const method=currentId?'PUT':'POST';
+    const res=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    const body=await res.json().catch(()=>({}));
+    if(!res.ok) return toast(body.message||'Lỗi',true);
+    currentId=body.id||body.result?.id||currentId; document.getElementById('result-id').value=currentId||'';
+    updatePrint(); toast(body.message||'Đã lưu'); await loadHistory();
+}
+async function loadHistory(){
+    const pid=document.getElementById('patient-select').value; const box=document.getElementById('history');
+    if(!pid){box.className='muted';box.textContent='Chọn bệnh nhân để xem lịch sử.';return;}
+    const res=await fetch(`/api/andrology-results?patient_id=${pid}`); const rows=await res.json();
+    if(!res.ok){box.className='muted';box.textContent=rows.message||'Lỗi';return;}
+    if(!rows.length){box.className='muted';box.textContent='Chưa có phiếu.';return;}
+    box.className='';
+    box.innerHTML=`<table><thead><tr><th>Ngày</th><th>Lý do</th><th>Nồng độ</th><th>PR%</th><th>Varicocele</th><th></th></tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+        <td>${r.exam_date?new Date(r.exam_date).toLocaleString('vi-VN'):''}</td>
+        <td>${r.chief_complaint||'—'}</td>
+        <td>${r.sperm_concentration??'—'}</td>
+        <td>${r.progressive_motility??'—'}</td>
+        <td>${r.varicocele_grade||'—'}</td>
+        <td>
+            <button class="btn btn-sec" type="button" onclick="loadResult(${r.id})">Mở</button>
+            <button class="btn btn-sec" type="button" onclick="window.open('/api/print_andrology/${r.id}','_blank')">In</button>
+            <button class="btn btn-sec" type="button" onclick="deleteResult(${r.id})">Xóa</button>
+        </td></tr>`).join('')}</tbody></table>`;
+}
+async function loadResult(id){
+    const res=await fetch(`/api/andrology-results/${id}`); const data=await res.json();
+    if(!res.ok) return toast(data.message||'Lỗi',true);
+    fill(data); toast('Đã tải #'+id); window.scrollTo({top:0,behavior:'smooth'});
+}
+async function deleteResult(id){
+    if(!confirm('Xóa phiếu #'+id+'?')) return;
+    const res=await fetch(`/api/andrology-results/${id}`,{method:'DELETE'});
+    const body=await res.json().catch(()=>({}));
+    if(!res.ok) return toast(body.message||'Lỗi',true);
+    if(String(currentId)===String(id)) resetForm(true);
+    toast('Đã xóa'); await loadHistory();
+}
+function printResult(){ if(currentId) window.open(`/api/print_andrology/${currentId}`,'_blank'); else toast('Lưu trước khi in',true); }
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+    setNow(); await loadPatients();
+    if(params.get('appointment_id')){
+        document.getElementById('appointment-id').value=params.get('appointment_id');
+        try{
+            const r=await fetch(`/api/appointments/${params.get('appointment_id')}`);
+            if(r.ok){const a=await r.json(); if(a.patient_id) document.getElementById('patient-select').value=a.patient_id;}
+        }catch(_){}
+    }
+    if(params.get('patient_id')) document.getElementById('patient-select').value=params.get('patient_id');
+    else if(params.get('phone')){
+        const sel=document.getElementById('patient-select');
+        const m=[...sel.options].find(o=>(o.textContent||'').includes(params.get('phone')));
+        if(m) sel.value=m.value;
+    }
+    document.getElementById('patient-select').addEventListener('change', loadHistory);
+    if(document.getElementById('patient-select').value) await loadHistory();
+    if(params.get('result_id')) await loadResult(params.get('result_id'));
+    updatePrint();
+});
+</script>
+<script src="ai-assistant.js"></script>
+<script src="footer-loader.js"></script>
+</body>
+</html>

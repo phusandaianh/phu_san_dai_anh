@@ -3,9 +3,10 @@ from extensions import db
 from sync_api import sync_bp
 from sqlalchemy import or_, inspect, func, text, bindparam, cast, Integer
 from sqlalchemy.exc import IntegrityError, OperationalError
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from zoneinfo import ZoneInfo
 import os
+import gzip
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -20,6 +21,7 @@ from io import BytesIO
 from models import Appointment
 from sync_api import sync_bp
 import base64
+import mimetypes
 import schedule
 import time
 import threading
@@ -41,12 +43,13 @@ import hmac
 import uuid
 import urllib.request
 import urllib.error
+from urllib.parse import quote, urlencode
 import unicodedata
 from pathlib import Path
 import subprocess
 from voluson_sync_service import get_voluson_sync_service
 import mwl_store
-from name_format import patient_name_title_vi
+from name_format import patient_name_title_vi, patient_name_for_mwl, mwl_ascii_text
 
 # Khi chạy bằng `python app.py`, module name là __main__.
 # Một số blueprint có `from app import ...` → nếu không alias sẽ tạo module app thứ 2,
@@ -54,6 +57,48 @@ from name_format import patient_name_title_vi
 sys.modules.setdefault('app', sys.modules[__name__])
 
 app = Flask(__name__, static_folder='.', template_folder='')
+
+_GZIP_MIN_SIZE = 512
+_GZIP_MIME_PREFIXES = (
+    'text/',
+    'application/javascript',
+    'application/json',
+    'application/xml',
+    'image/svg+xml',
+)
+
+def _maybe_gzip_response(response):
+    """Nén gzip cho HTML/CSS/JS/JSON khi client hỗ trợ."""
+    try:
+        if response.status_code < 200 or response.status_code >= 300:
+            return response
+        if response.headers.get('Content-Encoding'):
+            return response
+        accept_encoding = (request.headers.get('Accept-Encoding') or '').lower()
+        if 'gzip' not in accept_encoding:
+            return response
+        mimetype = (response.mimetype or '').lower()
+        if not any(mimetype.startswith(prefix) for prefix in _GZIP_MIME_PREFIXES):
+            return response
+
+        if response.direct_passthrough:
+            response.direct_passthrough = False
+
+        raw = response.get_data()
+        if not raw or len(raw) < _GZIP_MIN_SIZE:
+            return response
+
+        compressed = gzip.compress(raw, compresslevel=6)
+        if len(compressed) >= len(raw):
+            return response
+
+        response.set_data(compressed)
+        response.headers['Content-Encoding'] = 'gzip'
+        response.headers['Content-Length'] = str(len(compressed))
+        response.headers['Vary'] = 'Accept-Encoding'
+        return response
+    except Exception:
+        return response
 
 app.register_blueprint(sync_bp)
 def _clinic_now():
@@ -71,22 +116,118 @@ try:
 except Exception:
     pass
 
-QR_ADS_MEDIA_ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.webm'}
+QR_ADS_MEDIA_ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.webm', '.mp3', '.wav', '.ogg', '.m4a', '.aac'}
+QR_ADS_BGM_ALLOWED_EXTS = {'.mp3', '.wav', '.ogg', '.m4a', '.aac'}
+
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+CLINIC_LOGO_FILENAME = 'logo_phu_san_dai_anh.PNG'
+CLINIC_LOGO_VERSION_KEY = 'clinicLogoVersion'
 
 def _qr_ads_media_public_url(filename: str) -> str:
     return f"/qr-ads-media/{filename}"
 
-# ===== QR Ads doctor images uploads =====
-QR_ADS_DOCTOR_MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'qr-ads-doctor-images')
+# ===== Clinical flowcharts / infographics media =====
+FLOWCHARTS_MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'flowcharts-media')
 try:
-    os.makedirs(QR_ADS_DOCTOR_MEDIA_DIR, exist_ok=True)
+    os.makedirs(FLOWCHARTS_MEDIA_DIR, exist_ok=True)
 except Exception:
     pass
 
-QR_ADS_DOCTOR_ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.webp'}
+FLOWCHARTS_MEDIA_ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf'}
 
-def _qr_ads_doctor_media_public_url(filename: str) -> str:
-    return f"/qr-ads-doctor-images/{filename}"
+
+def _flowcharts_media_public_url(filename: str) -> str:
+    return f"/flowcharts-media/{filename}"
+
+# ===== Clinic assets: thiết bị / vật tư (ảnh + ghi chú) =====
+CLINIC_ASSETS_MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'clinic-assets-media')
+try:
+    os.makedirs(CLINIC_ASSETS_MEDIA_DIR, exist_ok=True)
+except Exception:
+    pass
+
+CLINIC_ASSETS_MEDIA_ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf'}
+
+
+def _clinic_assets_media_public_url(filename: str) -> str:
+    return f"/clinic-assets-media/{filename}"
+
+
+def _safe_clinic_asset_filename(original: str) -> str:
+    original = str(original or '').strip()
+    ext = os.path.splitext(original)[1].lower()
+    safe = werkzeug.utils.secure_filename(original)
+    if ext not in CLINIC_ASSETS_MEDIA_ALLOWED_EXTS:
+        ext = os.path.splitext(safe)[1].lower()
+    if not safe or safe in ('.', '..') or not os.path.splitext(safe)[1]:
+        import uuid
+        safe = f"asset_{uuid.uuid4().hex[:12]}{ext if ext in CLINIC_ASSETS_MEDIA_ALLOWED_EXTS else '.png'}"
+    return safe
+
+
+# ===== Clinic techniques: danh mục kĩ thuật thực hiện tại phòng khám =====
+CLINIC_TECHNIQUES_MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'clinic-techniques-media')
+try:
+    os.makedirs(CLINIC_TECHNIQUES_MEDIA_DIR, exist_ok=True)
+except Exception:
+    pass
+
+CLINIC_TECHNIQUES_MEDIA_ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+
+
+def _clinic_techniques_media_public_url(filename: str) -> str:
+    return f"/clinic-techniques-media/{filename}"
+
+
+def _safe_clinic_technique_filename(original: str) -> str:
+    original = str(original or '').strip()
+    ext = os.path.splitext(original)[1].lower()
+    safe = werkzeug.utils.secure_filename(original)
+    if ext not in CLINIC_TECHNIQUES_MEDIA_ALLOWED_EXTS:
+        ext = os.path.splitext(safe)[1].lower()
+    if not safe or safe in ('.', '..') or not os.path.splitext(safe)[1]:
+        import uuid
+        safe = f"tech_{uuid.uuid4().hex[:12]}{ext if ext in CLINIC_TECHNIQUES_MEDIA_ALLOWED_EXTS else '.png'}"
+    return safe
+
+
+# ===== Fetal guide measurement images =====
+FETAL_GUIDE_MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fetal-guide-media')
+try:
+    os.makedirs(FETAL_GUIDE_MEDIA_DIR, exist_ok=True)
+    os.makedirs(os.path.join(FETAL_GUIDE_MEDIA_DIR, 'refs'), exist_ok=True)
+except Exception:
+    pass
+
+FETAL_GUIDE_MEDIA_ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+
+
+def _fetal_guide_media_public_url(filename: str) -> str:
+    return f"/fetal-guide-media/{filename}"
+
+
+def _safe_flowchart_filename(original: str) -> str:
+    """Tên file an toàn; fallback UUID nếu secure_filename rỗng (tên tiếng Việt)."""
+    original = str(original or '').strip()
+    ext = os.path.splitext(original)[1].lower()
+    safe = werkzeug.utils.secure_filename(original)
+    if ext not in FLOWCHARTS_MEDIA_ALLOWED_EXTS:
+        ext = os.path.splitext(safe)[1].lower()
+    if not safe or safe in ('.', '..') or not os.path.splitext(safe)[1]:
+        import uuid
+        safe = f"flowchart_{uuid.uuid4().hex[:12]}{ext if ext in FLOWCHARTS_MEDIA_ALLOWED_EXTS else '.png'}"
+    return safe
+
+
+_DEFAULT_FLOWCHART_POSTER = {
+    'meta': {'title': 'FLOWCHART HƯỚNG DẪN', 'subtitle': '(Theo dõi / xử trí)'},
+    'sections': [
+        {'id': 'sec1', 'title': '1. Tầm soát / đánh giá ban đầu', 'content': 'Nhập nội dung hướng dẫn…'},
+        {'id': 'sec2', 'title': '2. Chỉ định can thiệp', 'content': 'Nhập nội dung hướng dẫn…'},
+        {'id': 'sec3', 'title': '3. Theo dõi', 'content': 'Nhập nội dung hướng dẫn…'},
+        {'id': 'sec4', 'title': '4. Ghi chú', 'content': 'Nhập nội dung hướng dẫn…'},
+    ],
+}
 
 # ===== Ultrasound capture media uploads =====
 ULTRASOUND_MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ultrasound-media')
@@ -121,20 +262,78 @@ def _find_ffmpeg_binary() -> str:
             return c
     return ''
 
-def _slugify_doctor_key(s: str) -> str:
-    if s is None:
+
+def _ffmpeg_source_has_audio(ffmpeg: str, src: str) -> bool:
+    try:
+        import subprocess
+        proc = subprocess.run(
+            [ffmpeg, '-hide_banner', '-i', src],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        text = (proc.stderr or b'').decode('utf-8', errors='ignore').lower()
+        return 'audio:' in text
+    except Exception:
+        return False
+
+
+def _ffmpeg_build_atempo_chain(speed: float) -> str:
+    filters = []
+    remaining = float(speed)
+    while remaining > 2.0 + 1e-6:
+        filters.append('atempo=2.0')
+        remaining /= 2.0
+    while remaining < 0.5 - 1e-6:
+        filters.append('atempo=0.5')
+        remaining /= 0.5
+    filters.append(f'atempo={remaining:.6f}')
+    return ','.join(filters)
+
+
+def _speed_label_for_filename(speed: float) -> str:
+    s = f'{speed:.2f}'.rstrip('0').rstrip('.')
+    return s.replace('.', 'p')
+
+
+# ===== Ultrasound live stream (RTMP) =====
+_ULTRASOUND_LIVE_LOCK = threading.Lock()
+_ULTRASOUND_LIVE_SESSIONS = {}
+
+
+def _ultrasound_live_cleanup_session(session_id: str):
+    with _ULTRASOUND_LIVE_LOCK:
+        info = _ULTRASOUND_LIVE_SESSIONS.pop(session_id, None)
+    if not info:
+        return
+    workers = info.get('workers') or []
+    for w in workers:
+        stdin = w.get('stdin')
+        proc = w.get('proc')
+        if stdin:
+            try:
+                stdin.close()
+            except Exception:
+                pass
+        if proc:
+            try:
+                if proc.poll() is None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=2)
+                    except Exception:
+                        proc.kill()
+            except Exception:
+                pass
+
+
+def _ultrasound_build_rtmp_target(rtmp_url: str, stream_key: str) -> str:
+    base = str(rtmp_url or '').strip()
+    key = str(stream_key or '').strip()
+    if not base:
         return ''
-    text = str(s).strip().lower()
-    if not text:
-        return ''
-    # Remove Vietnamese diacritics
-    text = text.replace('đ', 'd').replace('Đ', 'd').replace('Đ', 'd')
-    text = unicodedata.normalize('NFKD', text)
-    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
-    # Replace non-alphanum with hyphen
-    text = re.sub(r'[^a-z0-9]+', '-', text)
-    text = re.sub(r'-{2,}', '-', text).strip('-')
-    return text[:80]
+    if not key:
+        return base
+    return f"{base.rstrip('/')}/{key.lstrip('/')}"
 
 # Cấu hình: ưu tiên từ config.py và biến môi trường (theo khuyến nghị bảo mật)
 try:
@@ -159,7 +358,7 @@ if not app.config.get('SECRET_KEY') or app.config.get('SECRET_KEY', '').startswi
     if not os.environ.get('SECRET_KEY') and os.environ.get('FLASK_ENV') == 'production':
         print("WARNING: Set SECRET_KEY in environment for production.")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 1280 * 1024 * 1024  # 1280MB max file size
 if not app.config.get('TWILIO_ACCOUNT_SID'):
     app.config['TWILIO_ACCOUNT_SID'] = os.environ.get('TWILIO_ACCOUNT_SID') or 'YOUR_TWILIO_ACCOUNT_SID'
 if not app.config.get('TWILIO_AUTH_TOKEN'):
@@ -172,6 +371,20 @@ app.config['CORS_ALLOWED_ORIGINS'] = os.environ.get('ALLOWED_ORIGINS', '').split
 
 # SQLAlchemy - phải tạo TRƯỚC khi đăng ký blueprint để tránh lỗi "app not registered"
 db.init_app(app)
+
+# SQLite: WAL + cache lớn hơn → đọc/ghi nhanh hơn khi nhiều request đồng thời (poll 7s, v.v.)
+if _db_uri.startswith('sqlite:'):
+    from sqlalchemy import event
+    from sqlalchemy.engine import Engine
+
+    @event.listens_for(Engine, 'connect')
+    def _sqlite_performance_pragmas(dbapi_conn, _connection_record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute('PRAGMA journal_mode=WAL')
+        cursor.execute('PRAGMA synchronous=NORMAL')
+        cursor.execute('PRAGMA cache_size=-64000')
+        cursor.execute('PRAGMA temp_store=MEMORY')
+        cursor.close()
 
 # Đăng ký REST API (Blueprint) - dễ mở rộng, nâng cấp
 try:
@@ -194,7 +407,6 @@ except Exception:
 
 # Rate limiting đơn giản (theo IP) cho login / forgot-password
 from collections import defaultdict
-from time import time
 _RATE_LIMIT_STORE = defaultdict(list)
 RATE_LIMIT_WINDOW = 60  # giây
 RATE_LIMIT_MAX = 5      # số lần tối đa trong 1 cửa sổ
@@ -205,7 +417,7 @@ def rate_limit(key_prefix=''):
         def wrapper(*args, **kwargs):
             ip = request.remote_addr or 'unknown'
             key = f"{key_prefix}:{ip}"
-            now = time()
+            now = time.time()
             # Xóa các lần gọi cũ ngoài cửa sổ
             _RATE_LIMIT_STORE[key] = [t for t in _RATE_LIMIT_STORE[key] if now - t < RATE_LIMIT_WINDOW]
             if len(_RATE_LIMIT_STORE[key]) >= RATE_LIMIT_MAX:
@@ -652,6 +864,23 @@ def _create_backup_zip_bytes():
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
+def _backup_keep_count() -> int:
+    """Số bản backup giữ lại (mặc định 1 — bản mới thay bản cũ)."""
+    try:
+        n = int(os.environ.get('BACKUP_LOCAL_KEEP') or app.config.get('BACKUP_LOCAL_KEEP') or 1)
+    except Exception:
+        n = 1
+    return max(1, n)
+
+
+def _gdrive_backup_keep_count() -> int:
+    try:
+        n = int(os.environ.get('GDRIVE_BACKUP_KEEP') or app.config.get('GDRIVE_BACKUP_KEEP') or 1)
+    except Exception:
+        n = 1
+    return max(1, n)
+
+
 def _gdrive_client():
     """
     Tạo Google Drive client bằng Service Account.
@@ -697,8 +926,8 @@ def upload_backup_to_gdrive_from_buffer(buf: BytesIO, filename: str):
     file_metadata = {'name': filename, 'parents': [folder_id]}
     created = drive.files().create(body=file_metadata, media_body=media, fields='id,name,createdTime').execute()
 
-    # Retention: giữ N bản gần nhất
-    keep_n = int(os.environ.get('GDRIVE_BACKUP_KEEP') or app.config.get('GDRIVE_BACKUP_KEEP') or 30)
+    # Retention: giữ N bản gần nhất (mặc định 1)
+    keep_n = _gdrive_backup_keep_count()
     try:
         q = f"'{folder_id}' in parents and trashed=false and name contains 'backup-' and mimeType='application/zip'"
         items = drive.files().list(q=q, orderBy='createdTime desc', fields='files(id,name,createdTime)', pageSize=200).execute().get('files', [])
@@ -719,116 +948,101 @@ def upload_backup_to_gdrive():
     filename = f"backup-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.zip"
     return upload_backup_to_gdrive_from_buffer(buf, filename)
 
-def scheduled_daily_backup():
-    """Job chạy theo lịch: sao lưu và upload lên Google Drive."""
-    enabled = (os.environ.get('GDRIVE_BACKUP_ENABLED') or app.config.get('GDRIVE_BACKUP_ENABLED') or '1').strip()
-    if enabled not in ('1', 'true', 'True', 'yes', 'YES'):
-        return
+def _backup_local_dir():
+    local_dir = (os.environ.get('BACKUP_LOCAL_DIR') or app.config.get('BACKUP_LOCAL_DIR') or '').strip()
+    if not local_dir:
+        local_dir = os.path.abspath('backups')
+    return local_dir
+
+
+def _prune_local_backup_files(local_dir: str, keep_filename: str = None) -> int:
+    """Xóa backup cũ, chỉ giữ tối đa N bản mới nhất (mặc định N=1)."""
+    keep_n = _backup_keep_count()
+    removed = 0
     try:
-        # 1) Tạo zip backup (BytesIO)
-        buf = _create_backup_zip_bytes()
-        filename = f"backup-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.zip"
-
-        # 2) Ghi thêm ra thư mục local để không mất dữ liệu khi tắt máy
-        local_dir = (os.environ.get('BACKUP_LOCAL_DIR') or app.config.get('BACKUP_LOCAL_DIR') or '').strip()
-        if not local_dir:
-            # Mặc định lưu trong thư mục backups ở cùng cấp project
-            local_dir = os.path.abspath('backups')
-
-        try:
-            os.makedirs(local_dir, exist_ok=True)
-            local_path = os.path.join(local_dir, filename)
-            # BytesIO -> file
-            with open(local_path, 'wb') as f:
-                f.write(buf.getbuffer())
-            print(f"[BACKUP] Saved local backup: {local_path}")
-
-            # Giữ lại N bản gần nhất trên local (mặc định 7)
-            keep_n = int(os.environ.get('BACKUP_LOCAL_KEEP') or app.config.get('BACKUP_LOCAL_KEEP') or 7)
+        backups = [
+            os.path.join(local_dir, f) for f in os.listdir(local_dir)
+            if f.startswith('backup-') and f.endswith('.zip')
+        ]
+        backups.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+        keep_set = set(backups[:keep_n])
+        if keep_filename:
+            keep_path = os.path.join(local_dir, os.path.basename(keep_filename))
+            keep_set.add(keep_path)
+        for old in backups:
+            if old in keep_set:
+                continue
             try:
-                backups = [
-                    os.path.join(local_dir, f) for f in os.listdir(local_dir)
-                    if f.startswith('backup-') and f.endswith('.zip')
-                ]
-                backups.sort(key=lambda p: os.path.getmtime(p), reverse=True)
-                for old in backups[keep_n:]:
-                    try:
-                        os.remove(old)
-                    except Exception:
-                        pass
+                os.remove(old)
+                removed += 1
+                print(f"[BACKUP] Removed old backup: {old}")
             except Exception:
                 pass
-        except Exception as e:
-            # Không fail backup nếu không ghi được local
-            print(f"[BACKUP] Cannot save local backup: {e}")
+    except Exception:
+        pass
+    return removed
 
-        # 3) Upload lên Google Drive (nếu cấu hình đầy đủ)
+
+def _run_backup_save_local_and_optional_gdrive(trigger: str = 'manual') -> dict:
+    """Tạo zip backup, lưu thư mục local, upload Google Drive nếu cấu hình."""
+    buf = _create_backup_zip_bytes()
+    filename = f"backup-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.zip"
+    local_dir = _backup_local_dir()
+    os.makedirs(local_dir, exist_ok=True)
+    local_path = os.path.join(local_dir, filename)
+    with open(local_path, 'wb') as f:
+        f.write(buf.getbuffer())
+    print(f"[BACKUP] Saved local backup ({trigger}): {local_path}")
+    removed_old = _prune_local_backup_files(local_dir, keep_filename=filename)
+
+    gdrive_id = None
+    gdrive_enabled = (os.environ.get('GDRIVE_BACKUP_ENABLED') or app.config.get('GDRIVE_BACKUP_ENABLED') or '1').strip()
+    if gdrive_enabled in ('1', 'true', 'True', 'yes', 'YES'):
         try:
-            # Reuse cùng buffer đã tạo để không zip 2 lần
+            buf.seek(0)
             created = upload_backup_to_gdrive_from_buffer(buf, filename)
-            print(f"[BACKUP] Uploaded to Google Drive: {created.get('name')} ({created.get('id')})")
+            gdrive_id = created.get('id')
+            print(f"[BACKUP] Uploaded to Google Drive ({trigger}): {created.get('name')} ({gdrive_id})")
         except Exception as e:
-            print(f"[BACKUP] Google Drive upload skipped/failed: {e}")
-    except Exception as e:
-        print(f"[BACKUP] Failed: {e}")
+            print(f"[BACKUP] Google Drive upload skipped/failed ({trigger}): {e}")
 
-def backup_if_db_changed():
-    """
-    Backup nhưng chỉ chạy khi DB có thay đổi (dựa trên mtime của file sqlite).
-    Điều này gần đúng yêu cầu "chỉ backup phần thay đổi".
-    """
+    return {
+        'filename': filename,
+        'path': local_path,
+        'directory': local_dir,
+        'gdrive_id': gdrive_id,
+        'trigger': trigger,
+        'removed_old_count': removed_old,
+        'keep_count': _backup_keep_count(),
+    }
+
+
+def scheduled_daily_backup():
+    """Alias tương thích — gọi backup lưu local (+ GDrive nếu bật)."""
+    _run_backup_save_local_and_optional_gdrive(trigger='scheduled')
+
+
+def maybe_backup_weekly_sunday_on_startup() -> bool:
+    """Khi bật máy chủ: chỉ sao lưu nếu hôm nay là Chủ nhật và chưa backup Chủ nhật này."""
     try:
-        db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
-        db_path = _sqlite_path_from_uri(db_uri)
-        if not db_path or not os.path.exists(db_path):
-            print("[BACKUP] Skip: clinic db not found")
+        now = datetime.now()
+        if now.weekday() != 6:
+            print(f"[BACKUP] Skip startup: hôm nay không phải Chủ nhật (weekday={now.weekday()})")
             return False
 
-        mwl_path = os.path.abspath('mwl.db')
-        clinic_mtime = int(os.path.getmtime(db_path))
-        mwl_mtime = int(os.path.getmtime(mwl_path)) if os.path.exists(mwl_path) and _is_sqlite_file(mwl_path) else 0
-
-        # Lưu mốc lần backup gần nhất
-        last_clinic_mtime = int(AppSetting.get_value('backup_last_clinic_mtime', 0) or 0)
-        last_mwl_mtime = int(AppSetting.get_value('backup_last_mwl_mtime', 0) or 0)
-
-        if clinic_mtime == last_clinic_mtime and mwl_mtime == last_mwl_mtime:
-            print("[BACKUP] Skip: DB unchanged")
+        sunday_key = now.strftime('%Y-%m-%d')
+        last = AppSetting.get_value('backup_last_sunday_ymd', '') or ''
+        if last == sunday_key:
+            print(f"[BACKUP] Skip startup: đã sao lưu Chủ nhật {sunday_key}")
             return False
 
-        # Ghi nhận mốc thay đổi trước khi chạy backup (tránh chạy trùng nếu race)
-        AppSetting.set_value('backup_last_clinic_mtime', str(clinic_mtime))
-        AppSetting.set_value('backup_last_mwl_mtime', str(mwl_mtime))
-
-        # Reuse scheduled_daily_backup logic (local + optional gdrive)
-        scheduled_daily_backup()
+        _run_backup_save_local_and_optional_gdrive(trigger='startup_sunday')
+        AppSetting.set_value('backup_last_sunday_ymd', sunday_key)
+        AppSetting.set_value('backup_last_trigger', 'startup_sunday')
+        print(f"[BACKUP] Weekly Sunday backup done on {sunday_key}")
         return True
     except Exception as e:
-        print(f"[BACKUP] backup_if_db_changed error: {e}")
-        return False
-
-def maybe_backup_once_per_day(trigger: str = 'manual') -> bool:
-    """
-    Chỉ backup tối đa 1 lần/ngày.
-    Trigger dùng để log nguồn kích hoạt: startup / login / manual.
-    """
-    try:
-        today_ymd = datetime.now().strftime('%Y-%m-%d')
-        last_day = AppSetting.get_value('backup_last_day_ymd', '') or ''
-        if last_day == today_ymd:
-            return False
-
-        # Reuse logic hiện tại (ghi local + optional gdrive).
-        # Nếu DB không đổi thì vẫn skip như hành vi cũ.
-        changed = backup_if_db_changed()
-        if changed:
-            AppSetting.set_value('backup_last_day_ymd', today_ymd)
-            AppSetting.set_value('backup_last_trigger', trigger)
-            print(f"[BACKUP] Daily backup done via trigger={trigger}")
-            return True
-        return False
-    except Exception as e:
-        print(f"[BACKUP] maybe_backup_once_per_day error (trigger={trigger}): {e}")
+        print(f"[BACKUP] maybe_backup_weekly_sunday_on_startup error: {e}")
         return False
 
 def send_security_email(subject, body, to_email=None):
@@ -914,7 +1128,9 @@ def require_auth(fn):
         auth_header = request.headers.get('Authorization', '')
         token = None
         if auth_header.startswith('Bearer '):
-            token = auth_header.split(' ', 1)[1]
+            token = auth_header.split(' ', 1)[1].strip()
+        if not token:
+            token = (request.cookies.get('auth_token') or '').strip() or None
         user_id = get_user_from_token(token)
         if not user_id:
             return jsonify({'error': 'Unauthorized'}), 401
@@ -936,7 +1152,9 @@ def require_permission(permission_key):
     def decorator(fn):
         def wrapped(*args, **kwargs):
             auth_header = request.headers.get('Authorization', '')
-            token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+            token = auth_header.split(' ', 1)[1].strip() if auth_header.startswith('Bearer ') else ''
+            if not token:
+                token = (request.cookies.get('auth_token') or '').strip()
             user_id = get_user_from_token(token)
             if not user_id:
                 return jsonify({'error': 'Unauthorized'}), 401
@@ -973,10 +1191,12 @@ def add_security_headers(response):
                 "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com; "
                 "img-src 'self' data: https:; "
                 "connect-src 'self'; "
-                "frame-src 'self' https://www.google.com https://maps.google.com https://www.google.com.vn https://www.youtube.com https://www.youtube-nocookie.com"
+                "frame-src 'self' blob: data: https://www.google.com https://maps.google.com https://www.google.com.vn https://www.youtube.com https://www.youtube-nocookie.com; "
+                "object-src 'self' blob: data:; "
+                "worker-src 'self' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net"
             )
         response._security_headers_added = True
-    return response
+    return _maybe_gzip_response(response)
 
 # Route đăng nhập (fallback - đảm bảo luôn hoạt động)
 @app.route('/api/login', methods=['POST'])
@@ -1085,10 +1305,6 @@ def api_login():
         roles = [row[0] for row in roles_result]
         token = __import__('secrets').token_urlsafe(32)
         session_id = register_token(token, user_id, ip_address=ip_address, user_agent=user_agent, is_new_device=False)
-        try:
-            maybe_backup_once_per_day(trigger='login')
-        except Exception:
-            pass
         resp = make_response(jsonify({
             'token': token,
             'user': {
@@ -1199,10 +1415,6 @@ def api_login_verify_otp():
     roles = [row[0] for row in roles_result]
     token = __import__('secrets').token_urlsafe(32)
     session_id = register_token(token, user_id, ip_address=ip_address, user_agent=user_agent, is_new_device=False)
-    try:
-        maybe_backup_once_per_day(trigger='login')
-    except Exception:
-        pass
     resp = make_response(jsonify({
         'token': token,
         'user': {
@@ -1620,11 +1832,46 @@ def api_backup():
     return send_file(buf, mimetype='application/zip', as_attachment=True, download_name=filename)
 
 
-def _backup_local_dir():
-    local_dir = (os.environ.get('BACKUP_LOCAL_DIR') or app.config.get('BACKUP_LOCAL_DIR') or '').strip()
-    if not local_dir:
-        local_dir = os.path.abspath('backups')
-    return local_dir
+@app.route('/api/backup/save', methods=['POST'])
+def api_backup_save():
+    """Sao lưu thủ công: ghi file zip vào thư mục backups trên server. Chỉ manage_users."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    try:
+        info = _run_backup_save_local_and_optional_gdrive(trigger='manual')
+        AppSetting.set_value('backup_last_trigger', 'manual')
+        return jsonify({
+            'message': 'Đã sao lưu. Chỉ giữ 1 bản mới nhất trên server (bản cũ đã xóa nếu có).',
+            'filename': info.get('filename'),
+            'directory': info.get('directory'),
+            'path': info.get('path'),
+            'removed_old_count': info.get('removed_old_count', 0),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/backup/status', methods=['GET'])
+def api_backup_status():
+    """Trạng thái sao lưu tự động (Chủ nhật khi bật máy chủ). Chỉ manage_users."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    return jsonify({
+        'auto_schedule': 'weekly_sunday_on_startup',
+        'auto_description': 'Tự động sao lưu tối đa 1 lần/tuần vào Chủ nhật khi bật máy chủ. Chỉ giữ 1 file backup mới nhất.',
+        'last_sunday_backup': AppSetting.get_value('backup_last_sunday_ymd', '') or None,
+        'last_trigger': AppSetting.get_value('backup_last_trigger', '') or None,
+        'backup_directory': _backup_local_dir(),
+        'local_keep': _backup_keep_count(),
+    })
 
 
 @app.route('/api/backup/list', methods=['GET'])
@@ -2003,10 +2250,40 @@ ROLE_ALLOWED_PAGES = {
     'admin': ['*'],
     'doctor': [
         'examination-list.html','consultation-results.html','ultrasound-analysis.html','ultrasound-general.html',
+        'ultrasound-gynecology.html', 'gynecology-examination.html', 'obstetric-examination.html', 'gynecology-records.html',
+        'follicle-monitoring.html', 'andrology-examination.html', 'infertility-couple.html',
+        'radiology-mri.html',
+        'ctg-analysis.html','ultrasound-fetal-deep-analysis.html','ultrasound-fetal-guide.html',
+        'ultrasound-fetal-image-analysis.html','ultrasound-fetal-charts.html',
+        'clinical-flowcharts.html','flowchart-poster-editor.html',
+        'clinic-assets.html',
+        'clinic-techniques.html',
+        'van-su-calendar.html',
+        'can-chi.html',
+        'can-chi-menh.html',
+        'can-chi-cung.html',
+        'can-chi-mua.html',
+        'can-chi-amduong.html',
+        'can-chi-zodiac.html',
+        'can-chi-family.html',
+        'can-chi-bat-quai.html',
         'clinical-form-templates.html','medical-charts.html','patient-records.html','treatment-plans.html'
     ],
     'nurse': [
-        'examination-list.html','consultation-results.html','lab-tests.html','patient-records.html'
+        'examination-list.html','consultation-results.html','lab-tests.html','patient-records.html',
+        'obstetric-examination.html', 'ultrasound-general.html',
+        'radiology-mri.html',
+        'clinic-assets.html',
+        'clinic-techniques.html',
+        'van-su-calendar.html',
+        'can-chi.html',
+        'can-chi-menh.html',
+        'can-chi-cung.html',
+        'can-chi-mua.html',
+        'can-chi-amduong.html',
+        'can-chi-zodiac.html',
+        'can-chi-family.html',
+        'can-chi-bat-quai.html'
     ],
     'receptionist': [
         'booking.html','checkin-admin.html','schedule.html','doctor-schedule.html','qr-checkin.html'
@@ -2017,7 +2294,8 @@ ROLE_ALLOWED_PAGES = {
 # users.html: trang đăng nhập nhân viên (admin, bác sĩ, điều dưỡng)
 PUBLIC_PAGES = set([
     'index.html', 'booking.html', 'schedule.html', 'users.html', 'pregnancy-utilities.html', 'links.html',
-    'qr-display.html', 'tv-display-launcher.html'
+    'qr-display.html', 'tv-display-launcher.html',
+    'Phu-san-Dai-Anh-Brand-Kit/Atlas-truyen-thong/atlas-tv-display.html'
 ])
 
 # Trang yêu cầu đăng nhập (admin, bác sĩ, điều dưỡng)
@@ -2029,11 +2307,32 @@ STAFF_ONLY_PAGES = set([
     'home-content.html', 'clinical-services-admin.html',
     'ai-assistant-admin.html', 'prescription-management.html',
     'disease-tests.html', 'test-meanings.html', 'ultrasound-analysis.html',
-    'ultrasound-general.html', 'ctg-analysis.html', 'cervical-examination-analysis.html',
+    'ultrasound-general.html', 'ultrasound-gynecology.html', 'gynecology-examination.html',
+    'obstetric-examination.html',
+    'radiology-mri.html',
+    'gynecology-records.html', 'obstetric-records.html',
+    'follicle-monitoring.html', 'andrology-examination.html', 'infertility-couple.html',
+    'ctg-analysis.html', 'ultrasound-fetal-deep-analysis.html',
+    'ultrasound-fetal-guide.html', 'ultrasound-fetal-image-analysis.html',
+    'ultrasound-fetal-charts.html',
+    'clinical-flowcharts.html', 'flowchart-poster-editor.html',
+    'clinic-assets.html',
+    'clinic-techniques.html',
+    'van-su-calendar.html',
+    'can-chi.html',
+    'can-chi-menh.html',
+    'can-chi-cung.html',
+    'can-chi-mua.html',
+    'can-chi-amduong.html',
+    'can-chi-zodiac.html',
+    'can-chi-family.html',
+    'can-chi-bat-quai.html',
+    'cervical-examination-analysis.html', 'cervical-lesion-atlas.html',
     'mom-apps.html', 'appointment-details.html',
     'staff-training.html', 'improved-lab-result-template.html', 'improved-lab-request-template.html',
     'links.html', 'clinic-maps.html', 'pregnancy-utilities.html',
     'staff-work-calendar.html', 'staff-attendance.html',
+    'qr-ads-admin.html', 'ad-video-create.html',
 ])
 
 DEFAULT_CLINICAL_SERVICE_GROUPS = [
@@ -2430,6 +2729,57 @@ class MedicalChart(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
+class ClinicalFlowchart(db.Model):
+    """Flowchart / infographic: upload ảnh-PDF hoặc poster chỉnh sửa."""
+    __tablename__ = 'clinical_flowcharts'
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    category = db.Column(db.String(50), nullable=False, default='other')
+    content_type = db.Column(db.String(20), nullable=False, default='flowchart')  # flowchart | infographic
+    description = db.Column(db.Text)
+    source_type = db.Column(db.String(20), nullable=False, default='upload')  # upload | poster | link
+    file_name = db.Column(db.String(255))
+    link_url = db.Column(db.String(500))
+    poster_data = db.Column(db.Text)
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ClinicAsset(db.Model):
+    """Thiết bị / vật tư phòng khám: ảnh + ghi chú sử dụng, sửa lỗi, nơi mua…"""
+    __tablename__ = 'clinic_assets'
+    id = db.Column(db.Integer, primary_key=True)
+    asset_type = db.Column(db.String(20), nullable=False, default='equipment')  # equipment | supply
+    title = db.Column(db.String(200), nullable=False)
+    category = db.Column(db.String(80), nullable=False, default='other')
+    description = db.Column(db.Text)
+    usage_notes = db.Column(db.Text)
+    troubleshooting_notes = db.Column(db.Text)
+    purchase_notes = db.Column(db.Text)
+    image_name = db.Column(db.String(255))
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ClinicTechnique(db.Model):
+    """Danh mục kĩ thuật thực hiện tại phòng khám (chỉ định, dụng cụ, bước, ảnh minh họa…)."""
+    __tablename__ = 'clinic_techniques'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(250), nullable=False)
+    indications = db.Column(db.Text)          # Chỉ định
+    contraindications = db.Column(db.Text)    # Chống chỉ định
+    instruments = db.Column(db.Text)          # Dụng cụ
+    consumables = db.Column(db.Text)          # Vật tư tiêu hao
+    steps = db.Column(db.Text)                # Các bước thực hiện
+    post_monitoring = db.Column(db.Text)      # Theo dõi sau thực hiện
+    images_json = db.Column(db.Text)          # JSON: [{filename, caption, url}]
+    sort_order = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 # Role permissions per role
 class RolePermission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -2457,6 +2807,126 @@ class BookingPageContent(db.Model):
     contact = db.Column(db.Text)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 # --- Utilities: Safe migration helpers ---
+_SCHEMA_ENSURED = set()
+
+def _mark_schema_ensured(key):
+    _SCHEMA_ENSURED.add(key)
+
+def _is_schema_ensured(key):
+    return key in _SCHEMA_ENSURED
+
+_CLINICAL_TEMPLATE_SYNC_DONE = False
+
+def _sync_clinical_templates_once():
+    """Đồng bộ template CLS một lần lúc khởi động; POST/PUT/DELETE vẫn sync từng dịch vụ."""
+    global _CLINICAL_TEMPLATE_SYNC_DONE
+    if _CLINICAL_TEMPLATE_SYNC_DONE:
+        return
+    try:
+        sync_all_clinical_service_templates()
+        db.session.commit()
+        _CLINICAL_TEMPLATE_SYNC_DONE = True
+    except Exception:
+        db.session.rollback()
+
+def ensure_performance_indexes():
+    """Index cho truy vấn lịch hẹn / medical record / bảng biểu — chạy một lần."""
+    if _is_schema_ensured('performance_indexes'):
+        return
+    try:
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_appointment_date ON appointment(appointment_date)'))
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_medical_record_appointment_id ON medical_record(appointment_id)'))
+        db.session.execute(text('CREATE INDEX IF NOT EXISTS idx_medical_chart_category ON medical_chart(category)'))
+        db.session.commit()
+        _mark_schema_ensured('performance_indexes')
+    except Exception:
+        db.session.rollback()
+
+def ensure_clinical_flowchart_content_type_column():
+    """Best-effort migration: thêm cột content_type trên clinical_flowcharts (SQLite)."""
+    if _is_schema_ensured('clinical_flowchart_content_type'):
+        return
+    try:
+        db.create_all()
+        result = db.session.execute(text('PRAGMA table_info(clinical_flowcharts)'))
+        columns = [row[1] for row in result.fetchall()]
+        if 'content_type' not in columns:
+            db.session.execute(
+                text("ALTER TABLE clinical_flowcharts ADD COLUMN content_type VARCHAR(20) DEFAULT 'flowchart'")
+            )
+            db.session.commit()
+        _mark_schema_ensured('clinical_flowchart_content_type')
+    except Exception:
+        db.session.rollback()
+
+
+def ensure_clinic_assets_table():
+    """Tạo/bổ sung bảng clinic_assets (không xóa dữ liệu cũ)."""
+    if _is_schema_ensured('clinic_assets_table'):
+        return
+    try:
+        db.create_all()
+        result = db.session.execute(text('PRAGMA table_info(clinic_assets)'))
+        columns = {row[1] for row in result.fetchall()}
+        alters = []
+        if 'asset_type' not in columns:
+            alters.append("ALTER TABLE clinic_assets ADD COLUMN asset_type VARCHAR(20) DEFAULT 'equipment'")
+        if 'usage_notes' not in columns:
+            alters.append('ALTER TABLE clinic_assets ADD COLUMN usage_notes TEXT')
+        if 'troubleshooting_notes' not in columns:
+            alters.append('ALTER TABLE clinic_assets ADD COLUMN troubleshooting_notes TEXT')
+        if 'purchase_notes' not in columns:
+            alters.append('ALTER TABLE clinic_assets ADD COLUMN purchase_notes TEXT')
+        if 'description' not in columns:
+            alters.append('ALTER TABLE clinic_assets ADD COLUMN description TEXT')
+        if 'image_name' not in columns:
+            alters.append('ALTER TABLE clinic_assets ADD COLUMN image_name VARCHAR(255)')
+        if 'sort_order' not in columns:
+            alters.append('ALTER TABLE clinic_assets ADD COLUMN sort_order INTEGER DEFAULT 0')
+        for sql in alters:
+            db.session.execute(text(sql))
+        if alters:
+            db.session.commit()
+        _mark_schema_ensured('clinic_assets_table')
+    except Exception:
+        db.session.rollback()
+
+
+def ensure_clinic_techniques_table():
+    """Tạo bảng clinic_techniques (danh mục kĩ thuật phòng khám)."""
+    if _is_schema_ensured('clinic_techniques_table'):
+        return
+    try:
+        db.create_all()
+        result = db.session.execute(text('PRAGMA table_info(clinic_techniques)'))
+        columns = {row[1] for row in result.fetchall()}
+        alters = []
+        if columns:
+            if 'indications' not in columns:
+                alters.append('ALTER TABLE clinic_techniques ADD COLUMN indications TEXT')
+            if 'contraindications' not in columns:
+                alters.append('ALTER TABLE clinic_techniques ADD COLUMN contraindications TEXT')
+            if 'instruments' not in columns:
+                alters.append('ALTER TABLE clinic_techniques ADD COLUMN instruments TEXT')
+            if 'consumables' not in columns:
+                alters.append('ALTER TABLE clinic_techniques ADD COLUMN consumables TEXT')
+            if 'steps' not in columns:
+                alters.append('ALTER TABLE clinic_techniques ADD COLUMN steps TEXT')
+            if 'post_monitoring' not in columns:
+                alters.append('ALTER TABLE clinic_techniques ADD COLUMN post_monitoring TEXT')
+            if 'images_json' not in columns:
+                alters.append('ALTER TABLE clinic_techniques ADD COLUMN images_json TEXT')
+            if 'sort_order' not in columns:
+                alters.append('ALTER TABLE clinic_techniques ADD COLUMN sort_order INTEGER DEFAULT 0')
+        for sql in alters:
+            db.session.execute(text(sql))
+        if alters:
+            db.session.commit()
+        _mark_schema_ensured('clinic_techniques_table')
+    except Exception:
+        db.session.rollback()
+
+
 def ensure_booking_reasons_column():
     try:
         result = db.session.execute(text('PRAGMA table_info(booking_page_content)'))
@@ -2471,16 +2941,22 @@ def ensure_booking_reasons_column():
 
 def ensure_clinical_service_setting_columns():
     """Ensure backward compatibility by adding missing columns to clinical_service_setting table."""
+    if _is_schema_ensured('clinical_service_setting_columns'):
+        return
     try:
         result = db.session.execute(text('PRAGMA table_info(clinical_service_setting)'))
         columns = [row[1] for row in result.fetchall()]
+        alter_sql = []
         if 'description' not in columns:
-            db.session.execute(text("ALTER TABLE clinical_service_setting ADD COLUMN description TEXT DEFAULT '' NOT NULL"))
+            alter_sql.append("ALTER TABLE clinical_service_setting ADD COLUMN description TEXT DEFAULT '' NOT NULL")
         if 'service_group' not in columns:
-            db.session.execute(text('ALTER TABLE clinical_service_setting ADD COLUMN service_group VARCHAR(50)'))
+            alter_sql.append('ALTER TABLE clinical_service_setting ADD COLUMN service_group VARCHAR(50)')
         if 'provider_unit' not in columns:
-            db.session.execute(text('ALTER TABLE clinical_service_setting ADD COLUMN provider_unit VARCHAR(100)'))
+            alter_sql.append('ALTER TABLE clinical_service_setting ADD COLUMN provider_unit VARCHAR(100)')
+        for sql in alter_sql:
+            db.session.execute(text(sql))
         db.session.commit()
+        _mark_schema_ensured('clinical_service_setting_columns')
     except Exception:
         db.session.rollback()
         # Best-effort migration; ignore if cannot alter (e.g., already exists or locked)
@@ -2516,6 +2992,21 @@ def ensure_clinical_service_sync_columns():
             db.session.commit()
     except Exception:
         db.session.rollback()
+
+def ensure_appointment_discount_column():
+    """Best-effort migration: thêm cột discount_amount trên bảng appointment (SQLite)."""
+    if _is_schema_ensured('appointment_discount_column'):
+        return
+    try:
+        result = db.session.execute(text('PRAGMA table_info(appointment)'))
+        columns = [row[1] for row in result.fetchall()]
+        if 'discount_amount' not in columns:
+            db.session.execute(text('ALTER TABLE appointment ADD COLUMN discount_amount FLOAT DEFAULT 0'))
+            db.session.commit()
+        _mark_schema_ensured('appointment_discount_column')
+    except Exception:
+        db.session.rollback()
+        # Best-effort; bỏ qua nếu không alter được (đã tồn tại hoặc DB bị khóa)
 
 def ensure_work_schedule_columns():
     """Ensure new columns exist on work_schedule: is_locked, slot_minutes, is_closed, external_id."""
@@ -2573,23 +3064,29 @@ def ensure_home_content_style_columns():
 
 def ensure_appointment_doctor_column():
     """Ensure Appointment table has doctor_name column."""
+    if _is_schema_ensured('appointment_doctor_column'):
+        return
     try:
         result = db.session.execute(text('PRAGMA table_info(appointment)'))
         columns = [row[1] for row in result.fetchall()]
         if 'doctor_name' not in columns:
             db.session.execute(text("ALTER TABLE appointment ADD COLUMN doctor_name VARCHAR(100) DEFAULT 'PK Đại Anh'"))
             db.session.commit()
+        _mark_schema_ensured('appointment_doctor_column')
     except Exception:
         db.session.rollback()
 
 def ensure_appointment_expected_delivery_date_column():
     """Ensure Appointment table has expected_delivery_date column."""
+    if _is_schema_ensured('appointment_expected_delivery_date_column'):
+        return
     try:
         result = db.session.execute(text('PRAGMA table_info(appointment)'))
         columns = [row[1] for row in result.fetchall()]
         if 'expected_delivery_date' not in columns:
             db.session.execute(text("ALTER TABLE appointment ADD COLUMN expected_delivery_date DATE"))
             db.session.commit()
+        _mark_schema_ensured('appointment_expected_delivery_date_column')
     except Exception:
         db.session.rollback()
 
@@ -2622,6 +3119,8 @@ def ensure_appointment_sync_columns():
             alter_sql.append("ALTER TABLE appointment ADD COLUMN Maysieuam_sync_time DATETIME")
         if 'expected_delivery_date' not in columns:
             alter_sql.append("ALTER TABLE appointment ADD COLUMN expected_delivery_date DATE")
+        if 'pregnancy_episode_id' not in columns:
+            alter_sql.append("ALTER TABLE appointment ADD COLUMN pregnancy_episode_id INTEGER")
 
         for sql in alter_sql:
             db.session.execute(text(sql))
@@ -2631,6 +3130,10 @@ def ensure_appointment_sync_columns():
             db.session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_appointment_global_id ON appointment(global_id)"))
         except Exception:
             pass
+        try:
+            db.session.execute(text("CREATE INDEX IF NOT EXISTS idx_appointment_pregnancy_episode_id ON appointment(pregnancy_episode_id)"))
+        except Exception:
+            pass
 
         if alter_sql:
             db.session.commit()
@@ -2638,6 +3141,23 @@ def ensure_appointment_sync_columns():
         db.session.rollback()
     # Keep AppointmentChangeRequest schema compatible as the two features are coupled.
     ensure_appointment_change_request_columns()
+    ensure_appointment_active_slot_unique_index()
+
+
+def ensure_appointment_active_slot_unique_index():
+    """Một khung giờ chỉ một lịch đang hoạt động (chống double-book khi race)."""
+    if _is_schema_ensured('appointment_active_slot_unique'):
+        return
+    try:
+        db.session.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_appointment_active_slot "
+            "ON appointment(appointment_date) WHERE status != 'cancelled'"
+        ))
+        db.session.commit()
+        _mark_schema_ensured('appointment_active_slot_unique')
+    except Exception as ex:
+        db.session.rollback()
+        print(f"[SCHEMA] appointment active slot unique index warning: {ex}")
 
 def ensure_appointment_change_request_columns():
     """Best-effort migration cho bảng appointment_change_request trên DB cũ."""
@@ -2673,6 +3193,46 @@ def _sync_token_ok(req, body: dict = None) -> bool:
     if not got:
         return False
     return hmac.compare_digest(got.encode('utf-8'), expected.encode('utf-8'))
+
+
+def _pacs_internal_token_ok(req) -> bool:
+    """Xác thực callback nội bộ từ dicom_receiver (LAN)."""
+    expected = (
+        os.environ.get('PACS_INTERNAL_TOKEN')
+        or app.config.get('PACS_INTERNAL_TOKEN')
+        or os.environ.get('SYNC_TOKEN')
+        or app.config.get('SYNC_TOKEN')
+        or ''
+    ).strip()
+    if not expected:
+        remote = (req.remote_addr or '').strip()
+        return remote in ('127.0.0.1', '::1')
+    got = (req.headers.get('X-PACS-Token') or req.headers.get('X-Sync-Token') or '').strip()
+    if not got:
+        return False
+    return hmac.compare_digest(got.encode('utf-8'), expected.encode('utf-8'))
+
+
+def _auth_token_from_request():
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        return auth_header.split(' ', 1)[1].strip()
+    return (request.cookies.get('auth_token') or '').strip() or None
+
+
+def _require_staff_api_access(fn):
+    """API DICOM/PACS: nhân viên đã đăng nhập hoặc token nội bộ (dicom_receiver)."""
+    def wrapped(*args, **kwargs):
+        if request.method == 'OPTIONS':
+            return fn(*args, **kwargs)
+        if _pacs_internal_token_ok(request):
+            return fn(*args, **kwargs)
+        user_id = get_user_from_token(_auth_token_from_request())
+        if not user_id:
+            return jsonify({'error': 'Unauthorized'}), 401
+        return fn(*args, **kwargs)
+    wrapped.__name__ = fn.__name__
+    return wrapped
 
 
 def _parse_appointment_datetime(value):
@@ -3072,6 +3632,74 @@ def ensure_ultrasound_result_columns():
         # Ignore if table doesn't exist yet or column already exists
         print(f"⚠️ Migration ultrasound_results: {str(e)}")
 
+def ensure_gyn_ultrasound_schema():
+    """Ensure gynecological ultrasound results table exists."""
+    try:
+        db.create_all()
+    except Exception as e:
+        print(f"⚠️ Migration gyn_ultrasound_results: {str(e)}")
+
+def ensure_gyn_exam_schema():
+    """Ensure gynecological examination results table exists."""
+    try:
+        db.create_all()
+    except Exception as e:
+        print(f"⚠️ Migration gyn_exam_results: {str(e)}")
+
+def ensure_general_ultrasound_schema():
+    """Ensure general ultrasound results table exists."""
+    try:
+        db.create_all()
+    except Exception as e:
+        print(f"⚠️ Migration general_ultrasound_results: {str(e)}")
+
+def ensure_obstetric_exam_schema():
+    """Ensure obstetric (ANC) examination results table exists."""
+    try:
+        db.create_all()
+    except Exception as e:
+        print(f"⚠️ Migration obstetric_exam_results: {str(e)}")
+
+def ensure_fertility_andrology_schema():
+    """Ensure follicle monitoring + andrology/semen tables exist."""
+    try:
+        db.create_all()
+    except Exception as e:
+        print(f"⚠️ Migration fertility/andrology tables: {str(e)}")
+
+def ensure_infertility_couple_schema():
+    """Ensure infertility couple link table exists."""
+    try:
+        db.create_all()
+    except Exception as e:
+        print(f"⚠️ Migration infertility_couples: {str(e)}")
+
+
+def _sync_appointment_diagnosis(appointment_id, patient_id, diagnosis_text):
+    """Upsert MedicalRecord.diagnosis for appointment so examination-list shows it."""
+    diag = (diagnosis_text or '').strip()
+    if not appointment_id or not patient_id or not diag:
+        return False
+    try:
+        appt = db.session.get(Appointment, int(appointment_id))
+        if not appt:
+            return False
+        pid = int(patient_id)
+        if appt.patient_id and int(appt.patient_id) != pid:
+            # Prefer appointment's patient; still allow sync if IDs match intent
+            pid = int(appt.patient_id)
+        rec = MedicalRecord.query.filter_by(appointment_id=int(appointment_id)).order_by(MedicalRecord.id.desc()).first()
+        if not rec:
+            rec = MedicalRecord(patient_id=pid, appointment_id=int(appointment_id))
+            db.session.add(rec)
+        # Keep short for list view; preserve existing longer text if new is empty already handled
+        rec.diagnosis = diag[:2000]
+        rec.patient_id = pid
+        return True
+    except Exception as e:
+        print(f"⚠️ sync appointment diagnosis failed: {e}")
+        return False
+
 def normalize_service_group_name(name):
     return (name or '').strip().lower()
 
@@ -3447,13 +4075,15 @@ def sync_templates_for_clinical_service(service_name, service_group=None, old_se
     if request_template:
         request_template.name = label
         request_template.description = f'Mẫu phiếu chỉ định cho dịch vụ {label}'
+        request_template.category = group_id
         request_template.content_html = request_template.content_html or build_default_request_template_html(label)
         request_template.updated_at = datetime.utcnow()
     else:
         db.session.add(SpecialTemplate(
             name=label,
             description=f'Mẫu phiếu chỉ định cho dịch vụ {label}',
-            content_html=build_default_request_template_html(label)
+            content_html=build_default_request_template_html(label),
+            category=group_id,
         ))
 
     if result_template:
@@ -3473,8 +4103,71 @@ def sync_templates_for_clinical_service(service_name, service_group=None, old_se
 def sync_all_clinical_service_templates():
     services = ClinicalServiceSetting.query.all()
     sync_lab_result_groups_with_service_groups(commit_changes=False)
+    backfill_special_template_categories(commit=False)
     for service in services:
         sync_templates_for_clinical_service(service.name, service_group=service.service_group)
+    db.session.commit()
+
+def _template_name_norm(value):
+    return normalize_service_group_name(value)
+
+def resolve_template_category_for_service(service_name, explicit_category=None):
+    category = (explicit_category or '').strip()
+    if category:
+        return category
+    group_name = find_service_group_for_service(service_name)
+    if group_name:
+        return make_service_group_slug(group_name)
+    result_tpl = LabResultTemplate.query.filter(
+        func.lower(LabResultTemplate.name) == _template_name_norm(service_name)
+    ).first()
+    if result_tpl and result_tpl.category:
+        return result_tpl.category
+    request_tpl = SpecialTemplate.query.filter(
+        func.lower(SpecialTemplate.name) == _template_name_norm(service_name)
+    ).first()
+    if request_tpl and getattr(request_tpl, 'category', None):
+        return request_tpl.category
+    return 'other-test'
+
+def sync_paired_clinical_template_category(template_name, category, commit=False):
+    """Đồng bộ nhóm mẫu chỉ định ↔ mẫu kết quả cùng tên dịch vụ."""
+    label = (template_name or '').strip()
+    category_id = (category or '').strip() or 'other-test'
+    if not label:
+        return
+    ensure_special_template_category_column()
+    ensure_lab_result_template_columns()
+    norm = _template_name_norm(label)
+    if not norm:
+        return
+    request_tpl = SpecialTemplate.query.filter(func.lower(SpecialTemplate.name) == norm).first()
+    if request_tpl:
+        request_tpl.category = category_id
+        request_tpl.updated_at = datetime.utcnow()
+    result_tpl = LabResultTemplate.query.filter(func.lower(LabResultTemplate.name) == norm).first()
+    if result_tpl:
+        result_tpl.category = category_id
+        result_tpl.updated_at = datetime.utcnow()
+    if commit:
+        db.session.commit()
+
+def backfill_special_template_categories(commit=True):
+    """Gán nhóm cho mẫu chỉ định từ dịch vụ CLS hoặc mẫu kết quả cùng tên."""
+    ensure_special_template_category_column()
+    ensure_lab_result_template_columns()
+    changed = False
+    for request_tpl in SpecialTemplate.query.all():
+        if getattr(request_tpl, 'category', None):
+            continue
+        resolved = resolve_template_category_for_service(request_tpl.name)
+        if resolved:
+            request_tpl.category = resolved
+            request_tpl.updated_at = datetime.utcnow()
+            changed = True
+    if changed and commit:
+        db.session.commit()
+    return changed
 
 def find_service_group_for_service(service_name):
     normalized = normalize_service_group_name(service_name)
@@ -3871,6 +4564,16 @@ def normalize_patient_display_name(name):
     return str(name).strip().upper()
 
 
+def normalize_vn_phone(phone):
+    """Chuẩn hóa SĐT VN: chỉ giữ chữ số; +84/84 đầu → 0… (10–11 số)."""
+    if phone is None:
+        return ''
+    digits = re.sub(r'\D', '', str(phone).strip())
+    if digits.startswith('84') and len(digits) >= 10:
+        digits = '0' + digits[2:]
+    return digits
+
+
 def _find_patient_by_phone_name_dob(phone, name_norm, date_of_birth):
     """Một SĐT có thể có nhiều Patient; khớp theo SĐT + tên (đã chuẩn hóa) + ngày sinh."""
     if not phone or not name_norm or not date_of_birth:
@@ -3892,7 +4595,7 @@ def _resolve_booking_patient(data, dob_date):
     nếu không có thì tạo hồ sơ mới (cùng SĐT được phép).
     Cập nhật name/address/dob từ form lên bản ghi đã chọn.
     """
-    phone = (data.get('phone') or '').strip()
+    phone = normalize_vn_phone(data.get('phone') or '')
     storage_name = normalize_patient_display_name(data.get('name') or '')
     addr = data.get('address')
     patient = None
@@ -3904,7 +4607,7 @@ def _resolve_booking_patient(data, dob_date):
             want_id = None
         if want_id:
             cand = Patient.query.get(want_id)
-            if cand and (cand.phone or '').strip() == phone:
+            if cand and normalize_vn_phone(cand.phone or '') == phone:
                 patient = cand
     if not patient:
         patient = _find_patient_by_phone_name_dob(phone, storage_name, dob_date)
@@ -4161,9 +4864,12 @@ def work_schedule_default_slot_minutes():
         return jsonify({'success': False, 'message': str(e)}), 500
 
 # Routes
-_MWL_AUTOSTART_LOCK = threading.Lock()
-_MWL_AUTOSTART_LAST_TRY_AT = None
-_MWL_AUTOSTART_COOLDOWN_SECONDS = 15
+_DICOM_AUTOSTART_LOCK = threading.Lock()
+_DICOM_AUTOSTART_LAST_TRY = {}
+_DICOM_AUTOSTART_COOLDOWN_SECONDS = 15
+DICOM_MWL_PORT = int(os.environ.get('DICOM_MWL_PORT', '104') or '104')
+DICOM_CSTORE_PORT = int(os.environ.get('DICOM_CSTORE_PORT', '11112') or '11112')
+
 
 def _is_local_port_open(port: int, timeout_sec: float = 0.6) -> bool:
     try:
@@ -4175,28 +4881,27 @@ def _is_local_port_open(port: int, timeout_sec: float = 0.6) -> bool:
     except Exception:
         return False
 
-def _ensure_mwl_server_running() -> bool:
-    """
-    Auto-start MWL server on port 104 when web is opened.
-    Best effort: do nothing if already running.
-    """
-    global _MWL_AUTOSTART_LAST_TRY_AT
-    if _is_local_port_open(104):
+
+def _ensure_dicom_script_running(script_name: str, port: int, state_key: str) -> bool:
+    """Khởi động nền mwl_server.py hoặc dicom_receiver.py nếu port chưa mở."""
+    global _DICOM_AUTOSTART_LAST_TRY
+    if _is_local_port_open(port):
         return True
 
     now = datetime.utcnow()
-    with _MWL_AUTOSTART_LOCK:
-        if _is_local_port_open(104):
+    with _DICOM_AUTOSTART_LOCK:
+        if _is_local_port_open(port):
             return True
-        if _MWL_AUTOSTART_LAST_TRY_AT is not None:
-            elapsed = (now - _MWL_AUTOSTART_LAST_TRY_AT).total_seconds()
-            if elapsed < _MWL_AUTOSTART_COOLDOWN_SECONDS:
+        last_try = _DICOM_AUTOSTART_LAST_TRY.get(state_key)
+        if last_try is not None:
+            elapsed = (now - last_try).total_seconds()
+            if elapsed < _DICOM_AUTOSTART_COOLDOWN_SECONDS:
                 return False
-        _MWL_AUTOSTART_LAST_TRY_AT = now
+        _DICOM_AUTOSTART_LAST_TRY[state_key] = now
 
-        script_path = (Path(__file__).resolve().parent / 'mwl_server.py')
+        script_path = (Path(__file__).resolve().parent / script_name)
         if not script_path.exists():
-            print("[MWL-AUTOSTART] Không tìm thấy mwl_server.py")
+            print(f"[DICOM-AUTOSTART:{state_key}] Không tìm thấy {script_name}")
             return False
 
         try:
@@ -4213,10 +4918,40 @@ def _ensure_mwl_server_running() -> bool:
                     | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
                 )
             subprocess.Popen([sys.executable, str(script_path)], **popen_kwargs)
+            print(f"[DICOM-AUTOSTART:{state_key}] Đã khởi động {script_name} (port {port})")
         except Exception as e:
-            print(f"[MWL-AUTOSTART] Không thể khởi động mwl_server.py: {e}")
+            print(f"[DICOM-AUTOSTART:{state_key}] Không thể khởi động {script_name}: {e}")
             return False
     return False
+
+
+def _ensure_mwl_server_running() -> bool:
+    """Auto-start MWL server on port 104 when web is opened."""
+    return _ensure_dicom_script_running('mwl_server.py', DICOM_MWL_PORT, 'mwl')
+
+
+def _ensure_dicom_receiver_running() -> bool:
+    """Auto-start C-STORE receiver on port 11112 khi mở web (VR PACS / worklist)."""
+    return _ensure_dicom_script_running('dicom_receiver.py', DICOM_CSTORE_PORT, 'cstore')
+
+
+def _mwl_sync_days_ahead() -> int:
+    """Số ngày tới đồng bộ MWL (hôm nay + N ngày). Mặc định 7."""
+    try:
+        raw = AppSetting.get_value('mwl_sync_days_ahead', '') or os.environ.get('MWL_SYNC_DAYS_AHEAD', '7')
+        days = int(str(raw).strip())
+    except Exception:
+        days = 7
+    return max(0, min(days, 30))
+
+
+def _mwl_appointment_date_sql(alias: str = 'a') -> str:
+    """Điều kiện SQL lọc ngày hẹn cho MWL sync."""
+    col = f"date({alias}.appointment_date)"
+    days = _mwl_sync_days_ahead()
+    if days <= 0:
+        return f"{col} = date('now', 'localtime')"
+    return f"{col} BETWEEN date('now', 'localtime') AND date('now', 'localtime', '+{days} day')"
 
 
 def _request_hostname():
@@ -4230,7 +4965,8 @@ def _is_patient_booking_host():
     Mặc định: dangki.* — cấu hình thêm bằng BOOKING_HOST_PREFIXES (phân tách bằng dấu phẩy).
     """
     host = _request_hostname()
-    raw = (os.environ.get('BOOKING_HOST_PREFIXES') or 'dangki.').strip()
+    # Mặc định hỗ trợ cả booking.* và dangki.* (Render subdomain đặt lịch)
+    raw = (os.environ.get('BOOKING_HOST_PREFIXES') or 'booking.,dangki.').strip()
     for prefix in raw.split(','):
         prefix = prefix.strip().lower()
         if prefix and host.startswith(prefix):
@@ -4257,6 +4993,9 @@ def auto_start_mwl_for_main_pages():
             return
         if path == '/' or path.endswith('.html'):
             _ensure_mwl_server_running()
+            # C-STORE cần cho nhận ảnh VR PACS (port 11112)
+            if any(k in path for k in ('vr-pacs', 'worklist', 'examination-list', 'ultrasound')):
+                _ensure_dicom_receiver_running()
     except Exception as e:
         print(f"[MWL-AUTOSTART] before_request error: {e}")
 
@@ -4306,12 +5045,14 @@ def create_appointment():
     for field in required_fields:
         if not data.get(field):
             return jsonify({'message': f'Vui lòng nhập đầy đủ thông tin {field}.'}), 400
-    # Kiểm tra số điện thoại hợp lệ (10-11 số, chỉ chứa số)
-    if not re.match(r'^\d{10,11}$', data['phone']):
+    # Chuẩn hóa và kiểm tra số điện thoại (10-11 số)
+    phone_norm = normalize_vn_phone(data.get('phone', ''))
+    if not re.match(r'^\d{10,11}$', phone_norm):
         return jsonify({'message': 'Số điện thoại không hợp lệ. Vui lòng nhập đúng 10-11 số.'}), 400
+    data['phone'] = phone_norm
     # Kiểm tra ngày sinh hợp lệ
     try:
-        dob = datetime.strptime(data['date_of_birth'], '%Y-%m-%d')
+        dob = datetime.strptime(data['date_of_birth'], '%Y-%m-%d').date()
     except Exception:
         return jsonify({'message': 'Ngày sinh không hợp lệ. Định dạng đúng: yyyy-mm-dd.'}), 400
 
@@ -4366,15 +5107,16 @@ def create_appointment():
 
         patient = _resolve_booking_patient(data, dob)
 
-        same_shift_same_person = Appointment.query.filter(
+        # Một hồ sơ chỉ một lịch khám trong ngày (tránh đặt trùng sáng/chiều)
+        same_day_same_person = Appointment.query.filter(
             Appointment.patient_id == patient.id,
             db.func.date(Appointment.appointment_date) == day_date,
-            db.func.strftime('%H:%M', Appointment.appointment_date) >= containing_shift.start_time,
-            db.func.strftime('%H:%M', Appointment.appointment_date) < containing_shift.end_time,
             Appointment.status != 'cancelled',
         ).first()
-        if same_shift_same_person:
-            return jsonify({'message': 'Hồ sơ này đã có lịch trong phiên khám đã chọn. Vui lòng chọn giờ khác hoặc hồ sơ khác.'}), 400
+        if same_day_same_person:
+            return jsonify({
+                'message': 'Hồ sơ này đã có lịch khám trong ngày này. Vui lòng chọn ngày khác hoặc hủy lịch cũ trước khi đăng ký mới.'
+            }), 400
 
         appointment = Appointment(
             patient_id=patient.id,
@@ -4386,8 +5128,20 @@ def create_appointment():
             version=1,
             last_modified_by='patient',
         )
+        if is_obstetric_appointment(appointment):
+            ensure_pregnancy_episode_schema()
+            active_pregnancy = PregnancyEpisode.query.filter_by(
+                patient_id=patient.id, status='active'
+            ).order_by(PregnancyEpisode.created_at.desc()).first()
+            if active_pregnancy and active_pregnancy.expected_delivery_date:
+                appointment.expected_delivery_date = active_pregnancy.expected_delivery_date
+            link_appointment_to_pregnancy(appointment)
         db.session.add(appointment)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify({'message': 'Khung giờ này đã có người đăng ký. Vui lòng chọn giờ khác.'}), 400
 
         mirror_payload = {
             'name': patient.name,
@@ -4541,6 +5295,8 @@ def update_appointment(appointment_id: int):
             appt.last_modified_by = 'clinic'
             appt.version = (appt.version or 1) + 1
             appt.updated_at = datetime.utcnow()
+            if has_expected_delivery_date or is_obstetric_appointment(appt):
+                link_appointment_to_pregnancy(appt)
             db.session.commit()
 
             # Nếu đổi lý do khám liên quan siêu âm thì cập nhật MWL ngay
@@ -4637,6 +5393,8 @@ def update_appointment(appointment_id: int):
         appt.last_modified_by = 'clinic'
         appt.version = (appt.version or 1) + 1
         appt.updated_at = datetime.utcnow()
+        if 'expected_delivery_date' in data or is_obstetric_appointment(appt):
+            link_appointment_to_pregnancy(appt)
         db.session.commit()
 
         # Đổi ngày/giờ khám -> đồng bộ MWL tự động (nền)
@@ -4709,7 +5467,7 @@ def request_reschedule_appointment(appointment_id: int):
     ensure_appointment_sync_columns()
     try:
         data = request.json or {}
-        phone = (data.get('phone') or '').strip()
+        phone = normalize_vn_phone(data.get('phone') or '')
         dob_str = (data.get('date_of_birth') or '').strip()  # yyyy-mm-dd
         requested_date = (data.get('requested_date') or '').strip()  # yyyy-mm-dd
         requested_time = (data.get('requested_time') or '').strip()  # HH:MM
@@ -4725,7 +5483,7 @@ def request_reschedule_appointment(appointment_id: int):
             return jsonify({'message': 'Ngày sinh không hợp lệ (yyyy-mm-dd).'}), 400
 
         appt = _get_or_404(Appointment, appointment_id)
-        appt_phone = (appt.patient.phone or '').strip() if appt.patient else ''
+        appt_phone = normalize_vn_phone(appt.patient.phone or '') if appt.patient else ''
         appt_dob = appt.patient.date_of_birth if appt.patient else None
         if not appt.patient or appt_phone != phone or appt_dob != dob:
             return jsonify({'message': 'Không xác thực được lịch hẹn (sai SĐT hoặc ngày sinh).'}), 403
@@ -4760,10 +5518,11 @@ def request_reschedule_appointment(appointment_id: int):
         except Exception:
             return jsonify({'message': 'Thời gian đăng ký không hợp lệ.'}), 400
 
-        # Slot conflict check (exclude current appointment)
+        # Slot conflict check (exclude current appointment và lịch đã hủy)
         conflict = Appointment.query.filter(
             Appointment.id != appointment_id,
-            Appointment.appointment_date == new_dt
+            Appointment.appointment_date == new_dt,
+            Appointment.status != 'cancelled'
         ).first()
         if conflict:
             return jsonify({'message': 'Khung giờ đã có người đăng ký.'}), 400
@@ -4826,7 +5585,7 @@ def cancel_appointment_by_patient(appointment_id: int):
     ensure_appointment_sync_columns()
     try:
         data = request.json or {}
-        phone = (data.get('phone') or '').strip()
+        phone = normalize_vn_phone(data.get('phone') or '')
         dob_str = (data.get('date_of_birth') or '').strip()
         if not phone or not dob_str:
             return jsonify({'message': 'Thiếu thông tin (phone, date_of_birth).'}), 400
@@ -4838,7 +5597,7 @@ def cancel_appointment_by_patient(appointment_id: int):
             return jsonify({'message': 'Ngày sinh không hợp lệ (yyyy-mm-dd).'}), 400
 
         appt = _get_or_404(Appointment, appointment_id)
-        appt_phone = (appt.patient.phone or '').strip() if appt.patient else ''
+        appt_phone = normalize_vn_phone(appt.patient.phone or '') if appt.patient else ''
         appt_dob = appt.patient.date_of_birth if appt.patient else None
         if not appt.patient or appt_phone != phone or appt_dob != dob:
             return jsonify({'message': 'Không xác thực được lịch hẹn (sai SĐT hoặc ngày sinh).'}), 403
@@ -4988,6 +5747,19 @@ def delete_appointment(appointment_id: int):
         appointment_time = appointment.appointment_date.strftime('%H:%M')
         deleted_global_id = appointment.global_id
         
+        # Xóa hồ sơ bệnh án liên kết (nếu có) — ngược lại, xóa hồ sơ không xóa lịch khám.
+        try:
+            ensure_patient_record_columns()
+            ensure_patient_record_template_snapshot_table()
+            linked_records = PatientRecord.query.filter_by(appointment_id=appointment_id).all()
+            for pr in linked_records:
+                PatientRecordTemplateSnapshot.query.filter_by(
+                    patient_record_id=pr.id
+                ).delete(synchronize_session=False)
+                db.session.delete(pr)
+        except Exception:
+            pass
+
         # Xóa bản ghi con trước để tránh DB cũ bị lỗi NOT NULL/FK khi ORM set NULL.
         AppointmentChangeRequest.query.filter_by(appointment_id=appointment_id).delete(synchronize_session=False)
         Notification.query.filter_by(appointment_id=appointment_id).delete(synchronize_session=False)
@@ -5293,37 +6065,49 @@ def send_sms_notification(phone, message):
         return False
 
 def check_upcoming_appointments():
-    tomorrow = datetime.now() + timedelta(days=1)
-    appointments = Appointment.query.filter(
-        Appointment.appointment_date >= tomorrow,
-        Appointment.appointment_date < tomorrow + timedelta(days=1)
-    ).all()
-    
-    for appointment in appointments:
-        # Create notification record
-        notification = Notification(
-            patient_id=appointment.patient_id,
-            appointment_id=appointment.id,
-            notification_type='sms',
-            message=f"Lịch khám của bạn vào ngày {appointment.appointment_date.strftime('%d/%m/%Y %H:%M')} tại Phòng khám Phụ Sản Đại Anh. Vui lòng đến đúng giờ.",
-            sent_at=datetime.now(),
-            status='pending'
-        )
-        db.session.add(notification)
-        
-        # Send SMS
-        if send_sms_notification(appointment.patient.phone, notification.message):
-            notification.status = 'sent'
-        else:
-            notification.status = 'failed'
-        
-        db.session.commit()
+    """Chạy trong thread scheduler — bắt buộc có Flask app context khi truy vấn DB."""
+    try:
+        with app.app_context():
+            tomorrow = datetime.now() + timedelta(days=1)
+            appointments = Appointment.query.filter(
+                Appointment.appointment_date >= tomorrow,
+                Appointment.appointment_date < tomorrow + timedelta(days=1)
+            ).all()
+
+            for appointment in appointments:
+                notification = Notification(
+                    patient_id=appointment.patient_id,
+                    appointment_id=appointment.id,
+                    notification_type='sms',
+                    message=(
+                        f"Lịch khám của bạn vào ngày "
+                        f"{appointment.appointment_date.strftime('%d/%m/%Y %H:%M')} "
+                        f"tại Phòng khám Phụ Sản Đại Anh. Vui lòng đến đúng giờ."
+                    ),
+                    sent_at=datetime.now(),
+                    status='pending'
+                )
+                db.session.add(notification)
+
+                phone = appointment.patient.phone if appointment.patient else None
+                if phone and send_sms_notification(phone, notification.message):
+                    notification.status = 'sent'
+                else:
+                    notification.status = 'failed'
+
+                db.session.commit()
+    except Exception as e:
+        print(f"[SCHEDULER] check_upcoming_appointments error: {e}")
+
 
 def run_scheduler():
     import time as _time
     schedule.every().day.at("08:00").do(check_upcoming_appointments)
     while True:
-        schedule.run_pending()
+        try:
+            schedule.run_pending()
+        except Exception as e:
+            print(f"[SCHEDULER] run_pending error: {e}")
         _time.sleep(60)
 
 # Start scheduler in a separate thread
@@ -5331,11 +6115,11 @@ scheduler_thread = threading.Thread(target=run_scheduler)
 scheduler_thread.daemon = True
 scheduler_thread.start()
 
-# Startup trigger: thử backup 1 lần/ngày khi mở server
+# Startup trigger: sao lưu tự động 1 lần/tuần vào Chủ nhật khi bật máy chủ
 def _backup_startup_trigger():
     try:
         with app.app_context():
-            maybe_backup_once_per_day(trigger='startup')
+            maybe_backup_weekly_sunday_on_startup()
     except Exception as e:
         print(f"[BACKUP] startup trigger error: {e}")
 
@@ -5505,6 +6289,18 @@ def _apply_sync_event(event_type: str, payload_obj: dict) -> None:
             appt = Appointment.query.filter_by(global_id=global_id).first()
             if not appt:
                 return
+
+            try:
+                ensure_patient_record_columns()
+                ensure_patient_record_template_snapshot_table()
+                linked_records = PatientRecord.query.filter_by(appointment_id=appt.id).all()
+                for pr in linked_records:
+                    PatientRecordTemplateSnapshot.query.filter_by(
+                        patient_record_id=pr.id
+                    ).delete(synchronize_session=False)
+                    db.session.delete(pr)
+            except Exception:
+                pass
 
             AppointmentChangeRequest.query.filter_by(appointment_id=appt.id).delete(synchronize_session=False)
             Notification.query.filter_by(appointment_id=appt.id).delete(synchronize_session=False)
@@ -5743,6 +6539,17 @@ def run_sync_loop_local():
     print(f"[SYNC] local loop started. remote={remote}")
     _sync_state_set(loop_started_at_utc=_utc_iso_now(), last_error=None, last_error_at_utc=None)
 
+    # Khi máy chủ bật lại: đẩy lịch làm việc 30 ngày tới lên Render để bệnh nhân đặt được slot
+    try:
+        with app.app_context():
+            boot = _sync_work_schedules_to_peer_and_events()
+            print(
+                f"[SYNC] boot schedule push: mirrored={boot.get('mirrored')} "
+                f"range={boot.get('start_date')}..{boot.get('end_date')}"
+            )
+    except Exception as e:
+        print(f"[SYNC] boot schedule push skipped: {e}")
+
     while True:
         try:
             with app.app_context():
@@ -5848,41 +6655,1014 @@ try:
 except Exception:
     pass
 
-# Route for serving static files
-@app.route('/<path:filename>')
-def static_files(filename):
-    # Trang HTML không trong PUBLIC_PAGES → yêu cầu đăng nhập (dành cho nhân viên)
-    if filename.endswith('.html') and filename not in PUBLIC_PAGES:
-        token = request.cookies.get('auth_token') or request.headers.get('Authorization', '').replace('Bearer ', '')
-        user_id = get_user_from_token(token) if token else None
-        if not token or not user_id:
-            from flask import redirect
-            return redirect('/users.html?msg=Đăng nhập để truy cập trang này')
-        # Chặn truy cập trang không thuộc quyền theo vai trò (page/menu permissions)
-        try:
-            allowed = allowed_pages_for_user(user_id)
-            if '*' not in allowed and filename not in allowed:
-                return Response("Forbidden", status=403, mimetype='text/plain; charset=utf-8')
-        except Exception:
-            # Nếu có lỗi phụ trợ, vẫn ưu tiên không chặn để tránh ảnh hưởng vận hành
-            pass
-    return send_from_directory('.', filename)
+# API trích xuất báo cáo SA thai — đăng ký trước catch-all static để POST không bị 405
+@app.route('/api/fetal-parser-profiles', methods=['GET'])
+def api_list_fetal_parser_profiles():
+    try:
+        from fetal_image_parser.machine_profiles import list_all_profiles
+        data = list_all_profiles()
+        return jsonify({'success': True, **data})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/fetal-parser-profiles', methods=['POST'])
+def api_save_fetal_parser_profile():
+    try:
+        from fetal_image_parser.machine_profiles import upsert_custom_profile, set_active_profile_id
+        body = request.get_json(silent=True) or {}
+        name = (body.get('name') or '').strip()
+        note = (body.get('note') or '').strip()
+        base_profile = (body.get('base_profile') or 'generic').strip()
+        profile_id = body.get('id')
+        overrides = {
+            'alias_extra': body.get('alias_extra') or {},
+            'regex_extra': body.get('regex_extra') or {},
+            'ga_patterns': body.get('ga_patterns') or [],
+            'dicom_vendor_keywords': body.get('dicom_vendor_keywords') or {},
+        }
+        profile = upsert_custom_profile(
+            name, base_profile=base_profile, note=note, profile_id=profile_id, overrides=overrides
+        )
+        if body.get('set_active'):
+            set_active_profile_id(profile['id'])
+        return jsonify({'success': True, 'profile': profile})
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/fetal-parser-profiles/<profile_id>', methods=['DELETE'])
+def api_delete_fetal_parser_profile(profile_id):
+    try:
+        from fetal_image_parser.machine_profiles import delete_custom_profile
+        ok = delete_custom_profile(profile_id)
+        if not ok:
+            return jsonify({'success': False, 'message': 'Không tìm thấy cấu hình tùy chỉnh'}), 404
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/fetal-parser-profiles/<profile_id>/activate', methods=['POST'])
+def api_activate_fetal_parser_profile(profile_id):
+    try:
+        from fetal_image_parser.machine_profiles import set_active_profile_id
+        profile = set_active_profile_id(profile_id)
+        if not profile:
+            return jsonify({'success': False, 'message': 'Không tìm thấy cấu hình'}), 404
+        return jsonify({'success': True, 'profile': profile, 'active_profile_id': profile['id']})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/fetal-report/extract-from-image', methods=['POST'])
+def fetal_report_extract_from_image():
+    """Upload ảnh báo cáo siêu âm thai (JPG/PNG/DICOM) → trích chỉ số đo."""
+    try:
+        debug = request.args.get('debug', '').strip().lower() in ('1', 'true', 'yes')
+        image_bytes = None
+        filename = ''
+        if request.files and request.files.get('file'):
+            f = request.files['file']
+            filename = f.filename or ''
+            image_bytes = f.read()
+        else:
+            data = request.get_json(silent=True) or {}
+            image_data = data.get('image_data') or ''
+            filename = data.get('filename') or ''
+            if image_data.startswith('data:'):
+                image_data = image_data.split(',', 1)[1]
+            if image_data:
+                image_bytes = base64.b64decode(image_data)
+
+        if not image_bytes:
+            return jsonify({'success': False, 'message': 'Thiếu file ảnh báo cáo'}), 400
+
+        from fetal_image_parser.ingest import detect_ingest_type
+        from fetal_image_parser.machine_profiles import (
+            current_profile_id,
+            detect_profile_from_dicom,
+            get_active_profile_id,
+            get_profile,
+            parser_profile_scope,
+        )
+
+        body_json = request.get_json(silent=True) or {}
+        profile_arg = (
+            request.args.get('parser_profile')
+            or body_json.get('parser_profile')
+            or 'auto'
+        ).strip()
+        resolved_profile = profile_arg
+        if profile_arg == 'auto':
+            ingest = detect_ingest_type(image_bytes, filename)
+            if ingest.value == 'dicom':
+                try:
+                    import pydicom
+                    ds = pydicom.dcmread(BytesIO(image_bytes), force=True)
+                    resolved_profile = detect_profile_from_dicom(ds)
+                except Exception:
+                    resolved_profile = get_active_profile_id()
+            else:
+                resolved_profile = get_active_profile_id()
+
+        engine = get_fetal_image_parser_engine()
+        with parser_profile_scope(resolved_profile):
+            result = engine.parse(image_bytes, filename=filename, debug=debug)
+        payload = result.to_api_dict()
+        prof = get_profile(resolved_profile) or {}
+        parser_meta = dict(payload.get('parser') or {})
+        parser_meta['machine_profile'] = resolved_profile
+        parser_meta['machine_profile_name'] = prof.get('name') or resolved_profile
+        parser_meta['machine_profile_auto'] = profile_arg == 'auto'
+        payload['parser'] = parser_meta
+
+        if not result.success:
+            status = 503 if (
+                detect_ingest_type(image_bytes, filename).value == 'image' and not result.ocr_available
+            ) else 400
+            return jsonify(payload), status
+
+        if not result.filled_count:
+            if result.source_type == 'dicom':
+                payload['message'] = 'Không trích xuất được chỉ số từ DICOM — thử ảnh báo cáo hoặc nhập tay'
+            else:
+                payload['message'] = 'Không trích xuất được chỉ số — thử ảnh rõ hơn hoặc nhập tay'
+
+        min_conf_raw = request.args.get('min_confidence')
+        if min_conf_raw is None or str(min_conf_raw).strip() == '':
+            body = request.get_json(silent=True) or {}
+            min_conf_raw = body.get('min_confidence')
+        from fetal_image_parser.confidence_filter import apply_confidence_threshold_to_payload, parse_min_confidence_query
+        min_conf = parse_min_confidence_query(min_conf_raw)
+        if min_conf is not None and min_conf > 0:
+            payload = apply_confidence_threshold_to_payload(payload, min_conf)
+            applied_n = len(payload.get('measurements') or {})
+            skipped_n = len((payload.get('parser') or {}).get('skipped_fields') or [])
+            if applied_n > 0:
+                payload['message'] = (
+                    f"Đã điền {applied_n} chỉ số (tin cậy ≥ {int(min_conf * 100)}%)"
+                    + (f", bỏ qua {skipped_n} chỉ số dưới ngưỡng" if skipped_n else '')
+                )
+            elif skipped_n > 0:
+                payload['message'] = f'Không có chỉ số nào đạt tin cậy ≥ {int(min_conf * 100)}% — nhập tay hoặc hạ ngưỡng'
+
+        return jsonify(payload)
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi đọc ảnh báo cáo: {str(e)}'}), 500
+
+
+@app.route('/api/fetal-prognosis-table', methods=['GET'])
+def get_fetal_prognosis_table():
+    try:
+        return jsonify({'data': _load_fetal_prognosis_table()})
+    except Exception as e:
+        return jsonify({'message': f'Lỗi tải bảng tiên lượng thai nhi: {str(e)}'}), 500
+
+
+@app.route('/api/fetal-prognosis-table', methods=['PUT'])
+def update_fetal_prognosis_table():
+    try:
+        payload = request.json or {}
+        data = payload.get('data') if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            return jsonify({'message': 'Dữ liệu bảng tiên lượng không hợp lệ'}), 400
+        saved = _save_fetal_prognosis_table(data)
+        return jsonify({'success': True, 'data': saved, 'message': 'Đã lưu bảng tiên lượng thai nhi'})
+    except ValueError as e:
+        return jsonify({'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi lưu bảng tiên lượng thai nhi: {str(e)}'}), 500
+
+
+@app.route('/api/fetal-vaccination-table', methods=['GET'])
+def get_fetal_vaccination_table():
+    try:
+        return jsonify({'data': _load_fetal_vaccination_table()})
+    except Exception as e:
+        return jsonify({'message': f'Lỗi tải bảng tư vấn tiêm chủng: {str(e)}'}), 500
+
+
+@app.route('/api/fetal-vaccination-table', methods=['PUT'])
+def update_fetal_vaccination_table():
+    try:
+        payload = request.json or {}
+        data = payload.get('data') if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            return jsonify({'message': 'Dữ liệu bảng tiêm chủng không hợp lệ'}), 400
+        saved = _save_fetal_vaccination_table(data)
+        return jsonify({'success': True, 'data': saved, 'message': 'Đã lưu bảng tư vấn tiêm chủng'})
+    except ValueError as e:
+        return jsonify({'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi lưu bảng tư vấn tiêm chủng: {str(e)}'}), 500
+
+
+@app.route('/api/fetal-gdm-table', methods=['GET'])
+def get_fetal_gdm_table():
+    try:
+        return jsonify({'data': _load_fetal_gdm_table()})
+    except Exception as e:
+        return jsonify({'message': f'Lỗi tải bảng đái tháo đường thai kỳ: {str(e)}'}), 500
+
+
+@app.route('/api/fetal-gdm-table', methods=['PUT'])
+def update_fetal_gdm_table():
+    try:
+        payload = request.json or {}
+        data = payload.get('data') if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            return jsonify({'message': 'Dữ liệu bảng đái tháo đường thai kỳ không hợp lệ'}), 400
+        saved = _save_fetal_gdm_table(data)
+        return jsonify({'success': True, 'data': saved, 'message': 'Đã lưu bảng đái tháo đường thai kỳ'})
+    except ValueError as e:
+        return jsonify({'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi lưu bảng đái tháo đường thai kỳ: {str(e)}'}), 500
+
+
+@app.route('/api/fetal-nutrition-table', methods=['GET'])
+def get_fetal_nutrition_table():
+    try:
+        return jsonify({'data': _load_fetal_nutrition_table()})
+    except Exception as e:
+        return jsonify({'message': f'Lỗi tải bảng nhu cầu dinh dưỡng: {str(e)}'}), 500
+
+
+@app.route('/api/fetal-nutrition-table', methods=['PUT'])
+def update_fetal_nutrition_table():
+    try:
+        payload = request.json or {}
+        data = payload.get('data') if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            return jsonify({'message': 'Dữ liệu bảng nhu cầu dinh dưỡng không hợp lệ'}), 400
+        saved = _save_fetal_nutrition_table(data)
+        return jsonify({'success': True, 'data': saved, 'message': 'Đã lưu bảng nhu cầu dinh dưỡng'})
+    except ValueError as e:
+        return jsonify({'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi lưu bảng nhu cầu dinh dưỡng: {str(e)}'}), 500
+
+
+@app.route('/api/fetal-guide-table', methods=['GET'])
+def get_fetal_guide_table():
+    try:
+        return jsonify({'data': _load_fetal_guide_table()})
+    except Exception as e:
+        return jsonify({'message': f'Lỗi tải bảng hướng dẫn đo: {str(e)}'}), 500
+
+
+@app.route('/api/fetal-guide-table', methods=['PUT'])
+@require_auth
+def update_fetal_guide_table(**kwargs):
+    try:
+        payload = request.json or {}
+        data = payload.get('data') if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            return jsonify({'message': 'Dữ liệu bảng hướng dẫn không hợp lệ'}), 400
+        saved = _save_fetal_guide_table(data)
+        return jsonify({'success': True, 'data': saved, 'message': 'Đã lưu bảng hướng dẫn đo siêu âm thai'})
+    except ValueError as e:
+        return jsonify({'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi lưu bảng hướng dẫn đo: {str(e)}'}), 500
+
+
+CTG_PLACEMENT_GUIDE_SETTING_KEY = 'ctg_placement_guide_v1'
+
+_DEFAULT_CTG_PLACEMENT_GUIDE = {
+    'title': 'Hướng dẫn mắc CTG đúng cách',
+    'subtitle': (
+        'Cách gắn đầu dò tim thai (FHR) và đầu dò cơn co tử cung (TOCO) · '
+        'Kiểm tra trước khi ghi · Trường hợp CTG không đạt yêu cầu'
+    ),
+    'blocks': [
+        {
+            'type': 'section',
+            'icon': 'fa-user-check',
+            'title': 'Chuẩn bị & tư thế mẹ',
+            'items': [
+                'Giải thích quy trình, mẹ nằm nghiêng trái 15–30° (hoặc kê gối) để giảm chèn tĩnh mạch chủ dưới.',
+                'Vệ sinh da bụng, lau khô; bụng không quá ướt mồ hôi hoặc quá khô.',
+                'Bôi <strong>gel siêu âm dày đủ</strong> lên mặt đầu dò FHR và vùng da tiếp xúc.',
+                'Hạn chế thời gian nằm tĩnh quá lâu nếu mẹ khó chịu — có thể nghiêng nhẹ hai bên trong lúc ghi.',
+            ],
+        },
+        {
+            'type': 'grid',
+            'sections': [
+                {
+                    'icon': 'fa-baby',
+                    'title': 'Đầu dò tim thai (FHR / Doppler)',
+                    'items': [
+                        'Xác định vị trí tim thai bằng <strong>nghe tim Doppler tay</strong> hoặc siêu âm nhanh trước khi gắn đai.',
+                        'Đặt đầu dò đúng vùng tim thai (thường vùng lưng thai), không đặt lên mạch mẹ, xương sườn hay ruột (tiếng ồn / nhịp mẹ).',
+                        'Cố định bằng đai vừa đủ: không quá chặt gây khó chịu, không quá lỏng làm trượt đầu dò.',
+                        'Khi thai đổi vị trí / mất tín hiệu: tìm lại tim thai, điều chỉnh đầu dò và ghi chú thời điểm chỉnh.',
+                        'Đường FHR trên máy phải rõ, nhịp đập thai điển hình <strong>110–160 bpm</strong> (ngoài giai đoạn ngủ sâu có thể thấp hơn tạm thời).',
+                    ],
+                    'tip': 'Nếu đường FHR “đều như mạch mẹ” (~70–90 bpm) hoặc gấp đôi nhịp mẹ — nghi đang bắt nhầm mạch mẹ, cần đặt lại đầu dò.',
+                },
+                {
+                    'icon': 'fa-wave-square',
+                    'title': 'Đầu dò cơn co tử cung (TOCO)',
+                    'items': [
+                        'Đặt đầu dò TOCO phía trên vùng <strong>đáy tử cung (fundus)</strong>, giữa đường giữa bụng và vùng cơn co mạnh nhất khi thử.',
+                        'Đai chéo ngang bụng, cố định vừa phải; đầu dò tiếp xúc ổn định với da.',
+                        'Hiệu chỉnh baseline TOCO về mức thấp khi mẹ nghỉ (đường cơn co gần đường 0) trước khi bắt đầu ghi chính thức.',
+                        'Khi mẹ cử động, hoặc thở sâu, ho hoặc cười mạnh có thể tạo artifact — ghi chú trên phiếu nếu ảnh hưởng đọc đồ thị.',
+                        'TOCO đánh giá <strong>tần số và nhịp cơn co</strong>, không thay thế đo áp lực nội tử cung bằng catheter nội tử cung.',
+                    ],
+                },
+            ],
+        },
+        {
+            'type': 'section',
+            'icon': 'fa-clipboard-check',
+            'title': 'Kiểm tra trước khi chấp nhận bản ghi',
+            'items': [
+                'Thời gian ghi <strong>tối thiểu 20 phút</strong> (NST sản khoa); giai đoạn sản khoa có thể ghi liên tục theo phác đồ.',
+                'Đường FHR liên tục, mất tín hiệu ngắn &lt; 10% thời gian ghi; nếu mất dài phải ghi lại đoạn đó.',
+                'Có biến thiên (variability) và/hoặc gia tốc phù hợp tuổi thai khi thai thức.',
+                'Đường TOCO ổn định, phản ánh cơn co khi sờ bụng hoặc mẹ cảm nhận co.',
+                'Ghi rõ tuổi thai, ngày giờ, tư thế mẹ, thuốc/analgesia (nếu có) và cử động thai trên phiếu.',
+            ],
+        },
+        {
+            'type': 'section',
+            'icon': 'fa-exclamation-triangle',
+            'title': 'CTG không đạt yêu cầu — cần ghi lại hoặc can thiệp',
+            'items': [
+                '<strong>Mất tín hiệu FHR kéo dài</strong> (&gt; 10–15% thời gian hoặc đoạn mất &gt; 3 phút liên tục) do trượt đầu dò, hết gel, thai đổi vị trí.',
+                '<strong>Bắt nhầm nhịp mẹ</strong> (đường đều ~60–100 bpm, trùng mạch mẹ) hoặc nhiễu artifact / đường “răng cưa” do cử động mẹ.',
+                '<strong>Đường FHR phẳng bất thường</strong> (variability &lt; 5 bpm kéo dài) mà chưa rõ ngủ sâu — cần kích thích thai hoặc ghi lại.',
+                '<strong>Thời gian ghi &lt; 20 phút</strong> khi đánh giá NST antepartum (trừ chỉ định cấp cứu có ghi chú lâm sàng).',
+                '<strong>TOCO không hoạt động</strong>: đường phẳng trong khi có cơn co rõ; đặt sai vị trí; chưa baseline; đai quá lỏng.',
+                '<strong>Ảnh hưởng ngoài</strong>: máy rung, dây đầu dò kẹt, mẹ ra/vào toilet, vận động mạnh làm đồ thị không đọc được.',
+                '<strong>Ảnh chụp / file phân tích không đạt</strong>: méo, thiếu lưới BPM, cắt mất đường FHR, quá tối/sáng — không dùng để chấm điểm điện toán.',
+            ],
+            'failBox': (
+                'Điều chỉnh đầu dò, bổ sung gel, đổi tư thế mẹ, kích thích thai (vỗ bụng / tiếng ồn nhẹ) nếu cần; '
+                '<strong>ghi lại CTG mới tối thiểu 20 phút</strong> và ghi chú lý do bản ghi trước không đạt. '
+                'Kết quả lâm sàng vẫn ưu tiên hơn bản ghi kỹ thuật kém.'
+            ),
+            'warnText': 'Tham chiếu thêm tiêu chí đánh giá điện toán (Dawes-Redman, STV theo tuần thai) tại',
+            'warnLinkLabel': 'Bảng tiêu chí CTG',
+            'warnLinkHref': 'ultrasound-fetal-charts.html',
+        },
+    ],
+}
+
+
+def _normalize_ctg_placement_guide(data):
+    if not isinstance(data, dict):
+        raise ValueError('Dữ liệu hướng dẫn mắc CTG không hợp lệ')
+    title = str(data.get('title') or '').strip()
+    subtitle = str(data.get('subtitle') or '').strip()
+    blocks_in = data.get('blocks')
+    if not title:
+        raise ValueError('Thiếu tiêu đề hướng dẫn')
+    if not isinstance(blocks_in, list) or not blocks_in:
+        raise ValueError('Hướng dẫn phải có ít nhất một mục')
+
+    blocks_out = []
+    for block in blocks_in:
+        if not isinstance(block, dict):
+            continue
+        block_type = str(block.get('type') or 'section').strip()
+        if block_type == 'grid':
+            sections_in = block.get('sections')
+            if not isinstance(sections_in, list) or not sections_in:
+                continue
+            sections_out = []
+            for sec in sections_in:
+                if not isinstance(sec, dict):
+                    continue
+                sec_title = str(sec.get('title') or '').strip()
+                items = [str(x).strip() for x in (sec.get('items') or []) if str(x).strip()]
+                if not sec_title or not items:
+                    continue
+                sec_out = {
+                    'icon': str(sec.get('icon') or 'fa-circle').strip(),
+                    'title': sec_title,
+                    'items': items,
+                }
+                tip = str(sec.get('tip') or '').strip()
+                if tip:
+                    sec_out['tip'] = tip
+                sections_out.append(sec_out)
+            if sections_out:
+                blocks_out.append({'type': 'grid', 'sections': sections_out})
+            continue
+
+        sec_title = str(block.get('title') or '').strip()
+        items = [str(x).strip() for x in (block.get('items') or []) if str(x).strip()]
+        if not sec_title or not items:
+            continue
+        sec_out = {
+            'type': 'section',
+            'icon': str(block.get('icon') or 'fa-circle').strip(),
+            'title': sec_title,
+            'items': items,
+        }
+        for key in ('tip', 'failBox', 'warnText', 'warnLinkLabel', 'warnLinkHref'):
+            val = str(block.get(key) or '').strip()
+            if val:
+                sec_out[key] = val
+        blocks_out.append(sec_out)
+
+    if not blocks_out:
+        raise ValueError('Không có mục hướng dẫn hợp lệ')
+    return {'title': title, 'subtitle': subtitle, 'blocks': blocks_out}
+
+
+def _load_ctg_placement_guide():
+    try:
+        raw = AppSetting.get_value(CTG_PLACEMENT_GUIDE_SETTING_KEY, '') or ''
+        if not raw:
+            return json.loads(json.dumps(_DEFAULT_CTG_PLACEMENT_GUIDE))
+        return _normalize_ctg_placement_guide(json.loads(raw))
+    except ValueError:
+        return json.loads(json.dumps(_DEFAULT_CTG_PLACEMENT_GUIDE))
+    except Exception as exc:
+        print(f'load ctg placement guide failed: {exc}')
+        return json.loads(json.dumps(_DEFAULT_CTG_PLACEMENT_GUIDE))
+
+
+def _save_ctg_placement_guide(data):
+    normalized = _normalize_ctg_placement_guide(data)
+    AppSetting.set_value(
+        CTG_PLACEMENT_GUIDE_SETTING_KEY,
+        json.dumps(normalized, ensure_ascii=False),
+    )
+    return normalized
+
+
+@app.route('/api/ctg-placement-guide', methods=['GET'])
+def get_ctg_placement_guide():
+    try:
+        return jsonify({'data': _load_ctg_placement_guide()})
+    except Exception as e:
+        return jsonify({'message': f'Lỗi tải hướng dẫn mắc CTG: {str(e)}'}), 500
+
+
+@app.route('/api/ctg-placement-guide', methods=['PUT'])
+@require_auth
+def update_ctg_placement_guide(**kwargs):
+    try:
+        payload = request.json or {}
+        data = payload.get('data') if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            return jsonify({'message': 'Dữ liệu hướng dẫn không hợp lệ'}), 400
+        saved = _save_ctg_placement_guide(data)
+        return jsonify({
+            'success': True,
+            'data': saved,
+            'message': 'Đã lưu hướng dẫn mắc monitoring tim thai',
+        })
+    except ValueError as e:
+        return jsonify({'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi lưu hướng dẫn mắc CTG: {str(e)}'}), 500
+
+
+@app.route('/fetal-guide-media/<path:filename>')
+def fetal_guide_media_file(filename):
+    filename = str(filename or '').replace('\\', '/').lstrip('/')
+    parts = [p for p in filename.split('/') if p]
+    if not parts or '..' in parts:
+        return Response('Not found', status=404, mimetype='text/plain; charset=utf-8')
+    if len(parts) == 1:
+        rel_dir = ''
+        safe_name = werkzeug.utils.secure_filename(parts[0])
+    elif len(parts) == 2 and parts[0] == 'refs':
+        rel_dir = 'refs'
+        safe_name = werkzeug.utils.secure_filename(parts[1])
+    else:
+        return Response('Not found', status=404, mimetype='text/plain; charset=utf-8')
+    if not safe_name:
+        return Response('Not found', status=404, mimetype='text/plain; charset=utf-8')
+    path = os.path.join(FETAL_GUIDE_MEDIA_DIR, rel_dir, safe_name) if rel_dir else os.path.join(FETAL_GUIDE_MEDIA_DIR, safe_name)
+    if not os.path.isfile(path):
+        return Response('Not found', status=404, mimetype='text/plain; charset=utf-8')
+    return send_file(path, conditional=True)
+
+
+@app.route('/api/fetal-guide-media/upload', methods=['POST'])
+@require_auth
+def api_fetal_guide_media_upload(**kwargs):
+    try:
+        f = request.files.get('file') or request.files.get('image')
+        if not f or not getattr(f, 'filename', ''):
+            return jsonify({'success': False, 'error': 'Thiếu file ảnh.'}), 400
+        original = str(f.filename)
+        filename = werkzeug.utils.secure_filename(original)
+        ext = os.path.splitext(filename)[1].lower()
+        if not filename or ext not in FETAL_GUIDE_MEDIA_ALLOWED_EXTS:
+            return jsonify({'success': False, 'error': 'Chỉ hỗ trợ JPG, PNG, WEBP, GIF.'}), 400
+        base = os.path.splitext(filename)[0] or 'guide'
+        final_name = filename
+        i = 1
+        dst = os.path.join(FETAL_GUIDE_MEDIA_DIR, final_name)
+        while os.path.exists(dst):
+            final_name = f"{base}-{i}{ext}"
+            dst = os.path.join(FETAL_GUIDE_MEDIA_DIR, final_name)
+            i += 1
+        f.save(dst)
+        return jsonify({
+            'success': True,
+            'filename': final_name,
+            'url': _fetal_guide_media_public_url(final_name),
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/gyne/cervical-lesion-atlas', methods=['GET'])
+def api_get_gyne_cervical_lesion_atlas():
+    try:
+        return jsonify({'data': _load_gyne_cervical_lesion_atlas()})
+    except Exception as e:
+        return jsonify({'message': f'Lỗi tải atlas CTC: {str(e)}'}), 500
+
+
+@app.route('/api/gyne/cervical-lesion-atlas', methods=['PUT'])
+def api_update_gyne_cervical_lesion_atlas():
+    try:
+        payload = request.json or {}
+        data = payload.get('data') if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            return jsonify({'message': 'Dữ liệu atlas CTC không hợp lệ'}), 400
+        saved = _save_gyne_cervical_lesion_atlas(data)
+        return jsonify({'success': True, 'data': saved, 'message': 'Đã lưu atlas CTC'})
+    except ValueError as e:
+        return jsonify({'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi lưu atlas CTC: {str(e)}'}), 500
+
+
+_ATLAS_DIR = Path('Phu-san-Dai-Anh-Brand-Kit/Atlas-truyen-thong')
+_ATLAS_JSON_CACHE = {}
+_MEDICAL_CHARTS_RESPONSE_CACHE = {}
+_MEDICAL_CHARTS_CACHE_TTL = 0  # tắt cache server — bảng chỉ số thay đổi cấu trúc thường xuyên
+
+
+def _load_atlas_catalog():
+    path = _ATLAS_DIR / 'atlas-catalog.json'
+    if not path.is_file():
+        return None
+    mtime = path.stat().st_mtime
+    cached = _ATLAS_JSON_CACHE.get('catalog')
+    if cached and cached.get('mtime') == mtime:
+        return cached['data']
+    with open(path, encoding='utf-8') as f:
+        data = json.load(f)
+    _ATLAS_JSON_CACHE['catalog'] = {'mtime': mtime, 'data': data}
+    return data
+
+
+def _load_atlas_source_library():
+    path = _ATLAS_DIR / 'source-library.json'
+    if not path.is_file():
+        return None
+    mtime = path.stat().st_mtime
+    cached = _ATLAS_JSON_CACHE.get('source_library')
+    if cached and cached.get('mtime') == mtime:
+        return cached['data']
+    with open(path, encoding='utf-8') as f:
+        data = json.load(f)
+    _ATLAS_JSON_CACHE['source_library'] = {'mtime': mtime, 'data': data}
+    return data
+
+
+def _load_atlas_review_state():
+    path = _ATLAS_DIR / 'review-state.json'
+    if path.is_file():
+        with open(path, encoding='utf-8') as f:
+            return json.load(f)
+    catalog = _load_atlas_catalog() or {}
+    reviews = []
+    for topic in catalog.get('topics') or []:
+        reviews.append({
+            'slug': topic.get('slug'),
+            'title': topic.get('title'),
+            'volumeId': topic.get('volumeId'),
+            'contentLevel': topic.get('contentLevel', 'unknown'),
+            'reviewStatus': topic.get('reviewStatus') or 'clinician-review-needed',
+            'reviewer': '',
+            'reviewedAt': '',
+            'nextReviewDue': '2027-01-03',
+            'notes': '',
+            'updatedAt': ''
+        })
+    return {
+        'version': 1,
+        'workflow': [
+            'ai-draft',
+            'clinician-review-needed',
+            'needs-revision',
+            'approved-for-patient',
+            'approved-for-clinical-use',
+            'retired'
+        ],
+        'reviews': reviews
+    }
+
+
+def _save_atlas_review_state(data):
+    path = _ATLAS_DIR / 'review-state.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return data
+
+
+@app.route('/api/atlas/catalog', methods=['GET'])
+def api_atlas_catalog():
+    """Atlas truyền thông — catalog chủ đề (12 tập)."""
+    try:
+        data = _load_atlas_catalog()
+        if data is None:
+            return jsonify({'success': False, 'message': 'Chưa có atlas-catalog.json'}), 404
+        resp = jsonify({'success': True, 'data': data})
+        resp.headers['Cache-Control'] = 'private, max-age=300'
+        return resp
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi tải Atlas: {str(e)}'}), 500
+
+
+@app.route('/api/atlas/source-library', methods=['GET'])
+def api_atlas_source_library():
+    """Atlas — thư viện nguồn tham khảo chuẩn."""
+    try:
+        data = _load_atlas_source_library()
+        if data is None:
+            return jsonify({'success': False, 'message': 'Chưa có source-library.json'}), 404
+        return jsonify({'success': True, 'data': data})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi tải Source Library: {str(e)}'}), 500
+
+
+@app.route('/api/atlas/reviews', methods=['GET'])
+def api_atlas_reviews():
+    """Atlas — trạng thái review chuyên môn."""
+    try:
+        return jsonify({'success': True, 'data': _load_atlas_review_state()})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi tải review workflow: {str(e)}'}), 500
+
+
+@app.route('/api/atlas/topic/<slug>/review', methods=['PUT'])
+def api_atlas_update_topic_review(slug):
+    """Atlas — cập nhật reviewStatus/reviewer/notes cho một chủ đề."""
+    try:
+        safe = re.sub(r'[^a-z0-9\-]', '', str(slug or '').lower())
+        if not safe:
+            return jsonify({'success': False, 'message': 'Slug không hợp lệ'}), 400
+        payload = request.json or {}
+        allowed_status = {
+            'ai-draft',
+            'clinician-review-needed',
+            'needs-revision',
+            'approved-for-patient',
+            'approved-for-clinical-use',
+            'retired'
+        }
+        state = _load_atlas_review_state()
+        reviews = state.setdefault('reviews', [])
+        item = next((r for r in reviews if r.get('slug') == safe), None)
+        if item is None:
+            catalog = _load_atlas_catalog() or {}
+            meta = next((t for t in catalog.get('topics') or [] if t.get('slug') == safe), None)
+            if not meta:
+                return jsonify({'success': False, 'message': 'Không tìm thấy chủ đề'}), 404
+            item = {
+                'slug': safe,
+                'title': meta.get('title'),
+                'volumeId': meta.get('volumeId'),
+                'contentLevel': meta.get('contentLevel', 'unknown'),
+                'reviewStatus': meta.get('reviewStatus') or 'clinician-review-needed'
+            }
+            reviews.append(item)
+        review_status = str(payload.get('reviewStatus') or item.get('reviewStatus') or '').strip()
+        if review_status and review_status not in allowed_status:
+            return jsonify({'success': False, 'message': 'reviewStatus không hợp lệ'}), 400
+        for key in ['reviewStatus', 'reviewer', 'reviewedAt', 'nextReviewDue', 'notes']:
+            if key in payload:
+                item[key] = str(payload.get(key) or '').strip()
+        from datetime import date
+        item['updatedAt'] = date.today().isoformat()
+        _save_atlas_review_state(state)
+
+        topic_path = _ATLAS_DIR / 'topics' / safe / 'topic.json'
+        if topic_path.is_file():
+            with open(topic_path, encoding='utf-8') as f:
+                detail = json.load(f)
+            detail['reviewStatus'] = item.get('reviewStatus')
+            detail['reviewer'] = item.get('reviewer', '')
+            detail['reviewedAt'] = item.get('reviewedAt', '')
+            detail['nextReviewDue'] = item.get('nextReviewDue', '')
+            with open(topic_path, 'w', encoding='utf-8') as f:
+                json.dump(detail, f, ensure_ascii=False, indent=2)
+
+        return jsonify({'success': True, 'data': state, 'review': item})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi lưu review: {str(e)}'}), 500
+
+
+@app.route('/api/atlas/topic/<slug>', methods=['GET'])
+def api_atlas_topic(slug):
+    """Atlas — chi tiết một chủ đề (topic.json + metadata catalog)."""
+    try:
+        safe = re.sub(r'[^a-z0-9\-]', '', str(slug or '').lower())
+        if not safe:
+            return jsonify({'success': False, 'message': 'Slug không hợp lệ'}), 400
+        catalog = _load_atlas_catalog() or {}
+        meta = next((t for t in (catalog.get('topics') or []) if t.get('slug') == safe), None)
+        topic_path = _ATLAS_DIR / 'topics' / safe / 'topic.json'
+        detail = None
+        if topic_path.is_file():
+            with open(topic_path, encoding='utf-8') as f:
+                detail = json.load(f)
+        if not meta and not detail:
+            return jsonify({'success': False, 'message': 'Không tìm thấy chủ đề'}), 404
+        return jsonify({'success': True, 'data': {'meta': meta, 'detail': detail}})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi tải chủ đề Atlas: {str(e)}'}), 500
+
+
+@app.route('/api/atlas/search', methods=['GET'])
+def api_atlas_search():
+    """Tìm chủ đề Atlas theo từ khóa."""
+    try:
+        q = (request.args.get('q') or '').strip().lower()
+        catalog = _load_atlas_catalog()
+        if not catalog:
+            return jsonify({'success': False, 'message': 'Chưa có catalog'}), 404
+        topics = catalog.get('topics') or []
+        if q:
+            topics = [t for t in topics if q in (t.get('title') or '').lower() or q in (t.get('slug') or '')]
+        limit = min(int(request.args.get('limit', 30)), 100)
+        return jsonify({'success': True, 'data': topics[:limit], 'total': len(topics)})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+_ATLAS_USAGE_PATH = _ATLAS_DIR / 'usage-log.json'
+_ATLAS_USAGE_MAX_ENTRIES = 5000
+
+ATLAS_TV_SETTING_KEYS = [
+    'atlasTvEnabled',
+    'atlasTvUrl',
+    'atlasTvTitle',
+    'atlasTvTopicSlug',
+    'atlasTvPatientName',
+    'atlasTvAppointmentId',
+    'atlasTvBy',
+    'atlasTvUpdatedAt',
+]
+
+
+def _load_atlas_usage_log():
+    if _ATLAS_USAGE_PATH.is_file():
+        with open(_ATLAS_USAGE_PATH, encoding='utf-8') as f:
+            return json.load(f)
+    return {'version': 1, 'updated': '', 'entries': []}
+
+
+def _save_atlas_usage_log(data):
+    _ATLAS_USAGE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    from datetime import datetime
+    data['updated'] = datetime.now().isoformat(timespec='seconds')
+    entries = data.get('entries') or []
+    if len(entries) > _ATLAS_USAGE_MAX_ENTRIES:
+        data['entries'] = entries[-_ATLAS_USAGE_MAX_ENTRIES:]
+    with open(_ATLAS_USAGE_PATH, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return data
+
+
+def _append_atlas_usage(entry):
+    from datetime import datetime
+    import uuid
+    data = _load_atlas_usage_log()
+    entries = data.setdefault('entries', [])
+    now = datetime.now().isoformat(timespec='seconds')
+    item = {
+        'id': str(uuid.uuid4()),
+        'at': now,
+        'action': str(entry.get('action') or '').strip(),
+        'topicSlug': str(entry.get('topicSlug') or '').strip(),
+        'topicTitle': str(entry.get('topicTitle') or '').strip(),
+        'appointmentId': str(entry.get('appointmentId') or '').strip(),
+        'patientName': str(entry.get('patientName') or '').strip(),
+        'patientPhone': str(entry.get('patientPhone') or '').strip(),
+        'doctor': str(entry.get('doctor') or '').strip(),
+        'channel': str(entry.get('channel') or 'unknown').strip(),
+        'assetUrl': str(entry.get('assetUrl') or '').strip(),
+        'meta': entry.get('meta') if isinstance(entry.get('meta'), dict) else {},
+    }
+    entries.append(item)
+    return _save_atlas_usage_log(data), item
+
+
+def _atlas_tv_state():
+    data = {}
+    for k in ATLAS_TV_SETTING_KEYS:
+        data[k] = AppSetting.get_value(k, None)
+    data['atlasTvEnabled'] = str(data.get('atlasTvEnabled') or '').lower() in ('1', 'true', 'yes', 'on')
+    return data
+
+
+@app.route('/api/atlas/usage', methods=['GET'])
+def api_atlas_usage_list():
+    """Atlas — danh sách log sử dụng (in / gửi / TV / mở console)."""
+    try:
+        data = _load_atlas_usage_log()
+        entries = list(data.get('entries') or [])
+        appointment_id = (request.args.get('appointment') or '').strip()
+        patient = (request.args.get('patient') or '').strip().lower()
+        topic = (request.args.get('topic') or '').strip().lower()
+        action = (request.args.get('action') or '').strip().lower()
+        date_from = (request.args.get('from') or '').strip()
+        date_to = (request.args.get('to') or '').strip()
+        if appointment_id:
+            entries = [e for e in entries if str(e.get('appointmentId') or '') == appointment_id]
+        if patient:
+            entries = [e for e in entries if patient in (e.get('patientName') or '').lower()]
+        if topic:
+            entries = [e for e in entries if topic in (e.get('topicSlug') or '').lower() or topic in (e.get('topicTitle') or '').lower()]
+        if action:
+            entries = [e for e in entries if (e.get('action') or '').lower() == action]
+        if date_from:
+            entries = [e for e in entries if (e.get('at') or '')[:10] >= date_from]
+        if date_to:
+            entries = [e for e in entries if (e.get('at') or '')[:10] <= date_to]
+        entries.sort(key=lambda e: e.get('at') or '', reverse=True)
+        limit = min(int(request.args.get('limit', 100)), 500)
+        entries = entries[:limit]
+        stats = {}
+        for e in data.get('entries') or []:
+            act = e.get('action') or 'unknown'
+            stats[act] = stats.get(act, 0) + 1
+        return jsonify({
+            'success': True,
+            'data': {
+                'entries': entries,
+                'total': len(data.get('entries') or []),
+                'filtered': len(entries),
+                'stats': stats,
+                'updated': data.get('updated'),
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi tải usage log: {str(e)}'}), 500
+
+
+@app.route('/api/atlas/usage', methods=['POST'])
+def api_atlas_usage_log():
+    """Atlas — ghi log một thao tác (in / gửi Zalo / phát TV / mở console)."""
+    try:
+        payload = request.json or {}
+        action = str(payload.get('action') or '').strip().lower()
+        allowed = {'print', 'send-zalo', 'push-tv', 'open-console', 'open-calculators', 'view', 'clear-tv'}
+        if action not in allowed:
+            return jsonify({'success': False, 'message': 'action không hợp lệ'}), 400
+        data, item = _append_atlas_usage(payload)
+        return jsonify({'success': True, 'entry': item, 'total': len(data.get('entries') or [])})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi ghi usage log: {str(e)}'}), 500
+
+
+@app.route('/api/atlas/tv', methods=['GET'])
+def api_atlas_tv_get():
+    """Atlas — trạng thái nội dung đang phát trên TV phòng chờ."""
+    try:
+        return jsonify({'success': True, 'data': _atlas_tv_state()})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi tải TV Atlas: {str(e)}'}), 500
+
+
+@app.route('/api/atlas/tv', methods=['POST'])
+def api_atlas_tv_push():
+    """Atlas — đẩy chủ đề lên TV phòng chờ (lưu AppSetting, mọi TV poll cùng URL)."""
+    try:
+        payload = request.json or {}
+        enabled = payload.get('enabled', True)
+        if isinstance(enabled, str):
+            enabled = enabled.lower() in ('1', 'true', 'yes', 'on')
+        from datetime import datetime
+        now = datetime.now().isoformat(timespec='seconds')
+        if not enabled:
+            AppSetting.set_value('atlasTvEnabled', '0')
+            AppSetting.set_value('atlasTvUpdatedAt', now)
+            _append_atlas_usage({
+                'action': 'clear-tv',
+                'topicSlug': str(payload.get('topicSlug') or ''),
+                'topicTitle': str(payload.get('title') or ''),
+                'appointmentId': str(payload.get('appointmentId') or ''),
+                'patientName': str(payload.get('patientName') or ''),
+                'doctor': str(payload.get('doctor') or ''),
+                'channel': str(payload.get('channel') or 'api'),
+            })
+            return jsonify({'success': True, 'data': _atlas_tv_state(), 'message': 'Đã tắt Atlas TV.'})
+
+        url = str(payload.get('url') or '').strip()
+        if not url:
+            return jsonify({'success': False, 'message': 'Thiếu url nội dung TV'}), 400
+        AppSetting.set_value('atlasTvEnabled', '1')
+        AppSetting.set_value('atlasTvUrl', url)
+        AppSetting.set_value('atlasTvTitle', str(payload.get('title') or payload.get('topicTitle') or ''))
+        AppSetting.set_value('atlasTvTopicSlug', str(payload.get('topicSlug') or ''))
+        AppSetting.set_value('atlasTvPatientName', str(payload.get('patientName') or ''))
+        AppSetting.set_value('atlasTvAppointmentId', str(payload.get('appointmentId') or ''))
+        AppSetting.set_value('atlasTvBy', str(payload.get('doctor') or ''))
+        AppSetting.set_value('atlasTvUpdatedAt', now)
+        _append_atlas_usage({
+            'action': 'push-tv',
+            'topicSlug': str(payload.get('topicSlug') or ''),
+            'topicTitle': str(payload.get('title') or payload.get('topicTitle') or ''),
+            'appointmentId': str(payload.get('appointmentId') or ''),
+            'patientName': str(payload.get('patientName') or ''),
+            'patientPhone': str(payload.get('patientPhone') or ''),
+            'doctor': str(payload.get('doctor') or ''),
+            'channel': str(payload.get('channel') or 'api'),
+            'assetUrl': url,
+        })
+        return jsonify({
+            'success': True,
+            'data': _atlas_tv_state(),
+            'message': 'Đã gửi nội dung lên TV phòng chờ.'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi đẩy TV Atlas: {str(e)}'}), 500
+
+
+_CERVICAL_ATLAS_IMAGE_PATH = Path(
+    r"C:\Users\LEGION\.cursor\projects\d-phusandaianh-DU-AN-AI-Phong-kham-dai-anh\assets\c__Users_LEGION_AppData_Roaming_Cursor_User_workspaceStorage_70958c91d1991eb0d72a196bb76cd10b_images_12-4b931195-e4b3-4ed1-bb94-edcb56ceb59f.png"
+)
+
+
+@app.route('/api/cervical-lesion-atlas-image', methods=['GET'])
+def api_cervical_lesion_atlas_image():
+    """Serve nguyên ảnh atlas CTC do người dùng cung cấp."""
+    try:
+        image_path = _CERVICAL_ATLAS_IMAGE_PATH
+        if not image_path.is_file():
+            return jsonify({
+                'success': False,
+                'message': 'Không tìm thấy ảnh Atlas CTC đã tải lên.'
+            }), 404
+        return send_file(str(image_path), mimetype='image/png', conditional=True)
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Lỗi tải ảnh Atlas CTC: {str(e)}'
+        }), 500
+
 
 
 # ==================== DICOM VIEWER ROUTES ====================
 _DICOM_BASE_DIR = Path("received_dicoms")
 
+
+def _resolve_received_dicom_path(patient_name: str, filename: str):
+    """Trả về đường dẫn DICOM an toàn trong received_dicoms/ hoặc None."""
+    safe_filename = os.path.basename(str(filename or '').replace('\\', '/').split('/')[-1])
+    if not safe_filename or safe_filename != os.path.basename(str(filename or '')):
+        return None
+    if '..' in str(patient_name or '') or '..' in str(filename or ''):
+        return None
+    base_resolved = _DICOM_BASE_DIR.resolve()
+    if patient_name:
+        safe_patient = os.path.basename(str(patient_name).replace('\\', '/').split('/')[-1])
+        if not safe_patient:
+            return None
+        candidate = (base_resolved / safe_patient / safe_filename).resolve()
+        if str(candidate).startswith(str(base_resolved)) and candidate.is_file():
+            return candidate
+    candidate = (base_resolved / safe_filename).resolve()
+    if str(candidate).startswith(str(base_resolved)) and candidate.is_file():
+        return candidate
+    return None
+
+
 @app.route('/dicom/<patient>/<filename>')
 def serve_dicom_file(patient, filename):
     """Serve raw DICOM file for web viewer."""
-    safe_patient = os.path.basename(str(patient))
-    safe_filename = os.path.basename(str(filename))
-    dicom_path = (_DICOM_BASE_DIR / safe_patient / safe_filename).resolve()
-    base_resolved = _DICOM_BASE_DIR.resolve()
-    if not str(dicom_path).startswith(str(base_resolved)):
+    dicom_path = _resolve_received_dicom_path(patient, filename)
+    if not dicom_path:
         return Response("Invalid path", status=400, mimetype='text/plain; charset=utf-8')
-    if not dicom_path.exists() or not dicom_path.is_file():
-        return Response("Không tìm thấy file DICOM", status=404, mimetype='text/plain; charset=utf-8')
     return send_file(str(dicom_path), mimetype='application/dicom')
 
 @app.route('/viewer/<patient>/<filename>')
@@ -5988,17 +7768,14 @@ def api_admin_dicom_cleanup():
 @app.route('/templates/dicom_viewer.html')
 def dicom_viewer_alias():
     """
-    Backward-compatible route for direct access:
-    /templates/dicom_viewer.html?patient=<name>&filename=<file.dcm>
+    Viewer DICOM đơn lẻ (cần patient + filename).
+    Không có tham số → chuyển sang VR PACS (danh sách ảnh đầy đủ).
     """
+    from flask import redirect
     patient = (request.args.get('patient') or '').strip()
     filename = (request.args.get('filename') or '').strip()
     if not patient or not filename:
-        return Response(
-            "Thiếu tham số. Dùng: /templates/dicom_viewer.html?patient=<ten_benh_nhan>&filename=<file.dcm>",
-            status=400,
-            mimetype='text/plain; charset=utf-8'
-        )
+        return redirect('/vr-pacs.html')
     return render_template(
         'dicom_viewer.html',
         patient=patient,
@@ -6010,13 +7787,10 @@ def dicom_viewer_alias():
 
 @app.route('/api/clinical-services', methods=['GET'])
 def get_clinical_services():
-    # Ensure columns exist for older databases
     ensure_clinical_service_setting_columns()
     ensure_lab_result_template_columns()
-    sync_all_clinical_service_templates()
-    db.session.commit()
     services = ClinicalServiceSetting.query.all()
-    return jsonify([{
+    resp = jsonify([{
         'id': s.id,
         'name': s.name,
         'price': s.price,
@@ -6024,6 +7798,8 @@ def get_clinical_services():
         'service_group': s.service_group,
         'provider_unit': s.provider_unit
     } for s in services])
+    resp.headers['Cache-Control'] = 'private, max-age=60'
+    return resp
 
 @app.route('/api/clinical-services', methods=['POST'])
 def create_clinical_service():
@@ -6147,6 +7923,10 @@ def delete_clinical_service(id):
     service = _get_or_404(ClinicalServiceSetting, id)
     service_name = service.name
     provider_unit = service.provider_unit
+    # Chặn xóa nếu dịch vụ đang được chỉ định cho bệnh nhân — tránh tạo bản ghi mồ côi (orphan) làm hỏng panel khám
+    in_use_count = ClinicalService.query.filter_by(service_id=id).count()
+    if in_use_count > 0:
+        return jsonify({'message': f'Không thể xóa dịch vụ "{service_name}": đang được chỉ định cho {in_use_count} lượt khám. Vui lòng gỡ dịch vụ khỏi các phiếu khám liên quan trước khi xóa.'}), 409
     try:
         sync_templates_for_clinical_service(service_name, old_service_name=service_name, delete_mode=True)
         db.session.delete(service)
@@ -6249,6 +8029,145 @@ def rename_clinical_service_group():
         return jsonify({'message': f'Lỗi khi cập nhật tên nhóm: {str(e)}'}), 500
 
 # Provider units list (for filters/autocomplete and admin management)
+PROVIDER_QR_PRESETS = {
+    'gene solution': {
+        'bank_code': '970415',
+        'account_no': '867LMB0198',
+        'transfer_template': '{name_upper} {birth_year} {nipt_tests}',
+    },
+}
+
+
+def _build_vietqr_image_url(bank_code, account_no, amount, content, template_style='print'):
+    """Sinh URL ảnh QR VietQR chứa số tiền và nội dung chuyển khoản."""
+    bank_code = str(bank_code or '').strip()
+    account_no = str(account_no or '').strip()
+    if not bank_code or not account_no:
+        return ''
+    try:
+        amount_int = max(0, int(float(amount or 0)))
+    except (TypeError, ValueError):
+        amount_int = 0
+    content_str = str(content or '').strip()
+    base = f'https://img.vietqr.io/image/{bank_code}-{account_no}-{template_style}.png'
+    params = {}
+    if amount_int > 0:
+        params['amount'] = str(amount_int)
+    if content_str:
+        params['addInfo'] = content_str
+    if not params:
+        return base
+    return f'{base}?{urlencode(params)}'
+
+
+def _substitute_qr_template(template, meta, amount, content):
+    """Thay token trong mẫu QR động."""
+    try:
+        safe_amount = str(max(0, int(float(amount or 0))))
+    except (TypeError, ValueError):
+        safe_amount = '0'
+    safe_content = str(content or '').strip()
+    provider_name = str(meta.get('name') or '').strip()
+    out = str(template or '')
+    out = out.replace('{amount}', safe_amount).replace('{AMOUNT}', safe_amount)
+    out = out.replace('{content}', safe_content).replace('{CONTENT}', safe_content)
+    out = out.replace('{provider}', provider_name).replace('{PROVIDER}', provider_name)
+    out = out.replace('{amount_encoded}', quote(safe_amount, safe=''))
+    out = out.replace('{content_encoded}', quote(safe_content, safe=''))
+    out = out.replace('{provider_encoded}', quote(provider_name, safe=''))
+    return out
+
+
+def _resolve_payment_qr_url(meta, amount, content):
+    """Ưu tiên mẫu QR động, sau đó tự sinh VietQR từ bank_code/account_no."""
+    meta = meta or {}
+    dynamic_template = str(meta.get('qr_dynamic_template') or '').strip()
+    if dynamic_template:
+        return _substitute_qr_template(dynamic_template, meta, amount, content)
+    bank_code = str(meta.get('bank_code') or '').strip()
+    account_no = str(meta.get('account_no') or '').strip()
+    if bank_code and account_no:
+        return _build_vietqr_image_url(bank_code, account_no, amount, content)
+    static_qr = str(meta.get('qr_code_url') or '').strip()
+    return static_qr
+
+
+def _apply_provider_unit_defaults(entry):
+    """Bổ sung cấu hình mặc định cho các đơn vị đã biết (vd. Gene Solution)."""
+    if not entry:
+        return entry
+    preset = PROVIDER_QR_PRESETS.get(str(entry.get('name') or '').strip().lower())
+    if preset:
+        for key, value in preset.items():
+            if not str(entry.get(key) or '').strip():
+                entry[key] = value
+    bank_code = str(entry.get('bank_code') or '').strip()
+    account_no = str(entry.get('account_no') or '').strip()
+    if bank_code and account_no and not str(entry.get('qr_dynamic_template') or '').strip():
+        entry['qr_dynamic_template'] = (
+            f'https://img.vietqr.io/image/{bank_code}-{account_no}-print.png'
+            f'?amount={{amount}}&addInfo={{content_encoded}}'
+        )
+    return entry
+
+
+def _find_provider_unit_meta(provider_name, units):
+    """Tìm metadata đơn vị theo tên (không phân biệt hoa thường)."""
+    target = str(provider_name or '').strip().lower()
+    if not target:
+        return None
+    for unit in units or []:
+        if str(unit.get('name') or '').strip().lower() == target:
+            return unit
+    return None
+
+
+def _normalize_provider_unit_entry(item):
+    """Chuẩn hóa 1 đơn vị thực hiện: hỗ trợ cả string và object."""
+    if isinstance(item, str):
+        name = item.strip()
+        if not name:
+            return None
+        entry = {
+            'name': name,
+            'qr_code_url': '',
+            'transfer_template': '',
+            'qr_dynamic_template': '',
+            'bank_code': '',
+            'account_no': '',
+        }
+        return _apply_provider_unit_defaults(entry)
+    if isinstance(item, dict):
+        name = str(item.get('name') or '').strip()
+        if not name:
+            return None
+        entry = {
+            'name': name,
+            'qr_code_url': str(item.get('qr_code_url') or '').strip(),
+            'transfer_template': str(item.get('transfer_template') or '').strip(),
+            'qr_dynamic_template': str(item.get('qr_dynamic_template') or '').strip(),
+            'bank_code': str(item.get('bank_code') or '').strip(),
+            'account_no': str(item.get('account_no') or '').strip(),
+        }
+        return _apply_provider_unit_defaults(entry)
+    return None
+
+
+def _normalize_provider_units_payload(units):
+    out = []
+    seen = set()
+    for item in (units or []):
+        entry = _normalize_provider_unit_entry(item)
+        if not entry:
+            continue
+        key = entry['name'].lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(entry)
+    return out
+
+
 @app.route('/api/provider-units', methods=['GET', 'PUT'])
 def list_provider_units():
     try:
@@ -6268,9 +8187,10 @@ def list_provider_units():
                     # Use getattr to safely access the attribute
                     provider_unit_list = getattr(s, 'provider_unit_list', None)
                     if provider_unit_list:
-                        units = json.loads(provider_unit_list)
-                        if isinstance(units, list) and units:
-                            return jsonify(units)
+                        units_raw = json.loads(provider_unit_list)
+                        units = _normalize_provider_units_payload(units_raw if isinstance(units_raw, list) else [])
+                        if units:
+                            return jsonify({'units': units})
                 except (json.JSONDecodeError, AttributeError, Exception) as json_err:
                     print(f"Warning: Error parsing provider_unit_list: {json_err}")
                     pass
@@ -6280,19 +8200,19 @@ def list_provider_units():
                 units = db.session.query(ClinicalServiceSetting.provider_unit).filter(
                     ClinicalServiceSetting.provider_unit.isnot(None)
                 ).distinct().all()
-                result = [u[0] for u in units if u[0]]
-                return jsonify(result if result else [])
+                result = _normalize_provider_units_payload([u[0] for u in units if u[0]])
+                return jsonify({'units': result})
             except Exception as query_err:
                 print(f"Warning: Error querying ClinicalServiceSetting: {query_err}")
                 # Return empty list as fallback
-                return jsonify([])
+                return jsonify({'units': []})
         except Exception as e:
             import traceback
             error_trace = traceback.format_exc()
             print(f"Error in GET /api/provider-units: {str(e)}")
             print(error_trace)
             # Return empty list instead of error to prevent frontend issues
-            return jsonify([])
+            return jsonify({'units': []})
 
     if request.method == 'PUT':
         # Expect JSON body: { units: ["A","B"] }
@@ -6301,6 +8221,7 @@ def list_provider_units():
             units = data.get('units')
             if units is None or not isinstance(units, list):
                 return jsonify({'message': 'units (list) is required'}), 400
+            normalized_units = _normalize_provider_units_payload(units)
             
             # Ensure we have a LabSettings record (same pattern as /api/lab-settings PUT)
             s = LabSettings.query.first()
@@ -6309,11 +8230,11 @@ def list_provider_units():
                 db.session.add(s)
             
             # Save the units list (exact same pattern as /api/lab-settings PUT line 691)
-            units_json = json.dumps(units, ensure_ascii=False)
+            units_json = json.dumps(normalized_units, ensure_ascii=False)
             s.provider_unit_list = units_json
             db.session.commit()
             
-            return jsonify({'units': units})
+            return jsonify({'units': normalized_units})
         except Exception as e:
             db.session.rollback()
             import traceback
@@ -6325,19 +8246,79 @@ def list_provider_units():
                 # Get the LabSettings ID
                 s = LabSettings.query.first()
                 if s:
-                    units_json = json.dumps(units, ensure_ascii=False)
+                    units_json = json.dumps(normalized_units, ensure_ascii=False)
                     db.session.execute(
                         text("UPDATE lab_settings SET provider_unit_list = :units WHERE id = :sid"),
                         {'units': units_json, 'sid': s.id}
                     )
                     db.session.commit()
-                    return jsonify({'units': units})
+                    return jsonify({'units': normalized_units})
             except Exception as sql_err:
                 print(f"Error with raw SQL fallback: {sql_err}")
             
             # Return error if both methods failed
             error_msg = str(e)
             return jsonify({'message': f'Lỗi khi lưu danh sách đơn vị: {error_msg}'}), 500
+
+
+@app.route('/api/payment-qr', methods=['GET'])
+def build_payment_qr():
+    """Sinh URL QR thanh toán VietQR theo đơn vị, số tiền và nội dung CK."""
+    try:
+        provider_name = str(request.args.get('provider') or '').strip()
+        amount = request.args.get('amount', '0')
+        content = str(request.args.get('content') or '').strip()
+        units = []
+        s = LabSettings.query.first()
+        if s:
+            provider_unit_list = getattr(s, 'provider_unit_list', None)
+            if provider_unit_list:
+                try:
+                    units_raw = json.loads(provider_unit_list)
+                    units = _normalize_provider_units_payload(units_raw if isinstance(units_raw, list) else [])
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    units = []
+        meta = _find_provider_unit_meta(provider_name, units)
+        if not meta and provider_name:
+            meta = _apply_provider_unit_defaults({'name': provider_name})
+        if not meta:
+            return jsonify({'qr_url': '', 'message': 'Không tìm thấy đơn vị thực hiện'}), 404
+        qr_url = _resolve_payment_qr_url(meta, amount, content)
+        return jsonify({
+            'qr_url': qr_url,
+            'provider': meta.get('name') or provider_name,
+            'amount': amount,
+            'content': content,
+            'is_dynamic': bool(qr_url and 'vietqr.io' in qr_url),
+        })
+    except Exception as e:
+        return jsonify({'message': f'Lỗi sinh QR thanh toán: {str(e)}'}), 500
+
+
+@app.route('/api/provider-units/qr-upload', methods=['POST'])
+def upload_provider_unit_qr():
+    """Upload QR code image for provider unit payment."""
+    try:
+        f = request.files.get('file') or request.files.get('qr') or request.files.get('image')
+        if not f or not getattr(f, 'filename', ''):
+            return jsonify({'message': 'Thiếu file QR code'}), 400
+        original = str(f.filename)
+        safe = werkzeug.utils.secure_filename(original)
+        ext = os.path.splitext(safe)[1].lower()
+        if ext not in {'.jpg', '.jpeg', '.png', '.webp', '.gif'}:
+            return jsonify({'message': 'QR code chỉ hỗ trợ JPG, PNG, WEBP, GIF'}), 400
+        if not safe:
+            safe = f'provider_qr_{int(time.time())}{ext or ".png"}'
+        base, ext2 = os.path.splitext(safe)
+        final_name = safe
+        idx = 1
+        while os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], final_name)):
+            final_name = f'{base}_{idx}{ext2}'
+            idx += 1
+        f.save(os.path.join(app.config['UPLOAD_FOLDER'], final_name))
+        return jsonify({'success': True, 'url': f'/uploads/{final_name}', 'filename': final_name})
+    except Exception as e:
+        return jsonify({'message': f'Lỗi upload QR code: {str(e)}'}), 500
 
 # Lab orders APIs
 @app.route('/api/lab-orders', methods=['GET'])
@@ -6403,16 +8384,27 @@ def list_lab_orders():
 
 @app.route('/api/lab-orders', methods=['POST'])
 def create_lab_order():
-    data = request.json
+    data = request.get_json(silent=True) or {}
+    # Parse ngày an toàn (tránh 500 khi test_date sai định dạng)
+    test_date_raw = data.get('test_date')
+    try:
+        test_date = datetime.strptime(test_date_raw, '%Y-%m-%d').date() if test_date_raw else datetime.utcnow().date()
+    except (ValueError, TypeError):
+        return jsonify({'message': 'Ngày xét nghiệm không hợp lệ (định dạng YYYY-MM-DD)'}), 400
+    # Parse giá an toàn (tránh 500 khi price không phải số)
+    try:
+        price = float(data.get('price') or 0)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'Giá xét nghiệm không hợp lệ'}), 400
     order = LabOrder(
-        test_date=datetime.strptime(data.get('test_date'), '%Y-%m-%d').date() if data.get('test_date') else datetime.utcnow().date(),
-        patient_name=data.get('patient_name','').strip(),
+        test_date=test_date,
+        patient_name=(data.get('patient_name') or '').strip(),
         patient_phone=data.get('patient_phone'),
         patient_dob=data.get('patient_dob'),
         patient_address=data.get('patient_address'),
         provider_unit=data.get('provider_unit'),
         test_type=data.get('test_type'),
-        price=float(data.get('price') or 0),
+        price=price,
         status=data.get('status') or 'chờ kết quả',
         note=data.get('note')
     )
@@ -6434,9 +8426,12 @@ def create_lab_order():
 @app.route('/api/lab-orders/<int:id>', methods=['PUT'])
 def update_lab_order(id):
     order = _get_or_404(LabOrder, id)
-    data = request.json
+    data = request.get_json(silent=True) or {}
     if 'test_date' in data and data['test_date']:
-        order.test_date = datetime.strptime(data['test_date'], '%Y-%m-%d').date()
+        try:
+            order.test_date = datetime.strptime(data['test_date'], '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return jsonify({'message': 'Ngày xét nghiệm không hợp lệ (định dạng YYYY-MM-DD)'}), 400
     order.patient_name = data.get('patient_name', order.patient_name)
     order.patient_phone = data.get('patient_phone', order.patient_phone)
     order.patient_dob = data.get('patient_dob', order.patient_dob)
@@ -6490,6 +8485,9 @@ def sync_lab_orders():
             continue
         svc = db.session.get(ClinicalServiceSetting, cs.service_id)
         appt = db.session.get(Appointment, cs.appointment_id)
+        if not svc or not appt or not appt.patient:
+            skipped += 1
+            continue
         order = LabOrder(
             test_date=appt.appointment_date.date(),
             patient_name=appt.patient.name,
@@ -6538,6 +8536,9 @@ def sync_lab_orders_range():
             continue
         svc = db.session.get(ClinicalServiceSetting, cs.service_id)
         appt = db.session.get(Appointment, cs.appointment_id)
+        if not svc or not appt or not appt.patient:
+            skipped += 1
+            continue
         order = LabOrder(
             test_date=appt.appointment_date.date(),
             patient_name=appt.patient.name,
@@ -6622,8 +8623,11 @@ def print_clinical_service(appointment_id):
     total = 0
     for i, cs in enumerate(clinical_services, 1):
         service = db.session.get(ClinicalServiceSetting, cs.service_id)
-        data.append([str(i), service.name, f"{service.price:,.0f} VNĐ"])
-        total += service.price
+        if not service:
+            continue
+        price = service.price or 0
+        data.append([str(i), service.name, f"{price:,.0f} VNĐ"])
+        total += price
     
     data.append(['', 'Tổng cộng', f"{total:,.0f} VNĐ"])
     
@@ -6784,6 +8788,7 @@ def update_clinic_summary(**kwargs):
         return jsonify({'message': 'Tóm tắt dịch vụ phòng khám đã được cập nhật', 'clinicSummary': clinic_summary})
     except Exception as e:
         db.session.rollback()
+        return jsonify({'message': f'Lỗi cập nhật tóm tắt phòng khám: {str(e)}'}), 500
 
 @app.route('/api/footer-content', methods=['GET'])
 def get_footer_content():
@@ -6889,6 +8894,11 @@ def update_clinic_maps_config():
 
 # ============ QR Display Settings (Server-side) ============
 QR_DISPLAY_SETTING_KEYS = [
+    # Header — tên phòng khám
+    'qrClinicNameText',
+    'qrClinicNameColor',
+    'qrClinicNameFontFamily',
+    'qrClinicNameFontSize',
     # Bottom ticker (dịch vụ nổi bật)
     'qrAdText',
     'qrAdColor',
@@ -6898,6 +8908,10 @@ QR_DISPLAY_SETTING_KEYS = [
     'qrAdFontStyle',
     'qrAdLabelColor',
     'qrAdLabelText',
+    'qrAdScrollSpeed',          # px/giây — ô dịch vụ phòng khám (ticker ngang khi khám + cuộn dọc overlay idle)
+    'qrAdScrollGapLines',       # số dòng trống giữa 2 vòng lặp chữ dọc
+    'qrAdScrollPauseSeconds',   # giây dừng sau khi chạy hết 1 vòng, trước vòng tiếp theo
+    'qrAdScrollStartDelaySeconds',  # giây chờ trước khi bắt đầu cuộn chữ lần đầu
     # Top-right "dịch vụ mới"
     'qrNewServiceText',
     'qrNewServiceColor',
@@ -6907,17 +8921,52 @@ QR_DISPLAY_SETTING_KEYS = [
     'qrNewServiceFontStyle',
     'qrNewServiceLabelColor',
     'qrNewServiceLabelText',
+    'qrNewServiceScrollSpeed',  # px/giây — ô dịch vụ mới (góc phải trên)
     # Idle ads overlay (full screen)
     'qrIdleAdsEnabled',
     # Force overlay always on (override idle/patient state)
     'qrAdsAlwaysOn',
     'qrIdleSeconds',
+    'qrAdsFullscreenSlideshowMinutes',
     'qrAdsSlideIntervalSeconds',
     'qrAdsSlides',              # newline separated URLs/paths
+    'qrAdsMediaSoundEnabled',   # bật âm thanh trình chiếu (MP4/YouTube)
+    'qrAdsPatientNameMaskEnabled',  # che/làm mờ họ tên BN góc trên trái ảnh SA
+    'qrAdsVideoCaptionEnabled',     # ô chữ góc dưới trái khi phát video
+    'qrAdsVideoCaptionText',
+    'qrAdsVideoCaptionColor',
+    'qrAdsVideoCaptionFontSize',
+    'qrAdsVideoCaptionFontFamily',
+    'qrAdsVideoCaptionBgOpacity',   # độ trong nền khung chữ (0–100)
+    'qrAdsMediaLogoEnabled',
+    'qrAdsMediaLogoUrl',
+    'qrAdsMediaLogoSizePercent',
+    'qrAdsMediaLogoRotation',
+    'qrAdsMediaLogoSpinDir',
+    'qrAdsMediaLogoSpinSpeedSec',
+    'qrAdsBgmEnabled',
+    'qrAdsBgmUrl',
+    'qrAdsBgmVolume',
     'qrAdsServicesText',        # text block for services
     'qrAdsZaloUrl',             # URL to encode as QR (zalo.me/...)
     'qrAdsHotline',
     'qrAdsAddress',
+    # Thông báo dòng lịch khám (bên trái, cạnh Bác sĩ khám)
+    'qrScheduleNoticeText',
+    'qrScheduleNoticeColor',
+    'qrScheduleNoticeFontSize',
+    'qrScheduleNoticeFontFamily',
+    'qrScheduleNoticeLabelText',
+    'qrScheduleNoticeLabelColor',
+    'qrScheduleNoticeLabelFontSize',
+    'qrScheduleNoticeLabelFontFamily',
+    'qrScheduleNoticeFontWeight',
+    'qrScheduleNoticeFontStyle',
+    'qrScheduleNoticeLabelFontWeight',
+    'qrScheduleNoticeLabelFontStyle',
+    'qrScheduleNoticeLabelHidden',
+    'qrScheduleNoticeEffect',
+    'clinicLogoVersion',
 ]
 
 @app.route('/api/qr-display-settings', methods=['GET'])
@@ -6927,6 +8976,7 @@ def api_get_qr_display_settings():
         data = {}
         for k in QR_DISPLAY_SETTING_KEYS:
             data[k] = AppSetting.get_value(k, None)
+        data['qrAdsMediaLogoUrl'] = CLINIC_LOGO_FILENAME
         return jsonify({'success': True, 'settings': data})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -7012,8 +9062,11 @@ def add_test_result(appointment_id):
     result_text = request.form.get('result_text')
     file = request.files.get('file')
     file_path = None
-    if file:
-        filename = werkzeug.utils.secure_filename(file.filename)
+    if file and file.filename:
+        original = werkzeug.utils.secure_filename(file.filename) or 'file'
+        # Tiền tố duy nhất để không ghi đè file khác cùng tên (mất dữ liệu)
+        unique_prefix = f"{appointment_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+        filename = f"{unique_prefix}_{original}"
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(file_path)
     test_result = TestResult(
@@ -7055,7 +9108,67 @@ def uploaded_file(filename):
 # ===== QR Ads Media (upload + serve) =====
 @app.route('/qr-ads-media/<path:filename>')
 def qr_ads_media_file(filename):
-    return send_from_directory(QR_ADS_MEDIA_DIR, filename)
+    safe_name = os.path.basename(filename)
+    path = os.path.join(QR_ADS_MEDIA_DIR, safe_name)
+    if not os.path.isfile(path):
+        abort(404)
+    ext = os.path.splitext(safe_name)[1].lower()
+    mime_map = {
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.m4v': 'video/mp4',
+        '.mov': 'video/quicktime',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.webp': 'image/webp',
+        '.gif': 'image/gif',
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.ogg': 'audio/ogg',
+        '.m4a': 'audio/mp4',
+        '.aac': 'audio/aac',
+    }
+    mimetype = mime_map.get(ext) or mimetypes.guess_type(safe_name)[0] or 'application/octet-stream'
+    resp = send_file(path, mimetype=mimetype, conditional=True)
+    resp.headers['Accept-Ranges'] = 'bytes'
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
+    return resp
+
+@app.route('/flowcharts-media/<path:filename>')
+def flowcharts_media_file(filename):
+    safe = werkzeug.utils.secure_filename(os.path.basename(str(filename).replace('\\', '/')))
+    if not safe:
+        return Response('Invalid path', status=400, mimetype='text/plain; charset=utf-8')
+    path = os.path.join(FLOWCHARTS_MEDIA_DIR, safe)
+    if not os.path.isfile(path):
+        return Response('Not found', status=404, mimetype='text/plain; charset=utf-8')
+    ext = os.path.splitext(safe)[1].lower()
+    mimetype = 'application/pdf' if ext == '.pdf' else None
+    return send_file(path, mimetype=mimetype, conditional=True)
+
+
+@app.route('/clinic-assets-media/<path:filename>')
+def clinic_assets_media_file(filename):
+    safe = werkzeug.utils.secure_filename(os.path.basename(str(filename).replace('\\', '/')))
+    if not safe:
+        return Response('Invalid path', status=400, mimetype='text/plain; charset=utf-8')
+    path = os.path.join(CLINIC_ASSETS_MEDIA_DIR, safe)
+    if not os.path.isfile(path):
+        return Response('Not found', status=404, mimetype='text/plain; charset=utf-8')
+    return send_file(path, conditional=True)
+
+
+@app.route('/clinic-techniques-media/<path:filename>')
+def clinic_techniques_media_file(filename):
+    safe = werkzeug.utils.secure_filename(os.path.basename(str(filename).replace('\\', '/')))
+    if not safe:
+        return Response('Invalid path', status=400, mimetype='text/plain; charset=utf-8')
+    path = os.path.join(CLINIC_TECHNIQUES_MEDIA_DIR, safe)
+    if not os.path.isfile(path):
+        return Response('Not found', status=404, mimetype='text/plain; charset=utf-8')
+    return send_file(path, conditional=True)
+
 
 @app.route('/api/qr-ads-media/upload', methods=['POST'])
 @require_auth
@@ -7100,10 +9213,75 @@ def api_qr_ads_media_upload(**kwargs):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/qr-ads-media/list', methods=['GET'])
+def _clinic_logo_path() -> str:
+    return os.path.join(PROJECT_ROOT, CLINIC_LOGO_FILENAME)
+
+
+def _bump_clinic_logo_version() -> str:
+    v = str(int(time.time()))
+    AppSetting.set_value(CLINIC_LOGO_VERSION_KEY, v)
+    return v
+
+
+@app.route('/api/qr-ads-media/upload-logo', methods=['POST'])
 @require_auth
-def api_qr_ads_media_list(**kwargs):
-    """Liệt kê file trong qr-ads-media."""
+def api_qr_ads_media_logo_upload(**kwargs):
+    """Tải logo phòng khám — ghi đè file gốc dùng chung toàn hệ thống."""
+    try:
+        f = request.files.get('logo') or request.files.get('file')
+        if not f or not getattr(f, 'filename', ''):
+            return jsonify({'success': False, 'error': 'Thiếu file logo.'}), 400
+        original = str(f.filename)
+        ext = os.path.splitext(original)[1].lower()
+        if ext not in {'.jpg', '.jpeg', '.png', '.webp', '.gif'}:
+            return jsonify({'success': False, 'error': 'Logo chỉ hỗ trợ JPG, PNG, WEBP, GIF.'}), 400
+        dst = _clinic_logo_path()
+        f.save(dst)
+        version = _bump_clinic_logo_version()
+        return jsonify({
+            'success': True,
+            'filename': CLINIC_LOGO_FILENAME,
+            'url': f'/{CLINIC_LOGO_FILENAME}',
+            'clinicLogoVersion': version,
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/qr-ads-media/upload-bgm', methods=['POST'])
+@require_auth
+def api_qr_ads_media_bgm_upload(**kwargs):
+    """Tải file nhạc nền cho màn hình quảng cáo TV."""
+    try:
+        f = request.files.get('bgm') or request.files.get('file')
+        if not f or not getattr(f, 'filename', ''):
+            return jsonify({'success': False, 'error': 'Thiếu file nhạc nền.'}), 400
+        original = str(f.filename)
+        filename = werkzeug.utils.secure_filename(original)
+        if not filename:
+            return jsonify({'success': False, 'error': 'Tên file không hợp lệ.'}), 400
+        ext = os.path.splitext(filename)[1].lower()
+        if ext not in QR_ADS_BGM_ALLOWED_EXTS:
+            return jsonify({'success': False, 'error': 'Nhạc nền chỉ hỗ trợ MP3, WAV, OGG, M4A, AAC.'}), 400
+        base = os.path.splitext(filename)[0]
+        final_name = filename
+        i = 1
+        dst = os.path.join(QR_ADS_MEDIA_DIR, final_name)
+        while os.path.exists(dst):
+            final_name = f"{base}-{i}{ext}"
+            dst = os.path.join(QR_ADS_MEDIA_DIR, final_name)
+            i += 1
+        f.save(dst)
+        return jsonify({
+            'success': True,
+            'filename': final_name,
+            'url': _qr_ads_media_public_url(final_name),
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/qr-ads-media/list', methods=['GET'])
+def api_qr_ads_media_list():
+    """Liệt kê file trong qr-ads-media (đọc công khai để admin/TV hiển thị danh sách)."""
     try:
         if not os.path.isdir(QR_ADS_MEDIA_DIR):
             return jsonify({'success': True, 'files': []})
@@ -7123,9 +9301,22 @@ def api_qr_ads_media_list(**kwargs):
 @app.route('/api/qr-ads-media/delete', methods=['POST'])
 @require_auth
 def api_qr_ads_media_delete(**kwargs):
-    """Xóa file trong qr-ads-media."""
+    """Xóa file trong qr-ads-media — yêu cầu xác nhận mật khẩu admin."""
     try:
-        data = request.get_json() or request.form or {}
+        data = request.get_json(silent=True) or request.form or {}
+        admin_username = (data.get('admin_username') or request.form.get('admin_username') or '').strip()
+        admin_password = data.get('admin_password') or request.form.get('admin_password') or ''
+        if not admin_username or not admin_password:
+            return jsonify({
+                'success': False,
+                'error': 'Vui lòng nhập tài khoản và mật khẩu admin để xóa file.',
+            }), 400
+        admin_user = User.query.filter_by(username=admin_username).first()
+        if not admin_user or not verify_password_hash(admin_user.password_hash, admin_password):
+            return jsonify({'success': False, 'error': 'Tài khoản hoặc mật khẩu admin không đúng.'}), 403
+        if not has_permission(admin_user.id, 'manage_users'):
+            return jsonify({'success': False, 'error': 'Tài khoản không có quyền admin để xóa file.'}), 403
+
         filename = (data.get('filename') or request.form.get('filename') or '').strip()
         if not filename or '/' in filename or '..' in filename:
             return jsonify({'success': False, 'error': 'Tên file không hợp lệ.'}), 400
@@ -7137,78 +9328,6 @@ def api_qr_ads_media_delete(**kwargs):
             return jsonify({'success': False, 'error': 'File không tồn tại.'}), 404
         os.remove(path)
         return jsonify({'success': True, 'message': 'Đã xóa file.'})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/qr-ads-doctor-images/<path:filename>')
-def qr_ads_doctor_images_file(filename):
-    return send_from_directory(QR_ADS_DOCTOR_MEDIA_DIR, filename)
-
-@app.route('/api/qr-ads-doctor-images/upload', methods=['POST'])
-@require_auth
-def api_qr_ads_doctor_images_upload(**kwargs):
-    try:
-        doctor_key = (request.form.get('doctorKey') or '').strip()
-        if not doctor_key:
-            return jsonify({'success': False, 'error': 'Thiếu doctorKey.'}), 400
-
-        f = request.files.get('image') or request.files.get('file')
-        if not f or not getattr(f, 'filename', ''):
-            return jsonify({'success': False, 'error': 'Thiếu file ảnh.'}), 400
-
-        original = str(f.filename)
-        safe_name = werkzeug.utils.secure_filename(original)
-        ext = os.path.splitext(safe_name)[1].lower()
-        if ext not in QR_ADS_DOCTOR_ALLOWED_EXTS:
-            return jsonify({'success': False, 'error': f'File không hỗ trợ: {original}'}), 400
-
-        slug = _slugify_doctor_key(doctor_key)
-        if not slug:
-            return jsonify({'success': False, 'error': 'doctorKey không hợp lệ sau khi slugify.'}), 400
-
-        # Avoid overwrite: add suffix if needed
-        final_name = f"{slug}{ext}"
-        dst = os.path.join(QR_ADS_DOCTOR_MEDIA_DIR, final_name)
-        i = 1
-        while os.path.exists(dst):
-            final_name = f"{slug}-{i}{ext}"
-            dst = os.path.join(QR_ADS_DOCTOR_MEDIA_DIR, final_name)
-            i += 1
-
-        f.save(dst)
-
-        return jsonify({
-            'success': True,
-            'url': _qr_ads_doctor_media_public_url(final_name),
-            'filename': final_name,
-            'doctorKey': doctor_key,
-            'slug': slug
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/qr-ads-doctor-images/delete', methods=['POST'])
-@require_auth
-def api_qr_ads_doctor_images_delete(**kwargs):
-    """Xóa ảnh bác sĩ theo doctorKey (slug)."""
-    try:
-        data = request.get_json() or request.form or {}
-        doctor_key = (data.get('doctorKey') or request.form.get('doctorKey') or '').strip()
-        if not doctor_key:
-            return jsonify({'success': False, 'error': 'Thiếu doctorKey.'}), 400
-        slug = _slugify_doctor_key(doctor_key)
-        if not slug:
-            return jsonify({'success': False, 'error': 'doctorKey không hợp lệ.'}), 400
-        deleted = []
-        if os.path.isdir(QR_ADS_DOCTOR_MEDIA_DIR):
-            for name in os.listdir(QR_ADS_DOCTOR_MEDIA_DIR):
-                base = os.path.splitext(name)[0]
-                if base == slug or base.startswith(slug + '-'):
-                    path = os.path.join(QR_ADS_DOCTOR_MEDIA_DIR, name)
-                    if os.path.isfile(path):
-                        os.remove(path)
-                        deleted.append(name)
-        return jsonify({'success': True, 'deleted': deleted, 'message': f'Đã xóa {len(deleted)} file.'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -7365,6 +9484,202 @@ def api_ultrasound_media_delete(**kwargs):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+@app.route('/api/ultrasound-live/start', methods=['POST'])
+@require_auth
+def api_ultrasound_live_start(**kwargs):
+    """Khởi tạo phiên livestream RTMP bằng ffmpeg (nhận WebM chunks qua HTTP)."""
+    try:
+        payload = request.get_json(silent=True) or {}
+        targets = payload.get('targets')
+        if not isinstance(targets, list):
+            rtmp_url = str(payload.get('rtmp_url') or '').strip()
+            stream_key = str(payload.get('stream_key') or '').strip()
+            targets = [{'platform': 'custom', 'rtmp_url': rtmp_url, 'stream_key': stream_key}]
+        fps = int(payload.get('fps') or 30)
+        bitrate = int(payload.get('bitrate') or 4500000)
+        clean_targets = []
+        for t in targets:
+            if not isinstance(t, dict):
+                continue
+            platform = str(t.get('platform') or 'custom').strip().lower()[:20]
+            rtmp_url = str(t.get('rtmp_url') or '').strip()
+            stream_key = str(t.get('stream_key') or '').strip()
+            if not rtmp_url or not stream_key:
+                continue
+            if not (rtmp_url.startswith('rtmp://') or rtmp_url.startswith('rtmps://')):
+                return jsonify({'success': False, 'error': f'RTMP URL của {platform} không hợp lệ.'}), 400
+            clean_targets.append({'platform': platform, 'rtmp_url': rtmp_url, 'stream_key': stream_key})
+        if not clean_targets:
+            return jsonify({'success': False, 'error': 'Chưa có nền tảng hợp lệ để phát trực tiếp.'}), 400
+
+        ffmpeg = _find_ffmpeg_binary()
+        if not ffmpeg:
+            return jsonify({'success': False, 'error': 'Chưa tìm thấy FFmpeg trên server.'}), 400
+        fps = max(15, min(60, fps))
+        bitrate = max(1_500_000, min(12_000_000, bitrate))
+        gop = max(30, min(120, fps * 2))
+        vbk = int(bitrate / 1000)
+
+        session_id = str(uuid.uuid4())
+        creationflags = 0
+        if os.name == 'nt':
+            creationflags = (
+                getattr(subprocess, 'DETACHED_PROCESS', 0)
+                | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+            )
+
+        workers = []
+        for t in clean_targets:
+            target_url = _ultrasound_build_rtmp_target(t['rtmp_url'], t['stream_key'])
+            cmd = [
+                ffmpeg,
+                '-hide_banner',
+                '-loglevel', 'error',
+                '-fflags', '+genpts',
+                '-f', 'webm',
+                '-i', 'pipe:0',
+                '-map', '0:v:0',
+                '-map', '0:a:0?',
+                '-c:v', 'libx264',
+                '-preset', 'veryfast',
+                '-tune', 'zerolatency',
+                '-pix_fmt', 'yuv420p',
+                '-r', str(fps),
+                '-g', str(gop),
+                '-keyint_min', str(gop),
+                '-b:v', f'{vbk}k',
+                '-maxrate', f'{vbk}k',
+                '-bufsize', f'{vbk * 2}k',
+                '-c:a', 'aac',
+                '-b:a', '128k',
+                '-ar', '44100',
+                '-ac', '2',
+                '-f', 'flv',
+                target_url,
+            ]
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                bufsize=0,
+                creationflags=creationflags,
+            )
+            if not proc or not proc.stdin:
+                for w in workers:
+                    try:
+                        if w.get('stdin'):
+                            w['stdin'].close()
+                    except Exception:
+                        pass
+                    try:
+                        if w.get('proc') and w['proc'].poll() is None:
+                            w['proc'].terminate()
+                    except Exception:
+                        pass
+                return jsonify({'success': False, 'error': f"Không khởi tạo được tiến trình livestream cho {t['platform']}."}), 500
+            workers.append({
+                'platform': t['platform'],
+                'proc': proc,
+                'stdin': proc.stdin,
+                'state': 'ok',
+                'last_error': '',
+            })
+
+        with _ULTRASOUND_LIVE_LOCK:
+            _ULTRASOUND_LIVE_SESSIONS[session_id] = {
+                'workers': workers,
+                'started_at': time.time(),
+                'last_chunk_at': time.time(),
+                'bytes': 0,
+            }
+        return jsonify({
+            'success': True,
+            'session_id': session_id,
+            'platforms': [w['platform'] for w in workers],
+            'platform_statuses': [{'platform': w['platform'], 'state': 'ok', 'message': 'Đang phát'} for w in workers],
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ultrasound-live/chunk', methods=['POST'])
+@require_auth
+def api_ultrasound_live_chunk(**kwargs):
+    try:
+        session_id = str(request.form.get('session_id') or '').strip()
+        if not session_id:
+            return jsonify({'success': False, 'error': 'Thiếu session_id.'}), 400
+        f = request.files.get('chunk')
+        if not f:
+            return jsonify({'success': False, 'error': 'Thiếu dữ liệu chunk.'}), 400
+
+        with _ULTRASOUND_LIVE_LOCK:
+            info = _ULTRASOUND_LIVE_SESSIONS.get(session_id)
+        if not info:
+            return jsonify({'success': False, 'error': 'Phiên livestream không tồn tại hoặc đã kết thúc.'}), 404
+
+        workers = info.get('workers') or []
+        if not workers:
+            _ultrasound_live_cleanup_session(session_id)
+            return jsonify({'success': False, 'error': 'Tiến trình livestream đã dừng.'}), 409
+
+        data = f.read()
+        if not data:
+            return jsonify({'success': True, 'ignored': True})
+
+        alive_count = 0
+        statuses = []
+        for w in list(workers):
+            proc = w.get('proc')
+            stdin = w.get('stdin')
+            platform = str(w.get('platform') or 'custom')
+            if not proc or not stdin or proc.poll() is not None:
+                w['state'] = 'error'
+                if not w.get('last_error'):
+                    w['last_error'] = 'Tiến trình đã thoát'
+                statuses.append({'platform': platform, 'state': 'error', 'message': w.get('last_error') or 'Lỗi tiến trình'})
+                continue
+            try:
+                stdin.write(data)
+                stdin.flush()
+                alive_count += 1
+                w['state'] = 'ok'
+                w['last_error'] = ''
+                statuses.append({'platform': platform, 'state': 'ok', 'message': 'Đang phát'})
+            except Exception:
+                w['state'] = 'error'
+                w['last_error'] = 'Không ghi được dữ liệu vào ffmpeg'
+                statuses.append({'platform': platform, 'state': 'error', 'message': w['last_error']})
+                continue
+        if alive_count <= 0:
+            _ultrasound_live_cleanup_session(session_id)
+            return jsonify({'success': False, 'error': 'Tất cả luồng livestream đã dừng.'}), 500
+
+        with _ULTRASOUND_LIVE_LOCK:
+            if session_id in _ULTRASOUND_LIVE_SESSIONS:
+                _ULTRASOUND_LIVE_SESSIONS[session_id]['last_chunk_at'] = time.time()
+                _ULTRASOUND_LIVE_SESSIONS[session_id]['bytes'] = int(_ULTRASOUND_LIVE_SESSIONS[session_id].get('bytes') or 0) + len(data)
+        return jsonify({'success': True, 'alive_streams': alive_count, 'platform_statuses': statuses})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ultrasound-live/stop', methods=['POST'])
+@require_auth
+def api_ultrasound_live_stop(**kwargs):
+    try:
+        payload = request.get_json(silent=True) or {}
+        session_id = str(payload.get('session_id') or '').strip()
+        if not session_id:
+            return jsonify({'success': False, 'error': 'Thiếu session_id.'}), 400
+        _ultrasound_live_cleanup_session(session_id)
+        return jsonify({'success': True, 'message': 'Đã dừng livestream.'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/ultrasound-media/enhance', methods=['POST'])
 @require_auth
 def api_ultrasound_media_enhance(**kwargs):
@@ -7455,6 +9770,91 @@ def api_ultrasound_media_enhance(**kwargs):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+@app.route('/api/ultrasound-media/speed', methods=['POST'])
+@require_auth
+def api_ultrasound_media_speed(**kwargs):
+    """Đổi tốc độ phát video đã lưu và tạo file video mới."""
+    try:
+        import subprocess
+        data = request.get_json(silent=True) or {}
+        filename = str(data.get('filename') or '').strip()
+        try:
+            speed = float(data.get('speed') or 1.0)
+        except (TypeError, ValueError):
+            speed = 1.0
+        if not filename or '/' in filename or '..' in filename:
+            return jsonify({'success': False, 'error': 'Tên file không hợp lệ.'}), 400
+        if speed < 0.25 or speed > 4.0:
+            return jsonify({'success': False, 'error': 'Tốc độ phải từ 0.25x đến 4x.'}), 400
+        if abs(speed - 1.0) < 0.001:
+            return jsonify({'success': False, 'error': 'Chọn tốc độ khác 1x để lưu video mới.'}), 400
+        safe = werkzeug.utils.secure_filename(os.path.basename(filename))
+        if not safe:
+            return jsonify({'success': False, 'error': 'Tên file không hợp lệ.'}), 400
+        src = os.path.join(ULTRASOUND_MEDIA_DIR, safe)
+        if not os.path.isfile(src):
+            return jsonify({'success': False, 'error': 'File không tồn tại.'}), 404
+
+        stem, ext = os.path.splitext(safe)
+        ext = ext.lower()
+        if ext not in {'.mp4', '.webm', '.mov', '.mkv'}:
+            return jsonify({'success': False, 'error': 'Chỉ hỗ trợ đổi tốc độ cho video (MP4/WebM/MOV/MKV).'}), 400
+
+        ffmpeg = _find_ffmpeg_binary()
+        if not ffmpeg:
+            msg = (
+                'Chưa tìm thấy FFmpeg trên server. '
+                'Cài FFmpeg (Windows: winget install Gyan.FFmpeg) '
+                'hoặc đặt biến môi trường FFMPEG_PATH trỏ tới ffmpeg.exe.'
+            )
+            return jsonify({'success': False, 'error': msg}), 400
+
+        stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        speed_tag = _speed_label_for_filename(speed)
+        out_name = f"{stem}-SPD-{speed_tag}x-{stamp}{ext}"
+        out_path = os.path.join(ULTRASOUND_MEDIA_DIR, out_name)
+
+        vf = f'setpts=PTS/{speed:.6f}'
+        has_audio = _ffmpeg_source_has_audio(ffmpeg, src)
+        if has_audio:
+            af = _ffmpeg_build_atempo_chain(speed)
+            filter_complex = f'[0:v]{vf}[v];[0:a]{af}[a]'
+            cmd = [
+                ffmpeg, '-y', '-i', src,
+                '-filter_complex', filter_complex,
+                '-map', '[v]', '-map', '[a]',
+                '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
+                '-c:a', 'aac', '-b:a', '128k',
+                '-movflags', '+faststart',
+                out_path,
+            ]
+        else:
+            cmd = [
+                ffmpeg, '-y', '-i', src,
+                '-vf', vf,
+                '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
+                '-movflags', '+faststart',
+                '-an',
+                out_path,
+            ]
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode != 0 or not os.path.isfile(out_path):
+            err = (proc.stderr or b'').decode('utf-8', errors='ignore')
+            return jsonify({'success': False, 'error': f'FFmpeg lỗi: {err[-300:] if err else "unknown"}'}), 500
+
+        _cleanup_ultrasound_media_by_retention()
+        return jsonify({
+            'success': True,
+            'filename': out_name,
+            'url': _ultrasound_media_public_url(out_name),
+            'speed': speed,
+            'message': f'Đã tạo video mới ở tốc độ {speed}x.',
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 _AD_TICKER_FONT_KEYS = frozenset({'system', 'arial', 'georgia', 'times', 'verdana', 'courier', 'tahoma'})
 
 
@@ -7483,7 +9883,9 @@ def _ad_ticker_int_clamp(val, default, lo, hi):
 
 def _aux_shape_key(val):
     s = str(val or 'oval').strip().lower()[:10]
-    return s if s in ('oval', 'circle', 'heart') else 'oval'
+    if s == 'heart':
+        return 'heart1'
+    return s if s in ('oval', 'circle', 'heart1', 'heart2', 'heart3') else 'oval'
 
 
 def _aux_offset_pct(val):
@@ -7563,6 +9965,8 @@ def api_ultrasound_media_settings(**kwargs):
             'logo_position': str(settings.get('logo_position') or 'top-right')[:30],
             'logo_scale': int(settings.get('logo_scale') or 100),
             'logo_anim': str(settings.get('logo_anim') or 'none')[:20],
+            'logo_flip_dir': str(settings.get('logo_flip_dir') or 'none')[:10],
+            'logo_flip_speed_sec': int(settings.get('logo_flip_speed_sec') or 10),
             'heart_rain': bool(settings.get('heart_rain', False)),
             'main_source_type': str(settings.get('main_source_type') or 'camera')[:20],
             'main_video_filename': main_pl[0]['filename'] if main_pl else '',
@@ -7574,10 +9978,15 @@ def api_ultrasound_media_settings(**kwargs):
             'main_contrast_pct': _ad_ticker_int_clamp(settings.get('main_contrast_pct'), 100, 40, 180),
             'enhance_realtime': str(settings.get('enhance_realtime') or 'off')[:20],
             'audio_enabled': bool(settings.get('audio_enabled', False)),
-            'audio_source': str(settings.get('audio_source') or 'mic')[:20],
+            'audio_source': str(settings.get('audio_source') or 'pc_mic')[:20],
             'audio_device_id': str(settings.get('audio_device_id') or '')[:200],
             'audio_gain': int(settings.get('audio_gain') or 100),
             'audio_noise_suppression': bool(settings.get('audio_noise_suppression', True)),
+            'live_platform': str(settings.get('live_platform') or 'youtube')[:20],
+            'live_rtmp_url': str(settings.get('live_rtmp_url') or '')[:500],
+            'live_stream_key': str(settings.get('live_stream_key') or '')[:500],
+            'live_platforms': settings.get('live_platforms') if isinstance(settings.get('live_platforms'), dict) else {},
+            'live_save_key': bool(settings.get('live_save_key', True)),
             'aux_enabled': bool(settings.get('aux_enabled', False)),
             'aux_source_type': str(settings.get('aux_source_type') or 'camera')[:20],
             'aux_device_id': str(settings.get('aux_device_id') or '')[:120],
@@ -7610,6 +10019,12 @@ def api_ultrasound_media_settings(**kwargs):
             compact['logo_scale'] = 20
         if compact['logo_scale'] > 100:
             compact['logo_scale'] = 100
+        if compact['logo_flip_dir'] not in ('left', 'right', 'none'):
+            compact['logo_flip_dir'] = 'none'
+        if compact['logo_flip_speed_sec'] < 4:
+            compact['logo_flip_speed_sec'] = 4
+        if compact['logo_flip_speed_sec'] > 120:
+            compact['logo_flip_speed_sec'] = 120
         if compact['gallery_view_mode'] not in ('detail', 'icons'):
             compact['gallery_view_mode'] = 'detail'
         if compact['main_source_type'] not in ('camera', 'upload'):
@@ -7626,12 +10041,34 @@ def api_ultrasound_media_settings(**kwargs):
             compact['record_bitrate'] = 30000000
         if compact['enhance_realtime'] not in ('off', 'light', 'strong'):
             compact['enhance_realtime'] = 'off'
-        if compact['audio_source'] not in ('mic', 'file', 'none'):
-            compact['audio_source'] = 'mic'
+        if compact['audio_source'] not in ('mic', 'pc_mic', 'line_in', 'file', 'none'):
+            compact['audio_source'] = 'pc_mic'
         if compact['audio_gain'] < 0:
             compact['audio_gain'] = 0
         if compact['audio_gain'] > 200:
             compact['audio_gain'] = 200
+        if compact['live_platform'] not in ('youtube', 'facebook', 'tiktok', 'custom'):
+            compact['live_platform'] = 'youtube'
+        if not (compact['live_rtmp_url'].startswith('rtmp://') or compact['live_rtmp_url'].startswith('rtmps://') or compact['live_rtmp_url'] == ''):
+            compact['live_rtmp_url'] = ''
+        lpf = compact.get('live_platforms') if isinstance(compact.get('live_platforms'), dict) else {}
+        compact['live_platforms'] = {}
+        for pf in ('youtube', 'facebook', 'tiktok'):
+            item = lpf.get(pf) if isinstance(lpf.get(pf), dict) else {}
+            compact['live_platforms'][pf] = {
+                'enabled': bool(item.get('enabled', pf == 'youtube')),
+                'rtmp_url': str(item.get('rtmp_url') or '')[:500],
+                'stream_key': str(item.get('stream_key') or '')[:500],
+            }
+            if compact['live_platforms'][pf]['rtmp_url'] and not (
+                compact['live_platforms'][pf]['rtmp_url'].startswith('rtmp://')
+                or compact['live_platforms'][pf]['rtmp_url'].startswith('rtmps://')
+            ):
+                compact['live_platforms'][pf]['rtmp_url'] = ''
+        if not compact['live_save_key']:
+            compact['live_stream_key'] = ''
+            for pf in ('youtube', 'facebook', 'tiktok'):
+                compact['live_platforms'][pf]['stream_key'] = ''
         if compact['aux_source_type'] not in ('camera', 'upload'):
             compact['aux_source_type'] = 'camera'
         if compact['bg_kind'] not in ('image', 'video'):
@@ -7922,6 +10359,817 @@ def admin_work_schedule_by_external_id(external_id: str):
     return admin_update_work_schedule(ws.id)
 
 STAFF_HOURLY_RATE_KEY = 'staff_hourly_rate'
+STAFF_MEMBER_USER_IDS_KEY = 'staff_member_user_ids'
+
+
+def _staff_member_candidates():
+    """Danh sách user có thể dùng cho lịch/chấm công nhân viên."""
+    users = User.query.order_by(User.full_name.asc(), User.username.asc()).all()
+    out = []
+    for u in users:
+        roles = [r.name.lower() for r in (u.roles or [])]
+        if u.status != 'active':
+            continue
+        # Không đưa tài khoản chỉ có quyền admin vào danh sách nhân viên phụ khám.
+        if roles and all(r == 'admin' for r in roles):
+            continue
+        out.append({
+            'id': int(u.id),
+            'username': u.username,
+            'full_name': u.full_name,
+            'roles': roles,
+            'status': u.status,
+        })
+    return out
+
+
+def _staff_member_selected_ids(candidates=None):
+    candidates = candidates if candidates is not None else _staff_member_candidates()
+    candidate_ids = {int(x['id']) for x in candidates}
+    raw = AppSetting.get_value(STAFF_MEMBER_USER_IDS_KEY, '') or ''
+    selected = []
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                for x in parsed:
+                    try:
+                        val = int(x)
+                    except Exception:
+                        continue
+                    if val in candidate_ids:
+                        selected.append(val)
+        except Exception:
+            selected = []
+    # Mặc định: nếu chưa cấu hình thì lấy tất cả candidate active.
+    if not selected:
+        selected = sorted(candidate_ids)
+    return sorted(set(selected))
+
+
+@app.route('/api/staff-members', methods=['GET'])
+def api_get_staff_members():
+    """
+    Trả về danh sách nhân viên dùng cho lịch/chấm công.
+    GET cho phép người dùng đã đăng nhập xem để tự chấm công.
+    """
+    candidates = _staff_member_candidates()
+    selected_ids = set(_staff_member_selected_ids(candidates))
+    selected = [x for x in candidates if int(x['id']) in selected_ids]
+    return jsonify({
+        'selected': selected,
+        'all_candidates': candidates,
+        'selected_ids': sorted(selected_ids),
+    })
+
+
+@app.route('/api/staff-members', methods=['POST'])
+def api_set_staff_members():
+    """Lưu danh sách nhân viên từ users.html (yêu cầu manage_users)."""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ', 1)[1] if auth_header.startswith('Bearer ') else auth_header
+    user_id = get_user_from_token(token)
+    if not user_id or not has_permission(user_id, 'manage_users'):
+        return jsonify({'error': 'Forbidden'}), 403
+
+    payload = request.get_json(silent=True) or {}
+    raw_ids = payload.get('user_ids', [])
+    if not isinstance(raw_ids, list):
+        return jsonify({'error': 'user_ids phải là mảng'}), 400
+
+    candidates = _staff_member_candidates()
+    candidate_ids = {int(x['id']) for x in candidates}
+    selected = []
+    for x in raw_ids:
+        try:
+            val = int(x)
+        except Exception:
+            continue
+        if val in candidate_ids:
+            selected.append(val)
+    selected = sorted(set(selected))
+
+    AppSetting.set_value(STAFF_MEMBER_USER_IDS_KEY, json.dumps(selected, ensure_ascii=False))
+    selected_users = [x for x in candidates if int(x['id']) in set(selected)]
+    return jsonify({
+        'message': 'Đã cập nhật danh sách nhân viên phụ khám',
+        'selected_ids': selected,
+        'selected': selected_users,
+    })
+
+DOCTOR_HOSPITAL_SCHEDULES_KEY = 'doctor_hospital_schedules'
+DOCTOR_HOSPITAL_SCHEDULES_MEDIA_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), 'doctor-hospital-schedules-media'
+)
+try:
+    os.makedirs(DOCTOR_HOSPITAL_SCHEDULES_MEDIA_DIR, exist_ok=True)
+except Exception:
+    pass
+DOCTOR_HOSPITAL_SCHEDULES_ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+DOCTOR_HOSPITAL_SCHEDULE_KEYS = ('bs_dai', 'bs_quynh_anh')
+
+
+def _doctor_hospital_schedules_public_url(filename: str) -> str:
+    return f"/doctor-hospital-schedules-media/{filename}"
+
+
+def _default_doctor_hospital_schedules():
+    return {
+        'bs_dai': {
+            'label': 'Bác sĩ Đại',
+            'notes': '',
+            'images': [],
+        },
+        'bs_quynh_anh': {
+            'label': 'Bác sĩ Quỳnh Anh',
+            'notes': '',
+            'images': [],
+        },
+    }
+
+
+def _load_doctor_hospital_schedules():
+    raw = AppSetting.get_value(DOCTOR_HOSPITAL_SCHEDULES_KEY, '') or ''
+    data = {}
+    try:
+        parsed = json.loads(raw) if raw else {}
+        if isinstance(parsed, dict):
+            data = parsed
+    except Exception:
+        data = {}
+    base = _default_doctor_hospital_schedules()
+    for key in DOCTOR_HOSPITAL_SCHEDULE_KEYS:
+        item = data.get(key) if isinstance(data.get(key), dict) else {}
+        images = item.get('images') if isinstance(item.get('images'), list) else []
+        clean_images = []
+        for img in images:
+            if not isinstance(img, dict):
+                continue
+            fn = str(img.get('filename') or '').strip()
+            if not fn or '/' in fn or '..' in fn:
+                continue
+            safe = werkzeug.utils.secure_filename(os.path.basename(fn))
+            if not safe:
+                continue
+            clean_images.append({
+                'filename': safe,
+                'url': img.get('url') or _doctor_hospital_schedules_public_url(safe),
+                'caption': str(img.get('caption') or ''),
+                'uploaded_at': img.get('uploaded_at'),
+            })
+        base[key]['notes'] = str(item.get('notes') or '')
+        base[key]['images'] = clean_images
+        if item.get('label'):
+            base[key]['label'] = str(item.get('label'))
+    return base
+
+
+def _save_doctor_hospital_schedules(payload: dict):
+    AppSetting.set_value(DOCTOR_HOSPITAL_SCHEDULES_KEY, json.dumps(payload, ensure_ascii=False))
+
+
+@app.route('/doctor-hospital-schedules-media/<path:filename>')
+def doctor_hospital_schedules_media_file(filename):
+    safe = werkzeug.utils.secure_filename(os.path.basename(str(filename).replace('\\', '/')))
+    if not safe:
+        abort(404)
+    path = os.path.join(DOCTOR_HOSPITAL_SCHEDULES_MEDIA_DIR, safe)
+    if not os.path.isfile(path):
+        abort(404)
+    return send_file(path, conditional=True)
+
+
+@app.route('/api/doctor-hospital-schedules', methods=['GET'])
+def api_get_doctor_hospital_schedules():
+    try:
+        return jsonify({'success': True, 'schedules': _load_doctor_hospital_schedules()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/doctor-hospital-schedules/notes', methods=['POST'])
+def api_set_doctor_hospital_schedule_notes():
+    try:
+        data = request.get_json(silent=True) or {}
+        doctor_key = str(data.get('doctor_key') or '').strip()
+        if doctor_key not in DOCTOR_HOSPITAL_SCHEDULE_KEYS:
+            return jsonify({'success': False, 'error': 'doctor_key không hợp lệ'}), 400
+        schedules = _load_doctor_hospital_schedules()
+        schedules[doctor_key]['notes'] = str(data.get('notes') or '')
+        _save_doctor_hospital_schedules(schedules)
+        return jsonify({'success': True, 'schedules': schedules})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/doctor-hospital-schedules/upload', methods=['POST'])
+@require_auth
+def api_upload_doctor_hospital_schedule_image(**kwargs):
+    try:
+        doctor_key = str(request.form.get('doctor_key') or '').strip()
+        if doctor_key not in DOCTOR_HOSPITAL_SCHEDULE_KEYS:
+            return jsonify({'success': False, 'error': 'doctor_key không hợp lệ'}), 400
+        files = request.files.getlist('files') or []
+        if not files:
+            one = request.files.get('file') or request.files.get('image')
+            if one:
+                files = [one]
+        if not files:
+            return jsonify({'success': False, 'error': 'Thiếu file ảnh'}), 400
+
+        caption = str(request.form.get('caption') or '').strip()
+        schedules = _load_doctor_hospital_schedules()
+        saved = []
+        for f in files:
+            if not f or not getattr(f, 'filename', ''):
+                continue
+            original = str(f.filename)
+            filename = werkzeug.utils.secure_filename(original)
+            if not filename:
+                continue
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in DOCTOR_HOSPITAL_SCHEDULES_ALLOWED_EXTS:
+                return jsonify({'success': False, 'error': f'File không hỗ trợ: {original}'}), 400
+            base = os.path.splitext(filename)[0]
+            final_name = f"{doctor_key}_{base}{ext}"
+            i = 1
+            dst = os.path.join(DOCTOR_HOSPITAL_SCHEDULES_MEDIA_DIR, final_name)
+            while os.path.exists(dst):
+                final_name = f"{doctor_key}_{base}-{i}{ext}"
+                dst = os.path.join(DOCTOR_HOSPITAL_SCHEDULES_MEDIA_DIR, final_name)
+                i += 1
+            f.save(dst)
+            entry = {
+                'filename': final_name,
+                'url': _doctor_hospital_schedules_public_url(final_name),
+                'caption': caption,
+                'uploaded_at': datetime.utcnow().isoformat() + 'Z',
+            }
+            schedules[doctor_key]['images'].append(entry)
+            saved.append(entry)
+
+        if not saved:
+            return jsonify({'success': False, 'error': 'Không có ảnh hợp lệ'}), 400
+        _save_doctor_hospital_schedules(schedules)
+        return jsonify({'success': True, 'files': saved, 'schedules': schedules})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/doctor-hospital-schedules/delete-image', methods=['POST'])
+@require_auth
+def api_delete_doctor_hospital_schedule_image(**kwargs):
+    try:
+        data = request.get_json(silent=True) or {}
+        doctor_key = str(data.get('doctor_key') or '').strip()
+        filename = str(data.get('filename') or '').strip()
+        if doctor_key not in DOCTOR_HOSPITAL_SCHEDULE_KEYS:
+            return jsonify({'success': False, 'error': 'doctor_key không hợp lệ'}), 400
+        if not filename or '/' in filename or '..' in filename:
+            return jsonify({'success': False, 'error': 'Tên file không hợp lệ'}), 400
+        safe = werkzeug.utils.secure_filename(os.path.basename(filename))
+        if not safe:
+            return jsonify({'success': False, 'error': 'Tên file không hợp lệ'}), 400
+
+        schedules = _load_doctor_hospital_schedules()
+        before = len(schedules[doctor_key]['images'])
+        schedules[doctor_key]['images'] = [
+            img for img in schedules[doctor_key]['images'] if img.get('filename') != safe
+        ]
+        path = os.path.join(DOCTOR_HOSPITAL_SCHEDULES_MEDIA_DIR, safe)
+        if os.path.isfile(path):
+            os.remove(path)
+        if len(schedules[doctor_key]['images']) == before and not os.path.isfile(path):
+            # still save in case metadata was stale
+            pass
+        _save_doctor_hospital_schedules(schedules)
+        return jsonify({'success': True, 'schedules': schedules})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ===== Tạo video quảng cáo qua n8n =====
+AD_VIDEO_JOBS_KEY = 'ad_video_jobs_v1'
+AD_VIDEO_WEBHOOK_SETTING_KEY = 'ad_video_n8n_webhook_url'
+AD_VIDEO_REQ_PRESETS_KEY = 'ad_video_requirement_presets_v1'
+AD_VIDEO_MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ad-video-media')
+try:
+    os.makedirs(AD_VIDEO_MEDIA_DIR, exist_ok=True)
+except Exception:
+    pass
+AD_VIDEO_MAX_JOBS = 80
+AD_VIDEO_MAX_REQ_PRESETS = 50
+
+AD_VIDEO_DEFAULT_REQ_PRESETS = [
+    {
+        'id': 'preset_reels_warning',
+        'name': 'Reels cảnh báo sức khỏe',
+        'builtin': True,
+        'content': (
+            '- Giọng nữ ấm, tiếng Việt rõ, tốc độ vừa phải\n'
+            '- 60–75 giây, tỷ lệ 9:16 (Reels / TikTok)\n'
+            '- Cấu trúc: Hook triệu chứng → giải thích ngắn → lời khuyên → CTA đặt lịch\n'
+            '- Nhấn mạnh khi nào cần đi khám ngay, tránh gây hoảng sợ\n'
+            '- Màu hồng #C2185B, không text tiếng Anh\n'
+            '- Kết thúc bằng logo Phòng khám Phụ Sản Đại Anh + QR đặt lịch'
+        ),
+    },
+    {
+        'id': 'preset_service_promo',
+        'name': 'Quảng cáo dịch vụ khám',
+        'builtin': True,
+        'content': (
+            '- Giọng nữ chuyên nghiệp, thân thiện, tiếng Việt\n'
+            '- 45–60 giây, tỷ lệ 9:16\n'
+            '- Scene: giới thiệu dịch vụ → lợi ích cho mẹ bầu/phụ nữ → quy trình nhanh gọn → CTA\n'
+            '- Nhắc địa chỉ / giờ khám ngắn gọn, không liệt kê giá cụ thể\n'
+            '- Phong cách y khoa ấm áp, hình ảnh sạch sẽ, ánh sáng sáng\n'
+            '- Kết thúc: logo + dòng “Uy Tín - Chất Lượng” + QR đặt lịch'
+        ),
+    },
+    {
+        'id': 'preset_testimonial',
+        'name': 'Cảm nhận khách hàng',
+        'builtin': True,
+        'content': (
+            '- Giọng nữ dịu, gần gũi như kể chuyện, tiếng Việt\n'
+            '- 50–70 giây, tỷ lệ 9:16 hoặc 1:1\n'
+            '- Cấu trúc: tình huống lo lắng → trải nghiệm khám → cảm nhận an tâm → lời khuyên chung\n'
+            '- Không dùng tên bệnh nhân thật; dùng nhân vật minh họa\n'
+            '- Nhấn mạnh sự tận tâm của bác sĩ và không gian phòng khám\n'
+            '- CTA cuối: đặt lịch khám tại Phòng khám Phụ Sản Đại Anh + QR'
+        ),
+    },
+]
+
+
+def _ad_video_webhook_url() -> str:
+    env_url = (os.environ.get('N8N_AD_VIDEO_WEBHOOK_URL') or app.config.get('N8N_AD_VIDEO_WEBHOOK_URL') or '').strip()
+    if env_url:
+        return env_url
+    return (AppSetting.get_value(AD_VIDEO_WEBHOOK_SETTING_KEY, '') or '').strip()
+
+
+def _ad_video_mask_url(url: str) -> str:
+    u = (url or '').strip()
+    if not u:
+        return ''
+    if len(u) <= 28:
+        return u[:8] + '…'
+    return u[:22] + '…' + u[-10:]
+
+
+def _load_ad_video_jobs() -> list:
+    raw = AppSetting.get_value(AD_VIDEO_JOBS_KEY, '') or ''
+    try:
+        data = json.loads(raw) if raw else []
+        if isinstance(data, list):
+            return data
+    except Exception:
+        pass
+    return []
+
+
+def _save_ad_video_jobs(jobs: list):
+    trimmed = (jobs or [])[:AD_VIDEO_MAX_JOBS]
+    AppSetting.set_value(AD_VIDEO_JOBS_KEY, json.dumps(trimmed, ensure_ascii=False))
+
+
+def _find_ad_video_job(job_id: str):
+    jid = str(job_id or '').strip()
+    jobs = _load_ad_video_jobs()
+    for idx, job in enumerate(jobs):
+        if isinstance(job, dict) and str(job.get('id') or '') == jid:
+            return jobs, idx, job
+    return jobs, -1, None
+
+
+def _normalize_ad_video_req_preset(item: dict) -> dict | None:
+    if not isinstance(item, dict):
+        return None
+    pid = str(item.get('id') or '').strip()
+    name = str(item.get('name') or '').strip()
+    content = str(item.get('content') or '').strip()
+    if not pid or not name or not content:
+        return None
+    return {
+        'id': pid[:64],
+        'name': name[:120],
+        'content': content[:4000],
+        'builtin': bool(item.get('builtin')),
+        'created_at': str(item.get('created_at') or ''),
+        'created_by': str(item.get('created_by') or ''),
+    }
+
+
+def _load_ad_video_req_presets() -> list:
+    """Trả về mẫu mặc định + mẫu người dùng tự tạo (không trùng id)."""
+    custom = []
+    raw = AppSetting.get_value(AD_VIDEO_REQ_PRESETS_KEY, '') or ''
+    try:
+        data = json.loads(raw) if raw else []
+        if isinstance(data, list):
+            for item in data:
+                norm = _normalize_ad_video_req_preset(item)
+                if norm and not norm.get('builtin'):
+                    custom.append(norm)
+    except Exception:
+        pass
+    builtin_ids = {p['id'] for p in AD_VIDEO_DEFAULT_REQ_PRESETS}
+    custom = [c for c in custom if c['id'] not in builtin_ids]
+    return list(AD_VIDEO_DEFAULT_REQ_PRESETS) + custom[: AD_VIDEO_MAX_REQ_PRESETS]
+
+
+def _save_ad_video_req_presets_custom(presets: list):
+    """Chỉ lưu mẫu tự tạo (không lưu builtin)."""
+    cleaned = []
+    for item in presets or []:
+        norm = _normalize_ad_video_req_preset(item)
+        if not norm or norm.get('builtin'):
+            continue
+        cleaned.append({
+            'id': norm['id'],
+            'name': norm['name'],
+            'content': norm['content'],
+            'builtin': False,
+            'created_at': norm.get('created_at') or '',
+            'created_by': norm.get('created_by') or '',
+        })
+    AppSetting.set_value(
+        AD_VIDEO_REQ_PRESETS_KEY,
+        json.dumps(cleaned[:AD_VIDEO_MAX_REQ_PRESETS], ensure_ascii=False),
+    )
+
+
+def _ad_video_public_url(filename: str) -> str:
+    return f"/ad-video-media/{filename}"
+
+
+def _ad_video_callback_secret_ok() -> bool:
+    """Cho phép callback từ n8n bằng N8N_API_KEY hoặc không bắt buộc nếu chưa cấu hình key."""
+    try:
+        from n8n_commands import get_n8n_api_key
+        expected = get_n8n_api_key()
+    except Exception:
+        expected = (os.environ.get('N8N_API_KEY') or os.environ.get('N8N_WEBHOOK_SECRET') or '').strip()
+    if not expected:
+        return True
+    provided = (request.headers.get('X-N8N-API-Key') or '').strip()
+    if not provided:
+        auth = (request.headers.get('Authorization') or '').strip()
+        if auth.lower().startswith('bearer '):
+            provided = auth[7:].strip()
+    if not provided:
+        provided = str((request.get_json(silent=True) or {}).get('api_key') or '').strip()
+    return bool(provided) and hmac.compare_digest(provided, expected)
+
+
+@app.route('/ad-video-media/<path:filename>')
+def ad_video_media_file(filename):
+    safe = werkzeug.utils.secure_filename(os.path.basename(str(filename).replace('\\', '/')))
+    if not safe:
+        abort(404)
+    path = os.path.join(AD_VIDEO_MEDIA_DIR, safe)
+    if not os.path.isfile(path):
+        abort(404)
+    return send_file(path, conditional=True)
+
+
+@app.route('/api/ad-video/settings', methods=['GET'])
+@require_auth
+def api_get_ad_video_settings(**kwargs):
+    try:
+        url = _ad_video_webhook_url()
+        from_env = bool((os.environ.get('N8N_AD_VIDEO_WEBHOOK_URL') or app.config.get('N8N_AD_VIDEO_WEBHOOK_URL') or '').strip())
+        stored = (AppSetting.get_value(AD_VIDEO_WEBHOOK_SETTING_KEY, '') or '').strip()
+        return jsonify({
+            'success': True,
+            'configured': bool(url),
+            'webhook_url_masked': _ad_video_mask_url(url),
+            'webhook_url': '' if from_env else stored,
+            'from_env': from_env,
+            'callback_path': '/api/ad-video/callback',
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ad-video/settings', methods=['POST'])
+@require_auth
+def api_set_ad_video_settings(**kwargs):
+    try:
+        if (os.environ.get('N8N_AD_VIDEO_WEBHOOK_URL') or '').strip():
+            return jsonify({
+                'success': False,
+                'error': 'Webhook đang lấy từ biến môi trường N8N_AD_VIDEO_WEBHOOK_URL — không lưu qua UI.',
+            }), 400
+        data = request.get_json(silent=True) or {}
+        url = str(data.get('webhook_url') or '').strip()
+        if url and not (url.startswith('http://') or url.startswith('https://')):
+            return jsonify({'success': False, 'error': 'Webhook URL phải bắt đầu bằng http:// hoặc https://'}), 400
+        AppSetting.set_value(AD_VIDEO_WEBHOOK_SETTING_KEY, url)
+        return jsonify({
+            'success': True,
+            'configured': bool(url),
+            'webhook_url_masked': _ad_video_mask_url(url),
+            'webhook_url': url,
+            'from_env': False,
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ad-video/requirement-presets', methods=['GET'])
+@require_auth
+def api_list_ad_video_requirement_presets(**kwargs):
+    try:
+        return jsonify({'success': True, 'presets': _load_ad_video_req_presets()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ad-video/requirement-presets', methods=['POST'])
+@require_auth
+def api_create_ad_video_requirement_preset(**kwargs):
+    try:
+        user_id = kwargs.get('current_user_id')
+        data = request.get_json(silent=True) or {}
+        name = str(data.get('name') or '').strip()
+        content = str(data.get('content') or '').strip()
+        if not name:
+            return jsonify({'success': False, 'error': 'Vui lòng nhập tên mẫu yêu cầu'}), 400
+        if not content:
+            return jsonify({'success': False, 'error': 'Vui lòng nhập nội dung yêu cầu'}), 400
+        if len(content) > 4000:
+            return jsonify({'success': False, 'error': 'Nội dung yêu cầu tối đa 4000 ký tự'}), 400
+
+        all_presets = _load_ad_video_req_presets()
+        custom = [p for p in all_presets if not p.get('builtin')]
+        if len(custom) >= AD_VIDEO_MAX_REQ_PRESETS:
+            return jsonify({
+                'success': False,
+                'error': f'Đã đạt giới hạn {AD_VIDEO_MAX_REQ_PRESETS} mẫu tự tạo',
+            }), 400
+
+        username = ''
+        try:
+            u = db.session.get(User, user_id) if user_id else None
+            if u:
+                username = getattr(u, 'username', '') or getattr(u, 'full_name', '') or str(user_id)
+        except Exception:
+            username = str(user_id or '')
+
+        preset = {
+            'id': 'custom_' + uuid.uuid4().hex[:12],
+            'name': name[:120],
+            'content': content[:4000],
+            'builtin': False,
+            'created_at': datetime.utcnow().isoformat() + 'Z',
+            'created_by': username,
+        }
+        custom.insert(0, preset)
+        _save_ad_video_req_presets_custom(custom)
+        return jsonify({'success': True, 'preset': preset, 'presets': _load_ad_video_req_presets()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ad-video/requirement-presets/<preset_id>', methods=['DELETE'])
+@require_auth
+def api_delete_ad_video_requirement_preset(preset_id, **kwargs):
+    try:
+        pid = str(preset_id or '').strip()
+        if not pid:
+            return jsonify({'success': False, 'error': 'Thiếu id mẫu'}), 400
+        if any(p['id'] == pid for p in AD_VIDEO_DEFAULT_REQ_PRESETS):
+            return jsonify({'success': False, 'error': 'Không thể xóa mẫu mặc định'}), 400
+        custom = [p for p in _load_ad_video_req_presets() if not p.get('builtin')]
+        before = len(custom)
+        custom = [p for p in custom if str(p.get('id') or '') != pid]
+        if len(custom) == before:
+            return jsonify({'success': False, 'error': 'Không tìm thấy mẫu'}), 404
+        _save_ad_video_req_presets_custom(custom)
+        return jsonify({'success': True, 'presets': _load_ad_video_req_presets()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ad-video/jobs', methods=['GET'])
+@require_auth
+def api_list_ad_video_jobs(**kwargs):
+    try:
+        jobs = _load_ad_video_jobs()
+        return jsonify({'success': True, 'jobs': jobs})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ad-video/jobs/<job_id>', methods=['GET'])
+@require_auth
+def api_get_ad_video_job(job_id, **kwargs):
+    try:
+        _, _, job = _find_ad_video_job(job_id)
+        if not job:
+            return jsonify({'success': False, 'error': 'Không tìm thấy job'}), 404
+        return jsonify({'success': True, 'job': job})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ad-video/jobs/<job_id>', methods=['DELETE'])
+@require_auth
+def api_delete_ad_video_job(job_id, **kwargs):
+    try:
+        jobs, idx, job = _find_ad_video_job(job_id)
+        if idx < 0 or not job:
+            return jsonify({'success': False, 'error': 'Không tìm thấy job'}), 404
+        fn = str(job.get('local_filename') or '').strip()
+        if fn and '/' not in fn and '..' not in fn:
+            path = os.path.join(AD_VIDEO_MEDIA_DIR, werkzeug.utils.secure_filename(fn))
+            if os.path.isfile(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+        jobs.pop(idx)
+        _save_ad_video_jobs(jobs)
+        return jsonify({'success': True, 'jobs': jobs})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ad-video/create', methods=['POST'])
+@require_auth
+def api_create_ad_video(**kwargs):
+    try:
+        user_id = kwargs.get('current_user_id')
+        data = request.get_json(silent=True) or {}
+        topic = str(data.get('topic') or '').strip()
+        requirements = str(data.get('requirements') or '').strip()
+        if not topic:
+            return jsonify({'success': False, 'error': 'Vui lòng nhập chủ đề video'}), 400
+        if not requirements:
+            return jsonify({'success': False, 'error': 'Vui lòng nhập yêu cầu cụ thể'}), 400
+
+        duration_sec = data.get('duration_sec', 60)
+        try:
+            duration_sec = max(15, min(180, int(duration_sec)))
+        except Exception:
+            duration_sec = 60
+        aspect_ratio = str(data.get('aspect_ratio') or '9:16').strip()
+        if aspect_ratio not in ('9:16', '16:9', '1:1'):
+            aspect_ratio = '9:16'
+        voice = str(data.get('voice') or 'female_vi').strip() or 'female_vi'
+        style = str(data.get('style') or 'medical_warm').strip() or 'medical_warm'
+
+        webhook_url = _ad_video_webhook_url()
+        if not webhook_url:
+            return jsonify({
+                'success': False,
+                'error': 'Chưa cấu hình webhook n8n. Điền URL Production webhook trên trang này hoặc đặt N8N_AD_VIDEO_WEBHOOK_URL.',
+            }), 400
+
+        job_id = uuid.uuid4().hex
+        now = datetime.utcnow().isoformat() + 'Z'
+        username = ''
+        try:
+            u = db.session.get(User, user_id) if user_id else None
+            if u:
+                username = getattr(u, 'username', '') or getattr(u, 'full_name', '') or str(user_id)
+        except Exception:
+            username = str(user_id or '')
+
+        base = (request.url_root or '').rstrip('/')
+        callback_url = f"{base}/api/ad-video/callback"
+        payload = {
+            'job_id': job_id,
+            'topic': topic,
+            'requirements': requirements,
+            'duration_sec': duration_sec,
+            'aspect_ratio': aspect_ratio,
+            'voice': voice,
+            'style': style,
+            'brand': 'Phòng khám chuyên khoa Phụ Sản Đại Anh',
+            'brand_tagline': 'Uy Tín - Chất Lượng',
+            'callback_url': callback_url,
+            'created_at': now,
+            'created_by': username,
+        }
+
+        job = {
+            'id': job_id,
+            'topic': topic,
+            'requirements': requirements,
+            'duration_sec': duration_sec,
+            'aspect_ratio': aspect_ratio,
+            'voice': voice,
+            'style': style,
+            'status': 'queued',
+            'message': 'Đã gửi yêu cầu tới n8n',
+            'error': '',
+            'video_url': '',
+            'local_filename': '',
+            'created_at': now,
+            'updated_at': now,
+            'created_by': username,
+            'n8n_http_status': None,
+            'n8n_response': None,
+        }
+
+        code, resp = _http_json('POST', webhook_url, body_obj=payload, timeout_s=60)
+        job['n8n_http_status'] = code
+        if isinstance(resp, dict):
+            job['n8n_response'] = {k: resp[k] for k in list(resp.keys())[:20]}
+            if resp.get('video_url'):
+                job['video_url'] = str(resp.get('video_url'))
+            if resp.get('status'):
+                job['status'] = str(resp.get('status'))
+            if resp.get('message'):
+                job['message'] = str(resp.get('message'))
+        else:
+            job['n8n_response'] = {'raw': str(resp)[:500]}
+
+        if code and 200 <= int(code) < 300:
+            if job['status'] == 'queued':
+                job['status'] = 'processing'
+                job['message'] = job.get('message') or 'n8n đã nhận yêu cầu, đang tạo video…'
+        else:
+            job['status'] = 'failed'
+            err_detail = ''
+            if isinstance(resp, dict):
+                err_detail = str(resp.get('error') or resp.get('message') or resp.get('raw') or '')
+            job['error'] = f'n8n trả lỗi HTTP {code}' + (f': {err_detail}' if err_detail else '')
+            job['message'] = 'Gửi webhook thất bại'
+
+        jobs = _load_ad_video_jobs()
+        jobs.insert(0, job)
+        _save_ad_video_jobs(jobs)
+        ok = job['status'] != 'failed'
+        return jsonify({'success': ok, 'job': job, 'error': job.get('error') or None}), (200 if ok else 502)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ad-video/callback', methods=['POST'])
+def api_ad_video_callback():
+    """n8n gọi lại khi xử lý xong (hoặc cập nhật tiến độ)."""
+    try:
+        if not _ad_video_callback_secret_ok():
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+        data = request.get_json(silent=True) or {}
+        job_id = str(data.get('job_id') or data.get('id') or '').strip()
+        if not job_id:
+            return jsonify({'success': False, 'error': 'Thiếu job_id'}), 400
+        jobs, idx, job = _find_ad_video_job(job_id)
+        if idx < 0 or not job:
+            return jsonify({'success': False, 'error': 'Không tìm thấy job'}), 404
+
+        status = str(data.get('status') or '').strip().lower()
+        if status in ('queued', 'processing', 'done', 'completed', 'success', 'failed', 'error'):
+            if status in ('completed', 'success'):
+                status = 'done'
+            elif status == 'error':
+                status = 'failed'
+            job['status'] = status
+        if data.get('message') is not None:
+            job['message'] = str(data.get('message') or '')
+        if data.get('error') is not None:
+            job['error'] = str(data.get('error') or '')
+            if job['error'] and job.get('status') != 'done':
+                job['status'] = 'failed'
+        video_url = str(data.get('video_url') or data.get('url') or '').strip()
+        if video_url:
+            job['video_url'] = video_url
+            if job.get('status') in ('queued', 'processing', ''):
+                job['status'] = 'done'
+
+        # Cho phép n8n gửi file base64 (video ngắn)
+        b64 = data.get('video_base64') or data.get('file_base64')
+        if b64 and isinstance(b64, str):
+            try:
+                raw = base64.b64decode(b64.split(',')[-1], validate=False)
+                ext = str(data.get('ext') or data.get('extension') or 'mp4').strip().lstrip('.')
+                if ext not in ('mp4', 'webm', 'mov', 'gif'):
+                    ext = 'mp4'
+                final_name = f"{job_id}.{ext}"
+                dst = os.path.join(AD_VIDEO_MEDIA_DIR, final_name)
+                with open(dst, 'wb') as f:
+                    f.write(raw)
+                job['local_filename'] = final_name
+                job['video_url'] = _ad_video_public_url(final_name)
+                if job.get('status') in ('queued', 'processing', ''):
+                    job['status'] = 'done'
+            except Exception as e:
+                job['error'] = f'Lưu file callback thất bại: {e}'
+                job['status'] = 'failed'
+
+        job['updated_at'] = datetime.utcnow().isoformat() + 'Z'
+        jobs[idx] = job
+        _save_ad_video_jobs(jobs)
+        return jsonify({'success': True, 'job': job})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/staff-hourly-rate', methods=['GET'])
 def api_get_staff_hourly_rate():
@@ -8256,12 +11504,23 @@ def update_shift_template(id):
         return jsonify({'message': f'Lỗi khi cập nhật ca khám mẫu: {str(e)}'}), 500
 
 # Medical Charts API Endpoints
+def _invalidate_medical_charts_cache():
+    _MEDICAL_CHARTS_RESPONSE_CACHE.clear()
+
+
 @app.route('/api/medical-charts', methods=['GET'])
 def get_medical_charts():
     """Get all medical charts with optional filtering."""
     try:
         category = request.args.get('category', 'all')
         search = request.args.get('search', '')
+        cache_key = f'{category}|{search}'
+        now = time.time()
+        cached = _MEDICAL_CHARTS_RESPONSE_CACHE.get(cache_key)
+        if cached and cached[0] > now:
+            resp = jsonify(cached[1])
+            resp.headers['Cache-Control'] = 'private, max-age=120'
+            return resp
         
         query = MedicalChart.query
         
@@ -8273,7 +11532,7 @@ def get_medical_charts():
         
         charts = query.order_by(MedicalChart.created_at.desc()).all()
         
-        return jsonify([{
+        payload = [{
             'id': chart.id,
             'name': chart.name,
             'category': chart.category,
@@ -8282,7 +11541,11 @@ def get_medical_charts():
             'is_predefined': chart.is_predefined,
             'created_at': chart.created_at.isoformat(),
             'updated_at': chart.updated_at.isoformat()
-        } for chart in charts])
+        } for chart in charts]
+        _MEDICAL_CHARTS_RESPONSE_CACHE[cache_key] = (now + _MEDICAL_CHARTS_CACHE_TTL, payload)
+        resp = jsonify(payload)
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
     except Exception as e:
         return jsonify({'message': f'Lỗi khi lấy danh sách bảng biểu: {str(e)}'}), 500
 
@@ -8304,6 +11567,7 @@ def create_medical_chart():
         
         db.session.add(chart)
         db.session.commit()
+        _invalidate_medical_charts_cache()
         
         return jsonify({
             'message': 'Đã tạo bảng biểu thành công!',
@@ -8331,6 +11595,7 @@ def update_medical_chart(id):
         
         chart.updated_at = datetime.utcnow()
         db.session.commit()
+        _invalidate_medical_charts_cache()
         
         return jsonify({'message': 'Đã cập nhật bảng biểu thành công!'})
     except Exception as e:
@@ -8349,6 +11614,7 @@ def delete_medical_chart(id):
         
         db.session.delete(chart)
         db.session.commit()
+        _invalidate_medical_charts_cache()
         
         return jsonify({'message': 'Đã xóa bảng biểu thành công!'})
     except Exception as e:
@@ -8372,6 +11638,783 @@ def get_medical_chart(id):
         })
     except Exception as e:
         return jsonify({'message': f'Lỗi khi lấy bảng biểu: {str(e)}'}), 500
+
+
+def _clinical_flowchart_to_dict(item: ClinicalFlowchart):
+    poster = None
+    if item.poster_data:
+        try:
+            poster = json.loads(item.poster_data)
+        except Exception:
+            poster = None
+    file_url = _flowcharts_media_public_url(item.file_name) if item.file_name else None
+    return {
+        'id': item.id,
+        'title': item.title,
+        'category': item.category,
+        'content_type': getattr(item, 'content_type', None) or 'flowchart',
+        'description': item.description or '',
+        'source_type': item.source_type,
+        'file_name': item.file_name,
+        'file_url': file_url,
+        'link_url': item.link_url,
+        'poster_data': poster,
+        'sort_order': item.sort_order or 0,
+        'created_at': item.created_at.isoformat() if item.created_at else None,
+        'updated_at': item.updated_at.isoformat() if item.updated_at else None,
+    }
+
+
+@app.route('/api/clinical-flowcharts', methods=['GET'])
+def api_get_clinical_flowcharts():
+    try:
+        category = (request.args.get('category') or 'all').strip()
+        content_type = (request.args.get('content_type') or 'all').strip()
+        search = (request.args.get('search') or '').strip()
+        q = ClinicalFlowchart.query
+        if category and category != 'all':
+            q = q.filter(ClinicalFlowchart.category == category)
+        if content_type and content_type != 'all':
+            q = q.filter(ClinicalFlowchart.content_type == content_type)
+        if search:
+            like = f'%{search}%'
+            q = q.filter(
+                db.or_(
+                    ClinicalFlowchart.title.ilike(like),
+                    ClinicalFlowchart.description.ilike(like),
+                )
+            )
+        items = q.order_by(
+            ClinicalFlowchart.sort_order.asc(),
+            ClinicalFlowchart.updated_at.desc(),
+        ).all()
+        return jsonify({'items': [_clinical_flowchart_to_dict(x) for x in items]})
+    except Exception as e:
+        return jsonify({'message': f'Lỗi tải flowchart: {str(e)}'}), 500
+
+
+@app.route('/api/clinical-flowcharts/<int:item_id>', methods=['GET'])
+def api_get_clinical_flowchart(item_id):
+    try:
+        item = _get_or_404(ClinicalFlowchart, item_id)
+        return jsonify({'item': _clinical_flowchart_to_dict(item)})
+    except Exception as e:
+        return jsonify({'message': f'Lỗi tải flowchart: {str(e)}'}), 500
+
+
+@app.route('/api/clinical-flowcharts', methods=['POST'])
+def api_create_clinical_flowchart():
+    try:
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            title = (request.form.get('title') or '').strip()
+            category = (request.form.get('category') or 'other').strip()
+            content_type = (request.form.get('content_type') or 'flowchart').strip()
+            description = (request.form.get('description') or '').strip()
+            source_type = (request.form.get('source_type') or 'upload').strip()
+            link_url = (request.form.get('link_url') or '').strip() or None
+            upload = request.files.get('file')
+        else:
+            data = request.json or {}
+            title = (data.get('title') or '').strip()
+            category = (data.get('category') or 'other').strip()
+            content_type = (data.get('content_type') or 'flowchart').strip()
+            description = (data.get('description') or '').strip()
+            source_type = (data.get('source_type') or 'poster').strip()
+            link_url = (data.get('link_url') or '').strip() or None
+            upload = None
+
+        if not title:
+            return jsonify({'message': 'Thiếu tiêu đề flowchart'}), 400
+
+        file_name = None
+        if source_type == 'upload':
+            if not upload or not getattr(upload, 'filename', ''):
+                return jsonify({'message': 'Vui lòng chọn file ảnh hoặc PDF'}), 400
+            original = str(upload.filename)
+            safe = _safe_flowchart_filename(original)
+            if not safe:
+                return jsonify({'message': 'Tên file không hợp lệ'}), 400
+            ext = os.path.splitext(safe)[1].lower()
+            if ext not in FLOWCHARTS_MEDIA_ALLOWED_EXTS:
+                return jsonify({'message': 'Chỉ hỗ trợ JPG, PNG, WEBP, GIF, PDF'}), 400
+            base = os.path.splitext(safe)[0]
+            final_name = safe
+            i = 1
+            while os.path.exists(os.path.join(FLOWCHARTS_MEDIA_DIR, final_name)):
+                final_name = f'{base}-{i}{ext}'
+                i += 1
+            upload.save(os.path.join(FLOWCHARTS_MEDIA_DIR, final_name))
+            file_name = final_name
+        elif source_type == 'link' and not link_url:
+            return jsonify({'message': 'Thiếu đường dẫn liên kết'}), 400
+
+        poster_json = None
+        if source_type == 'poster':
+            poster = json.loads(json.dumps(_DEFAULT_FLOWCHART_POSTER))
+            poster['meta']['title'] = title
+            poster_json = json.dumps(poster, ensure_ascii=False)
+
+        if content_type not in ('flowchart', 'infographic'):
+            content_type = 'flowchart'
+
+        item = ClinicalFlowchart(
+            title=title,
+            category=category or 'other',
+            content_type=content_type,
+            description=description,
+            source_type=source_type,
+            file_name=file_name,
+            link_url=link_url,
+            poster_data=poster_json,
+        )
+        db.session.add(item)
+        db.session.commit()
+        return jsonify({'success': True, 'item': _clinical_flowchart_to_dict(item)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi tạo flowchart: {str(e)}'}), 500
+
+
+@app.route('/api/clinical-flowcharts/<int:item_id>', methods=['PUT'])
+def api_update_clinical_flowchart(item_id):
+    try:
+        item = _get_or_404(ClinicalFlowchart, item_id)
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            data = request.form
+            upload = request.files.get('file')
+        else:
+            data = request.json or {}
+            upload = None
+
+        if 'title' in data:
+            item.title = (data.get('title') or '').strip() or item.title
+        if 'category' in data:
+            item.category = (data.get('category') or item.category).strip()
+        if 'content_type' in data:
+            ct = (data.get('content_type') or item.content_type or 'flowchart').strip()
+            if ct in ('flowchart', 'infographic'):
+                item.content_type = ct
+        if 'description' in data:
+            item.description = data.get('description') or ''
+        if 'link_url' in data:
+            item.link_url = (data.get('link_url') or '').strip() or None
+        if 'poster_data' in data and item.source_type == 'poster':
+            pd = data.get('poster_data')
+            if isinstance(pd, dict):
+                item.poster_data = json.dumps(pd, ensure_ascii=False)
+            elif isinstance(pd, str) and pd.strip():
+                item.poster_data = pd
+
+        if upload and getattr(upload, 'filename', ''):
+            original = str(upload.filename)
+            safe = _safe_flowchart_filename(original)
+            ext = os.path.splitext(safe)[1].lower()
+            if ext not in FLOWCHARTS_MEDIA_ALLOWED_EXTS:
+                return jsonify({'message': 'Chỉ hỗ trợ JPG, PNG, WEBP, GIF, PDF'}), 400
+            base = os.path.splitext(safe)[0]
+            final_name = safe
+            i = 1
+            while os.path.exists(os.path.join(FLOWCHARTS_MEDIA_DIR, final_name)):
+                final_name = f'{base}-{i}{ext}'
+                i += 1
+            upload.save(os.path.join(FLOWCHARTS_MEDIA_DIR, final_name))
+            if item.file_name:
+                old = os.path.join(FLOWCHARTS_MEDIA_DIR, item.file_name)
+                if os.path.isfile(old):
+                    try:
+                        os.remove(old)
+                    except Exception:
+                        pass
+            item.file_name = final_name
+            item.source_type = 'upload'
+
+        item.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'success': True, 'item': _clinical_flowchart_to_dict(item)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi cập nhật flowchart: {str(e)}'}), 500
+
+
+@app.route('/api/clinical-flowcharts/<int:item_id>', methods=['DELETE'])
+def api_delete_clinical_flowchart(item_id):
+    try:
+        item = _get_or_404(ClinicalFlowchart, item_id)
+        if item.file_name:
+            path = os.path.join(FLOWCHARTS_MEDIA_DIR, item.file_name)
+            if os.path.isfile(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+        db.session.delete(item)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Đã xóa flowchart'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi xóa flowchart: {str(e)}'}), 500
+
+
+def _clinic_asset_to_dict(item: ClinicAsset):
+    return {
+        'id': item.id,
+        'title': item.title,
+        'kind': item.asset_type or 'equipment',
+        'asset_type': item.asset_type or 'equipment',
+        'category': item.category or 'other',
+        'description': item.description or '',
+        'usage_notes': item.usage_notes or '',
+        'troubleshooting_notes': item.troubleshooting_notes or '',
+        'purchase_notes': item.purchase_notes or '',
+        'image_name': item.image_name,
+        'image_url': _clinic_assets_media_public_url(item.image_name) if item.image_name else None,
+        'sort_order': item.sort_order or 0,
+        'created_at': item.created_at.isoformat() if item.created_at else None,
+        'updated_at': item.updated_at.isoformat() if item.updated_at else None,
+    }
+
+
+# ============ Clinic assets (VT/TTB) ============
+@app.route('/clinic-assets.html')
+def clinic_assets_page():
+    resp = send_from_directory('.', 'clinic-assets.html')
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
+
+
+@app.route('/api/clinic-assets', methods=['GET'])
+def api_list_clinic_assets():
+    try:
+        ensure_clinic_assets_table()
+        kind = (request.args.get('kind') or request.args.get('asset_type') or 'all').strip()
+        category = (request.args.get('category') or 'all').strip()
+        search = (request.args.get('search') or '').strip()
+        q = ClinicAsset.query
+        if kind and kind != 'all':
+            q = q.filter(ClinicAsset.asset_type == kind)
+        if category and category != 'all':
+            q = q.filter(ClinicAsset.category == category)
+        if search:
+            like = f'%{search}%'
+            q = q.filter(db.or_(
+                ClinicAsset.title.ilike(like),
+                ClinicAsset.description.ilike(like),
+                ClinicAsset.usage_notes.ilike(like),
+                ClinicAsset.troubleshooting_notes.ilike(like),
+                ClinicAsset.purchase_notes.ilike(like),
+                ClinicAsset.category.ilike(like),
+            ))
+        items = q.order_by(ClinicAsset.sort_order.asc(), ClinicAsset.updated_at.desc()).all()
+        return jsonify({'success': True, 'items': [_clinic_asset_to_dict(x) for x in items]})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi tải danh sách: {str(e)}'}), 500
+
+
+@app.route('/api/clinic-assets', methods=['POST'])
+def api_create_clinic_asset():
+    try:
+        ensure_clinic_assets_table()
+        title = (request.form.get('title') or '').strip()
+        kind = (request.form.get('kind') or request.form.get('asset_type') or 'equipment').strip()
+        category = (request.form.get('category') or 'other').strip()
+        description = (request.form.get('description') or '').strip()
+        usage_notes = (request.form.get('usage_notes') or '').strip()
+        troubleshooting_notes = (request.form.get('troubleshooting_notes') or '').strip()
+        purchase_notes = (request.form.get('purchase_notes') or '').strip()
+        upload = request.files.get('image') or request.files.get('file')
+        if not title:
+            return jsonify({'success': False, 'message': 'Thiếu tiêu đề'}), 400
+        if kind not in ('equipment', 'supply'):
+            kind = 'equipment'
+        image_name = None
+        if upload and getattr(upload, 'filename', ''):
+            original = str(upload.filename)
+            safe = _safe_clinic_asset_filename(original)
+            ext = os.path.splitext(safe)[1].lower()
+            if ext not in CLINIC_ASSETS_MEDIA_ALLOWED_EXTS:
+                return jsonify({'success': False, 'message': 'Chỉ hỗ trợ JPG, PNG, WEBP, GIF, PDF'}), 400
+            base = os.path.splitext(safe)[0]
+            final_name = safe
+            i = 1
+            while os.path.exists(os.path.join(CLINIC_ASSETS_MEDIA_DIR, final_name)):
+                final_name = f'{base}-{i}{ext}'
+                i += 1
+            upload.save(os.path.join(CLINIC_ASSETS_MEDIA_DIR, final_name))
+            image_name = final_name
+        item = ClinicAsset(
+            title=title,
+            asset_type=kind,
+            category=category or 'other',
+            description=description,
+            usage_notes=usage_notes,
+            troubleshooting_notes=troubleshooting_notes,
+            purchase_notes=purchase_notes,
+            image_name=image_name,
+        )
+        db.session.add(item)
+        db.session.commit()
+        return jsonify({'success': True, 'item': _clinic_asset_to_dict(item)}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi tạo mục: {str(e)}'}), 500
+
+
+@app.route('/api/clinic-assets/<int:item_id>', methods=['PUT'])
+def api_update_clinic_asset(item_id):
+    try:
+        ensure_clinic_assets_table()
+        item = _get_or_404(ClinicAsset, item_id)
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            data = request.form
+            upload = request.files.get('image') or request.files.get('file')
+        else:
+            data = request.json or {}
+            upload = None
+        if 'title' in data:
+            item.title = (data.get('title') or '').strip() or item.title
+        if 'kind' in data or 'asset_type' in data:
+            kind = (data.get('kind') or data.get('asset_type') or item.asset_type or 'equipment').strip()
+            if kind in ('equipment', 'supply'):
+                item.asset_type = kind
+        if 'category' in data:
+            item.category = (data.get('category') or item.category or 'other').strip()
+        if 'description' in data:
+            item.description = data.get('description') or ''
+        if 'usage_notes' in data:
+            item.usage_notes = data.get('usage_notes') or ''
+        if 'troubleshooting_notes' in data:
+            item.troubleshooting_notes = data.get('troubleshooting_notes') or ''
+        if 'purchase_notes' in data:
+            item.purchase_notes = data.get('purchase_notes') or ''
+        if upload and getattr(upload, 'filename', ''):
+            original = str(upload.filename)
+            safe = _safe_clinic_asset_filename(original)
+            ext = os.path.splitext(safe)[1].lower()
+            if ext not in CLINIC_ASSETS_MEDIA_ALLOWED_EXTS:
+                return jsonify({'success': False, 'message': 'Chỉ hỗ trợ JPG, PNG, WEBP, GIF, PDF'}), 400
+            base = os.path.splitext(safe)[0]
+            final_name = safe
+            i = 1
+            while os.path.exists(os.path.join(CLINIC_ASSETS_MEDIA_DIR, final_name)):
+                final_name = f'{base}-{i}{ext}'
+                i += 1
+            upload.save(os.path.join(CLINIC_ASSETS_MEDIA_DIR, final_name))
+            if item.image_name:
+                old = os.path.join(CLINIC_ASSETS_MEDIA_DIR, item.image_name)
+                if os.path.isfile(old):
+                    try:
+                        os.remove(old)
+                    except Exception:
+                        pass
+            item.image_name = final_name
+        item.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'success': True, 'item': _clinic_asset_to_dict(item)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi cập nhật: {str(e)}'}), 500
+
+
+@app.route('/api/clinic-assets/<int:item_id>', methods=['DELETE'])
+def api_delete_clinic_asset(item_id):
+    try:
+        ensure_clinic_assets_table()
+        item = _get_or_404(ClinicAsset, item_id)
+        if item.image_name:
+            path = os.path.join(CLINIC_ASSETS_MEDIA_DIR, item.image_name)
+            if os.path.isfile(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+        db.session.delete(item)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Đã xóa'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi xóa: {str(e)}'}), 500
+
+
+def _parse_technique_images(raw):
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return []
+    if not isinstance(data, list):
+        return []
+    out = []
+    for img in data:
+        if not isinstance(img, dict):
+            continue
+        fn = str(img.get('filename') or '').strip()
+        if not fn or '/' in fn or '\\' in fn or '..' in fn:
+            continue
+        safe = werkzeug.utils.secure_filename(os.path.basename(fn))
+        if not safe:
+            continue
+        out.append({
+            'filename': safe,
+            'caption': str(img.get('caption') or ''),
+            'url': img.get('url') or _clinic_techniques_media_public_url(safe),
+        })
+    return out
+
+
+def _clinic_technique_to_dict(item: ClinicTechnique):
+    images = _parse_technique_images(item.images_json)
+    return {
+        'id': item.id,
+        'name': item.name,
+        'indications': item.indications or '',
+        'contraindications': item.contraindications or '',
+        'instruments': item.instruments or '',
+        'consumables': item.consumables or '',
+        'steps': item.steps or '',
+        'post_monitoring': item.post_monitoring or '',
+        'images': images,
+        'sort_order': item.sort_order or 0,
+        'created_at': item.created_at.isoformat() if item.created_at else None,
+        'updated_at': item.updated_at.isoformat() if item.updated_at else None,
+    }
+
+
+def _save_technique_upload(upload):
+    """Lưu 1 file ảnh kĩ thuật; trả về dict {filename, caption, url} hoặc None."""
+    if not upload or not getattr(upload, 'filename', ''):
+        return None
+    original = str(upload.filename)
+    safe = _safe_clinic_technique_filename(original)
+    ext = os.path.splitext(safe)[1].lower()
+    if ext not in CLINIC_TECHNIQUES_MEDIA_ALLOWED_EXTS:
+        return None
+    base = os.path.splitext(safe)[0]
+    final_name = safe
+    i = 1
+    while os.path.exists(os.path.join(CLINIC_TECHNIQUES_MEDIA_DIR, final_name)):
+        final_name = f'{base}-{i}{ext}'
+        i += 1
+    upload.save(os.path.join(CLINIC_TECHNIQUES_MEDIA_DIR, final_name))
+    return {
+        'filename': final_name,
+        'caption': '',
+        'url': _clinic_techniques_media_public_url(final_name),
+    }
+
+
+def _delete_technique_image_files(images):
+    for img in images or []:
+        fn = (img or {}).get('filename')
+        if not fn:
+            continue
+        path = os.path.join(CLINIC_TECHNIQUES_MEDIA_DIR, fn)
+        if os.path.isfile(path):
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+
+
+# ============ Clinic techniques (Danh mục kĩ thuật) ============
+@app.route('/clinic-techniques.html')
+def clinic_techniques_page():
+    resp = send_from_directory('.', 'clinic-techniques.html')
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
+
+
+@app.route('/api/clinic-techniques', methods=['GET'])
+def api_list_clinic_techniques():
+    try:
+        ensure_clinic_techniques_table()
+        search = (request.args.get('search') or '').strip()
+        q = ClinicTechnique.query
+        if search:
+            like = f'%{search}%'
+            q = q.filter(db.or_(
+                ClinicTechnique.name.ilike(like),
+                ClinicTechnique.indications.ilike(like),
+                ClinicTechnique.contraindications.ilike(like),
+                ClinicTechnique.instruments.ilike(like),
+                ClinicTechnique.consumables.ilike(like),
+                ClinicTechnique.steps.ilike(like),
+                ClinicTechnique.post_monitoring.ilike(like),
+            ))
+        items = q.order_by(ClinicTechnique.sort_order.asc(), ClinicTechnique.name.asc()).all()
+        return jsonify({'success': True, 'items': [_clinic_technique_to_dict(x) for x in items]})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi tải danh sách: {str(e)}'}), 500
+
+
+@app.route('/api/clinic-techniques', methods=['POST'])
+def api_create_clinic_technique():
+    try:
+        ensure_clinic_techniques_table()
+        is_multipart = request.content_type and 'multipart/form-data' in request.content_type
+        data = request.form if is_multipart else (request.json or {})
+        name = (data.get('name') or '').strip()
+        if not name:
+            return jsonify({'success': False, 'message': 'Thiếu tên kĩ thuật'}), 400
+        images = []
+        if is_multipart:
+            files = request.files.getlist('images') or request.files.getlist('image')
+            for f in files:
+                saved = _save_technique_upload(f)
+                if saved:
+                    images.append(saved)
+            captions_raw = data.get('image_captions') or '[]'
+            try:
+                captions = json.loads(captions_raw) if isinstance(captions_raw, str) else captions_raw
+            except Exception:
+                captions = []
+            if isinstance(captions, list):
+                for i, img in enumerate(images):
+                    if i < len(captions):
+                        img['caption'] = str(captions[i] or '')
+        item = ClinicTechnique(
+            name=name,
+            indications=(data.get('indications') or '').strip(),
+            contraindications=(data.get('contraindications') or '').strip(),
+            instruments=(data.get('instruments') or '').strip(),
+            consumables=(data.get('consumables') or '').strip(),
+            steps=(data.get('steps') or '').strip(),
+            post_monitoring=(data.get('post_monitoring') or '').strip(),
+            images_json=json.dumps(images, ensure_ascii=False),
+            sort_order=int(data.get('sort_order') or 0),
+        )
+        db.session.add(item)
+        db.session.commit()
+        return jsonify({'success': True, 'item': _clinic_technique_to_dict(item)}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi tạo kĩ thuật: {str(e)}'}), 500
+
+
+@app.route('/api/clinic-techniques/<int:item_id>', methods=['GET'])
+def api_get_clinic_technique(item_id):
+    try:
+        ensure_clinic_techniques_table()
+        item = _get_or_404(ClinicTechnique, item_id)
+        return jsonify({'success': True, 'item': _clinic_technique_to_dict(item)})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi tải: {str(e)}'}), 500
+
+
+@app.route('/api/clinic-techniques/<int:item_id>', methods=['PUT'])
+def api_update_clinic_technique(item_id):
+    try:
+        ensure_clinic_techniques_table()
+        item = _get_or_404(ClinicTechnique, item_id)
+        is_multipart = request.content_type and 'multipart/form-data' in request.content_type
+        data = request.form if is_multipart else (request.json or {})
+        if 'name' in data:
+            name = (data.get('name') or '').strip()
+            if name:
+                item.name = name
+        for field in ('indications', 'contraindications', 'instruments', 'consumables', 'steps', 'post_monitoring'):
+            if field in data:
+                setattr(item, field, (data.get(field) or '').strip())
+        if 'sort_order' in data:
+            try:
+                item.sort_order = int(data.get('sort_order') or 0)
+            except Exception:
+                pass
+        images = _parse_technique_images(item.images_json)
+        # Cập nhật caption ảnh hiện có (JSON array theo thứ tự)
+        if 'existing_images' in data:
+            raw = data.get('existing_images')
+            try:
+                existing = json.loads(raw) if isinstance(raw, str) else raw
+            except Exception:
+                existing = None
+            if isinstance(existing, list):
+                by_fn = {img['filename']: img for img in images}
+                rebuilt = []
+                for entry in existing:
+                    if not isinstance(entry, dict):
+                        continue
+                    fn = str(entry.get('filename') or '').strip()
+                    if fn in by_fn:
+                        by_fn[fn]['caption'] = str(entry.get('caption') or '')
+                        rebuilt.append(by_fn[fn])
+                # Giữ ảnh không có trong list (không xóa vô tình) — chỉ rebuild theo existing nếu gửi đủ
+                if rebuilt or existing == []:
+                    removed = [img for img in images if img['filename'] not in {x['filename'] for x in rebuilt}]
+                    _delete_technique_image_files(removed)
+                    images = rebuilt
+        if is_multipart:
+            files = request.files.getlist('images') or request.files.getlist('image')
+            new_imgs = []
+            for f in files:
+                saved = _save_technique_upload(f)
+                if saved:
+                    new_imgs.append(saved)
+            captions_raw = data.get('image_captions') or '[]'
+            try:
+                captions = json.loads(captions_raw) if isinstance(captions_raw, str) else captions_raw
+            except Exception:
+                captions = []
+            if isinstance(captions, list):
+                for i, img in enumerate(new_imgs):
+                    if i < len(captions):
+                        img['caption'] = str(captions[i] or '')
+            images.extend(new_imgs)
+        item.images_json = json.dumps(images, ensure_ascii=False)
+        item.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'success': True, 'item': _clinic_technique_to_dict(item)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi cập nhật: {str(e)}'}), 500
+
+
+@app.route('/api/clinic-techniques/<int:item_id>', methods=['DELETE'])
+def api_delete_clinic_technique(item_id):
+    try:
+        ensure_clinic_techniques_table()
+        item = _get_or_404(ClinicTechnique, item_id)
+        _delete_technique_image_files(_parse_technique_images(item.images_json))
+        db.session.delete(item)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Đã xóa'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi xóa: {str(e)}'}), 500
+
+
+@app.route('/api/clinic-techniques/<int:item_id>/images', methods=['POST'])
+def api_add_clinic_technique_images(item_id):
+    """Chèn thêm nhiều ảnh minh họa cho một kĩ thuật."""
+    try:
+        ensure_clinic_techniques_table()
+        item = _get_or_404(ClinicTechnique, item_id)
+        files = request.files.getlist('images') or request.files.getlist('image')
+        if not files:
+            return jsonify({'success': False, 'message': 'Thiếu file ảnh'}), 400
+        images = _parse_technique_images(item.images_json)
+        captions_raw = request.form.get('image_captions') or '[]'
+        try:
+            captions = json.loads(captions_raw) if isinstance(captions_raw, str) else captions_raw
+        except Exception:
+            captions = []
+        added = []
+        for i, f in enumerate(files):
+            saved = _save_technique_upload(f)
+            if not saved:
+                continue
+            if isinstance(captions, list) and i < len(captions):
+                saved['caption'] = str(captions[i] or '')
+            images.append(saved)
+            added.append(saved)
+        if not added:
+            return jsonify({'success': False, 'message': 'Không lưu được ảnh (chỉ JPG/PNG/WEBP/GIF)'}), 400
+        item.images_json = json.dumps(images, ensure_ascii=False)
+        item.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'success': True, 'item': _clinic_technique_to_dict(item), 'added': added})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi tải ảnh: {str(e)}'}), 500
+
+
+@app.route('/api/clinic-techniques/<int:item_id>/images/<path:filename>', methods=['DELETE'])
+def api_delete_clinic_technique_image(item_id, filename):
+    try:
+        ensure_clinic_techniques_table()
+        item = _get_or_404(ClinicTechnique, item_id)
+        safe = werkzeug.utils.secure_filename(os.path.basename(str(filename).replace('\\', '/')))
+        images = _parse_technique_images(item.images_json)
+        keep = [img for img in images if img['filename'] != safe]
+        removed = [img for img in images if img['filename'] == safe]
+        _delete_technique_image_files(removed)
+        item.images_json = json.dumps(keep, ensure_ascii=False)
+        item.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'success': True, 'item': _clinic_technique_to_dict(item)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi xóa ảnh: {str(e)}'}), 500
+
+
+CAN_CHI_GUIDES_KEY = 'can_chi_guides_v1'
+
+
+@app.route('/api/can-chi/guides', methods=['GET'])
+def api_get_can_chi_guides():
+    try:
+        raw = AppSetting.get_value(CAN_CHI_GUIDES_KEY, '') or ''
+        guides = {}
+        if raw:
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    guides = parsed
+            except Exception:
+                guides = {}
+        return jsonify({'success': True, 'guides': guides})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi tải kiến giải: {str(e)}'}), 500
+
+
+@app.route('/api/can-chi/guides', methods=['PUT'])
+def api_put_can_chi_guides():
+    try:
+        data = request.get_json(silent=True) or {}
+        guides = data.get('guides') if isinstance(data, dict) else None
+        if not isinstance(guides, dict):
+            return jsonify({'success': False, 'message': 'Dữ liệu guides không hợp lệ'}), 400
+        clean = {'menh': {}, 'zodiac': {}, 'cung': {}, 'mua': {}, 'amDuong': {}, 'family': {}}
+        for section in ('menh', 'zodiac', 'cung', 'mua', 'amDuong', 'family'):
+            src = guides.get(section) if isinstance(guides.get(section), dict) else {}
+            for key, item in src.items():
+                if not isinstance(key, str) or not key.strip():
+                    continue
+                if not isinstance(item, dict):
+                    continue
+                clean[section][key.strip()] = {
+                    'title': str(item.get('title') or key).strip()[:200],
+                    'content': str(item.get('content') or '').strip()[:8000],
+                }
+        AppSetting.set_value(CAN_CHI_GUIDES_KEY, json.dumps(clean, ensure_ascii=False))
+        return jsonify({'success': True, 'guides': clean})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Lỗi lưu kiến giải: {str(e)}'}), 500
+
+
+@app.route('/api/fetal-index-aliases', methods=['GET'])
+def get_fetal_index_aliases():
+    try:
+        store = _load_fetal_alias_store()
+        return jsonify({'aliases': store.get('aliases') or {}, 'notes': store.get('notes') or {}})
+    except Exception as e:
+        return jsonify({'message': f'Lỗi tải alias chỉ số thai: {str(e)}'}), 500
+
+
+@app.route('/api/fetal-index-aliases', methods=['PUT'])
+def update_fetal_index_aliases():
+    try:
+        data = request.json or {}
+        aliases = data.get('aliases') if isinstance(data, dict) else None
+        if not isinstance(aliases, dict):
+            return jsonify({'message': 'Dữ liệu aliases không hợp lệ'}), 400
+        notes = data.get('notes') if isinstance(data, dict) else None
+        if notes is None:
+            notes = (_load_fetal_alias_store().get('notes') or {})
+        elif not isinstance(notes, dict):
+            return jsonify({'message': 'Dữ liệu notes không hợp lệ'}), 400
+        _save_fetal_alias_store(aliases, notes)
+        store = _load_fetal_alias_store()
+        return jsonify({
+            'success': True,
+            'aliases': store.get('aliases') or {},
+            'notes': store.get('notes') or {},
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi lưu alias chỉ số thai: {str(e)}'}), 500
 
 @app.route('/api/shift-templates/<int:id>', methods=['DELETE'])
 def delete_shift_template(id):
@@ -8675,7 +12718,7 @@ def init_default_pregnancy_utilities():
 @app.route('/api/clinical-service-packages', methods=['POST'])
 def create_clinical_service_package():
     ensure_clinical_service_package_description_column()
-    data = request.json
+    data = request.get_json(silent=True) or {}
     name = data.get('name')
     description = (data.get('description') or '').strip()
     price = data.get('price')
@@ -8683,6 +12726,14 @@ def create_clinical_service_package():
 
     if not name or price is None or not isinstance(service_ids, list):
         return jsonify({'message': 'Missing required fields or invalid data format.'}), 400
+
+    # Ép kiểu giá về số (tránh lưu chuỗi rác vào cột Float / lỗi khi commit)
+    try:
+        price = float(price)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'Giá gói không hợp lệ.'}), 400
+    if price < 0:
+        return jsonify({'message': 'Giá gói không được âm.'}), 400
 
     try:
         # Check for duplicate name (case-insensitive)
@@ -8754,7 +12805,7 @@ def delete_clinical_service_package(id):
 def update_clinical_service_package(package_id):
     ensure_clinical_service_package_description_column()
     package = _get_or_404(ClinicalServicePackage, package_id)
-    data = request.json
+    data = request.get_json(silent=True) or {}
     name = data.get('name')
     description = (data.get('description') or '').strip()
     price = data.get('price')
@@ -8762,6 +12813,14 @@ def update_clinical_service_package(package_id):
 
     if not name or price is None:
         return jsonify({'message': 'Missing required fields: name, price.'}), 400
+
+    # Ép kiểu giá về số (tránh lưu chuỗi rác vào cột Float / lỗi khi commit)
+    try:
+        price = float(price)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'Giá gói không hợp lệ.'}), 400
+    if price < 0:
+        return jsonify({'message': 'Giá gói không được âm.'}), 400
 
     try:
         # Check for duplicate name (case-insensitive), excluding the current package
@@ -8805,12 +12864,66 @@ def get_patients():
         'address': p.address
     } for p in patients])
 
+@app.route('/api/appointments/<int:appointment_id>/discount', methods=['GET'])
+def get_appointment_discount(appointment_id):
+    """Đọc số tiền giảm giá đã lưu cho lịch hẹn."""
+    ensure_appointment_discount_column()
+    appointment = _get_or_404(Appointment, appointment_id)
+    discount = float(getattr(appointment, 'discount_amount', 0) or 0)
+    return jsonify({'success': True, 'discount': max(0.0, discount)})
+
+@app.route('/api/appointments/<int:appointment_id>/discount', methods=['PUT'])
+def set_appointment_discount(appointment_id):
+    """Lưu số tiền giảm giá cho lịch hẹn (VND, không âm)."""
+    ensure_appointment_discount_column()
+    appointment = _get_or_404(Appointment, appointment_id)
+    data = request.get_json(silent=True) or {}
+    try:
+        discount = float(data.get('discount', 0) or 0)
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'message': 'Giá trị giảm giá không hợp lệ'}), 400
+    if discount < 0:
+        discount = 0.0
+    try:
+        appointment.discount_amount = discount
+        db.session.commit()
+        return jsonify({'success': True, 'discount': discount})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi lưu giảm giá: {str(e)}'}), 500
+
 @app.route('/api/appointments/<int:appointment_id>/clinical-services', methods=['GET'])
 def get_appointment_clinical_services(appointment_id):
     ensure_clinical_service_setting_columns()
     ensure_clinical_service_sync_columns()
     appointment = _get_or_404(Appointment, appointment_id)
-    services = appointment.clinical_services
+    # Bỏ qua bản ghi mồ côi (dịch vụ gốc đã bị xóa) để tránh AttributeError → 500
+    services = [s for s in appointment.clinical_services if s.service is not None]
+
+    result_names_norm = set()
+    try:
+        import json as _json
+        for r in ClinicalResult.query.filter_by(appointment_id=appointment_id).all():
+            name_norm = (r.service_name or '').strip().lower()
+            if not name_norm:
+                continue
+            has_content = bool((r.result_text or '').strip())
+            if not has_content and r.fields_data:
+                try:
+                    fd = _json.loads(r.fields_data) if isinstance(r.fields_data, str) else r.fields_data
+                    has_content = bool(fd) and any(str(v or '').strip() for v in (fd.values() if isinstance(fd, dict) else []))
+                except Exception:
+                    has_content = bool(r.fields_data)
+            if not has_content and getattr(r, 'pdf_file_path', None):
+                has_content = True
+            if has_content:
+                result_names_norm.add(name_norm)
+    except Exception:
+        result_names_norm = set()
+
+    def _service_has_result(service_name):
+        return (service_name or '').strip().lower() in result_names_norm
+
     return jsonify([{
         'id': s.id,  # id của bản ghi ClinicalService (liên kết)
         'service_id': s.service.id,  # id dịch vụ gốc (ClinicalServiceSetting)
@@ -8820,6 +12933,7 @@ def get_appointment_clinical_services(appointment_id):
         'service_group': s.service.service_group,  # Thêm service_group để kiểm tra nhóm dịch vụ
         'provider_unit': getattr(s.service, 'provider_unit', None),
         'description': getattr(s.service, 'description', ''),  # Thêm description nếu có
+        'has_result': _service_has_result(s.service.name),
         'Maysieuam': {
             'status': getattr(s, 'Maysieuam_status', '') or '',
             'retry_count': int(getattr(s, 'Maysieuam_retry_count', 0) or 0),
@@ -8854,15 +12968,15 @@ def _upsert_mwl_entry_for_appointment(appointment, study_description: str, acces
             return False
         dob = patient.date_of_birth.strftime('%Y%m%d') if getattr(patient, 'date_of_birth', None) else ''
         expected_delivery_date = appointment.expected_delivery_date.strftime('%Y-%m-%d') if getattr(appointment, 'expected_delivery_date', None) else ''
-        base_study_desc = (study_description or appointment.service_type or 'Siêu âm').strip()
+        base_study_desc = mwl_ascii_text((study_description or appointment.service_type or 'Sieu am').strip())
         # Embed DKS directly into StudyDescription so modality can read it from MWL list/details.
         if expected_delivery_date and 'dks ' not in base_study_desc.lower():
             dks_display = expected_delivery_date
             if len(expected_delivery_date) == 10 and expected_delivery_date[4] == '-' and expected_delivery_date[7] == '-':
                 dks_display = f"{expected_delivery_date[8:10]}/{expected_delivery_date[5:7]}/{expected_delivery_date[0:4]}"
-            base_study_desc = f"{base_study_desc} | DKS {dks_display}"
+            base_study_desc = mwl_ascii_text(f"{base_study_desc} | DKS {dks_display}")
         entry = {
-            'PatientName': patient_name_title_vi(patient.name or ''),
+            'PatientName': patient_name_for_mwl(patient.name or ''),
             'PatientID': getattr(patient, 'patient_id', None) or f"PAT_{appointment.id}",
             'PatientBirthDate': dob,
             'StudyDescription': base_study_desc,
@@ -9335,7 +13449,9 @@ def api_post_mwl_entry():
         if not data:
             return jsonify({'success': False, 'error': 'Missing JSON body'}), 400
         if 'PatientName' in data:
-            data['PatientName'] = patient_name_title_vi(data.get('PatientName') or '')
+            data['PatientName'] = patient_name_for_mwl(data.get('PatientName') or '')
+        if 'StudyDescription' in data:
+            data['StudyDescription'] = mwl_ascii_text(data.get('StudyDescription') or '')
         mwl_store.init_db()
         entry_id = mwl_store.upsert_entry(data)
         return jsonify({'success': True, 'entry_id': entry_id})
@@ -9349,7 +13465,9 @@ def api_put_mwl_entry(entry_id):
     try:
         data = dict(request.json or {})
         if 'PatientName' in data:
-            data['PatientName'] = patient_name_title_vi(data.get('PatientName') or '')
+            data['PatientName'] = patient_name_for_mwl(data.get('PatientName') or '')
+        if 'StudyDescription' in data:
+            data['StudyDescription'] = mwl_ascii_text(data.get('StudyDescription') or '')
         mwl_store.init_db()
         updated = mwl_store.update_entry_by_id(entry_id, data)
         if not updated:
@@ -9380,6 +13498,138 @@ def _mwl_entry_compare_tuple(entry: dict):
         'ExpectedDeliveryDate',
     )
     return tuple((k, (entry.get(k) if entry.get(k) is not None else '') or '') for k in keys)
+
+
+@app.route('/api/mwl-sync/config', methods=['GET', 'POST'])
+@require_permission('manage_worklist')
+def api_mwl_sync_config():
+    """Cấu hình số ngày đồng bộ MWL (hôm nay + N ngày)."""
+    try:
+        if request.method == 'POST':
+            data = request.get_json(silent=True) or {}
+            days = int(data.get('days_ahead', _mwl_sync_days_ahead()))
+            days = max(0, min(days, 30))
+            AppSetting.set_value('mwl_sync_days_ahead', str(days))
+            return jsonify({'success': True, 'days_ahead': days})
+        return jsonify({
+            'success': True,
+            'days_ahead': _mwl_sync_days_ahead(),
+            'date_filter': _mwl_appointment_date_sql('a'),
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _apply_ultrasound_config_snapshot(snapshot: dict) -> dict:
+    """Ghi snapshot cấu hình máy siêu âm + MWL lên server (voluson_config + days_ahead)."""
+    if not isinstance(snapshot, dict):
+        raise ValueError('Snapshot không hợp lệ')
+    voluson = snapshot.get('voluson') or {}
+    if voluson:
+        sync_service = get_voluson_sync_service()
+        key_aliases = {
+            'Maysieuam_ip': 'voluson_ip',
+            'Maysieuam_port': 'voluson_port',
+            'Maysieuam_ae_title': 'voluson_ae_title',
+        }
+        normalized = {}
+        for k, v in voluson.items():
+            normalized[k] = v
+            if k in key_aliases:
+                normalized[key_aliases[k]] = v
+        for key, value in normalized.items():
+            if key in sync_service.config:
+                sync_service.config[key] = value
+        try:
+            sync_service.sync_enabled = bool(sync_service.config.get('sync_enabled', True))
+            sync_service.voluson_ip = sync_service.config.get('voluson_ip', sync_service.voluson_ip)
+            sync_service.voluson_port = int(sync_service.config.get('voluson_port', sync_service.voluson_port))
+            sync_service.ae_title = sync_service.config.get('ae_title', sync_service.ae_title)
+            sync_service.voluson_ae_title = sync_service.config.get(
+                'voluson_ae_title', sync_service.voluson_ae_title
+            )
+        except Exception:
+            pass
+        with open('voluson_config.json', 'w', encoding='utf-8') as f:
+            json.dump(sync_service.config, f, indent=2, ensure_ascii=False)
+        with open('Maysieuam_config.json', 'w', encoding='utf-8') as f:
+            json.dump(sync_service.config, f, indent=2, ensure_ascii=False)
+    mwl_sync = snapshot.get('mwl_sync') or {}
+    days = mwl_sync.get('days_ahead')
+    if days is not None:
+        try:
+            days_i = max(0, min(30, int(days)))
+            AppSetting.set_value('mwl_sync_days_ahead', str(days_i))
+        except Exception:
+            pass
+    parser_profile = snapshot.get('parser_profile')
+    if parser_profile:
+        try:
+            from fetal_image_parser.machine_profiles import set_active_profile_id
+            set_active_profile_id(str(parser_profile))
+        except Exception:
+            pass
+    return snapshot
+
+
+@app.route('/api/ultrasound-machine-profiles', methods=['GET'])
+@require_permission('manage_worklist')
+def api_list_ultrasound_machine_profiles():
+    try:
+        import ultrasound_machine_profiles as ump
+        data = ump.list_profiles()
+        return jsonify({'success': True, **data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ultrasound-machine-profiles', methods=['POST'])
+@require_permission('manage_worklist')
+def api_save_ultrasound_machine_profile():
+    try:
+        import ultrasound_machine_profiles as ump
+        body = request.get_json(silent=True) or {}
+        name = (body.get('name') or '').strip()
+        note = (body.get('note') or '').strip()
+        snapshot = body.get('snapshot')
+        profile_id = body.get('id')
+        profile = ump.upsert_profile(name, snapshot, profile_id=profile_id, note=note)
+        if body.get('set_active'):
+            ump.set_active_profile(profile['id'])
+        return jsonify({'success': True, 'profile': profile})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ultrasound-machine-profiles/<profile_id>', methods=['DELETE'])
+@require_permission('manage_worklist')
+def api_delete_ultrasound_machine_profile(profile_id):
+    try:
+        import ultrasound_machine_profiles as ump
+        ok = ump.delete_profile(profile_id)
+        if not ok:
+            return jsonify({'success': False, 'error': 'Không tìm thấy cấu hình'}), 404
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/ultrasound-machine-profiles/<profile_id>/apply', methods=['POST'])
+@require_permission('manage_worklist')
+def api_apply_ultrasound_machine_profile(profile_id):
+    try:
+        import ultrasound_machine_profiles as ump
+        profile = ump.get_profile(profile_id)
+        if not profile:
+            return jsonify({'success': False, 'error': 'Không tìm thấy cấu hình'}), 404
+        snapshot = profile.get('snapshot') or {}
+        _apply_ultrasound_config_snapshot(snapshot)
+        ump.set_active_profile(profile_id)
+        return jsonify({'success': True, 'profile': profile, 'snapshot': snapshot})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/mwl-sync', methods=['POST'])
@@ -9435,7 +13685,8 @@ def api_trigger_mwl_sync():
             'unchanged': unchanged,
             'removed': removed,
             'total_after_sync': len(entries),
-            'total_before_sync': len(old_entries)
+            'total_before_sync': len(old_entries),
+            'days_ahead': _mwl_sync_days_ahead(),
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -9448,9 +13699,14 @@ def checkin_stats():
         # Tổng số check-in hôm nay
         total_checkins = CheckIn.query.filter_by(checkin_date=today).count()
         
-        # Số thứ tự hiện tại (cao nhất)
-        last_checkin = CheckIn.query.filter_by(checkin_date=today).order_by(CheckIn.queue_number.desc()).first()
-        current_queue = last_checkin.queue_number if last_checkin else 0
+        # Số thứ tự đang khám hiện tại (status=serving)
+        serving_checkin = (
+            CheckIn.query
+            .filter_by(checkin_date=today, status='serving')
+            .order_by(CheckIn.queue_number.desc())
+            .first()
+        )
+        current_queue = serving_checkin.queue_number if serving_checkin else 0
         
         # Số bệnh nhân đang chờ
         waiting_count = CheckIn.query.filter_by(checkin_date=today, status='waiting').count()
@@ -9473,6 +13729,9 @@ def waiting_list():
         q = CheckIn.query.filter_by(checkin_date=today)
         if not include_cancelled:
             q = q.filter(CheckIn.status != 'cancelled')
+        status_filter = (request.args.get('status') or '').strip()
+        if status_filter:
+            q = q.filter(CheckIn.status == status_filter)
         checkins = q.order_by(CheckIn.queue_number.asc()).all()
         
         waiting_list = []
@@ -9655,138 +13914,344 @@ def initialize_default_doctors():
     
 
 def initialize_default_medical_charts():
-    """Initialize default medical charts if none exist."""
+    """Seed default medical reference charts; add any missing by name."""
     try:
-        if MedicalChart.query.count() == 0:
-            predefined_charts = [
-                {
-                    'name': 'Bảng điểm Bishop',
-                    'category': 'obstetrics',
-                    'description': 'Đánh giá độ chín muồi cổ tử cung trước khi chuyển dạ',
-                    'data': {
-                        'headers': ['Tiêu chí', 'Điểm số', 'Mô tả'],
-                        'rows': [
-                            ['Độ mở cổ tử cung', '0-3', '0: đóng, 1: 1-2cm, 2: 3-4cm, 3: ≥5cm'],
-                            ['Độ xóa cổ tử cung', '0-3', '0: dài, 1: 50% xóa, 2: 75% xóa, 3: hoàn toàn'],
-                            ['Vị trí cổ tử cung', '0-2', '0: sau, 1: giữa, 2: trước'],
-                            ['Độ cứng cổ tử cung', '0-2', '0: cứng, 1: trung bình, 2: mềm'],
-                            ['Vị trí ngôi thai', '0-3', '0: cao, 1: trung bình, 2: thấp, 3: sờ thấy']
-                        ]
-                    }
-                },
-                {
-                    'name': 'Bảng điểm Apgar',
-                    'category': 'obstetrics',
-                    'description': 'Đánh giá tình trạng sơ sinh ngay sau sinh',
-                    'data': {
-                        'headers': ['Tiêu chí', '0 điểm', '1 điểm', '2 điểm'],
-                        'rows': [
-                            ['Nhịp tim', 'Không có', '< 100 lần/phút', '≥ 100 lần/phút'],
-                            ['Hô hấp', 'Không có', 'Chậm, không đều', 'Tốt, khóc to'],
-                            ['Trương lực cơ', 'Mềm nhũn', 'Gập nhẹ tay chân', 'Hoạt động tích cực'],
-                            ['Phản xạ', 'Không có', 'Nhăn mặt', 'Ho, hắt hơi'],
-                            ['Màu da', 'Xanh tím toàn thân', 'Hồng thân, tím tay chân', 'Hồng toàn thân']
-                        ]
-                    }
-                },
-                {
-                    'name': 'Bảng đánh giá ORADS',
-                    'category': 'ultrasound',
-                    'description': 'Hệ thống báo cáo và dữ liệu siêu âm buồng trứng',
-                    'data': {
-                        'headers': ['ORADS', 'Mô tả', 'Nguy cơ ác tính', 'Khuyến nghị'],
-                        'rows': [
-                            ['ORADS 0', 'Không đánh giá được', 'Không xác định', 'Siêu âm lại sau 2-4 tuần'],
-                            ['ORADS 1', 'Bình thường', '< 1%', 'Theo dõi thường quy'],
-                            ['ORADS 2', 'Khối u lành tính', '1-10%', 'Theo dõi 6-12 tháng'],
-                            ['ORADS 3', 'Khối u có nguy cơ thấp', '10-45%', 'Theo dõi 3-6 tháng'],
-                            ['ORADS 4', 'Khối u có nguy cơ trung bình', '45-85%', 'Chuyển chuyên khoa'],
-                            ['ORADS 5', 'Khối u có nguy cơ cao', '> 85%', 'Phẫu thuật ngay']
-                        ]
-                    }
-                },
-                {
-                    'name': 'Bảng phân loại TIRADS',
-                    'category': 'ultrasound',
-                    'description': 'Hệ thống báo cáo và dữ liệu siêu âm tuyến giáp',
-                    'data': {
-                        'headers': ['TIRADS', 'Mô tả', 'Nguy cơ ác tính', 'Khuyến nghị'],
-                        'rows': [
-                            ['TIRADS 1', 'Bình thường', '0%', 'Không cần theo dõi'],
-                            ['TIRADS 2', 'Lành tính', '0%', 'Theo dõi thường quy'],
-                            ['TIRADS 3', 'Không xác định', '5-15%', 'Theo dõi 6-12 tháng'],
-                            ['TIRADS 4', 'Nghi ngờ', '15-85%', 'Chọc hút tế bào'],
-                            ['TIRADS 5', 'Ác tính', '> 85%', 'Phẫu thuật']
-                        ]
-                    }
-                },
-                {
-                    'name': 'Bảng phân loại BIRADS',
-                    'category': 'ultrasound',
-                    'description': 'Hệ thống báo cáo và dữ liệu hình ảnh vú',
-                    'data': {
-                        'headers': ['BIRADS', 'Mô tả', 'Nguy cơ ác tính', 'Khuyến nghị'],
-                        'rows': [
-                            ['BIRADS 0', 'Không đánh giá được', 'Không xác định', 'Cần thêm xét nghiệm'],
-                            ['BIRADS 1', 'Bình thường', '0%', 'Theo dõi thường quy'],
-                            ['BIRADS 2', 'Lành tính', '0%', 'Theo dõi thường quy'],
-                            ['BIRADS 3', 'Có thể lành tính', '< 2%', 'Theo dõi 6 tháng'],
-                            ['BIRADS 4', 'Nghi ngờ ác tính', '2-95%', 'Sinh thiết'],
-                            ['BIRADS 5', 'Ác tính', '> 95%', 'Điều trị ngay'],
-                            ['BIRADS 6', 'Đã xác định ác tính', '100%', 'Điều trị']
-                        ]
-                    }
-                },
-                {
-                    'name': 'Bảng phân loại u xơ tử cung theo FIGO',
-                    'category': 'gynecology',
-                    'description': 'Phân loại u xơ tử cung theo Hiệp hội Sản phụ khoa Quốc tế',
-                    'data': {
-                        'headers': ['FIGO', 'Vị trí', 'Mô tả', 'Điều trị'],
-                        'rows': [
-                            ['FIGO 0', 'Dưới niêm mạc', 'U xơ hoàn toàn trong lòng tử cung', 'Nội soi cắt bỏ'],
-                            ['FIGO 1', 'Dưới niêm mạc', 'U xơ > 50% trong lòng tử cung', 'Nội soi cắt bỏ'],
-                            ['FIGO 2', 'Dưới niêm mạc', 'U xơ < 50% trong lòng tử cung', 'Nội soi hoặc mổ mở'],
-                            ['FIGO 3', 'Trong thành', 'U xơ tiếp xúc với niêm mạc', 'Mổ mở hoặc nội soi'],
-                            ['FIGO 4', 'Trong thành', 'U xơ hoàn toàn trong thành tử cung', 'Theo dõi hoặc mổ'],
-                            ['FIGO 5', 'Dưới phúc mạc', 'U xơ > 50% ngoài tử cung', 'Mổ mở'],
-                            ['FIGO 6', 'Dưới phúc mạc', 'U xơ < 50% ngoài tử cung', 'Mổ mở'],
-                            ['FIGO 7', 'Dưới phúc mạc', 'U xơ có cuống', 'Cắt cuống'],
-                            ['FIGO 8', 'Khác', 'U xơ ở vị trí khác', 'Tùy vị trí']
-                        ]
-                    }
-                },
-                {
-                    'name': 'Bảng phân độ gan nhiễm mỡ mới nhất',
-                    'category': 'laboratory',
-                    'description': 'Phân độ gan nhiễm mỡ theo tiêu chuẩn quốc tế mới nhất',
-                    'data': {
-                        'headers': ['Độ', 'Mô tả', 'Tỷ lệ mỡ', 'Triệu chứng', 'Điều trị'],
-                        'rows': [
-                            ['Độ 0', 'Bình thường', '< 5%', 'Không có', 'Không cần điều trị'],
-                            ['Độ 1', 'Nhẹ', '5-33%', 'Không có', 'Thay đổi lối sống'],
-                            ['Độ 2', 'Trung bình', '33-66%', 'Mệt mỏi nhẹ', 'Chế độ ăn + tập luyện'],
-                            ['Độ 3', 'Nặng', '> 66%', 'Đau bụng, mệt mỏi', 'Điều trị tích cực'],
-                            ['Độ 4', 'Rất nặng', '> 80%', 'Vàng da, phù', 'Điều trị khẩn cấp']
-                        ]
-                    }
+        predefined_charts = [
+            {
+                'name': 'Bảng điểm Bishop',
+                'category': 'obstetrics',
+                'description': 'Đánh giá độ chín muồi cổ tử cung trước khi chuyển dạ',
+                'data': {
+                    'headers': ['Tiêu chí', 'Điểm số', 'Mô tả'],
+                    'rows': [
+                        ['Độ mở cổ tử cung', '0-3', '0: đóng, 1: 1-2cm, 2: 3-4cm, 3: ≥5cm'],
+                        ['Độ xóa cổ tử cung', '0-3', '0: dài, 1: 50% xóa, 2: 75% xóa, 3: hoàn toàn'],
+                        ['Vị trí cổ tử cung', '0-2', '0: sau, 1: giữa, 2: trước'],
+                        ['Độ cứng cổ tử cung', '0-2', '0: cứng, 1: trung bình, 2: mềm'],
+                        ['Vị trí ngôi thai', '0-3', '0: cao, 1: trung bình, 2: thấp, 3: sờ thấy']
+                    ]
                 }
-            ]
-            
-            for chart_data in predefined_charts:
-                chart = MedicalChart(
-                    name=chart_data['name'],
-                    category=chart_data['category'],
-                    description=chart_data['description'],
-                    chart_data=json.dumps(chart_data['data']),
-                    is_predefined=True
-                )
-                db.session.add(chart)
-            
+            },
+            {
+                'name': 'Bảng điểm Apgar',
+                'category': 'obstetrics',
+                'description': 'Đánh giá tình trạng sơ sinh ngay sau sinh',
+                'data': {
+                    'headers': ['Tiêu chí', '0 điểm', '1 điểm', '2 điểm'],
+                    'rows': [
+                        ['Nhịp tim', 'Không có', '< 100 lần/phút', '≥ 100 lần/phút'],
+                        ['Hô hấp', 'Không có', 'Chậm, không đều', 'Tốt, khóc to'],
+                        ['Trương lực cơ', 'Mềm nhũn', 'Gập nhẹ tay chân', 'Hoạt động tích cực'],
+                        ['Phản xạ', 'Không có', 'Nhăn mặt', 'Ho, hắt hơi'],
+                        ['Màu da', 'Xanh tím toàn thân', 'Hồng thân, tím tay chân', 'Hồng toàn thân']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng đánh giá ORADS',
+                'category': 'ultrasound',
+                'description': 'Hệ thống báo cáo và dữ liệu siêu âm buồng trứng',
+                'data': {
+                    'headers': ['ORADS', 'Mô tả', 'Nguy cơ ác tính', 'Khuyến nghị'],
+                    'rows': [
+                        ['ORADS 0', 'Không đánh giá được', 'Không xác định', 'Siêu âm lại sau 2-4 tuần'],
+                        ['ORADS 1', 'Bình thường', '< 1%', 'Theo dõi thường quy'],
+                        ['ORADS 2', 'Khối u lành tính', '1-10%', 'Theo dõi 6-12 tháng'],
+                        ['ORADS 3', 'Khối u có nguy cơ thấp', '10-45%', 'Theo dõi 3-6 tháng'],
+                        ['ORADS 4', 'Khối u có nguy cơ trung bình', '45-85%', 'Chuyển chuyên khoa'],
+                        ['ORADS 5', 'Khối u có nguy cơ cao', '> 85%', 'Phẫu thuật ngay']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng phân loại TIRADS',
+                'category': 'ultrasound',
+                'description': 'Hệ thống báo cáo và dữ liệu siêu âm tuyến giáp',
+                'data': {
+                    'headers': ['TIRADS', 'Mô tả', 'Nguy cơ ác tính', 'Khuyến nghị'],
+                    'rows': [
+                        ['TIRADS 1', 'Bình thường', '0%', 'Không cần theo dõi'],
+                        ['TIRADS 2', 'Lành tính', '0%', 'Theo dõi thường quy'],
+                        ['TIRADS 3', 'Không xác định', '5-15%', 'Theo dõi 6-12 tháng'],
+                        ['TIRADS 4', 'Nghi ngờ', '15-85%', 'Chọc hút tế bào'],
+                        ['TIRADS 5', 'Ác tính', '> 85%', 'Phẫu thuật']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng phân loại BIRADS',
+                'category': 'ultrasound',
+                'description': 'Hệ thống báo cáo và dữ liệu hình ảnh vú',
+                'data': {
+                    'headers': ['BIRADS', 'Mô tả', 'Nguy cơ ác tính', 'Khuyến nghị'],
+                    'rows': [
+                        ['BIRADS 0', 'Không đánh giá được', 'Không xác định', 'Cần thêm xét nghiệm'],
+                        ['BIRADS 1', 'Bình thường', '0%', 'Theo dõi thường quy'],
+                        ['BIRADS 2', 'Lành tính', '0%', 'Theo dõi thường quy'],
+                        ['BIRADS 3', 'Có thể lành tính', '< 2%', 'Theo dõi 6 tháng'],
+                        ['BIRADS 4', 'Nghi ngờ ác tính', '2-95%', 'Sinh thiết'],
+                        ['BIRADS 5', 'Ác tính', '> 95%', 'Điều trị ngay'],
+                        ['BIRADS 6', 'Đã xác định ác tính', '100%', 'Điều trị']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng phân loại u xơ tử cung theo FIGO',
+                'category': 'gynecology',
+                'description': 'Phân loại u xơ tử cung theo Hiệp hội Sản phụ khoa Quốc tế',
+                'data': {
+                    'headers': ['FIGO', 'Vị trí', 'Mô tả', 'Điều trị'],
+                    'rows': [
+                        ['FIGO 0', 'Dưới niêm mạc', 'U xơ hoàn toàn trong lòng tử cung', 'Nội soi cắt bỏ'],
+                        ['FIGO 1', 'Dưới niêm mạc', 'U xơ > 50% trong lòng tử cung', 'Nội soi cắt bỏ'],
+                        ['FIGO 2', 'Dưới niêm mạc', 'U xơ < 50% trong lòng tử cung', 'Nội soi hoặc mổ mở'],
+                        ['FIGO 3', 'Trong thành', 'U xơ tiếp xúc với niêm mạc', 'Mổ mở hoặc nội soi'],
+                        ['FIGO 4', 'Trong thành', 'U xơ hoàn toàn trong thành tử cung', 'Theo dõi hoặc mổ'],
+                        ['FIGO 5', 'Dưới phúc mạc', 'U xơ > 50% ngoài tử cung', 'Mổ mở'],
+                        ['FIGO 6', 'Dưới phúc mạc', 'U xơ < 50% ngoài tử cung', 'Mổ mở'],
+                        ['FIGO 7', 'Dưới phúc mạc', 'U xơ có cuống', 'Cắt cuống'],
+                        ['FIGO 8', 'Khác', 'U xơ ở vị trí khác', 'Tùy vị trí']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng phân độ gan nhiễm mỡ mới nhất',
+                'category': 'laboratory',
+                'description': 'Phân độ gan nhiễm mỡ theo tiêu chuẩn quốc tế mới nhất',
+                'data': {
+                    'headers': ['Độ', 'Mô tả', 'Tỷ lệ mỡ', 'Triệu chứng', 'Điều trị'],
+                    'rows': [
+                        ['Độ 0', 'Bình thường', '< 5%', 'Không có', 'Không cần điều trị'],
+                        ['Độ 1', 'Nhẹ', '5-33%', 'Không có', 'Thay đổi lối sống'],
+                        ['Độ 2', 'Trung bình', '33-66%', 'Mệt mỏi nhẹ', 'Chế độ ăn + tập luyện'],
+                        ['Độ 3', 'Nặng', '> 66%', 'Đau bụng, mệt mỏi', 'Điều trị tích cực'],
+                        ['Độ 4', 'Rất nặng', '> 80%', 'Vàng da, phù', 'Điều trị khẩn cấp']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng số đo sinh trắc thai ASUM/ISUOG',
+                'category': 'ultrasound',
+                'description': 'Các chỉ số sinh trắc thai chuẩn theo khuyến cáo ASUM/ISUOG (tham chiếu lâm sàng)',
+                'data': {
+                    'headers': ['Chỉ số', 'Cửa sổ / cách đo', 'Ý nghĩa', 'Ghi chú'],
+                    'rows': [
+                        ['CRL', '6–13+6 tuần; mặt phẳng giữa thai', 'Xác định tuổi thai quý I', 'Đo từ đỉnh đầu đến mông, thai trung tính'],
+                        ['BPD', '≥14 tuần; mặt cắt xuyên não thất', 'Ước lượng tuổi thai / EFW', 'Đo outer-to-inner hoặc biparietal theo máy'],
+                        ['HC', '≥14 tuần; cùng mặt cắt BPD', 'Ước lượng tuổi thai / EFW', 'Chu vi đầu; ưu tiên hơn BPD khi đầu hình bầu dục'],
+                        ['AC', '≥14 tuần; mặt cắt bụng ngang', 'Ước lượng cân thai (EFW)', 'Qua tĩnh mạch rốn / dạ dày; không ép bụng'],
+                        ['FL', '≥14 tuần; xương đùi dài nhất', 'Ước lượng tuổi thai / EFW', 'Đo thân xương, không gồm đầu sụn'],
+                        ['NT', '11–13+6 tuần; CRL 45–84 mm', 'Sàng lọc trisomy / dị tật', 'Mặt phẳng giữa, phóng đại đúng chuẩn ISUOG'],
+                        ['EFW', 'Công thức Hadlock / INTERGROWTH', 'Ước lượng cân thai', 'Đối chiếu bách phân vị theo tuổi thai'],
+                        ['UA Doppler', '≥24 tuần khi nghi FGR', 'Đánh giá tuần hoàn rau thai', 'PI/RI; AEDF/REDF bất thường nặng'],
+                        ['MCA Doppler', 'Khi nghi thiếu oxy / FGR', 'Đánh giá redistribution não', 'Kết hợp CPR = MCA-PI / UA-PI'],
+                        ['CL', 'Quý II–III; đường âm đạo', 'Nguy cơ đẻ non', 'Đo chiều dài CTC ngắn nhất']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng độ trưởng thành nhau thai (Grannum)',
+                'category': 'ultrasound',
+                'description': 'Phân độ trưởng thành nhau thai theo Grannum trên siêu âm',
+                'data': {
+                    'headers': ['Độ', 'Mặt mẹ (chorionic plate)', 'Nhu mô nhau', 'Mặt thai (basal plate)', 'Thường gặp'],
+                    'rows': [
+                        ['Độ 0', 'Phẳng, nhẵn', 'Đồng nhất, không vôi hóa', 'Không thấy rõ', '< 18 tuần'],
+                        ['Độ I', 'Sóng nhẹ', 'Vôi hóa rải rác nhỏ', 'Chưa rõ', '~18–29 tuần'],
+                        ['Độ II', 'Khuyết dạng dấu phẩy', 'Vôi hóa dạng cột chưa đến mặt mẹ', 'Vôi hóa dạng đường', '~30–38 tuần'],
+                        ['Độ III', 'Khuyết sâu, thùy hóa', 'Vôi hóa lan tỏa, thùy rõ', 'Vôi hóa liên tục', '≥ 36 tuần; sớm → nghi lão hóa']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng phân độ nước ối (AFI / SDP)',
+                'category': 'ultrasound',
+                'description': 'Phân độ lượng nước ối theo AFI và túi ối sâu nhất (SDP)',
+                'data': {
+                    'headers': ['Phân loại', 'AFI', 'SDP', 'Ý nghĩa lâm sàng'],
+                    'rows': [
+                        ['Thiểu ối nặng', '≤ 5 cm', '< 2 cm', 'Nguy cơ cao; cần đánh giá nguyên nhân / theo dõi sát'],
+                        ['Thiểu ối', '5,1–8 cm', '2–< 2,5 cm', 'Theo dõi; loại trừ rỉ ối, FGR, bất thường thận thai'],
+                        ['Bình thường', '8,1–24 cm', '2,5–8 cm', 'Theo dõi thai kỳ thường quy'],
+                        ['Đa ối', '24,1–35 cm', '> 8–12 cm', 'Sàng lọc đái tháo đường, bất thường tiêu hóa/thần kinh'],
+                        ['Đa ối nặng', '> 35 cm', '> 12 cm', 'Nguy cơ cao đẻ non, sa dây rốn; hội chẩn']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng IETA — siêu âm nội mạc tử cung',
+                'category': 'ultrasound',
+                'description': 'Thuật ngữ mô tả nội mạc tử cung theo IETA (International Endometrial Tumor Analysis)',
+                'data': {
+                    'headers': ['Đặc điểm', 'Phân loại', 'Mô tả', 'Gợi ý'],
+                    'rows': [
+                        ['Độ dày NMTC', 'mm', 'Đo lớp đôi dày nhất mặt cắt dọc', 'Sau mãn kinh ≥4–5 mm → cần đánh giá thêm'],
+                        ['Đường giữa', 'Đều / không đều / không thấy', 'Đường giao hai lớp nội mạc', 'Mất đường giữa gợi ý tổn thương'],
+                        ['Bờ nội mạc', 'Đều / không đều', 'Giao diện nội mạc–cơ', 'Bờ không đều → nghi polyp/ung thư'],
+                        ['Echo nội mạc', 'Đồng nhất / không đồng nhất', 'Cấu trúc echo trong NMTC', 'Không đồng nhất cần mô tả nang/vôi'],
+                        ['Màu Doppler', 'Score 1–4', '1 không mạch; 4 mạch phong phú', 'Mạch nhiều / hỗn loạn → nguy cơ cao'],
+                        ['Khối trong lòng TC', 'Có / không', 'Polyp, u xơ dưới niêm, máu cục', 'Mô tả cuống, kích thước, mạch nuôi']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng IOTA — quy tắc đơn giản khối phần phụ',
+                'category': 'ultrasound',
+                'description': 'IOTA Simple Rules phân loại khối phần phụ lành/ác trên siêu âm',
+                'data': {
+                    'headers': ['Nhóm', 'Ký hiệu', 'Đặc điểm', 'Kết luận'],
+                    'rows': [
+                        ['Lành tính (B)', 'B1', 'Khối đơn thùy nang thuần', 'Nếu chỉ có B, không có M → lành tính'],
+                        ['Lành tính (B)', 'B2', 'Thành phần đặc lớn nhất < 7 mm', 'Áp dụng Simple Rules'],
+                        ['Lành tính (B)', 'B3', 'Bóng âm (acoustic shadow)', 'Áp dụng Simple Rules'],
+                        ['Lành tính (B)', 'B4', 'Khối đa thùy nang thuần trơn, đường kính lớn nhất < 100 mm', 'Áp dụng Simple Rules'],
+                        ['Lành tính (B)', 'B5', 'Không có mạch máu trên Doppler màu', 'Áp dụng Simple Rules'],
+                        ['Ác tính (M)', 'M1', 'Khối đặc không đều', 'Nếu chỉ có M, không có B → ác tính'],
+                        ['Ác tính (M)', 'M2', 'Cổ trướng', 'Áp dụng Simple Rules'],
+                        ['Ác tính (M)', 'M3', 'Có ≥4 cấu trúc papillary', 'Áp dụng Simple Rules'],
+                        ['Ác tính (M)', 'M4', 'Khối đặc không đều, đường kính lớn nhất ≥ 100 mm', 'Áp dụng Simple Rules'],
+                        ['Ác tính (M)', 'M5', 'Mạch máu rất mạnh (score màu 4)', 'Áp dụng Simple Rules'],
+                        ['Không kết luận', '—', 'Có cả đặc điểm B và M', 'Dùng ADNEX / chuyên gia / O-RADS']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng tham chiếu AFC / AMH',
+                'category': 'infertility',
+                'description': 'Đánh giá dự trữ buồng trứng theo số nang AFC và AMH (tham chiếu lâm sàng)',
+                'data': {
+                    'headers': ['Chỉ số', 'Thấp', 'Bình thường', 'Cao / nguy cơ OHSS', 'Ghi chú'],
+                    'rows': [
+                        ['AFC (nang 2–10 mm, 2 BT)', '< 5–7', '7–15', '> 15–20', 'Đếm ngày 2–5 vòng kinh'],
+                        ['AMH (ng/mL)', '< 1,0', '1,0–3,5', '> 3,5–5', 'Ngưỡng lab có thể khác'],
+                        ['AMH (pmol/L)', '< 7', '7–25', '> 25', 'Quy đổi ≈ ×7,14 từ ng/mL'],
+                        ['Đáp ứng kích thích', 'Poor responder', 'Normo-responder', 'Hyper-responder', 'Điều chỉnh liều gonadotropin'],
+                        ['Tư vấn', 'IVF sớm / trứng hiến', 'IUI/IVF tùy chỉ định', 'Phác đồ đối kháng, giảm liều', 'Kết hợp tuổi + FSH ngày 3']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng staging lạc nội mạc tử cung (rAFS/ASRM)',
+                'category': 'infertility',
+                'description': 'Phân giai đoạn endometriosis theo điểm rAFS/ASRM',
+                'data': {
+                    'headers': ['Giai đoạn', 'Điểm ASRM', 'Mô tả tổn thương', 'Ý nghĩa'],
+                    'rows': [
+                        ['I — Tối thiểu', '1–5', 'Implant nông, dính nhẹ', 'Có thể gây đau / giảm khả năng thụ thai'],
+                        ['II — Nhẹ', '6–15', 'Implant nông nhiều hơn', 'Cân nhắc nội soi điều trị'],
+                        ['III — Trung bình', '16–40', 'U nội mạc BT, dính rõ', 'Ảnh hưởng ống dẫn trứng / buồng trứng'],
+                        ['IV — Nặng', '> 40', 'U lớn, dính dày đông đặc', 'Thường cần phẫu thuật + hỗ trợ sinh sản'],
+                        ['Điểm thành phần', '—', 'Phúc mạc, BT, ống, túi cùng Douglas', 'Cộng điểm tổn thương + dính']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng phân loại HSG (chụp tử cung–vòi trứng)',
+                'category': 'infertility',
+                'description': 'Phân loại kết quả chụp HSG đánh giá buồng tử cung và thông thương vòi trứng',
+                'data': {
+                    'headers': ['Phân loại', 'Buồng tử cung', 'Vòi trứng', 'Hướng xử trí'],
+                    'rows': [
+                        ['Bình thường', 'Hình tam giác đều, bờ nhẵn', '2 vòi thông, thuốc tràn ổ bụng', 'Chuyển bước vô sinh tiếp theo'],
+                        ['Bất thường buồng TC', 'Khuyết thuốc / vách / polyp / dính', 'Có thể bình thường', 'Nội soi buồng tử cung'],
+                        ['Tắc 1 bên', 'Bình thường hoặc kèm bất thường', '1 vòi không thông / ứ dịch', 'IUI bên thông hoặc nội soi'],
+                        ['Tắc 2 bên', 'Bình thường hoặc kèm bất thường', '2 vòi tắc / ứ dịch 2 bên', 'IVF; cân nhắc phẫu thuật vòi'],
+                        ['Ứ dịch vòi (hydrosalpinx)', 'Có thể bình thường', 'Vòi giãn, thuốc không tràn', 'Kẹp/cắt vòi trước IVF nếu cần'],
+                        ['Dính quanh vòi', 'Bình thường', 'Thông chậm / khu trú thuốc', 'Nội soi ổ bụng đánh giá']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng phân tích tinh dịch WHO',
+                'category': 'andrology',
+                'description': 'Ngưỡng tham chiếu tinh dịch đồ theo WHO (lab tham chiếu 2021, tóm tắt lâm sàng)',
+                'data': {
+                    'headers': ['Chỉ số', 'Ngưỡng tham chiếu thấp hơn', 'Đơn vị', 'Ghi chú'],
+                    'rows': [
+                        ['Thể tích', '≥ 1,4', 'mL', 'Kiêng xuất tinh 2–7 ngày'],
+                        ['Nồng độ tinh trùng', '≥ 16', 'triệu/mL', 'WHO 2021 (percentile 5)'],
+                        ['Tổng số tinh trùng', '≥ 39', 'triệu/lần xuất tinh', 'Thể tích × nồng độ'],
+                        ['Tỷ lệ sống', '≥ 54', '%', 'Vitality'],
+                        ['Di động tiến tới (PR)', '≥ 30', '%', 'Progressive motility'],
+                        ['Tổng di động (PR+NP)', '≥ 42', '%', 'Total motility'],
+                        ['Hình dạng bình thường', '≥ 4', '%', 'Strict morphology (Kruger)'],
+                        ['pH', '≥ 7,2', '—', 'Toan → nghi tắc đường dẫn'],
+                        ['Bạch cầu', '< 1', 'triệu/mL', 'Viêm đường sinh dục']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng phân độ giãn tĩnh mạch thừng tinh',
+                'category': 'andrology',
+                'description': 'Phân độ lâm sàng và siêu âm giãn tĩnh mạch thừng tinh (varicocele)',
+                'data': {
+                    'headers': ['Độ', 'Lâm sàng', 'Siêu âm / Doppler', 'Ghi chú'],
+                    'rows': [
+                        ['Độ 0 (ẩn)', 'Không sờ thấy, chỉ phát hiện SA', 'Đường kính TM ≥ 2,5–3 mm; trào ngược khi Valsalva', 'Subclinical'],
+                        ['Độ I', 'Sờ thấy chỉ khi Valsalva', 'Trào ngược rõ khi Valsalva', 'Khám đứng'],
+                        ['Độ II', 'Sờ thấy khi đứng, không nhìn thấy', 'Đám rối giãn, trào ngược tự phát/Valsalva', 'Thường bên trái'],
+                        ['Độ III', 'Nhìn thấy và sờ thấy khi đứng', 'Giãn nhiều, trào ngược liên tục', 'Cân nhắc điều trị nếu vô sinh/đau'],
+                        ['Chỉ định can thiệp', 'Đau / vô sinh / bất thường tinh dịch', 'Kèm bất thường tinh dịch đồ', 'Phẫu thuật hoặc can thiệp mạch']
+                    ]
+                }
+            },
+            {
+                'name': 'Bảng phân độ viêm âm đạo',
+                'category': 'gynecology',
+                'description': 'Định hướng phân biệt viêm âm đạo thường gặp tại phòng khám',
+                'data': {
+                    'headers': ['Loại', 'Huyết trắng', 'pH âm đạo', 'Test / soi tươi', 'Điều trị định hướng'],
+                    'rows': [
+                        ['Viêm khuẩn (BV)', 'Xám-trắng, mùi cá', '> 4,5', 'Clue cells; Whiff (+)', 'Metronidazole / Clindamycin'],
+                        ['Nấm Candida', 'Trắng đặc như sữa đông, ngứa', '≤ 4,5', 'Sợi nấm / bào tử', 'Azole tại chỗ hoặc uống'],
+                        ['Trichomonas', 'Vàng-xanh, bọt, mùi', '> 4,5', 'Trichomonas di động', 'Metronidazole; điều trị bạn tình'],
+                        ['Viêm do dị ứng / kích ứng', 'Ít, không đặc hiệu', 'Bình thường', 'Không tác nhân nhiễm', 'Ngưng dị nguyên; chăm sóc tại chỗ'],
+                        ['Viêm cổ tử cung', 'Mủ cổ tử cung', 'Thay đổi', 'Xét nghiệm CT/NG khi nghi', 'Kháng sinh theo tác nhân']
+                    ]
+                }
+            },
+            {
+                'name': 'Thang điểm đau VAS',
+                'category': 'other',
+                'description': 'Thang đo mức độ đau Visual Analogue Scale (0–10) dùng trong khám sản phụ khoa',
+                'data': {
+                    'headers': ['Điểm VAS', 'Mức độ', 'Mô tả bệnh nhân', 'Gợi ý xử trí'],
+                    'rows': [
+                        ['0', 'Không đau', 'Không khó chịu', 'Không cần giảm đau'],
+                        ['1–3', 'Đau nhẹ', 'Khó chịu nhẹ, sinh hoạt gần bình thường', 'Theo dõi; giảm đau không opioid nếu cần'],
+                        ['4–6', 'Đau trung bình', 'Ảnh hưởng sinh hoạt / giấc ngủ', 'Giảm đau chủ động; đánh giá nguyên nhân'],
+                        ['7–9', 'Đau nặng', 'Khó chịu nhiều, hạn chế vận động', 'Giảm đau mạnh; loại trừ cấp cứu sản phụ khoa'],
+                        ['10', 'Đau tối đa', 'Đau dữ dội nhất có thể tưởng tượng', 'Cấp cứu; hội chẩn']
+                    ]
+                }
+            }
+        ]
+
+        existing_names = {c.name for c in MedicalChart.query.with_entities(MedicalChart.name).all()}
+        added = 0
+        for chart_data in predefined_charts:
+            if chart_data['name'] in existing_names:
+                continue
+            chart = MedicalChart(
+                name=chart_data['name'],
+                category=chart_data['category'],
+                description=chart_data['description'],
+                chart_data=json.dumps(chart_data['data'], ensure_ascii=False),
+                is_predefined=True
+            )
+            db.session.add(chart)
+            added += 1
+
+        if added:
             db.session.commit()
-            print("Initialized default medical charts")
+            _invalidate_medical_charts_cache()
+            print(f"Initialized/added {added} default medical charts")
+        elif not existing_names:
+            print("No medical charts to initialize")
+        else:
+            print("Default medical charts already present")
     except Exception as e:
-        print(f"Error initializing doctor list: {e}")
+        print(f"Error initializing medical charts: {e}")
         db.session.rollback()
 
 def initialize_default_templates():
@@ -9963,9 +14428,16 @@ def ensure_special_template_lock_column():
             db.session.execute(text('ALTER TABLE special_template ADD COLUMN locked_snapshot_at DATETIME'))
             db.session.commit()
             print("Added locked_snapshot_at column to special_template table")
+        if 'category' not in columns:
+            db.session.execute(text("ALTER TABLE special_template ADD COLUMN category VARCHAR(50) DEFAULT 'other-test'"))
+            db.session.commit()
+            print("Added category column to special_template table")
     except Exception as e:
         db.session.rollback()
         print(f"Error checking/adding special_template lock columns: {e}")
+
+def ensure_special_template_category_column():
+    ensure_special_template_lock_column()
 
 def ensure_clinic_summary_column():
     """Đảm bảo cột clinic_summary tồn tại trong bảng HomeContent"""
@@ -10252,6 +14724,7 @@ class SpecialTemplate(db.Model):
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     content_html = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(50), default='other-test')
     is_locked = db.Column(db.Boolean, default=False, nullable=False)
     locked_snapshot_html = db.Column(db.Text)
     locked_snapshot_at = db.Column(db.DateTime)
@@ -10290,6 +14763,73 @@ class TreatmentPlan(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
+TREATMENT_SPECIALTY_IDS = (
+    'obstetrics',
+    'gynecology',
+    'andrology',
+    'male-infertility',
+    'female-infertility',
+)
+TREATMENT_SPECIALTY_LABELS = {
+    'obstetrics': 'Sản khoa',
+    'gynecology': 'Phụ khoa',
+    'andrology': 'Nam khoa',
+    'male-infertility': 'Vô sinh nam',
+    'female-infertility': 'Vô sinh nữ',
+}
+TREATMENT_SPECIALTY_ALIASES = {
+    'san': 'obstetrics',
+    'phu': 'gynecology',
+    'nam': 'andrology',
+    'vo-sinh-nam': 'male-infertility',
+    'vosinhnam': 'male-infertility',
+    'vo-sinh-nu': 'female-infertility',
+    'vosinhnu': 'female-infertility',
+}
+
+
+def _normalize_treatment_specialty(value):
+    key = (value or '').strip().lower()
+    if not key:
+        return ''
+    key = TREATMENT_SPECIALTY_ALIASES.get(key, key)
+    return key if key in TREATMENT_SPECIALTY_IDS else ''
+
+
+class TreatmentGuideline(db.Model):
+    """Hướng dẫn / phác đồ điều trị theo chuyên khoa (Sản / Phụ / Nam / Vô sinh), chỉnh sửa được."""
+    __tablename__ = 'treatment_guideline'
+
+    id = db.Column(db.Integer, primary_key=True)
+    specialty = db.Column(db.String(30), nullable=False, index=True)  # obstetrics|gynecology|andrology|male-infertility|female-infertility
+    disease_key = db.Column(db.String(80), nullable=False, index=True)
+    title = db.Column(db.String(200), nullable=False)
+    summary = db.Column(db.String(500))
+    content_html = db.Column(db.Text, nullable=False)
+    sort_order = db.Column(db.Integer, default=0)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('specialty', 'disease_key', name='uq_treatment_guideline_specialty_key'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'specialty': self.specialty,
+            'disease_key': self.disease_key,
+            'title': self.title,
+            'summary': self.summary or '',
+            'content_html': self.content_html or '',
+            'sort_order': self.sort_order or 0,
+            'is_active': bool(self.is_active),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
 class ShiftTemplate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
@@ -10326,13 +14866,36 @@ class PregnancyUtility(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+def _special_template_summary(row):
+    return {
+        'id': row.id,
+        'name': row.name,
+        'description': row.description,
+        'category': getattr(row, 'category', None) or 'other-test',
+        'is_locked': bool(getattr(row, 'is_locked', False)),
+        'has_locked_snapshot': bool(getattr(row, 'locked_snapshot_html', None)),
+        'locked_snapshot_at': row.locked_snapshot_at.strftime('%Y-%m-%d %H:%M:%S') if getattr(row, 'locked_snapshot_at', None) else None,
+        'created_at': row.created_at.strftime('%Y-%m-%d %H:%M:%S') if row.created_at else None,
+        'updated_at': row.updated_at.strftime('%Y-%m-%d %H:%M:%S') if row.updated_at else None
+    }
+
+def _special_template_payload(row, include_content=False):
+    payload = _special_template_summary(row)
+    if include_content:
+        payload['content_html'] = row.content_html
+    return payload
+
 @app.route('/api/special-templates', methods=['GET'])
 def get_special_templates():
     try:
-        base_request_template = get_lab_request_base_template_html()
+        summary_only = request.args.get('summary', '').lower() in ('1', 'true', 'yes')
         rows = SpecialTemplate.query.order_by(SpecialTemplate.created_at.desc()).all()
-        has_updates = False
 
+        if summary_only:
+            return jsonify([_special_template_summary(row) for row in rows])
+
+        base_request_template = get_lab_request_base_template_html()
+        has_updates = False
         templates = []
         for row in rows:
             if not getattr(row, 'is_locked', False):
@@ -10342,17 +14905,7 @@ def get_special_templates():
                     row.updated_at = datetime.utcnow()
                     has_updates = True
 
-            templates.append({
-                'id': row.id,
-                'name': row.name,
-                'description': row.description,
-                'content_html': row.content_html,
-                'is_locked': bool(getattr(row, 'is_locked', False)),
-                'has_locked_snapshot': bool(getattr(row, 'locked_snapshot_html', None)),
-                'locked_snapshot_at': row.locked_snapshot_at.strftime('%Y-%m-%d %H:%M:%S') if getattr(row, 'locked_snapshot_at', None) else None,
-                'created_at': row.created_at.strftime('%Y-%m-%d %H:%M:%S') if row.created_at else None,
-                'updated_at': row.updated_at.strftime('%Y-%m-%d %H:%M:%S') if row.updated_at else None
-            })
+            templates.append(_special_template_payload(row, include_content=True))
 
         if has_updates:
             db.session.commit()
@@ -10365,26 +14918,32 @@ def get_special_templates():
 @app.route('/api/special-templates', methods=['POST'])
 def create_special_template():
     try:
+        ensure_special_template_category_column()
         data = request.json
         if not data or not data.get('name'):
             return jsonify({'message': 'Tên mẫu phiếu là bắt buộc'}), 400
 
         base_request_template = get_lab_request_base_template_html()
         generated_html = apply_service_name_to_request_template(base_request_template, data['name'])
+        category = resolve_template_category_for_service(data['name'], data.get('category'))
         
         template = SpecialTemplate(
             name=data['name'],
             description=data.get('description', ''),
             content_html=generated_html,
+            category=category,
             is_locked=bool(data.get('is_locked', False))
         )
         db.session.add(template)
+        db.session.flush()
+        sync_paired_clinical_template_category(template.name, category, commit=False)
         db.session.commit()
         
         return jsonify({
             'id': template.id,
             'name': template.name,
             'description': template.description,
+            'category': template.category,
             'content_html': template.content_html,
             'is_locked': bool(template.is_locked),
             'has_locked_snapshot': bool(getattr(template, 'locked_snapshot_html', None)),
@@ -10396,9 +14955,18 @@ def create_special_template():
         db.session.rollback()
         return jsonify({'message': f'Lỗi khi tạo mẫu đặc biệt: {str(e)}'}), 500
 
+@app.route('/api/special-templates/<int:template_id>', methods=['GET'])
+def get_special_template(template_id):
+    try:
+        template = _get_or_404(SpecialTemplate, template_id)
+        return jsonify(_special_template_payload(template, include_content=True))
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy mẫu đặc biệt: {str(e)}'}), 500
+
 @app.route('/api/special-templates/<int:template_id>', methods=['PUT'])
 def update_special_template(template_id):
     try:
+        ensure_special_template_category_column()
         template = _get_or_404(SpecialTemplate, template_id)
         data = request.json
         was_locked = bool(template.is_locked)
@@ -10427,6 +14995,10 @@ def update_special_template(template_id):
             template.name = data['name']
         if 'description' in data:
             template.description = data['description']
+        if 'category' in data:
+            template.category = resolve_template_category_for_service(template.name, data.get('category'))
+        elif not getattr(template, 'category', None):
+            template.category = resolve_template_category_for_service(template.name)
         if 'is_locked' in data:
             template.is_locked = bool(data.get('is_locked'))
 
@@ -10448,12 +15020,14 @@ def update_special_template(template_id):
             template.locked_snapshot_at = datetime.utcnow()
         
         template.updated_at = datetime.utcnow()
+        sync_paired_clinical_template_category(template.name, template.category, commit=False)
         db.session.commit()
         
         return jsonify({
             'id': template.id,
             'name': template.name,
             'description': template.description,
+            'category': getattr(template, 'category', None) or 'other-test',
             'content_html': template.content_html,
             'is_locked': bool(template.is_locked),
             'has_locked_snapshot': bool(getattr(template, 'locked_snapshot_html', None)),
@@ -10731,6 +15305,7 @@ def summarize_patient_records(records):
         entry['status_counts'][status_key] = entry['status_counts'].get(status_key, 0) + 1
         entry['visits'].append({
             'id': record.id,
+            'appointment_id': getattr(record, 'appointment_id', None),
             'appointment_date': record.appointment_date.isoformat() if record.appointment_date else None,
             'service_type': record.service_type,
             'doctor_name': record.doctor_name,
@@ -10762,6 +15337,192 @@ def summarize_patient_records(records):
     # Handle None values by putting them at the end
     patients = sorted(patients, key=lambda p: p['latest_visit'] if p['latest_visit'] else '0000-01-01T00:00:00', reverse=True)
     return patients, total_visits
+
+# ============ Pregnancy Episode Model (Giai đoạn 2) ============
+class PregnancyEpisode(db.Model):
+    __tablename__ = 'pregnancy_episode'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    lmp_date = db.Column(db.Date)
+    expected_delivery_date = db.Column(db.Date)
+    gravida = db.Column(db.Integer)
+    para = db.Column(db.String(50))
+    status = db.Column(db.String(20), default='active', index=True)  # active, delivered, miscarriage, closed
+    doctor_name = db.Column(db.String(100))
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    closed_at = db.Column(db.DateTime)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'lmp_date': self.lmp_date.isoformat() if self.lmp_date else None,
+            'expected_delivery_date': self.expected_delivery_date.isoformat() if self.expected_delivery_date else None,
+            'gravida': self.gravida,
+            'para': self.para,
+            'status': self.status,
+            'doctor_name': self.doctor_name,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'closed_at': self.closed_at.isoformat() if self.closed_at else None,
+        }
+
+
+class PatientVaccinationProfile(db.Model):
+    __tablename__ = 'patient_vaccination_profile'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    pregnancy_episode_id = db.Column(db.Integer, db.ForeignKey('pregnancy_episode.id'), nullable=True, index=True)
+    tetanus_history_id = db.Column(db.String(50))
+    tetanus_history_reason = db.Column(db.Text)
+    tetanus_history_updated_at = db.Column(db.DateTime)
+    ga_weeks = db.Column(db.Float)
+    scenarios_json = db.Column(db.Text)
+    notes = db.Column(db.Text)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        scenarios = {}
+        if self.scenarios_json:
+            try:
+                scenarios = json.loads(self.scenarios_json)
+            except Exception:
+                scenarios = {}
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'pregnancy_episode_id': self.pregnancy_episode_id,
+            'tetanus_history_id': self.tetanus_history_id,
+            'tetanus_history_reason': self.tetanus_history_reason,
+            'tetanus_history_updated_at': self.tetanus_history_updated_at.isoformat() if self.tetanus_history_updated_at else None,
+            'ga_weeks': self.ga_weeks,
+            'scenarios': scenarios,
+            'notes': self.notes,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class PatientVaccinationShot(db.Model):
+    __tablename__ = 'patient_vaccination_shot'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    pregnancy_episode_id = db.Column(db.Integer, db.ForeignKey('pregnancy_episode.id'), nullable=True, index=True)
+    appointment_id = db.Column(db.Integer, nullable=True, index=True)
+    vaccine_name = db.Column(db.String(100), nullable=False)
+    shot_date = db.Column(db.Date, nullable=False)
+    dose_label = db.Column(db.String(100))
+    ga_weeks = db.Column(db.Float)
+    administered_by = db.Column(db.String(100))
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'pregnancy_episode_id': self.pregnancy_episode_id,
+            'appointment_id': self.appointment_id,
+            'vaccine_name': self.vaccine_name,
+            'shot_date': self.shot_date.isoformat() if self.shot_date else None,
+            'dose_label': self.dose_label,
+            'ga_weeks': self.ga_weeks,
+            'administered_by': self.administered_by,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class PatientWeightProfile(db.Model):
+    __tablename__ = 'patient_weight_profile'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    pregnancy_episode_id = db.Column(db.Integer, db.ForeignKey('pregnancy_episode.id'), nullable=True, index=True)
+    prepreg_weight_kg = db.Column(db.Float)
+    height_cm = db.Column(db.Float)
+    prepreg_bmi = db.Column(db.Float)
+    bmi_category = db.Column(db.String(30))
+    notes = db.Column(db.Text)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'pregnancy_episode_id': self.pregnancy_episode_id,
+            'prepreg_weight_kg': self.prepreg_weight_kg,
+            'height_cm': self.height_cm,
+            'prepreg_bmi': self.prepreg_bmi,
+            'bmi_category': self.bmi_category,
+            'notes': self.notes,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class PatientWeightEntry(db.Model):
+    __tablename__ = 'patient_weight_entry'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    pregnancy_episode_id = db.Column(db.Integer, db.ForeignKey('pregnancy_episode.id'), nullable=True, index=True)
+    measured_at = db.Column(db.Date, nullable=False)
+    ga_weeks = db.Column(db.Float)
+    weight_kg = db.Column(db.Float, nullable=False)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'pregnancy_episode_id': self.pregnancy_episode_id,
+            'measured_at': self.measured_at.isoformat() if self.measured_at else None,
+            'ga_weeks': self.ga_weeks,
+            'weight_kg': self.weight_kg,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class PatientGbsScreening(db.Model):
+    """Sàng lọc liên cầu nhóm B (GBS) theo thai kỳ."""
+    __tablename__ = 'patient_gbs_screening'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    pregnancy_episode_id = db.Column(db.Integer, db.ForeignKey('pregnancy_episode.id'), nullable=True, index=True)
+    result = db.Column(db.String(20))  # negative | positive | None (chưa làm)
+    tested_at = db.Column(db.Date)
+    ga_weeks = db.Column(db.Float)
+    sample_site = db.Column(db.String(100))
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'pregnancy_episode_id': self.pregnancy_episode_id,
+            'result': self.result,
+            'tested_at': self.tested_at.isoformat() if self.tested_at else None,
+            'ga_weeks': self.ga_weeks,
+            'sample_site': self.sample_site,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
 
 # ============ Patient Records Model ============
 class PatientRecord(db.Model):
@@ -11293,6 +16054,7 @@ def get_patient_records():
         q_name = (request.args.get('name') or '').strip()
         q_pid = (request.args.get('pid') or '').strip()
         q_phone = (request.args.get('phone') or '').strip()
+        q_appointment_id = request.args.get('appointment_id', type=int)
         date_from = (request.args.get('date_from') or '').strip()  # yyyy-mm-dd
         date_to = (request.args.get('date_to') or '').strip()      # yyyy-mm-dd
         status = (request.args.get('status') or '').strip()
@@ -11308,6 +16070,9 @@ def get_patient_records():
 
         if q_phone:
             query = query.filter(PatientRecord.patient_phone.ilike(f'%{q_phone}%'))
+
+        if q_appointment_id:
+            query = query.filter(PatientRecord.appointment_id == q_appointment_id)
 
         if q_pid:
             # If user inputs digits, they might be old PID==phone or just phone-like.
@@ -11363,6 +16128,1069 @@ def get_patient_records():
         } for (record, pid, address) in rows])
     except Exception as e:
         return jsonify({'message': f'Lỗi khi lấy danh sách hồ sơ: {str(e)}'}), 500
+
+def _normalize_phone_digits(phone):
+    return ''.join(ch for ch in str(phone or '') if ch.isdigit())
+
+OBSTETRIC_SERVICE_KEYWORDS = ('thai', 'siêu âm', 'sieu am', 'sản', 'san', 'obstetric', 'prenatal')
+
+def ensure_pregnancy_episode_schema():
+    """Ensure pregnancy_episode table and link columns exist."""
+    try:
+        db.create_all()
+    except Exception:
+        db.session.rollback()
+    try:
+        result = db.session.execute(text('PRAGMA table_info(ultrasound_results)'))
+        columns = [row[1] for row in result]
+        if 'pregnancy_episode_id' not in columns:
+            db.session.execute(text('ALTER TABLE ultrasound_results ADD COLUMN pregnancy_episode_id INTEGER'))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+    try:
+        result = db.session.execute(text('PRAGMA table_info(appointment)'))
+        columns = [row[1] for row in result]
+        if 'pregnancy_episode_id' not in columns:
+            db.session.execute(text('ALTER TABLE appointment ADD COLUMN pregnancy_episode_id INTEGER'))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+def ensure_patient_vaccination_schema():
+    """Tạo bảng quản lý tiêm uốn ván / tiêm chủng theo bệnh nhân."""
+    try:
+        db.create_all()
+        _ensure_patient_vaccination_columns()
+    except Exception:
+        db.session.rollback()
+
+
+def _ensure_patient_vaccination_columns():
+    if _is_schema_ensured('patient_vaccination_columns_v2'):
+        return
+    try:
+        profile_cols = db.session.execute(text('PRAGMA table_info(patient_vaccination_profile)')).fetchall()
+        profile_names = [row[1] for row in profile_cols]
+        if 'tetanus_history_reason' not in profile_names:
+            db.session.execute(text('ALTER TABLE patient_vaccination_profile ADD COLUMN tetanus_history_reason TEXT'))
+        if 'tetanus_history_updated_at' not in profile_names:
+            db.session.execute(text('ALTER TABLE patient_vaccination_profile ADD COLUMN tetanus_history_updated_at DATETIME'))
+
+        shot_cols = db.session.execute(text('PRAGMA table_info(patient_vaccination_shot)')).fetchall()
+        shot_names = [row[1] for row in shot_cols]
+        if 'appointment_id' not in shot_names:
+            db.session.execute(text('ALTER TABLE patient_vaccination_shot ADD COLUMN appointment_id INTEGER'))
+
+        db.session.commit()
+        _mark_schema_ensured('patient_vaccination_columns_v2')
+    except Exception:
+        db.session.rollback()
+
+
+def is_obstetric_appointment(appointment):
+    if not appointment:
+        return False
+    service = (getattr(appointment, 'service_type', None) or '').lower()
+    if any(kw in service for kw in OBSTETRIC_SERVICE_KEYWORDS):
+        return True
+    return bool(getattr(appointment, 'expected_delivery_date', None))
+
+def _parse_iso_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(str(value)[:10], '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return None
+
+def _ensure_single_active_pregnancy(patient_id, keep_episode_id=None):
+    active_eps = PregnancyEpisode.query.filter_by(patient_id=patient_id, status='active').all()
+    for ep in active_eps:
+        if keep_episode_id and ep.id == keep_episode_id:
+            continue
+        ep.status = 'closed'
+        ep.closed_at = datetime.utcnow()
+
+def link_appointment_to_pregnancy(appointment):
+    """Gắn lịch hẹn với thai kỳ (tự tạo nếu cần)."""
+    if not appointment or not appointment.patient_id:
+        return None
+    ensure_pregnancy_episode_schema()
+    edd = getattr(appointment, 'expected_delivery_date', None)
+    episode = None
+
+    if getattr(appointment, 'pregnancy_episode_id', None):
+        episode = db.session.get(PregnancyEpisode, appointment.pregnancy_episode_id)
+
+    active_episode = PregnancyEpisode.query.filter_by(
+        patient_id=appointment.patient_id, status='active'
+    ).order_by(PregnancyEpisode.created_at.desc()).first()
+
+    if edd:
+        if episode and episode.status == 'active':
+            if episode.expected_delivery_date != edd:
+                episode.expected_delivery_date = edd
+                episode.updated_at = datetime.utcnow()
+        elif active_episode:
+            episode = active_episode
+            if episode.expected_delivery_date != edd:
+                episode.expected_delivery_date = edd
+                episode.updated_at = datetime.utcnow()
+            _ensure_single_active_pregnancy(appointment.patient_id, keep_episode_id=episode.id)
+        else:
+            episode = PregnancyEpisode.query.filter_by(
+                patient_id=appointment.patient_id,
+                expected_delivery_date=edd
+            ).first()
+            if not episode:
+                episode = PregnancyEpisode(
+                    patient_id=appointment.patient_id,
+                    expected_delivery_date=edd,
+                    status='active',
+                    doctor_name=getattr(appointment, 'doctor_name', None) or 'PK Đại Anh'
+                )
+                db.session.add(episode)
+                db.session.flush()
+                _ensure_single_active_pregnancy(appointment.patient_id, keep_episode_id=episode.id)
+    elif is_obstetric_appointment(appointment):
+        episode = episode or active_episode
+        if not episode:
+            episode = PregnancyEpisode(
+                patient_id=appointment.patient_id,
+                status='active',
+                doctor_name=getattr(appointment, 'doctor_name', None) or 'PK Đại Anh',
+                notes='Tự tạo từ lịch khám sản'
+            )
+            db.session.add(episode)
+            db.session.flush()
+    if episode and getattr(appointment, 'pregnancy_episode_id', None) != episode.id:
+        appointment.pregnancy_episode_id = episode.id
+    return episode
+
+def sync_patient_pregnancy_episodes(patient_id):
+    """Đồng bộ thai kỳ từ lịch sử lịch hẹn và gắn siêu âm."""
+    if not patient_id:
+        return []
+    ensure_pregnancy_episode_schema()
+    appointments = Appointment.query.filter_by(patient_id=patient_id).order_by(Appointment.appointment_date.asc()).all()
+    for appt in appointments:
+        if is_obstetric_appointment(appt) or getattr(appt, 'expected_delivery_date', None):
+            link_appointment_to_pregnancy(appt)
+
+    # Gắn siêu âm theo lịch hẹn
+    ultrasound_rows = UltrasoundResult.query.filter_by(patient_id=patient_id).all()
+    for row in ultrasound_rows:
+        if getattr(row, 'pregnancy_episode_id', None):
+            continue
+        if not row.appointment_id:
+            continue
+        appt = db.session.get(Appointment, row.appointment_id)
+        if appt and getattr(appt, 'pregnancy_episode_id', None):
+            row.pregnancy_episode_id = appt.pregnancy_episode_id
+
+    db.session.commit()
+    return PregnancyEpisode.query.filter_by(patient_id=patient_id).order_by(PregnancyEpisode.created_at.desc()).all()
+
+def pregnancy_episode_to_dict(episode, visit_count=0, ultrasound_count=0):
+    if not episode:
+        return None
+    return {
+        **episode.to_dict(),
+        'visit_count': visit_count,
+        'ultrasound_count': ultrasound_count,
+        'label': _pregnancy_episode_label(episode),
+    }
+
+def _pregnancy_episode_label(episode):
+    edd = episode.expected_delivery_date.strftime('%d/%m/%Y') if episode.expected_delivery_date else 'Chưa có EDD'
+    status_map = {
+        'active': 'Đang theo dõi',
+        'delivered': 'Đã sinh',
+        'miscarriage': 'Sẩy thai',
+        'closed': 'Đã kết thúc',
+    }
+    status_text = status_map.get(episode.status, episode.status or '')
+    return f'{edd} — {status_text}'
+
+def _resolve_ultrasound_pregnancy_episode_id(patient_id, appointment_id=None, explicit_episode_id=None):
+    """Xác định thai kỳ cho kết quả siêu âm."""
+    ensure_pregnancy_episode_schema()
+    if explicit_episode_id:
+        return int(explicit_episode_id)
+    if appointment_id:
+        appt = db.session.get(Appointment, appointment_id)
+        if appt:
+            if is_obstetric_appointment(appt) or getattr(appt, 'expected_delivery_date', None):
+                link_appointment_to_pregnancy(appt)
+            ep_id = getattr(appt, 'pregnancy_episode_id', None)
+            if ep_id:
+                return ep_id
+    active = PregnancyEpisode.query.filter_by(
+        patient_id=patient_id, status='active'
+    ).order_by(PregnancyEpisode.created_at.desc()).first()
+    return active.id if active else None
+
+@app.route('/api/patient-records/patient-summary', methods=['GET'])
+def get_patient_profile_summary():
+    """Hồ sơ tổng hợp theo bệnh nhân: lịch sử khám + siêu âm (Giai đoạn 1)."""
+    try:
+        ensure_patient_record_columns()
+        ensure_ultrasound_result_columns()
+        ensure_pregnancy_episode_schema()
+
+        phone_raw = (request.args.get('phone') or '').strip()
+        pid_raw = (request.args.get('pid') or '').strip()
+        pregnancy_episode_id = request.args.get('pregnancy_episode_id', type=int)
+        if not phone_raw and not pid_raw:
+            return jsonify({'message': 'Thiếu số điện thoại hoặc PID bệnh nhân'}), 400
+
+        patient = None
+        patient_id = request.args.get('patient_id', type=int)
+        if patient_id:
+            patient = db.session.get(Patient, patient_id)
+        if not patient and pid_raw:
+            patient = Patient.query.filter(
+                db.func.lower(Patient.patient_id) == pid_raw.lower()
+            ).first()
+            if not patient:
+                patient = Patient.query.filter(
+                    Patient.patient_id.ilike(f'%{pid_raw}%')
+                ).first()
+
+        records = []
+        phone_digits = _normalize_phone_digits(phone_raw) if phone_raw else ''
+        if phone_raw:
+            if not phone_digits:
+                return jsonify({'message': 'Số điện thoại không hợp lệ'}), 400
+            tail = phone_digits[-9:] if len(phone_digits) >= 9 else phone_digits
+            candidate_records = PatientRecord.query.filter(
+                PatientRecord.patient_phone.ilike(f'%{tail}%')
+            ).order_by(PatientRecord.appointment_date.desc()).all()
+            records = [
+                r for r in candidate_records
+                if _normalize_phone_digits(r.patient_phone) == phone_digits
+            ]
+        elif patient:
+            appt_ids = [
+                a.id for a in Appointment.query.filter_by(patient_id=patient.id).all()
+            ]
+            if appt_ids:
+                records = (
+                    PatientRecord.query
+                    .filter(PatientRecord.appointment_id.in_(appt_ids))
+                    .order_by(PatientRecord.appointment_date.desc())
+                    .all()
+                )
+            phone_raw = patient.phone or ''
+
+        if patient and records:
+            filtered = []
+            for rec in records:
+                if not rec.appointment_id:
+                    filtered.append(rec)
+                    continue
+                appt = db.session.get(Appointment, rec.appointment_id)
+                if appt and appt.patient_id == patient.id:
+                    filtered.append(rec)
+            records = filtered
+
+        if not patient and phone_digits:
+            tail = phone_digits[-9:] if len(phone_digits) >= 9 else phone_digits
+            for p in Patient.query.filter(Patient.phone.ilike(f'%{tail}%')).all():
+                if _normalize_phone_digits(p.phone) == phone_digits:
+                    patient = p
+                    break
+        if not patient:
+            for rec in records:
+                if not rec.appointment_id:
+                    continue
+                appt = db.session.get(Appointment, rec.appointment_id)
+                if appt and appt.patient:
+                    patient = appt.patient
+                    break
+
+        patients, _ = summarize_patient_records(records)
+        profile = patients[0] if patients else None
+
+        resolved_patient_id = patient.id if patient else None
+        pregnancy_episodes = []
+        active_pregnancy_episode_id = None
+        if resolved_patient_id:
+            episodes = sync_patient_pregnancy_episodes(resolved_patient_id)
+            for ep in episodes:
+                visit_count = Appointment.query.filter_by(
+                    patient_id=resolved_patient_id,
+                    pregnancy_episode_id=ep.id
+                ).count()
+                us_count = UltrasoundResult.query.filter_by(
+                    patient_id=resolved_patient_id,
+                    pregnancy_episode_id=ep.id
+                ).count()
+                pregnancy_episodes.append(pregnancy_episode_to_dict(ep, visit_count, us_count))
+            active = next((e for e in episodes if e.status == 'active'), None)
+            if active:
+                active_pregnancy_episode_id = active.id
+            elif episodes:
+                active_pregnancy_episode_id = episodes[0].id
+
+        filter_episode_id = pregnancy_episode_id or active_pregnancy_episode_id
+
+        ultrasound_results = []
+        if resolved_patient_id:
+            us_query = UltrasoundResult.query.filter_by(patient_id=resolved_patient_id)
+            if filter_episode_id:
+                us_query = us_query.filter_by(pregnancy_episode_id=filter_episode_id)
+            ultrasound_results = us_query.order_by(UltrasoundResult.exam_date.asc()).all()
+
+        enriched_visits = []
+        if profile:
+            record_by_id = {r.id: r for r in records}
+            for visit in profile.get('visits') or []:
+                rec = record_by_id.get(visit.get('id'))
+                preg_ep_id = None
+                if rec and rec.appointment_id:
+                    appt = db.session.get(Appointment, rec.appointment_id)
+                    preg_ep_id = getattr(appt, 'pregnancy_episode_id', None) if appt else None
+                item = {
+                    **visit,
+                    'appointment_id': rec.appointment_id if rec else None,
+                    'patient_pid': None,
+                    'pregnancy_episode_id': preg_ep_id,
+                }
+                if filter_episode_id and preg_ep_id != filter_episode_id:
+                    continue
+                enriched_visits.append(item)
+
+        return jsonify({
+            'patient_id': resolved_patient_id,
+            'patient_name': (profile or {}).get('patient_name') or (patient.name if patient else ''),
+            'patient_phone': phone_raw or (patient.phone if patient else ''),
+            'patient_pid': getattr(patient, 'patient_id', None) if patient else None,
+            'patient_address': getattr(patient, 'address', None) or '',
+            'patient_dob': patient.date_of_birth.isoformat() if patient and patient.date_of_birth else None,
+            'total_visits': (profile or {}).get('total_visits') or len(records),
+            'first_visit': (profile or {}).get('first_visit'),
+            'latest_visit': (profile or {}).get('latest_visit'),
+            'status_summary': (profile or {}).get('status_summary') or '',
+            'visits': enriched_visits,
+            'ultrasound_results': [r.to_dict() for r in ultrasound_results],
+            'pregnancy_episodes': pregnancy_episodes,
+            'active_pregnancy_episode_id': active_pregnancy_episode_id,
+            'selected_pregnancy_episode_id': filter_episode_id,
+        })
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy hồ sơ tổng hợp: {str(e)}'}), 500
+
+@app.route('/api/pregnancy-episodes', methods=['GET'])
+def list_pregnancy_episodes():
+    try:
+        patient_id = request.args.get('patient_id', type=int)
+        if not patient_id:
+            return jsonify({'message': 'Thiếu patient_id'}), 400
+        episodes = sync_patient_pregnancy_episodes(patient_id)
+        payload = []
+        for ep in episodes:
+            visit_count = Appointment.query.filter_by(patient_id=patient_id, pregnancy_episode_id=ep.id).count()
+            us_count = UltrasoundResult.query.filter_by(patient_id=patient_id, pregnancy_episode_id=ep.id).count()
+            payload.append(pregnancy_episode_to_dict(ep, visit_count, us_count))
+        return jsonify(payload)
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy danh sách thai kỳ: {str(e)}'}), 500
+
+@app.route('/api/pregnancy-episodes', methods=['POST'])
+def create_pregnancy_episode():
+    try:
+        ensure_pregnancy_episode_schema()
+        data = request.json or {}
+        patient_id = data.get('patient_id')
+        if not patient_id:
+            return jsonify({'message': 'Thiếu patient_id'}), 400
+        patient = _get_or_404(Patient, int(patient_id))
+
+        if data.get('close_other_active', True):
+            _ensure_single_active_pregnancy(patient.id)
+
+        episode = PregnancyEpisode(
+            patient_id=patient.id,
+            lmp_date=_parse_iso_date(data.get('lmp_date')),
+            expected_delivery_date=_parse_iso_date(data.get('expected_delivery_date')),
+            gravida=data.get('gravida'),
+            para=(data.get('para') or '').strip() or None,
+            status=data.get('status') or 'active',
+            doctor_name=(data.get('doctor_name') or '').strip() or None,
+            notes=(data.get('notes') or '').strip() or None,
+        )
+        db.session.add(episode)
+        db.session.commit()
+        return jsonify({
+            'message': 'Đã tạo thai kỳ mới',
+            'episode': pregnancy_episode_to_dict(episode, 0, 0)
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi tạo thai kỳ: {str(e)}'}), 500
+
+@app.route('/api/pregnancy-episodes/<int:episode_id>', methods=['PUT'])
+def update_pregnancy_episode(episode_id):
+    try:
+        ensure_pregnancy_episode_schema()
+        episode = _get_or_404(PregnancyEpisode, episode_id)
+        data = request.json or {}
+        if 'lmp_date' in data:
+            episode.lmp_date = _parse_iso_date(data.get('lmp_date'))
+        if 'expected_delivery_date' in data:
+            episode.expected_delivery_date = _parse_iso_date(data.get('expected_delivery_date'))
+        if 'gravida' in data:
+            episode.gravida = data.get('gravida')
+        if 'para' in data:
+            episode.para = (data.get('para') or '').strip() or None
+        if data.get('status'):
+            episode.status = data.get('status')
+            if episode.status in ('delivered', 'miscarriage', 'closed'):
+                episode.closed_at = datetime.utcnow()
+        if 'doctor_name' in data:
+            episode.doctor_name = (data.get('doctor_name') or '').strip() or None
+        if 'notes' in data:
+            episode.notes = (data.get('notes') or '').strip() or None
+        episode.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'message': 'Đã cập nhật thai kỳ', 'episode': episode.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi cập nhật thai kỳ: {str(e)}'}), 500
+
+@app.route('/api/pregnancy-episodes/<int:episode_id>/close', methods=['POST'])
+def close_pregnancy_episode(episode_id):
+    try:
+        ensure_pregnancy_episode_schema()
+        episode = _get_or_404(PregnancyEpisode, episode_id)
+        data = request.json or {}
+        new_status = (data.get('status') or 'closed').strip()
+        if new_status not in ('delivered', 'miscarriage', 'closed'):
+            return jsonify({'message': 'Trạng thái không hợp lệ'}), 400
+        episode.status = new_status
+        episode.closed_at = datetime.utcnow()
+        if data.get('notes'):
+            episode.notes = ((episode.notes or '') + '\n' + data.get('notes')).strip()
+        episode.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'message': 'Đã kết thúc thai kỳ', 'episode': episode.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi kết thúc thai kỳ: {str(e)}'}), 500
+
+
+def _get_vaccination_profile(patient_id, pregnancy_episode_id=None):
+    query = PatientVaccinationProfile.query.filter_by(patient_id=patient_id)
+    if pregnancy_episode_id:
+        profile = query.filter_by(pregnancy_episode_id=pregnancy_episode_id).first()
+        if profile:
+            return profile
+    return query.filter(PatientVaccinationProfile.pregnancy_episode_id.is_(None)).first()
+
+
+def _gestational_age_weeks_from_lmp(lmp_date, reference_date=None):
+    if not lmp_date:
+        return None
+    ref = reference_date or date.today()
+    ga_days = (ref - lmp_date).days
+    if ga_days < 0:
+        return None
+    return round(ga_days / 7.0, 1)
+
+
+def _gestational_age_weeks_from_edd(edd_date, reference_date=None):
+    if not edd_date:
+        return None
+    ref = reference_date or date.today()
+    days_to_edd = (edd_date - ref).days
+    ga_days = 280 - days_to_edd
+    if ga_days < 0:
+        return None
+    return round(ga_days / 7.0, 1)
+
+
+def _latest_ga_weeks_for_patient(patient_id, pregnancy_episode_id=None):
+    us_query = UltrasoundResult.query.filter_by(patient_id=patient_id)
+    if pregnancy_episode_id:
+        us_query = us_query.filter_by(pregnancy_episode_id=pregnancy_episode_id)
+    rows = us_query.filter(UltrasoundResult.gestational_age.isnot(None)).order_by(
+        UltrasoundResult.exam_date.desc()
+    ).all()
+    for row in rows:
+        if row.gestational_age is not None:
+            return float(row.gestational_age)
+
+    episode = None
+    if pregnancy_episode_id:
+        episode = db.session.get(PregnancyEpisode, pregnancy_episode_id)
+    if not episode:
+        episode = PregnancyEpisode.query.filter_by(
+            patient_id=patient_id, status='active'
+        ).order_by(PregnancyEpisode.created_at.desc()).first()
+    if not episode:
+        episode = PregnancyEpisode.query.filter_by(
+            patient_id=patient_id
+        ).order_by(PregnancyEpisode.created_at.desc()).first()
+    if episode:
+        if episode.lmp_date:
+            ga = _gestational_age_weeks_from_lmp(episode.lmp_date)
+            if ga is not None:
+                return ga
+        if episode.expected_delivery_date:
+            ga = _gestational_age_weeks_from_edd(episode.expected_delivery_date)
+            if ga is not None:
+                return ga
+    return None
+
+
+@app.route('/api/patient-vaccinations', methods=['GET'])
+def get_patient_vaccinations():
+    """Lấy hồ sơ tư vấn tiêm & danh sách mũi tiêm của bệnh nhân."""
+    try:
+        ensure_patient_vaccination_schema()
+        patient_id = request.args.get('patient_id', type=int)
+        pregnancy_episode_id = request.args.get('pregnancy_episode_id', type=int)
+        if not patient_id:
+            return jsonify({'message': 'Thiếu patient_id'}), 400
+        patient = _get_or_404(Patient, patient_id)
+
+        profile = _get_vaccination_profile(patient_id, pregnancy_episode_id)
+        shots_query = PatientVaccinationShot.query.filter_by(patient_id=patient_id)
+        if pregnancy_episode_id:
+            shots_query = shots_query.filter_by(pregnancy_episode_id=pregnancy_episode_id)
+        shots = shots_query.order_by(PatientVaccinationShot.shot_date.desc()).all()
+        suggested_ga = _latest_ga_weeks_for_patient(patient_id, pregnancy_episode_id)
+
+        return jsonify({
+            'patient_id': patient.id,
+            'pregnancy_episode_id': pregnancy_episode_id,
+            'profile': profile.to_dict() if profile else None,
+            'shots': [s.to_dict() for s in shots],
+            'suggested_ga_weeks': suggested_ga,
+        })
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy hồ sơ tiêm: {str(e)}'}), 500
+
+
+@app.route('/api/patient-vaccinations/profile', methods=['PUT'])
+def upsert_patient_vaccination_profile():
+    """Lưu tiền sử uốn ván, tuổi thai và tình huống tư vấn."""
+    try:
+        ensure_patient_vaccination_schema()
+        data = request.json or {}
+        patient_id = data.get('patient_id')
+        if not patient_id:
+            return jsonify({'message': 'Thiếu patient_id'}), 400
+        _get_or_404(Patient, int(patient_id))
+
+        pregnancy_episode_id = data.get('pregnancy_episode_id')
+        if pregnancy_episode_id:
+            _get_or_404(PregnancyEpisode, int(pregnancy_episode_id))
+
+        profile = _get_vaccination_profile(int(patient_id), pregnancy_episode_id)
+        if not profile:
+            profile = PatientVaccinationProfile(
+                patient_id=int(patient_id),
+                pregnancy_episode_id=int(pregnancy_episode_id) if pregnancy_episode_id else None,
+            )
+            db.session.add(profile)
+
+        if 'tetanus_history_id' in data:
+            new_tetanus_id = (data.get('tetanus_history_id') or '').strip() or None
+            if new_tetanus_id != profile.tetanus_history_id:
+                profile.tetanus_history_updated_at = datetime.utcnow()
+            profile.tetanus_history_id = new_tetanus_id
+            if not profile.tetanus_history_updated_at and new_tetanus_id:
+                profile.tetanus_history_updated_at = datetime.utcnow()
+        if 'tetanus_history_reason' in data:
+            reason = (data.get('tetanus_history_reason') or '').strip() or None
+            profile.tetanus_history_reason = reason
+            if reason:
+                profile.tetanus_history_updated_at = datetime.utcnow()
+        if 'ga_weeks' in data:
+            ga = data.get('ga_weeks')
+            profile.ga_weeks = float(ga) if ga not in (None, '') else None
+        if 'scenarios' in data:
+            profile.scenarios_json = json.dumps(data.get('scenarios') or {}, ensure_ascii=False)
+        if 'notes' in data:
+            profile.notes = (data.get('notes') or '').strip() or None
+        profile.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({
+            'message': 'Đã lưu hồ sơ tư vấn tiêm',
+            'profile': profile.to_dict(),
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi lưu hồ sơ tư vấn tiêm: {str(e)}'}), 500
+
+
+@app.route('/api/patient-vaccinations/shots', methods=['POST'])
+def create_patient_vaccination_shot():
+    """Ghi nhận mũi tiêm (Td, Tdap, ...)."""
+    try:
+        ensure_patient_vaccination_schema()
+        data = request.json or {}
+        patient_id = data.get('patient_id')
+        vaccine_name = (data.get('vaccine_name') or '').strip()
+        shot_date_raw = data.get('shot_date')
+        if not patient_id or not vaccine_name or not shot_date_raw:
+            return jsonify({'message': 'Thiếu patient_id, vaccine_name hoặc shot_date'}), 400
+        _get_or_404(Patient, int(patient_id))
+
+        pregnancy_episode_id = data.get('pregnancy_episode_id')
+        if pregnancy_episode_id:
+            _get_or_404(PregnancyEpisode, int(pregnancy_episode_id))
+
+        shot_date = _parse_iso_date(shot_date_raw)
+        if not shot_date:
+            return jsonify({'message': 'Ngày tiêm không hợp lệ'}), 400
+
+        ga_weeks = data.get('ga_weeks')
+        appointment_id = data.get('appointment_id')
+        if appointment_id:
+            appt = db.session.get(Appointment, int(appointment_id))
+            if not appt:
+                return jsonify({'message': 'Lịch hẹn không tồn tại'}), 400
+
+        shot = PatientVaccinationShot(
+            patient_id=int(patient_id),
+            pregnancy_episode_id=int(pregnancy_episode_id) if pregnancy_episode_id else None,
+            appointment_id=int(appointment_id) if appointment_id else None,
+            vaccine_name=vaccine_name,
+            shot_date=shot_date,
+            dose_label=(data.get('dose_label') or '').strip() or None,
+            ga_weeks=float(ga_weeks) if ga_weeks not in (None, '') else None,
+            administered_by=(data.get('administered_by') or '').strip() or None,
+            notes=(data.get('notes') or '').strip() or None,
+        )
+        db.session.add(shot)
+        db.session.commit()
+        return jsonify({
+            'message': 'Đã ghi nhận mũi tiêm',
+            'shot': shot.to_dict(),
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi ghi nhận mũi tiêm: {str(e)}'}), 500
+
+
+@app.route('/api/patient-vaccinations/shots/<int:shot_id>', methods=['PUT'])
+def update_patient_vaccination_shot(shot_id):
+    try:
+        ensure_patient_vaccination_schema()
+        shot = _get_or_404(PatientVaccinationShot, shot_id)
+        data = request.json or {}
+        if 'vaccine_name' in data:
+            vaccine_name = (data.get('vaccine_name') or '').strip()
+            if not vaccine_name:
+                return jsonify({'message': 'Tên vaccine không được để trống'}), 400
+            shot.vaccine_name = vaccine_name
+        if 'shot_date' in data:
+            shot_date = _parse_iso_date(data.get('shot_date'))
+            if not shot_date:
+                return jsonify({'message': 'Ngày tiêm không hợp lệ'}), 400
+            shot.shot_date = shot_date
+        if 'dose_label' in data:
+            shot.dose_label = (data.get('dose_label') or '').strip() or None
+        if 'ga_weeks' in data:
+            ga = data.get('ga_weeks')
+            shot.ga_weeks = float(ga) if ga not in (None, '') else None
+        if 'administered_by' in data:
+            shot.administered_by = (data.get('administered_by') or '').strip() or None
+        if 'notes' in data:
+            shot.notes = (data.get('notes') or '').strip() or None
+        if 'appointment_id' in data:
+            appt_id = data.get('appointment_id')
+            if appt_id:
+                appt = db.session.get(Appointment, int(appt_id))
+                if not appt:
+                    return jsonify({'message': 'Lịch hẹn không tồn tại'}), 400
+                shot.appointment_id = int(appt_id)
+            else:
+                shot.appointment_id = None
+        shot.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'message': 'Đã cập nhật mũi tiêm', 'shot': shot.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi cập nhật mũi tiêm: {str(e)}'}), 500
+
+
+@app.route('/api/patient-vaccinations/shots/<int:shot_id>', methods=['DELETE'])
+def delete_patient_vaccination_shot(shot_id):
+    try:
+        ensure_patient_vaccination_schema()
+        shot = _get_or_404(PatientVaccinationShot, shot_id)
+        db.session.delete(shot)
+        db.session.commit()
+        return jsonify({'message': 'Đã xóa mũi tiêm'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi xóa mũi tiêm: {str(e)}'}), 500
+
+
+def ensure_patient_weight_schema():
+    try:
+        db.create_all()
+    except Exception:
+        db.session.rollback()
+
+
+def _bmi_category(bmi):
+    if bmi is None:
+        return None
+    if bmi < 18.5:
+        return 'underweight'
+    if bmi < 25:
+        return 'normal'
+    if bmi < 30:
+        return 'overweight'
+    return 'obese'
+
+
+def _weight_gain_guideline_for_bmi(bmi):
+    category = _bmi_category(bmi)
+    guideline = {
+        'underweight': {
+            'label': 'Thiếu cân (<18.5)',
+            'total_gain_min': 12.5,
+            'total_gain_max': 18.0,
+            'weekly_gain_min': 0.44,
+            'weekly_gain_max': 0.58,
+        },
+        'normal': {
+            'label': 'Bình thường (18.5–24.9)',
+            'total_gain_min': 11.5,
+            'total_gain_max': 16.0,
+            'weekly_gain_min': 0.35,
+            'weekly_gain_max': 0.50,
+        },
+        'overweight': {
+            'label': 'Thừa cân (25.0–29.9)',
+            'total_gain_min': 7.0,
+            'total_gain_max': 11.5,
+            'weekly_gain_min': 0.23,
+            'weekly_gain_max': 0.33,
+        },
+        'obese': {
+            'label': 'Béo phì (>=30)',
+            'total_gain_min': 5.0,
+            'total_gain_max': 9.0,
+            'weekly_gain_min': 0.17,
+            'weekly_gain_max': 0.27,
+        },
+    }.get(category)
+    if not guideline:
+        return None
+    return {'category': category, **guideline}
+
+
+def _recommended_gain_at_week(ga_weeks, guideline):
+    if ga_weeks is None or not guideline:
+        return {'gain_min': None, 'gain_max': None}
+    week = max(float(ga_weeks), 0.0)
+    # Quý I thường tăng ~0.5–2kg, sau đó theo tốc độ/tuần (IOM).
+    base_min, base_max = 0.5, 2.0
+    if week <= 13:
+        span = week / 13.0 if week > 0 else 0
+        gain_min = round(base_min * span, 2)
+        gain_max = round(base_max * span, 2)
+    else:
+        gain_min = round(base_min + (week - 13) * guideline['weekly_gain_min'], 2)
+        gain_max = round(base_max + (week - 13) * guideline['weekly_gain_max'], 2)
+    return {'gain_min': gain_min, 'gain_max': gain_max}
+
+
+def _get_weight_profile(patient_id, pregnancy_episode_id=None):
+    query = PatientWeightProfile.query.filter_by(patient_id=patient_id)
+    if pregnancy_episode_id:
+        profile = query.filter_by(pregnancy_episode_id=pregnancy_episode_id).first()
+        if profile:
+            return profile
+    return query.filter(PatientWeightProfile.pregnancy_episode_id.is_(None)).first()
+
+
+@app.route('/api/patient-weight-tracking', methods=['GET'])
+def get_patient_weight_tracking():
+    try:
+        ensure_patient_weight_schema()
+        patient_id = request.args.get('patient_id', type=int)
+        pregnancy_episode_id = request.args.get('pregnancy_episode_id', type=int)
+        if not patient_id:
+            return jsonify({'message': 'Thiếu patient_id'}), 400
+        _get_or_404(Patient, patient_id)
+
+        profile = _get_weight_profile(patient_id, pregnancy_episode_id)
+        entries_query = PatientWeightEntry.query.filter_by(patient_id=patient_id)
+        if pregnancy_episode_id:
+            entries_query = entries_query.filter_by(pregnancy_episode_id=pregnancy_episode_id)
+        entries = entries_query.order_by(PatientWeightEntry.ga_weeks.asc(), PatientWeightEntry.measured_at.asc()).all()
+
+        suggested_ga = _latest_ga_weeks_for_patient(patient_id, pregnancy_episode_id)
+        bmi = profile.prepreg_bmi if profile else None
+        guideline = _weight_gain_guideline_for_bmi(bmi)
+
+        return jsonify({
+            'patient_id': patient_id,
+            'pregnancy_episode_id': pregnancy_episode_id,
+            'profile': profile.to_dict() if profile else None,
+            'entries': [e.to_dict() for e in entries],
+            'suggested_ga_weeks': suggested_ga,
+            'guideline': guideline,
+        })
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy theo dõi cân nặng: {str(e)}'}), 500
+
+
+@app.route('/api/patient-weight-tracking/profile', methods=['PUT'])
+def upsert_patient_weight_profile():
+    try:
+        ensure_patient_weight_schema()
+        data = request.json or {}
+        patient_id = data.get('patient_id')
+        if not patient_id:
+            return jsonify({'message': 'Thiếu patient_id'}), 400
+        _get_or_404(Patient, int(patient_id))
+        pregnancy_episode_id = data.get('pregnancy_episode_id')
+        if pregnancy_episode_id:
+            _get_or_404(PregnancyEpisode, int(pregnancy_episode_id))
+
+        profile = _get_weight_profile(int(patient_id), pregnancy_episode_id)
+        if not profile:
+            profile = PatientWeightProfile(
+                patient_id=int(patient_id),
+                pregnancy_episode_id=int(pregnancy_episode_id) if pregnancy_episode_id else None,
+            )
+            db.session.add(profile)
+
+        if 'prepreg_weight_kg' in data:
+            val = data.get('prepreg_weight_kg')
+            profile.prepreg_weight_kg = float(val) if val not in (None, '') else None
+        if 'height_cm' in data:
+            val = data.get('height_cm')
+            profile.height_cm = float(val) if val not in (None, '') else None
+        if 'prepreg_bmi' in data:
+            val = data.get('prepreg_bmi')
+            profile.prepreg_bmi = float(val) if val not in (None, '') else None
+        if profile.prepreg_bmi is None and profile.prepreg_weight_kg and profile.height_cm:
+            m = profile.height_cm / 100.0
+            if m > 0:
+                profile.prepreg_bmi = round(profile.prepreg_weight_kg / (m * m), 2)
+        profile.bmi_category = _bmi_category(profile.prepreg_bmi)
+        if 'notes' in data:
+            profile.notes = (data.get('notes') or '').strip() or None
+        profile.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Đã lưu hồ sơ BMI/tăng cân',
+            'profile': profile.to_dict(),
+            'guideline': _weight_gain_guideline_for_bmi(profile.prepreg_bmi),
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi lưu hồ sơ BMI/tăng cân: {str(e)}'}), 500
+
+
+@app.route('/api/patient-weight-tracking/entries', methods=['POST'])
+def create_patient_weight_entry():
+    try:
+        ensure_patient_weight_schema()
+        data = request.json or {}
+        patient_id = data.get('patient_id')
+        measured_at = _parse_iso_date(data.get('measured_at'))
+        weight_kg = data.get('weight_kg')
+        if not patient_id or not measured_at or weight_kg in (None, ''):
+            return jsonify({'message': 'Thiếu patient_id, ngày đo hoặc cân nặng'}), 400
+        _get_or_404(Patient, int(patient_id))
+        pregnancy_episode_id = data.get('pregnancy_episode_id')
+        if pregnancy_episode_id:
+            _get_or_404(PregnancyEpisode, int(pregnancy_episode_id))
+        ga_weeks = data.get('ga_weeks')
+        entry = PatientWeightEntry(
+            patient_id=int(patient_id),
+            pregnancy_episode_id=int(pregnancy_episode_id) if pregnancy_episode_id else None,
+            measured_at=measured_at,
+            ga_weeks=float(ga_weeks) if ga_weeks not in (None, '') else None,
+            weight_kg=float(weight_kg),
+            notes=(data.get('notes') or '').strip() or None,
+        )
+        db.session.add(entry)
+        db.session.commit()
+        return jsonify({'message': 'Đã thêm lần đo cân nặng', 'entry': entry.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi thêm lần đo cân nặng: {str(e)}'}), 500
+
+
+@app.route('/api/patient-weight-tracking/entries/<int:entry_id>', methods=['PUT'])
+def update_patient_weight_entry(entry_id):
+    try:
+        ensure_patient_weight_schema()
+        entry = _get_or_404(PatientWeightEntry, entry_id)
+        data = request.json or {}
+        if 'measured_at' in data:
+            parsed = _parse_iso_date(data.get('measured_at'))
+            if not parsed:
+                return jsonify({'message': 'Ngày đo không hợp lệ'}), 400
+            entry.measured_at = parsed
+        if 'ga_weeks' in data:
+            val = data.get('ga_weeks')
+            entry.ga_weeks = float(val) if val not in (None, '') else None
+        if 'weight_kg' in data:
+            val = data.get('weight_kg')
+            if val in (None, ''):
+                return jsonify({'message': 'Cân nặng không được để trống'}), 400
+            entry.weight_kg = float(val)
+        if 'notes' in data:
+            entry.notes = (data.get('notes') or '').strip() or None
+        entry.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'message': 'Đã cập nhật lần đo', 'entry': entry.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi cập nhật lần đo: {str(e)}'}), 500
+
+
+@app.route('/api/patient-weight-tracking/entries/<int:entry_id>', methods=['DELETE'])
+def delete_patient_weight_entry(entry_id):
+    try:
+        ensure_patient_weight_schema()
+        entry = _get_or_404(PatientWeightEntry, entry_id)
+        db.session.delete(entry)
+        db.session.commit()
+        return jsonify({'message': 'Đã xóa lần đo'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi xóa lần đo: {str(e)}'}), 500
+
+
+def ensure_patient_gbs_schema():
+    try:
+        db.create_all()
+    except Exception:
+        db.session.rollback()
+
+
+def _get_gbs_screening(patient_id, pregnancy_episode_id=None):
+    query = PatientGbsScreening.query.filter_by(patient_id=patient_id)
+    if pregnancy_episode_id:
+        row = query.filter_by(pregnancy_episode_id=pregnancy_episode_id).first()
+        if row:
+            return row
+    return query.filter(PatientGbsScreening.pregnancy_episode_id.is_(None)).first()
+
+
+def _parse_optional_date(value):
+    if value in (None, ''):
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace('Z', '+00:00')).date()
+    except Exception:
+        try:
+            return datetime.strptime(text[:10], '%Y-%m-%d').date()
+        except Exception:
+            return None
+
+
+@app.route('/api/patient-gbs-screening', methods=['GET'])
+def get_patient_gbs_screening():
+    try:
+        ensure_patient_gbs_schema()
+        patient_id = request.args.get('patient_id', type=int)
+        pregnancy_episode_id = request.args.get('pregnancy_episode_id', type=int)
+        if not patient_id:
+            return jsonify({'message': 'Thiếu patient_id'}), 400
+        _get_or_404(Patient, patient_id)
+        record = _get_gbs_screening(patient_id, pregnancy_episode_id)
+        suggested_ga = _latest_ga_weeks_for_patient(patient_id, pregnancy_episode_id)
+        return jsonify({
+            'patient_id': patient_id,
+            'pregnancy_episode_id': pregnancy_episode_id,
+            'record': record.to_dict() if record else None,
+            'suggested_ga_weeks': suggested_ga,
+        })
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy hồ sơ GBS: {str(e)}'}), 500
+
+
+@app.route('/api/patient-gbs-screening', methods=['PUT'])
+def upsert_patient_gbs_screening():
+    try:
+        ensure_patient_gbs_schema()
+        data = request.json or {}
+        patient_id = data.get('patient_id')
+        if not patient_id:
+            return jsonify({'message': 'Thiếu patient_id'}), 400
+        _get_or_404(Patient, int(patient_id))
+        pregnancy_episode_id = data.get('pregnancy_episode_id')
+        if pregnancy_episode_id:
+            _get_or_404(PregnancyEpisode, int(pregnancy_episode_id))
+
+        result = (data.get('result') or '').strip().lower() or None
+        if result not in (None, 'negative', 'positive', 'pending'):
+            return jsonify({'message': 'Kết quả GBS không hợp lệ (negative/positive/pending)'}), 400
+        if result == 'pending':
+            result = None
+
+        record = _get_gbs_screening(int(patient_id), pregnancy_episode_id)
+        if not record:
+            record = PatientGbsScreening(
+                patient_id=int(patient_id),
+                pregnancy_episode_id=int(pregnancy_episode_id) if pregnancy_episode_id else None,
+            )
+            db.session.add(record)
+
+        record.result = result
+        if 'tested_at' in data:
+            record.tested_at = _parse_optional_date(data.get('tested_at'))
+        if 'ga_weeks' in data:
+            ga = data.get('ga_weeks')
+            record.ga_weeks = float(ga) if ga not in (None, '') else None
+        if 'sample_site' in data:
+            record.sample_site = (data.get('sample_site') or '').strip() or None
+        if 'notes' in data:
+            record.notes = (data.get('notes') or '').strip() or None
+        record.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        suggested_ga = _latest_ga_weeks_for_patient(int(patient_id), pregnancy_episode_id)
+        return jsonify({
+            'message': 'Đã lưu kết quả GBS',
+            'record': record.to_dict(),
+            'suggested_ga_weeks': suggested_ga,
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi lưu hồ sơ GBS: {str(e)}'}), 500
+
+
+@app.route('/api/patient-gbs-screening', methods=['DELETE'])
+def clear_patient_gbs_screening():
+    try:
+        ensure_patient_gbs_schema()
+        patient_id = request.args.get('patient_id', type=int)
+        pregnancy_episode_id = request.args.get('pregnancy_episode_id', type=int)
+        if not patient_id:
+            return jsonify({'message': 'Thiếu patient_id'}), 400
+        record = _get_gbs_screening(patient_id, pregnancy_episode_id)
+        if record:
+            db.session.delete(record)
+            db.session.commit()
+        return jsonify({'message': 'Đã xóa kết quả GBS'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi xóa hồ sơ GBS: {str(e)}'}), 500
+
 
 @app.route('/api/patient-records', methods=['POST'])
 def create_patient_record():
@@ -11464,10 +17292,43 @@ def update_patient_record(record_id):
 def delete_patient_record(record_id):
     try:
         ensure_patient_record_columns()
+        data = request.get_json(silent=True) or {}
+        admin_username = (data.get('admin_username') or '').strip()
+        admin_password = data.get('admin_password') or ''
+        if not admin_username or not admin_password:
+            return jsonify({'message': 'Vui lòng nhập tài khoản và mật khẩu admin để xóa hồ sơ'}), 400
+
+        admin_user = User.query.filter_by(username=admin_username).first()
+        if not admin_user or not verify_password_hash(admin_user.password_hash, admin_password):
+            return jsonify({'message': 'Tài khoản hoặc mật khẩu admin không đúng'}), 403
+        if not has_permission(admin_user.id, 'manage_users'):
+            return jsonify({'message': 'Tài khoản không có quyền admin để xóa hồ sơ'}), 403
+
         record = _get_or_404(PatientRecord, record_id)
+        linked_appointment_id = record.appointment_id
+
+        # Chỉ xóa hồ sơ bệnh án và snapshot liên quan — KHÔNG xóa lịch khám (appointment)
+        # để bệnh nhân vẫn còn trong danh sách khám ở examination-list.html.
+        try:
+            ensure_patient_record_template_snapshot_table()
+            PatientRecordTemplateSnapshot.query.filter_by(
+                patient_record_id=record_id
+            ).delete(synchronize_session=False)
+        except Exception:
+            pass
+
         db.session.delete(record)
         db.session.commit()
-        return jsonify({'message': 'Đã xóa hồ sơ thành công'})
+
+        appointment_preserved = False
+        if linked_appointment_id:
+            appointment_preserved = db.session.get(Appointment, linked_appointment_id) is not None
+
+        return jsonify({
+            'message': 'Đã xóa hồ sơ bệnh án. Lịch khám vẫn được giữ trong danh sách khám.',
+            'appointment_id': linked_appointment_id,
+            'appointment_preserved': appointment_preserved,
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': f'Lỗi khi xóa hồ sơ: {str(e)}'}), 500
@@ -11740,11 +17601,25 @@ def ensure_lab_result_template_columns():
 def get_lab_result_templates():
     ensure_lab_result_template_columns()
     try:
-        # Ensure every clinical service has a matching lab result template
-        sync_all_clinical_service_templates()
-        db.session.commit()
+        summary_only = request.args.get('summary', '').lower() in ('1', 'true', 'yes')
+        if summary_only:
+            result = db.session.execute(db.text("""
+                SELECT id, name, description, category, created_at, updated_at
+                FROM lab_result_template
+                ORDER BY created_at DESC
+            """)).fetchall()
+            templates = []
+            for row in result:
+                templates.append({
+                    'id': row[0],
+                    'name': row[1],
+                    'description': row[2],
+                    'category': row[3] or 'other-test',
+                    'created_at': row[4],
+                    'updated_at': row[5]
+                })
+            return jsonify(templates)
 
-        # Sử dụng raw SQL để tránh vấn đề datetime parsing
         result = db.session.execute(db.text("""
             SELECT id, name, description, content_html, category, created_at, updated_at 
             FROM lab_result_template 
@@ -11779,9 +17654,11 @@ def create_lab_result_template():
             name=data['name'],
             description=data.get('description', ''),
             content_html=data['content_html'],
-            category=data.get('category', 'other-test')
+            category=resolve_template_category_for_service(data['name'], data.get('category'))
         )
         db.session.add(template)
+        db.session.flush()
+        sync_paired_clinical_template_category(template.name, template.category, commit=False)
         db.session.commit()
         
         return jsonify({
@@ -11830,6 +17707,23 @@ def get_lab_result_template_by_name():
     except Exception as e:
         return jsonify({'message': f'Lỗi khi tìm mẫu phiếu: {str(e)}'}), 500
 
+@app.route('/api/lab-result-templates/<int:template_id>', methods=['GET'])
+def get_lab_result_template(template_id):
+    ensure_lab_result_template_columns()
+    try:
+        template = _get_or_404(LabResultTemplate, template_id)
+        return jsonify({
+            'id': template.id,
+            'name': template.name,
+            'description': template.description,
+            'content_html': template.content_html,
+            'category': template.category or 'other-test',
+            'created_at': template.created_at.strftime('%Y-%m-%d %H:%M:%S') if template.created_at else None,
+            'updated_at': template.updated_at.strftime('%Y-%m-%d %H:%M:%S') if template.updated_at else None
+        })
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy mẫu kết quả: {str(e)}'}), 500
+
 @app.route('/api/lab-result-templates/<int:template_id>', methods=['PUT'])
 def update_lab_result_template(template_id):
     ensure_lab_result_template_columns()
@@ -11844,9 +17738,10 @@ def update_lab_result_template(template_id):
         if data.get('content_html'):
             template.content_html = data['content_html']
         if 'category' in data:
-            template.category = data['category']
+            template.category = resolve_template_category_for_service(template.name, data.get('category'))
         
         template.updated_at = datetime.utcnow()
+        sync_paired_clinical_template_category(template.name, template.category, commit=False)
         db.session.commit()
         
         return jsonify({
@@ -11961,7 +17856,29 @@ def create_clinical_result():
         # Prepare fields_data
         fields_data = None
         if data.get('fields'):
-            fields_data = json.dumps(data['fields'])
+            fields_data = json.dumps(data['fields'], ensure_ascii=False)
+
+        service_key = (data.get('service_name') or '').strip().lower()
+        existing = None
+        if service_key:
+            for row in ClinicalResult.query.filter_by(appointment_id=data['appointment_id']).all():
+                if (row.service_name or '').strip().lower() == service_key:
+                    existing = row
+                    break
+        if existing:
+            existing.patient_id = data['patient_id']
+            existing.template_id = data.get('template_id') or existing.template_id
+            existing.exam_date = exam_date
+            existing.result_text = data.get('result_text')
+            existing.notes = data.get('notes')
+            if fields_data is not None:
+                existing.fields_data = fields_data
+            db.session.commit()
+            return jsonify({
+                'message': 'Đã cập nhật kết quả thành công',
+                'id': existing.id,
+                'result': existing.to_dict()
+            }), 200
         
         clinical_result = ClinicalResult(
             appointment_id=data['appointment_id'],
@@ -12003,7 +17920,7 @@ def get_clinical_results():
         if service_name:
             query = query.filter_by(service_name=service_name)
         
-        results = query.order_by(ClinicalResult.exam_date.desc()).all()
+        results = query.order_by(ClinicalResult.updated_at.desc(), ClinicalResult.exam_date.desc()).all()
         
         return jsonify([r.to_dict() for r in results])
     except Exception as e:
@@ -12153,10 +18070,864 @@ def update_clinical_result(result_id):
         db.session.rollback()
         return jsonify({'message': f'Lỗi khi cập nhật kết quả: {str(e)}'}), 500
 
+# ============ Treatment Guidelines (Sản / Phụ khoa) ============
+
+def _default_treatment_guidelines():
+    """Phác đồ mặc định — ưu tiên gói chuyên gia."""
+    try:
+        from treatment_guidelines_expert import expert_treatment_guidelines as _expert_fn
+        return _expert_fn()
+    except Exception as _e:
+        print('[treatment-guidelines] expert pack unavailable:', _e)
+        return _legacy_default_treatment_guidelines()
+
+
+def _legacy_default_treatment_guidelines():
+    """Fallback phác đồ ngắn (legacy) — có thể chỉnh sửa trên giao diện."""
+    return [
+        {
+            'specialty': 'obstetrics',
+            'disease_key': 'gbs-positive',
+            'title': 'GBS dương tính — Dự phòng kháng sinh khi chuyển dạ',
+            'summary': 'Phác đồ điều trị / dự phòng khi xét nghiệm liên cầu nhóm B (GBS) dương tính',
+            'sort_order': 1,
+            'content_html': """
+<h3>Chỉ định dự phòng kháng sinh trong chuyển dạ (IAP)</h3>
+<ul>
+  <li>Cấy GBS âm đạo–trực tràng <strong>dương tính</strong> (thường sàng lọc 34–37+6 tuần)</li>
+  <li>GBS niệu bất kỳ lượng trong lần mang thai này</li>
+  <li>Con trước mắc bệnh GBS xâm lấn</li>
+  <li>Chưa rõ GBS + chuyển dạ &lt;37 tuần / ối vỡ ≥18 giờ / sốt ≥38°C</li>
+</ul>
+<h3>Kháng sinh ưu tiên (không dị ứng penicillin)</h3>
+<ul>
+  <li><strong>Penicillin G</strong>: 5 triệu UI IV liều đầu → 2,5–3 triệu UI IV mỗi 4 giờ đến khi sinh</li>
+  <li>Thay thế: <strong>Ampicillin</strong> 2 g IV → 1 g IV mỗi 4 giờ</li>
+</ul>
+<h3>Dị ứng penicillin</h3>
+<ul>
+  <li>Nguy cơ thấp (không phản vệ): <strong>Cefazolin</strong> 2 g IV → 1 g mỗi 8 giờ</li>
+  <li>Nguy cơ cao (phản vệ): <strong>Clindamycin</strong> 900 mg IV mỗi 8 giờ nếu GBS nhạy; nếu kháng/không rõ → <strong>Vancomycin</strong> theo cân nặng</li>
+</ul>
+<h3>Thời điểm & lưu ý</h3>
+<ul>
+  <li>Bắt đầu khi vào chuyển dạ hoặc vỡ ối; tối ưu ≥4 giờ trước sinh</li>
+  <li><strong>Không cần IAP</strong> nếu mổ lấy thai chủ động, màng ối còn nguyên và chưa chuyển dạ</li>
+  <li>Theo dõi sốt, nhịp tim thai; thông báo Khoa Nhi nếu sinh sớm / IAP chưa đủ liều</li>
+</ul>
+<p><em>Tham chiếu: ACOG / hướng dẫn sản khoa Bộ Y tế — bác sĩ điều chỉnh theo lâm sàng.</em></p>
+""".strip(),
+        },
+        {
+            'specialty': 'obstetrics',
+            'disease_key': 'threatened-preterm-labor',
+            'title': 'Dọa đẻ non',
+            'summary': 'Theo dõi, ức chế chuyển dạ, corticosteroid, MgSO4 (nếu chỉ định)',
+            'sort_order': 2,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Tuổi thai, cơn co, tình trạng cổ tử cung, ối, nhiễm trùng, rau tiền đạo/rau bong</li>
+  <li>CTG, siêu âm cổ tử cung, xét nghiệm nhiễm trùng / GBS nếu phù hợp</li>
+</ul>
+<h3>Nguyên tắc xử trí</h3>
+<ul>
+  <li>Nằm nghỉ tương đối, bù dịch, giảm kích thích tử cung</li>
+  <li>Cân nhắc tocolysis ngắn hạn để hoàn tất corticosteroid (nếu ≥24–&lt;34 tuần)</li>
+  <li>Corticosteroid trưởng thành phổi thai theo tuổi thai</li>
+  <li>MgSO4 bảo vệ thần kinh thai nếu &lt;32 tuần và nguy cơ sinh trong 24 giờ</li>
+  <li>Kháng sinh nếu nghi nhiễm hoặc ối vỡ non</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'obstetrics',
+            'disease_key': 'preeclampsia',
+            'title': 'Tăng huyết áp thai kỳ / Tiền sản giật',
+            'summary': 'Theo dõi HA, protein niệu, dự phòng co giật, chỉ định chấm dứt thai kỳ',
+            'sort_order': 3,
+            'content_html': """
+<h3>Phân loại & theo dõi</h3>
+<ul>
+  <li>HA ≥140/90 sau 20 tuần; đánh giá protein niệu, công thức máu, chức năng gan-thận, LDH</li>
+  <li>Dấu hiệu nặng: HA rất cao, đau đầu, rối loạn thị giác, đau thượng vị, tiểu ít, phù phổi…</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Hạ áp khi HA ≥160/110 (labetalol / nifedipine / hydralazine theo phác đồ)</li>
+  <li>MgSO4 dự phòng/điều trị co giật khi TSG nặng hoặc sản giật</li>
+  <li>Corticosteroid nếu thai non tháng và dự kiến sinh sớm</li>
+  <li>Chỉ định chấm dứt thai kỳ theo tuổi thai và mức độ nặng</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'obstetrics',
+            'disease_key': 'gdm',
+            'title': 'Đái tháo đường thai kỳ (GDM)',
+            'summary': 'Chế độ ăn, theo dõi đường huyết, insulin khi cần',
+            'sort_order': 4,
+            'content_html': """
+<h3>Chẩn đoán</h3>
+<ul>
+  <li>Sàng lọc/chẩn đoán theo ngưỡng OGTT của cơ sở (thường 24–28 tuần)</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Tư vấn dinh dưỡng, hoạt động thể lực phù hợp</li>
+  <li>Theo dõi đường huyết mao mạch (đói / sau ăn)</li>
+  <li>Insulin khi không đạt mục tiêu với chế độ ăn</li>
+  <li>Theo dõi tăng trưởng thai, nước ối; lập kế hoạch sinh</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'obstetrics',
+            'disease_key': 'prom',
+            'title': 'Ối vỡ non (PROM / PPROM)',
+            'summary': 'Khẳng định vỡ ối, kháng sinh, corticosteroid, theo dõi nhiễm trùng',
+            'sort_order': 5,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Khẳng định dịch ối, loại trừ cấp cứu (sa dây rốn, nhiễm trùng, chuyển dạ)</li>
+  <li>Tuổi thai, CTG, siêu âm, công thức máu, CRP theo chỉ định</li>
+</ul>
+<h3>Xử trí</h3>
+<ul>
+  <li>PPROM (&lt;37 tuần): nằm viện theo dõi, kháng sinh kéo dài thời gian tiềm phục, corticosteroid nếu chỉ định</li>
+  <li>PROM đủ tháng: cân nhắc kích thích chuyển dạ / theo dõi sát</li>
+  <li>Chấm dứt thai kỳ sớm nếu nghi chorioamnionitis</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'obstetrics',
+            'disease_key': 'anemia-pregnancy',
+            'title': 'Thiếu máu thai kỳ',
+            'summary': 'Bổ sung sắt/folate, tìm nguyên nhân, theo dõi Hb',
+            'sort_order': 6,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Hb, ferritin, hồng cầu lưới; loại trừ thiếu máu hồng cầu lớn / thalassemia nếu nghi</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Sắt uống (hoặc truyền sắt theo chỉ định) + acid folic</li>
+  <li>Tư vấn chế độ ăn; tái khám kiểm tra đáp ứng</li>
+  <li>Truyền máu khi Hb rất thấp / triệu chứng nặng / sắp sinh</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'obstetrics',
+            'disease_key': 'hyperemesis',
+            'title': 'Nghén nặng (Hyperemesis gravidarum)',
+            'summary': 'Bù dịch, chống nôn, dinh dưỡng, theo dõi điện giải',
+            'sort_order': 7,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Mức độ mất nước, cân nặng, ketone niệu, điện giải, chức năng gan-thận</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Bù dịch đường tĩnh mạch, bổ sung điện giải / vitamin B1 nếu cần</li>
+  <li>Thuốc chống nôn theo bậc thang (VD: doxylamine/B6, metoclopramide, ondansetron — cân nhắc lợi ích/nguy cơ)</li>
+  <li>Dinh dưỡng từng bước; nhập viện khi mất nước nặng</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'gynecology',
+            'disease_key': 'vaginitis',
+            'title': 'Viêm âm đạo / viêm cổ tử cung',
+            'summary': 'Chẩn đoán nguyên nhân, điều trị đặc hiệu, tư vấn vệ sinh',
+            'sort_order': 1,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Khám mỏ vịt, pH, soi tươi / nuôi cấy / PCR nếu chỉ định</li>
+  <li>Phân biệt: nấm Candida, viêm khuẩn âm đạo (BV), Trichomonas, viêm CTC do STI</li>
+</ul>
+<h3>Điều trị định hướng</h3>
+<ul>
+  <li>Candida: thuốc kháng nấm tại chỗ hoặc uống theo phác đồ</li>
+  <li>BV: metronidazole / clindamycin theo hướng dẫn</li>
+  <li>Trichomonas: metronidazole; điều trị bạn tình</li>
+  <li>Viêm CTC (Chlamydia/Gonorrhea): kháng sinh theo kháng sinh đồ / hướng dẫn CDC-BYT</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'gynecology',
+            'disease_key': 'abnormal-uterine-bleeding',
+            'title': 'Rối loạn kinh nguyệt / xuất huyết tử cung bất thường',
+            'summary': 'Phân loại PALM-COEIN, cầm máu, điều chỉnh nội tiết',
+            'sort_order': 2,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Mức độ mất máu, Hb, siêu âm tử cung phần phụ, β-hCG loại trừ thai</li>
+  <li>Cân nhắc nội soi buồng tử cung / sinh thiết nội mạc theo tuổi và yếu tố nguy cơ</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Cầm máu cấp: thuốc co hồi tử cung / nội tiết / truyền máu nếu cần</li>
+  <li>Điều trị duy trì: thuốc tránh thai phối hợp, progesterone, LNG-IUD…</li>
+  <li>Xử trí nguyên nhân cấu trúc (polyp, u xơ…) khi có chỉ định</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'gynecology',
+            'disease_key': 'uterine-fibroid',
+            'title': 'U xơ tử cung',
+            'summary': 'Theo dõi, nội khoa triệu chứng, can thiệp khi chỉ định',
+            'sort_order': 3,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Siêu âm: vị trí, kích thước, số lượng; triệu chứng rong kinh, đau, chèn ép</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Không triệu chứng: theo dõi định kỳ</li>
+  <li>Triệu chứng nhẹ–trung bình: cầm máu, sắt, thuốc giảm đau, GnRH analog ngắn hạn nếu cần</li>
+  <li>Can thiệp: myomectomy / tắc mạch / cắt tử cung tùy tuổi, nhu cầu sinh đẻ</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'gynecology',
+            'disease_key': 'ovarian-cyst',
+            'title': 'U nang buồng trứng',
+            'summary': 'Phân biệt chức năng / thực thể, theo dõi hoặc phẫu thuật',
+            'sort_order': 4,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Siêu âm đặc điểm nang; CA-125 / markers khi nghi ác tính (theo tuổi)</li>
+  <li>Loại trừ thai ngoài tử cung, xoắn phần phụ cấp cứu</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Nang chức năng nhỏ: theo dõi chu kỳ, siêu âm kiểm tra</li>
+  <li>Nang lớn / kéo dài / nghi phức tạp: cân nhắc phẫu thuật</li>
+  <li>Xoắn / vỡ / chảy máu: cấp cứu ngoại khoa</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'gynecology',
+            'disease_key': 'pcos',
+            'title': 'Hội chứng buồng trứng đa nang (PCOS)',
+            'summary': 'Thay đổi lối sống, điều hòa kinh, hỗ trợ sinh sản',
+            'sort_order': 5,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Tiêu chuẩn Rotterdam; loại trừ rối loạn nội tiết khác</li>
+  <li>Sàng lọc chuyển hóa (đường huyết, lipid), BMI</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Giảm cân, chế độ ăn, vận động</li>
+  <li>Điều hòa kinh: thuốc tránh thai phối hợp / progesterone</li>
+  <li>Kháng androgen khi rậm lông; metformin khi kháng insulin / rối loạn đường huyết</li>
+  <li>Vô sinh: kích thích rụng trứng theo phác đồ chuyên khoa</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'gynecology',
+            'disease_key': 'endometriosis',
+            'title': 'Lạc nội mạc tử cung',
+            'summary': 'Giảm đau, ức chế nội tiết, phẫu thuật khi cần',
+            'sort_order': 6,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Đau bụng kinh, đau khi giao hợp, vô sinh; siêu âm / MRI khi nghi thâm nhiễm sâu</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Giảm đau NSAID</li>
+  <li>Ức chế nội tiết: thuốc tránh thai liên tục, progestin, GnRH analog…</li>
+  <li>Phẫu thuật bảo tồn khi thất bại nội khoa / khối lạc nội mạc / vô sinh</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'gynecology',
+            'disease_key': 'pid',
+            'title': 'Viêm vùng chậu (PID)',
+            'summary': 'Kháng sinh sớm, đủ liệu trình; nhập viện khi nặng',
+            'sort_order': 7,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Đau hạ vị, sốt, khí hư, ấn đau CTC/phần phụ; loại trừ thai ngoài tử cung</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Kháng sinh phổ rộng theo hướng dẫn (phủ Chlamydia, Gonorrhea, kỵ khí)</li>
+  <li>Điều trị bạn tình; tư vấn STI</li>
+  <li>Nhập viện: sốt cao, nôn, áp xe, thai nghén, thất bại ngoại trú</li>
+</ul>
+""".strip(),
+        },
+        # --- Nam khoa ---
+        {
+            'specialty': 'andrology',
+            'disease_key': 'prostatitis',
+            'title': 'Viêm tuyến tiền liệt',
+            'summary': 'Phân loại cấp/mạn, kháng sinh, giảm triệu chứng',
+            'sort_order': 1,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Đau vùng chậu / tầng sinh môn, tiểu khó, sốt (cấp); PSA / siêu âm khi chỉ định</li>
+  <li>Phân biệt: viêm cấp nhiễm khuẩn, hội chứng đau chậu mạn tính, viêm không triệu chứng</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Cấp nhiễm khuẩn: kháng sinh đủ liệu trình (fluoroquinolone / TMP-SMX theo hướng dẫn &amp; kháng sinh đồ)</li>
+  <li>Giảm đau, alpha-blocker nếu tắc nghẽn chức năng; uống nhiều nước</li>
+  <li>Mạn tính: điều trị kéo dài hơn, vật lý trị liệu sàn chậu khi đau mạn</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'andrology',
+            'disease_key': 'varicocele',
+            'title': 'Giãn tĩnh mạch tinh hoàn',
+            'summary': 'Theo dõi, chỉ định phẫu thuật khi đau / vô sinh / teo tinh hoàn',
+            'sort_order': 2,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Khám đứng, siêu âm Doppler; phân độ lâm sàng</li>
+  <li>Đánh giá tinh dịch đồ nếu mong con</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Không triệu chứng, tinh dịch bình thường: theo dõi</li>
+  <li>Đau dai dẳng / vô sinh / tinh dịch bất thường / teo tinh hoàn: cân nhắc thắt / nút tĩnh mạch tinh</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'andrology',
+            'disease_key': 'bph',
+            'title': 'Phì đại lành tính tuyến tiền liệt (BPH)',
+            'summary': 'Đánh giá IPSS, alpha-blocker, 5-ARI, can thiệp khi chỉ định',
+            'sort_order': 3,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Triệu chứng đường tiểu dưới (LUTS), IPSS, PSA theo tuổi, siêu âm tồn lưu / thể tích tuyến</li>
+  <li>Loại trừ ung thư tuyến tiền liệt, nhiễm trùng, hẹp niệu đạo</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Nhẹ: theo dõi, thay đổi lối sống</li>
+  <li>Alpha-blocker ± 5-alpha reductase inhibitor khi tuyến lớn / PSA cao</li>
+  <li>Can thiệp (TURP / kỹ thuật tối thiểu) khi bí tiểu, nhiễm trùng tái phát, sỏi bàng quang, suy thận</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'andrology',
+            'disease_key': 'urethritis-sti',
+            'title': 'Viêm niệu đạo / STI nam',
+            'summary': 'Xét nghiệm nguyên nhân, kháng sinh đặc hiệu, điều trị bạn tình',
+            'sort_order': 4,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Tiểu buốt, dịch niệu đạo; PCR/nuôi cấy Chlamydia, Gonorrhea, Mycoplasma…</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Điều trị theo nguyên nhân (VD: ceftriaxone + doxycycline / azithromycin theo hướng dẫn hiện hành)</li>
+  <li>Điều trị bạn tình đồng thời; kiêng quan hệ đến hết liệu trình</li>
+  <li>Sàng lọc HIV, giang mai khi phù hợp</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'andrology',
+            'disease_key': 'erectile-dysfunction',
+            'title': 'Rối loạn cương dương',
+            'summary': 'Đánh giá nguyên nhân, PDE5i, lối sống, chuyên khoa khi cần',
+            'sort_order': 5,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Bệnh nền (đái tháo đường, mạch vành, nội tiết), thuốc đang dùng, yếu tố tâm lý</li>
+  <li>Khám sinh dục, testosterone buổi sáng khi chỉ định</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Thay đổi lối sống: giảm cân, bỏ thuốc lá, kiểm soát đường huyết / HA</li>
+  <li>Ức chế PDE-5 (sildenafil, tadalafil…) nếu không chống chỉ định</li>
+  <li>Điều trị testosterone khi thiếu thật sự; tư vấn tâm lý / chuyên khoa sâu khi thất bại</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'andrology',
+            'disease_key': 'premature-ejaculation',
+            'title': 'Xuất tinh sớm',
+            'summary': 'Tư vấn hành vi, thuốc bôi / SSRI theo chỉ định',
+            'sort_order': 6,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Thời gian tiềm phục trong âm đạo, mức độ kiểm soát, ảnh hưởng tâm lý cặp đôi</li>
+</ul>
+<h3>Điều trị</h3>
+<ul>
+  <li>Kỹ thuật hành vi (stop-start, squeeze), tư vấn cặp đôi</li>
+  <li>Thuốc bôi gây tê tại chỗ; SSRI / dapoxetine theo chỉ định chuyên khoa</li>
+</ul>
+""".strip(),
+        },
+        # --- Vô sinh nam ---
+        {
+            'specialty': 'male-infertility',
+            'disease_key': 'semen-analysis',
+            'title': 'Đánh giá tinh dịch đồ & tiếp cận ban đầu',
+            'summary': 'Làm tinh dịch đồ đúng quy trình, lặp lại, định hướng nguyên nhân',
+            'sort_order': 1,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>Tinh dịch đồ sau kiêng 2–7 ngày; lặp lại nếu bất thường</li>
+  <li>Khám sinh dục, siêu âm tinh hoàn / tĩnh mạch tinh; nội tiết (FSH, LH, Testosterone, Prolactin) khi chỉ định</li>
+  <li>Khai thác sốt, thuốc, độc chất, phẫu thuật, STI, giãn tĩnh mạch tinh</li>
+</ul>
+<h3>Định hướng</h3>
+<ul>
+  <li>Oligo / astheno / teratozoospermia: tìm và điều trị nguyên nhân có thể đảo ngược</li>
+  <li>Azoospermia: phân biệt tắc / không tắc; chuyển chuyên khoa hỗ trợ sinh sản</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'male-infertility',
+            'disease_key': 'oligoasthenozoospermia',
+            'title': 'Thiểu tinh / yếu tinh / dị dạng tinh trùng',
+            'summary': 'Điều trị nguyên nhân, hỗ trợ dinh dưỡng, IUI/IVF khi cần',
+            'sort_order': 2,
+            'content_html': """
+<h3>Điều trị</h3>
+<ul>
+  <li>Bỏ thuốc lá, rượu, tránh nhiệt độ cao vùng bìu; điều trị nhiễm trùng / giãn TM tinh nếu có</li>
+  <li>Bổ sung chống oxy hóa theo chỉ định; điều trị nội tiết khi thiếu hormone</li>
+  <li>IUI khi thông ống, tinh trùng đủ ngưỡng; IVF/ICSI khi nặng hoặc thất bại</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'male-infertility',
+            'disease_key': 'azoospermia',
+            'title': 'Vô tinh (Azoospermia)',
+            'summary': 'Phân biệt tắc / không tắc, sinh thiết tinh hoàn, ICSI',
+            'sort_order': 3,
+            'content_html': """
+<h3>Đánh giá</h3>
+<ul>
+  <li>FSH, thể tích tinh hoàn, siêu âm; karyotype / Y microdeletion khi nghi không tắc</li>
+  <li>Tiền sử cắt ống dẫn tinh, nhiễm trùng, chấn thương</li>
+</ul>
+<h3>Xử trí</h3>
+<ul>
+  <li>Tắc: cân nhắc nối thông / lấy tinh trùng phẫu thuật + ICSI</li>
+  <li>Không tắc: TESE/micro-TESE ± ICSI; tư vấn di truyền</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'male-infertility',
+            'disease_key': 'varicocele-infertility',
+            'title': 'Giãn tĩnh mạch tinh và vô sinh',
+            'summary': 'Chỉ định sửa chữa khi tinh dịch bất thường và mong con',
+            'sort_order': 4,
+            'content_html': """
+<h3>Chỉ định can thiệp</h3>
+<ul>
+  <li>Giãn TM tinh lâm sàng + tinh dịch bất thường + cặp đôi mong con</li>
+  <li>Theo dõi tinh dịch sau mổ 3–6 tháng; kết hợp hỗ trợ sinh sản nếu cần</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'male-infertility',
+            'disease_key': 'hypogonadism-infertility',
+            'title': 'Suy sinh dục / rối loạn nội tiết nam',
+            'summary': 'Đánh giá trục dưới đồi–tuyến yên–tinh hoàn; tránh testosterone ngoại sinh khi mong con',
+            'sort_order': 5,
+            'content_html': """
+<h3>Lưu ý quan trọng</h3>
+<ul>
+  <li><strong>Không dùng testosterone thay thế</strong> khi đang mong có con (ức chế sinh tinh)</li>
+  <li>Cân nhắc hCG / SERM / GnRH theo chuyên khoa nội tiết sinh sản</li>
+  <li>Điều trị tăng prolactin, suy giáp nếu có</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'male-infertility',
+            'disease_key': 'male-infertility-art',
+            'title': 'Chỉ định IUI / IVF-ICSI (vô sinh nam)',
+            'summary': 'Ngưỡng chuyển hỗ trợ sinh sản theo mức độ bất thường tinh trùng',
+            'sort_order': 6,
+            'content_html': """
+<h3>Định hướng</h3>
+<ul>
+  <li>Bất thường nhẹ–trung bình, ống dẫn trứng thông: thử IUI vài chu kỳ</li>
+  <li>Bất thường nặng / azoospermia lấy được tinh trùng / thất bại IUI: IVF ± ICSI</li>
+  <li>Tư vấn tỷ lệ thành công, chi phí, rủi ro theo tuổi người vợ</li>
+</ul>
+""".strip(),
+        },
+        # --- Vô sinh nữ ---
+        {
+            'specialty': 'female-infertility',
+            'disease_key': 'female-infertility-workup',
+            'title': 'Tiếp cận đánh giá vô sinh nữ',
+            'summary': 'Khảo sát rụng trứng, dự trữ buồng trứng, vòi trứng, tử cung',
+            'sort_order': 1,
+            'content_html': """
+<h3>Đánh giá cơ bản</h3>
+<ul>
+  <li>Hỏi bệnh: chu kỳ kinh, đau, phẫu thuật, STI, thời gian mong con</li>
+  <li>AMH / FSH ngày 2–3, siêu âm AFC; progesterone ngày 21 hoặc theo dõi rụng trứng</li>
+  <li>HSG / HyCoSy đánh giá vòi trứng; siêu âm tử cung (polyp, u xơ, dị dạng)</li>
+  <li>Đánh giá song song yếu tố nam (tinh dịch đồ)</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'female-infertility',
+            'disease_key': 'ovulatory-disorder',
+            'title': 'Rối loạn rụng trứng (PCOS / suy buồng trứng…)',
+            'summary': 'Kích thích rụng trứng, điều trị nguyên nhân nội tiết',
+            'sort_order': 2,
+            'content_html': """
+<h3>Điều trị</h3>
+<ul>
+  <li>PCOS: giảm cân nếu thừa cân; letrozole / clomiphene kích thích rụng trứng; theo dõi nang</li>
+  <li>Suy giáp / tăng prolactin: điều trị nguyên nhân trước</li>
+  <li>Suy buồng trứng sớm: tư vấn hiến noãn / hỗ trợ sinh sản chuyên sâu</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'female-infertility',
+            'disease_key': 'tubal-factor',
+            'title': 'Yếu tố vòi trứng',
+            'summary': 'HSG, điều trị nhiễm trùng, IVF khi tắc / tổn thương nặng',
+            'sort_order': 3,
+            'content_html': """
+<h3>Xử trí</h3>
+<ul>
+  <li>Tắc một bên: có thể thử kích thích + IUI / quan hệ theo dõi</li>
+  <li>Tắc hai bên / ứ dịch vòi nặng: ưu tiên IVF; cân nhắc cắt ứ dịch trước chuyển phôi</li>
+  <li>Tiền sử PID: điều trị nhiễm trùng dứt điểm trước hỗ trợ sinh sản</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'female-infertility',
+            'disease_key': 'endometriosis-infertility',
+            'title': 'Lạc nội mạc tử cung và vô sinh',
+            'summary': 'Phẫu thuật chọn lọc, kích thích rụng trứng, IVF',
+            'sort_order': 4,
+            'content_html': """
+<h3>Định hướng</h3>
+<ul>
+  <li>Nặng / nang lạc nội mạc lớn: cân nhắc phẫu thuật bảo tồn trước hỗ trợ sinh sản</li>
+  <li>Nhẹ–trung bình: kích thích rụng trứng ± IUI vài chu kỳ; thất bại → IVF</li>
+  <li>Tránh phẫu thuật lặp lại làm giảm dự trữ buồng trứng</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'female-infertility',
+            'disease_key': 'unexplained-infertility',
+            'title': 'Vô sinh chưa rõ nguyên nhân',
+            'summary': 'Siêu kích thích nhẹ + IUI, sau đó IVF theo tuổi và thời gian',
+            'sort_order': 5,
+            'content_html': """
+<h3>Xử trí bậc thang</h3>
+<ul>
+  <li>Thời gian mong con ngắn, tuổi trẻ: theo dõi có hướng dẫn / IUI vài chu kỳ</li>
+  <li>Tuổi ≥35 hoặc thất bại IUI: chuyển IVF sớm hơn</li>
+  <li>Tối ưu BMI, bỏ thuốc lá, bổ sung acid folic</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'female-infertility',
+            'disease_key': 'diminished-ovarian-reserve',
+            'title': 'Giảm dự trữ buồng trứng',
+            'summary': 'Tư vấn tiên lượng, kích thích phù hợp, IVF sớm',
+            'sort_order': 6,
+            'content_html': """
+<h3>Nguyên tắc</h3>
+<ul>
+  <li>AMH thấp / AFC thấp / FSH tăng: tư vấn tiên lượng trung thực</li>
+  <li>Ưu tiên IVF sớm với phác đồ kích thích cá thể hóa</li>
+  <li>Thất bại lặp / dự trữ rất thấp: thảo luận noãn hiến</li>
+</ul>
+""".strip(),
+        },
+        {
+            'specialty': 'female-infertility',
+            'disease_key': 'iui-ivf-female',
+            'title': 'IUI và IVF — chỉ định chung (vô sinh nữ)',
+            'summary': 'Lựa chọn phương pháp theo nguyên nhân, tuổi và thời gian vô sinh',
+            'sort_order': 7,
+            'content_html': """
+<h3>IUI</h3>
+<ul>
+  <li>Vòi trứng thông, tinh trùng đủ, rối loạn rụng trứng đã điều trị / vô sinh nhẹ</li>
+</ul>
+<h3>IVF</h3>
+<ul>
+  <li>Tắc vòi, lạc nội mạc nặng, giảm dự trữ, tuổi cao, thất bại IUI, yếu tố nam nặng</li>
+  <li>Theo dõi OHSS, đa thai; tư vấn số phôi chuyển</li>
+</ul>
+""".strip(),
+        },
+    ]
+
+
+def ensure_treatment_guideline_schema():
+    try:
+        db.create_all()
+    except Exception:
+        pass
+
+
+def seed_treatment_guidelines_if_empty():
+    ensure_treatment_guideline_schema()
+    if TreatmentGuideline.query.count() > 0:
+        return 0
+    added = 0
+    for item in _default_treatment_guidelines():
+        db.session.add(TreatmentGuideline(
+            specialty=item['specialty'],
+            disease_key=item['disease_key'],
+            title=item['title'],
+            summary=item.get('summary') or '',
+            content_html=item['content_html'],
+            sort_order=item.get('sort_order') or 0,
+            is_active=True,
+        ))
+        added += 1
+    db.session.commit()
+    return added
+
+
+@app.route('/api/treatment-guidelines', methods=['GET'])
+def list_treatment_guidelines():
+    try:
+        ensure_treatment_guideline_schema()
+        seed_treatment_guidelines_if_empty()
+        specialty = _normalize_treatment_specialty(request.args.get('specialty'))
+        q = TreatmentGuideline.query.filter_by(is_active=True)
+        if specialty:
+            q = q.filter_by(specialty=specialty)
+        rows = q.order_by(TreatmentGuideline.sort_order.asc(), TreatmentGuideline.title.asc()).all()
+        try:
+            from treatment_guidelines_expert import EXPERT_CONTENT_VERSION as _ev
+        except Exception:
+            _ev = 1
+        return jsonify({
+            'success': True,
+            'items': [r.to_dict() for r in rows],
+            'specialties': [
+                {'id': sid, 'name': TREATMENT_SPECIALTY_LABELS[sid]}
+                for sid in TREATMENT_SPECIALTY_IDS
+            ],
+            'expert_version': _ev,
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/treatment-guidelines/<int:guideline_id>', methods=['GET'])
+def get_treatment_guideline(guideline_id):
+    try:
+        ensure_treatment_guideline_schema()
+        row = _get_or_404(TreatmentGuideline, guideline_id)
+        return jsonify({'success': True, 'item': row.to_dict()})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/treatment-guidelines/<int:guideline_id>', methods=['PUT'])
+def update_treatment_guideline(guideline_id):
+    try:
+        ensure_treatment_guideline_schema()
+        row = _get_or_404(TreatmentGuideline, guideline_id)
+        data = request.json or {}
+        if 'title' in data:
+            title = (data.get('title') or '').strip()
+            if not title:
+                return jsonify({'success': False, 'message': 'Tên bệnh lý không được trống'}), 400
+            row.title = title
+        if 'summary' in data:
+            row.summary = (data.get('summary') or '').strip()
+        if 'content_html' in data:
+            content = (data.get('content_html') or '').strip()
+            if not content:
+                return jsonify({'success': False, 'message': 'Nội dung hướng dẫn không được trống'}), 400
+            row.content_html = content
+        if 'sort_order' in data:
+            try:
+                row.sort_order = int(data.get('sort_order') or 0)
+            except (TypeError, ValueError):
+                pass
+        if 'is_active' in data:
+            row.is_active = bool(data.get('is_active'))
+        row.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Đã lưu hướng dẫn điều trị', 'item': row.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/treatment-guidelines', methods=['POST'])
+def create_treatment_guideline():
+    try:
+        ensure_treatment_guideline_schema()
+        data = request.json or {}
+        specialty = _normalize_treatment_specialty(data.get('specialty'))
+        if not specialty:
+            return jsonify({
+                'success': False,
+                'message': 'specialty phải là obstetrics, gynecology, andrology, male-infertility hoặc female-infertility',
+            }), 400
+        title = (data.get('title') or '').strip()
+        content = (data.get('content_html') or '').strip()
+        if not title or not content:
+            return jsonify({'success': False, 'message': 'Thiếu tiêu đề hoặc nội dung'}), 400
+        disease_key = (data.get('disease_key') or '').strip().lower()
+        if not disease_key:
+            disease_key = re.sub(r'[^a-z0-9]+', '-', unicodedata.normalize('NFKD', title.lower()).encode('ascii', 'ignore').decode('ascii')).strip('-') or f'guide-{int(time.time())}'
+        if TreatmentGuideline.query.filter_by(specialty=specialty, disease_key=disease_key).first():
+            return jsonify({'success': False, 'message': 'Đã có hướng dẫn với mã bệnh lý này'}), 400
+        row = TreatmentGuideline(
+            specialty=specialty,
+            disease_key=disease_key,
+            title=title,
+            summary=(data.get('summary') or '').strip(),
+            content_html=content,
+            sort_order=int(data.get('sort_order') or 99),
+            is_active=True,
+        )
+        db.session.add(row)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Đã thêm hướng dẫn', 'item': row.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/treatment-guidelines/seed', methods=['POST'])
+def seed_treatment_guidelines_endpoint():
+    """Khôi phục các phác đồ mặc định còn thiếu (không ghi đè bản đã sửa)."""
+    try:
+        ensure_treatment_guideline_schema()
+        added = 0
+        for item in _default_treatment_guidelines():
+            exists = TreatmentGuideline.query.filter_by(
+                specialty=item['specialty'], disease_key=item['disease_key']
+            ).first()
+            if exists:
+                continue
+            db.session.add(TreatmentGuideline(
+                specialty=item['specialty'],
+                disease_key=item['disease_key'],
+                title=item['title'],
+                summary=item.get('summary') or '',
+                content_html=item['content_html'],
+                sort_order=item.get('sort_order') or 0,
+                is_active=True,
+            ))
+            added += 1
+        db.session.commit()
+        return jsonify({'success': True, 'added': added, 'message': f'Đã bổ sung {added} hướng dẫn mặc định'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/treatment-guidelines/upgrade-expert', methods=['POST'])
+def upgrade_treatment_guidelines_expert():
+    """Nâng cấp nội dung phác đồ lên gói chuyên gia (v2)."""
+    try:
+        ensure_treatment_guideline_schema()
+        from treatment_guidelines_expert import expert_treatment_guidelines, EXPERT_CONTENT_VERSION
+        data = request.get_json(silent=True) or {}
+        force = bool(data.get('force') or request.args.get('force') in ('1', 'true', 'yes'))
+        added = upgraded = skipped = 0
+        for item in expert_treatment_guidelines():
+            row = TreatmentGuideline.query.filter_by(
+                specialty=item['specialty'], disease_key=item['disease_key']
+            ).first()
+            html = item['content_html']
+            if not row:
+                db.session.add(TreatmentGuideline(
+                    specialty=item['specialty'],
+                    disease_key=item['disease_key'],
+                    title=item['title'],
+                    summary=item.get('summary') or '',
+                    content_html=html,
+                    sort_order=item.get('sort_order') or 0,
+                    is_active=True,
+                ))
+                added += 1
+                continue
+            current = row.content_html or ''
+            should = force or ('tp-level' not in current) or (len(current) < 900)
+            if not should:
+                skipped += 1
+                continue
+            row.title = item['title']
+            row.summary = item.get('summary') or ''
+            row.content_html = html
+            row.sort_order = item.get('sort_order') or row.sort_order or 0
+            row.updated_at = datetime.utcnow()
+            upgraded += 1
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'version': EXPERT_CONTENT_VERSION,
+            'added': added,
+            'upgraded': upgraded,
+            'skipped': skipped,
+            'message': f'Nâng cấp chuyên gia v{EXPERT_CONTENT_VERSION}: +{added} mới, {upgraded} cập nhật, {skipped} giữ nguyên',
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 # ============ Treatment Plans APIs ============
 @app.route('/treatment-plans.html')
 def treatment_plans_page():
-    return render_template('treatment-plans.html')
+    resp = send_from_directory('.', 'treatment-plans.html')
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 @app.route('/api/treatment-plans', methods=['GET'])
 def get_treatment_plans():
@@ -12192,7 +18963,7 @@ def get_treatment_plans():
             result.append({
                 'id': f'pf-{pf.id}',
                 'source': 'pricing_file',
-                'name': pf.original_filename.replace('.pdf', ''),
+                'name': (pf.original_filename or '').replace('.pdf', '').replace('.PDF', ''),
                 'description': '',
                 'hospital': 'Chưa xác định',
                 'category': 'sản',
@@ -12206,6 +18977,46 @@ def get_treatment_plans():
             p = pf.file_path or ''
             seen_paths.add(p)
             seen_paths.add(os.path.basename(p) if p else '')
+
+        # 2b. Quét uploads/pricing (file treatment_plans_*.pdf chưa có trong DB)
+        pricing_dir = os.path.join(app.root_path, 'uploads', 'pricing')
+        if os.path.isdir(pricing_dir):
+            for fname in os.listdir(pricing_dir):
+                if not fname.lower().endswith('.pdf'):
+                    continue
+                if not fname.lower().startswith('treatment_plans_'):
+                    continue
+                if fname in seen_paths:
+                    continue
+                rel_path = os.path.join('uploads', 'pricing', fname)
+                if rel_path in seen_paths:
+                    continue
+                full_path = os.path.join(pricing_dir, fname)
+                try:
+                    stat = os.stat(full_path)
+                    mtime = datetime.fromtimestamp(stat.st_mtime)
+                    display = fname
+                    parts = fname.split('_', 3)
+                    if len(parts) >= 4:
+                        display = parts[3]
+                    result.append({
+                        'id': f'file-pricing-{fname}',
+                        'source': 'pricing_folder',
+                        'name': display.replace('.pdf', '').replace('.PDF', ''),
+                        'description': '',
+                        'hospital': 'Chưa xác định',
+                        'category': 'sản',
+                        'tags': '',
+                        'file_name': fname,
+                        'file_path': rel_path,
+                        'file_size': stat.st_size,
+                        'created_at': mtime.strftime('%Y-%m-%d %H:%M:%S'),
+                        'updated_at': ''
+                    })
+                    seen_paths.add(fname)
+                    seen_paths.add(rel_path)
+                except Exception:
+                    pass
 
         # 3. Quét thư mục uploads/treatment-plans (file chưa có trong DB)
         upload_dir = os.path.join(app.root_path, 'uploads', 'treatment-plans')
@@ -12367,6 +19178,19 @@ def delete_treatment_plan_unified(plan_id):
                     pass
             db.session.delete(pf)
             db.session.commit()
+        elif plan_id.startswith('file-pricing-'):
+            fname = plan_id[len('file-pricing-'):]
+            if '..' in fname or '/' in fname or '\\' in fname:
+                return jsonify({'message': 'Tên file không hợp lệ'}), 400
+            full_path = os.path.join(app.root_path, 'uploads', 'pricing', fname)
+            full_path = os.path.normpath(full_path)
+            pricing_root = os.path.normpath(os.path.join(app.root_path, 'uploads', 'pricing'))
+            if not full_path.startswith(pricing_root):
+                return jsonify({'message': 'Đường dẫn không hợp lệ'}), 400
+            if os.path.isfile(full_path):
+                os.remove(full_path)
+            else:
+                return jsonify({'message': 'File không tồn tại'}), 404
         elif plan_id.startswith('file-'):
             # File trong thư mục uploads/treatment-plans
             fname = plan_id[5:]  # phần sau "file-"
@@ -12474,6 +19298,12 @@ def _resolve_treatment_plan_file(plan_id):
             return None, 'Không tìm thấy file'
         file_path = pf.file_path
         file_name = pf.original_filename
+    elif plan_id.startswith('file-pricing-'):
+        fname = plan_id[len('file-pricing-'):]
+        if '..' in fname or '/' in fname or '\\' in fname:
+            return None, 'Tên file không hợp lệ'
+        file_path = os.path.join(app.root_path, 'uploads', 'pricing', fname)
+        file_name = fname
     elif plan_id.startswith('file-'):
         fname = plan_id[5:]
         if '..' in fname or '/' in fname or '\\' in fname:
@@ -12509,18 +19339,24 @@ def download_treatment_plan(plan_id):
     except Exception as e:
         return jsonify({'message': f'Lỗi khi tải xuống file: {str(e)}'}), 500
 
-@app.route('/api/treatment-plans/<path:plan_id>/view', methods=['GET'])
+@app.route('/api/treatment-plans/<path:plan_id>/view', methods=['GET', 'HEAD'])
 def view_treatment_plan(plan_id):
     try:
         file_path, file_name = _resolve_treatment_plan_file(str(plan_id))
         if not file_path:
             return jsonify({'message': file_name}), 404
-        from urllib.parse import quote
-        safe_filename = quote((file_name or '').encode('utf-8'))
-        response = send_file(file_path, mimetype='application/pdf', as_attachment=False)
-        response.headers['Content-Disposition'] = f'inline; filename="{file_name}"; filename*=UTF-8\'\'{safe_filename}'
+        response = send_file(
+            file_path,
+            mimetype='application/pdf',
+            as_attachment=False,
+            conditional=True,
+        )
+        # Chỉ dùng inline — tránh trình duyệt tự tải về khi nhúng iframe
+        response.headers['Content-Disposition'] = 'inline'
+        response.headers['Content-Type'] = 'application/pdf'
         response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['Cache-Control'] = 'public, max-age=3600'
+        response.headers['Cache-Control'] = 'private, max-age=60'
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
         return response
     except Exception as e:
         return jsonify({'message': f'Lỗi khi xem file: {str(e)}'}), 500
@@ -12584,6 +19420,7 @@ class UltrasoundResult(db.Model):
     findings = db.Column(db.Text)
     recommendations = db.Column(db.Text)
     analysis_source = db.Column(db.String(50), default='manual_input')
+    pregnancy_episode_id = db.Column(db.Integer, db.ForeignKey('pregnancy_episode.id'), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def to_dict(self):
@@ -12609,7 +19446,460 @@ class UltrasoundResult(db.Model):
             'findings': self.findings,
             'recommendations': self.recommendations,
             'analysis_source': self.analysis_source,
+            'pregnancy_episode_id': getattr(self, 'pregnancy_episode_id', None),
             'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class GynecologicalUltrasoundResult(db.Model):
+    """Kết quả siêu âm phụ khoa (tử cung – phần phụ), không phải siêu âm thai."""
+    __tablename__ = 'gyn_ultrasound_results'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    appointment_id = db.Column(db.Integer, db.ForeignKey('appointment.id'), nullable=True, index=True)
+    exam_date = db.Column(db.DateTime, nullable=False)
+    exam_indication = db.Column(db.String(255))
+    menstrual_day = db.Column(db.Integer)
+
+    uterus_position = db.Column(db.String(50))
+    uterus_length_mm = db.Column(db.Float)
+    uterus_width_mm = db.Column(db.Float)
+    uterus_height_mm = db.Column(db.Float)
+    myometrium = db.Column(db.String(100))
+    endometrium_mm = db.Column(db.Float)
+    endometrium_pattern = db.Column(db.String(100))
+    endometrial_border = db.Column(db.String(50))
+    cavity_findings = db.Column(db.String(255))
+    cervix_length_mm = db.Column(db.Float)
+    figo_fibroid = db.Column(db.String(50))
+
+    left_ovary_length_mm = db.Column(db.Float)
+    left_ovary_width_mm = db.Column(db.Float)
+    left_ovary_height_mm = db.Column(db.Float)
+    left_ovary_findings = db.Column(db.String(255))
+    right_ovary_length_mm = db.Column(db.Float)
+    right_ovary_width_mm = db.Column(db.Float)
+    right_ovary_height_mm = db.Column(db.Float)
+    right_ovary_findings = db.Column(db.String(255))
+    afc_left = db.Column(db.Integer)
+    afc_right = db.Column(db.Integer)
+    afc_total = db.Column(db.Integer)
+
+    adnexal_mass_side = db.Column(db.String(50))
+    adnexal_mass_description = db.Column(db.Text)
+    orads_score = db.Column(db.String(20))
+    iota_conclusion = db.Column(db.String(50))
+    douglas_pouch = db.Column(db.String(100))
+
+    findings = db.Column(db.Text)
+    recommendations = db.Column(db.Text)
+    analysis_source = db.Column(db.String(50), default='manual_input')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'appointment_id': self.appointment_id,
+            'exam_date': self.exam_date.isoformat() if self.exam_date else None,
+            'exam_indication': self.exam_indication,
+            'menstrual_day': self.menstrual_day,
+            'uterus_position': self.uterus_position,
+            'uterus_length_mm': self.uterus_length_mm,
+            'uterus_width_mm': self.uterus_width_mm,
+            'uterus_height_mm': self.uterus_height_mm,
+            'myometrium': self.myometrium,
+            'endometrium_mm': self.endometrium_mm,
+            'endometrium_pattern': self.endometrium_pattern,
+            'endometrial_border': self.endometrial_border,
+            'cavity_findings': self.cavity_findings,
+            'cervix_length_mm': self.cervix_length_mm,
+            'figo_fibroid': self.figo_fibroid,
+            'left_ovary_length_mm': self.left_ovary_length_mm,
+            'left_ovary_width_mm': self.left_ovary_width_mm,
+            'left_ovary_height_mm': self.left_ovary_height_mm,
+            'left_ovary_findings': self.left_ovary_findings,
+            'right_ovary_length_mm': self.right_ovary_length_mm,
+            'right_ovary_width_mm': self.right_ovary_width_mm,
+            'right_ovary_height_mm': self.right_ovary_height_mm,
+            'right_ovary_findings': self.right_ovary_findings,
+            'afc_left': self.afc_left,
+            'afc_right': self.afc_right,
+            'afc_total': self.afc_total,
+            'adnexal_mass_side': self.adnexal_mass_side,
+            'adnexal_mass_description': self.adnexal_mass_description,
+            'orads_score': self.orads_score,
+            'iota_conclusion': self.iota_conclusion,
+            'douglas_pouch': self.douglas_pouch,
+            'findings': self.findings,
+            'recommendations': self.recommendations,
+            'analysis_source': self.analysis_source,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+class GynecologicalExamResult(db.Model):
+    """Phiếu khám phụ khoa có cấu trúc (không phải siêu âm / soi CTC)."""
+    __tablename__ = 'gyn_exam_results'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    appointment_id = db.Column(db.Integer, db.ForeignKey('appointment.id'), nullable=True, index=True)
+    exam_date = db.Column(db.DateTime, nullable=False)
+    doctor_name = db.Column(db.String(100))
+    chief_complaint = db.Column(db.String(255))
+
+    lmp_date = db.Column(db.Date)
+    menstrual_day = db.Column(db.Integer)
+    cycle_pattern = db.Column(db.String(50))
+    gravida = db.Column(db.Integer)
+    para = db.Column(db.String(50))
+    contraception = db.Column(db.String(100))
+    allergies = db.Column(db.String(255))
+    past_gyn_history = db.Column(db.Text)
+
+    general_exam = db.Column(db.Text)
+    vagina_findings = db.Column(db.Text)
+    cervix_findings = db.Column(db.Text)
+    uterus_bimanual = db.Column(db.Text)
+    adnexa_findings = db.Column(db.Text)
+    discharge_character = db.Column(db.String(100))
+    pain_vas = db.Column(db.Integer)
+    exam_findings = db.Column(db.Text)
+
+    diagnosis = db.Column(db.Text)
+    treatment_plan = db.Column(db.Text)
+    recommendations = db.Column(db.Text)
+    follow_up_date = db.Column(db.Date)
+    follow_up_notes = db.Column(db.Text)
+    analysis_source = db.Column(db.String(50), default='manual_input')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'appointment_id': self.appointment_id,
+            'exam_date': self.exam_date.isoformat() if self.exam_date else None,
+            'doctor_name': self.doctor_name,
+            'chief_complaint': self.chief_complaint,
+            'lmp_date': self.lmp_date.isoformat() if self.lmp_date else None,
+            'menstrual_day': self.menstrual_day,
+            'cycle_pattern': self.cycle_pattern,
+            'gravida': self.gravida,
+            'para': self.para,
+            'contraception': self.contraception,
+            'allergies': self.allergies,
+            'past_gyn_history': self.past_gyn_history,
+            'general_exam': self.general_exam,
+            'vagina_findings': self.vagina_findings,
+            'cervix_findings': self.cervix_findings,
+            'uterus_bimanual': self.uterus_bimanual,
+            'adnexa_findings': self.adnexa_findings,
+            'discharge_character': self.discharge_character,
+            'pain_vas': self.pain_vas,
+            'exam_findings': self.exam_findings,
+            'diagnosis': self.diagnosis,
+            'treatment_plan': self.treatment_plan,
+            'recommendations': self.recommendations,
+            'follow_up_date': self.follow_up_date.isoformat() if self.follow_up_date else None,
+            'follow_up_notes': self.follow_up_notes,
+            'analysis_source': self.analysis_source,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+class GeneralUltrasoundResult(db.Model):
+    """Kết quả siêu âm tổng quát theo loại cơ quan (tim/gan/thận/giáp/vú…)."""
+    __tablename__ = 'general_ultrasound_results'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    appointment_id = db.Column(db.Integer, db.ForeignKey('appointment.id'), nullable=True, index=True)
+    exam_date = db.Column(db.DateTime, nullable=False)
+    exam_type = db.Column(db.String(50), nullable=False, default='abdomen', index=True)
+    exam_indication = db.Column(db.String(255))
+    findings_json = db.Column(db.Text)  # JSON object for organ-specific fields
+    findings = db.Column(db.Text)
+    recommendations = db.Column(db.Text)
+    analysis_source = db.Column(db.String(50), default='manual_input')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        payload = {}
+        if self.findings_json:
+            try:
+                payload = json.loads(self.findings_json) if isinstance(self.findings_json, str) else (self.findings_json or {})
+            except Exception:
+                payload = {}
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'appointment_id': self.appointment_id,
+            'exam_date': self.exam_date.isoformat() if self.exam_date else None,
+            'exam_type': self.exam_type or 'abdomen',
+            'exam_indication': self.exam_indication,
+            'findings_json': payload if isinstance(payload, dict) else {},
+            'findings': self.findings,
+            'recommendations': self.recommendations,
+            'analysis_source': self.analysis_source,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ObstetricExamResult(db.Model):
+    """Phiếu khám sản định kỳ (ANC follow-up), ngoài SA thai / CTG."""
+    __tablename__ = 'obstetric_exam_results'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    appointment_id = db.Column(db.Integer, db.ForeignKey('appointment.id'), nullable=True, index=True)
+    pregnancy_episode_id = db.Column(db.Integer, db.ForeignKey('pregnancy_episode.id'), nullable=True, index=True)
+    exam_date = db.Column(db.DateTime, nullable=False)
+    doctor_name = db.Column(db.String(100))
+    chief_complaint = db.Column(db.String(255))
+
+    ga_weeks = db.Column(db.Integer)
+    ga_days = db.Column(db.Integer)
+    gravida = db.Column(db.Integer)
+    para = db.Column(db.String(50))
+    lmp_date = db.Column(db.Date)
+    edd_date = db.Column(db.Date)
+
+    weight_kg = db.Column(db.Float)
+    height_cm = db.Column(db.Float)
+    bmi = db.Column(db.Float)
+    bp_systolic = db.Column(db.Integer)
+    bp_diastolic = db.Column(db.Integer)
+    pulse = db.Column(db.Integer)
+    temperature_c = db.Column(db.Float)
+
+    fundal_height_cm = db.Column(db.Float)
+    fetal_heart_rate = db.Column(db.Integer)
+    presentation = db.Column(db.String(50))
+    leopold_findings = db.Column(db.Text)
+    fetal_movement = db.Column(db.String(50))
+    edema = db.Column(db.String(50))
+    urine_protein = db.Column(db.String(50))
+    urine_glucose = db.Column(db.String(50))
+
+    exam_notes = db.Column(db.Text)
+    diagnosis = db.Column(db.Text)
+    treatment_plan = db.Column(db.Text)
+    recommendations = db.Column(db.Text)
+    follow_up_date = db.Column(db.Date)
+    follow_up_notes = db.Column(db.Text)
+    analysis_source = db.Column(db.String(50), default='manual_input')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'appointment_id': self.appointment_id,
+            'pregnancy_episode_id': self.pregnancy_episode_id,
+            'exam_date': self.exam_date.isoformat() if self.exam_date else None,
+            'doctor_name': self.doctor_name,
+            'chief_complaint': self.chief_complaint,
+            'ga_weeks': self.ga_weeks,
+            'ga_days': self.ga_days,
+            'gravida': self.gravida,
+            'para': self.para,
+            'lmp_date': self.lmp_date.isoformat() if self.lmp_date else None,
+            'edd_date': self.edd_date.isoformat() if self.edd_date else None,
+            'weight_kg': self.weight_kg,
+            'height_cm': self.height_cm,
+            'bmi': self.bmi,
+            'bp_systolic': self.bp_systolic,
+            'bp_diastolic': self.bp_diastolic,
+            'pulse': self.pulse,
+            'temperature_c': self.temperature_c,
+            'fundal_height_cm': self.fundal_height_cm,
+            'fetal_heart_rate': self.fetal_heart_rate,
+            'presentation': self.presentation,
+            'leopold_findings': self.leopold_findings,
+            'fetal_movement': self.fetal_movement,
+            'edema': self.edema,
+            'urine_protein': self.urine_protein,
+            'urine_glucose': self.urine_glucose,
+            'exam_notes': self.exam_notes,
+            'diagnosis': self.diagnosis,
+            'treatment_plan': self.treatment_plan,
+            'recommendations': self.recommendations,
+            'follow_up_date': self.follow_up_date.isoformat() if self.follow_up_date else None,
+            'follow_up_notes': self.follow_up_notes,
+            'analysis_source': self.analysis_source,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+class FollicleMonitoringCycle(db.Model):
+    """Chu kỳ theo dõi nang (vô sinh / IUI / IVF)."""
+    __tablename__ = 'follicle_monitoring_cycles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    cycle_label = db.Column(db.String(100))
+    lmp_date = db.Column(db.Date)
+    protocol = db.Column(db.String(100))  # natural, IUI, IVF antagonist, ...
+    status = db.Column(db.String(30), default='active')  # active, triggered, cancelled, closed
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self, include_entries=False):
+        data = {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'cycle_label': self.cycle_label,
+            'lmp_date': self.lmp_date.isoformat() if self.lmp_date else None,
+            'protocol': self.protocol,
+            'status': self.status,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_entries:
+            entries = FollicleMonitoringEntry.query.filter_by(cycle_id=self.id).order_by(
+                FollicleMonitoringEntry.exam_date.asc(), FollicleMonitoringEntry.id.asc()
+            ).all()
+            data['entries'] = [e.to_dict() for e in entries]
+            data['entry_count'] = len(entries)
+        else:
+            data['entry_count'] = FollicleMonitoringEntry.query.filter_by(cycle_id=self.id).count()
+        return data
+
+
+class FollicleMonitoringEntry(db.Model):
+    """Một lần siêu âm theo dõi nang trong chu kỳ."""
+    __tablename__ = 'follicle_monitoring_entries'
+
+    id = db.Column(db.Integer, primary_key=True)
+    cycle_id = db.Column(db.Integer, db.ForeignKey('follicle_monitoring_cycles.id'), nullable=False, index=True)
+    appointment_id = db.Column(db.Integer, db.ForeignKey('appointment.id'), nullable=True, index=True)
+    exam_date = db.Column(db.DateTime, nullable=False)
+    cycle_day = db.Column(db.Integer)
+    endometrium_mm = db.Column(db.Float)
+    left_follicles = db.Column(db.String(255))   # e.g. "12,10,8"
+    right_follicles = db.Column(db.String(255))
+    dominant_follicle_mm = db.Column(db.Float)
+    estradiol = db.Column(db.Float)  # pg/mL or lab unit
+    lh = db.Column(db.Float)
+    recommendation = db.Column(db.String(50))  # continue, trigger, cancel, iui, oocyte_pickup
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'cycle_id': self.cycle_id,
+            'appointment_id': self.appointment_id,
+            'exam_date': self.exam_date.isoformat() if self.exam_date else None,
+            'cycle_day': self.cycle_day,
+            'endometrium_mm': self.endometrium_mm,
+            'left_follicles': self.left_follicles,
+            'right_follicles': self.right_follicles,
+            'dominant_follicle_mm': self.dominant_follicle_mm,
+            'estradiol': self.estradiol,
+            'lh': self.lh,
+            'recommendation': self.recommendation,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class AndrologyExamResult(db.Model):
+    """Phiếu khám nam khoa + tinh dịch đồ WHO (một phiếu)."""
+    __tablename__ = 'andrology_exam_results'
+
+    id = db.Column(db.Integer, primary_key=True)
+    patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    appointment_id = db.Column(db.Integer, db.ForeignKey('appointment.id'), nullable=True, index=True)
+    exam_date = db.Column(db.DateTime, nullable=False)
+    doctor_name = db.Column(db.String(100))
+    chief_complaint = db.Column(db.String(255))
+
+    abstinence_days = db.Column(db.Integer)
+    testis_left = db.Column(db.String(100))
+    testis_right = db.Column(db.String(100))
+    varicocele_grade = db.Column(db.String(20))
+    epididymis_notes = db.Column(db.String(255))
+    exam_findings = db.Column(db.Text)
+
+    semen_volume_ml = db.Column(db.Float)
+    semen_ph = db.Column(db.Float)
+    sperm_concentration = db.Column(db.Float)  # triệu/mL
+    total_sperm_count = db.Column(db.Float)    # triệu/lần
+    progressive_motility = db.Column(db.Float)  # % PR
+    total_motility = db.Column(db.Float)        # % PR+NP
+    vitality = db.Column(db.Float)              # %
+    normal_morphology = db.Column(db.Float)     # %
+    leukocytes = db.Column(db.Float)            # triệu/mL
+    semen_notes = db.Column(db.Text)
+
+    diagnosis = db.Column(db.Text)
+    recommendations = db.Column(db.Text)
+    analysis_source = db.Column(db.String(50), default='manual_input')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'patient_id': self.patient_id,
+            'appointment_id': self.appointment_id,
+            'exam_date': self.exam_date.isoformat() if self.exam_date else None,
+            'doctor_name': self.doctor_name,
+            'chief_complaint': self.chief_complaint,
+            'abstinence_days': self.abstinence_days,
+            'testis_left': self.testis_left,
+            'testis_right': self.testis_right,
+            'varicocele_grade': self.varicocele_grade,
+            'epididymis_notes': self.epididymis_notes,
+            'exam_findings': self.exam_findings,
+            'semen_volume_ml': self.semen_volume_ml,
+            'semen_ph': self.semen_ph,
+            'sperm_concentration': self.sperm_concentration,
+            'total_sperm_count': self.total_sperm_count,
+            'progressive_motility': self.progressive_motility,
+            'total_motility': self.total_motility,
+            'vitality': self.vitality,
+            'normal_morphology': self.normal_morphology,
+            'leukocytes': self.leukocytes,
+            'semen_notes': self.semen_notes,
+            'diagnosis': self.diagnosis,
+            'recommendations': self.recommendations,
+            'analysis_source': self.analysis_source,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+class InfertilityCouple(db.Model):
+    """Liên kết hồ sơ cặp vợ chồng vô sinh (nữ ↔ nam)."""
+    __tablename__ = 'infertility_couples'
+
+    id = db.Column(db.Integer, primary_key=True)
+    female_patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    male_patient_id = db.Column(db.Integer, db.ForeignKey('patient.id'), nullable=False, index=True)
+    couple_label = db.Column(db.String(150))
+    status = db.Column(db.String(30), default='active')  # active, pregnant, closed
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        female = db.session.get(Patient, self.female_patient_id)
+        male = db.session.get(Patient, self.male_patient_id)
+        return {
+            'id': self.id,
+            'female_patient_id': self.female_patient_id,
+            'male_patient_id': self.male_patient_id,
+            'female_name': (female.name if female else '') or '',
+            'female_phone': (female.phone if female else '') or '',
+            'male_name': (male.name if male else '') or '',
+            'male_phone': (male.phone if male else '') or '',
+            'couple_label': self.couple_label,
+            'status': self.status,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
 
 class PacsStudyLink(db.Model):
@@ -12629,6 +19919,9 @@ class PacsStudyLink(db.Model):
     ultrasound_result_id = db.Column(db.Integer, db.ForeignKey('ultrasound_results.id'), nullable=True)
     match_confidence = db.Column(db.Integer, default=0)
     sync_status = db.Column(db.String(20), default='received')
+    indices_payload_json = db.Column(db.Text)
+    indices_import_status = db.Column(db.String(20))
+    indices_filled_count = db.Column(db.Integer, default=0)
     raw_metadata = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -12649,6 +19942,8 @@ class PacsStudyLink(db.Model):
             'ultrasound_result_id': self.ultrasound_result_id,
             'match_confidence': self.match_confidence,
             'sync_status': self.sync_status,
+            'indices_import_status': self.indices_import_status,
+            'indices_filled_count': int(self.indices_filled_count or 0),
             'raw_metadata': self.raw_metadata,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
@@ -12660,8 +19955,18 @@ def ensure_pacs_workflow_tables():
         db.create_all()
         result = db.session.execute(db.text('PRAGMA table_info(pacs_study_links)'))
         columns = [row[1] for row in result]
-        if 'ultrasound_result_id' not in columns:
-            db.session.execute(db.text('ALTER TABLE pacs_study_links ADD COLUMN ultrasound_result_id INTEGER'))
+        altered = False
+        migrations = {
+            'ultrasound_result_id': 'ALTER TABLE pacs_study_links ADD COLUMN ultrasound_result_id INTEGER',
+            'indices_payload_json': 'ALTER TABLE pacs_study_links ADD COLUMN indices_payload_json TEXT',
+            'indices_import_status': 'ALTER TABLE pacs_study_links ADD COLUMN indices_import_status VARCHAR(20)',
+            'indices_filled_count': 'ALTER TABLE pacs_study_links ADD COLUMN indices_filled_count INTEGER DEFAULT 0',
+        }
+        for col, sql in migrations.items():
+            if col not in columns:
+                db.session.execute(db.text(sql))
+                altered = True
+        if altered:
             db.session.commit()
     except Exception as e:
         db.session.rollback()
@@ -12679,44 +19984,311 @@ def _to_float_or_none(value):
     except Exception:
         return None
 
-def _extract_measurements_from_dicom_dataset(ds):
-    """
-    MVP extractor:
-    - Try known DICOM keywords first.
-    - Fallback to regex scan on dataset text (supports machine overlay text dumps).
-    """
-    text_blob = str(ds)[:200000]
 
-    def pick_by_keywords(keywords):
-        for key in keywords:
-            try:
-                if hasattr(ds, key):
-                    v = _to_float_or_none(getattr(ds, key))
-                    if v is not None:
-                        return v
-            except Exception:
-                continue
-        return None
+def _sr_concept_text(item) -> str:
+    try:
+        cnc = item.get('ConceptNameCodeSequence')
+        if cnc and len(cnc):
+            return str(cnc[0].get('CodeMeaning') or cnc[0].get('CodeValue') or '').lower()
+    except Exception:
+        pass
+    return ''
 
-    def pick_by_regex(patterns):
-        for pattern in patterns:
-            m = re.search(pattern, text_blob, flags=re.IGNORECASE)
-            if m:
-                v = _to_float_or_none(m.group(1))
+
+def _sr_numeric_value(item):
+    try:
+        mvs = item.get('MeasuredValueSequence')
+        if mvs and len(mvs):
+            mv = mvs[0]
+            v = _to_float_or_none(mv.get('NumericValue'))
+            if v is not None:
+                return v
+            return _to_float_or_none(mv.get('FloatingPointValue'))
+    except Exception:
+        pass
+    return _to_float_or_none(getattr(item, 'NumericValue', None))
+
+
+def _walk_sr_content(item, out: dict, depth: int = 0):
+    if depth > 24 or item is None:
+        return
+    concept_map = (
+        (('biparietal', 'bpd'), 'bpd'),
+        (('head circ', 'ofc', ' hc'), 'hc'),
+        (('abdominal circ', ' abdominal'), 'ac'),
+        (('femur', 'fl '), 'fl'),
+        (('amniotic fluid', 'afi'), 'afi'),
+        (('gestational age', 'ga '), 'gestational_age'),
+        (('efw', 'estimated fetal', 'fetal weight'), 'estimated_weight'),
+    )
+    concept = _sr_concept_text(item)
+    measured = _sr_numeric_value(item)
+    if concept and measured is not None:
+        for needles, field in concept_map:
+            if any(n in concept for n in needles):
+                out.setdefault(field, measured)
+                break
+    try:
+        children = item.get('ContentSequence')
+        if children:
+            for child in children:
+                _walk_sr_content(child, out, depth + 1)
+    except Exception:
+        pass
+
+
+def _extract_sr_measurements(ds) -> dict:
+    out = {}
+    try:
+        if hasattr(ds, 'ContentSequence') and ds.ContentSequence:
+            for item in ds.ContentSequence:
+                _walk_sr_content(item, out)
+    except Exception:
+        pass
+    return out
+
+
+def _extract_vendor_tag_measurements(ds) -> dict:
+    """Quét tag số (kể cả private GE/Voluson) theo tên keyword/tag."""
+    out = {}
+    keyword_map = {
+        'bpd': ('bpd', 'biparietal'),
+        'hc': ('hc', 'headcirc', 'head_circ', 'ofc'),
+        'ac': ('ac', 'abdominal'),
+        'fl': ('fl', 'femur'),
+        'afi': ('afi', 'amniotic'),
+        'gestational_age': ('gestational', 'ga_'),
+        'estimated_weight': ('efw', 'fetalweight', 'estimated_fetal'),
+    }
+    try:
+        from fetal_image_parser.machine_profiles import profile_dicom_vendor_keywords
+        for field, needles in profile_dicom_vendor_keywords().items():
+            if field in keyword_map:
+                keyword_map[field] = tuple(dict.fromkeys(keyword_map[field] + tuple(needles)))
+            else:
+                keyword_map[field] = tuple(needles)
+    except Exception:
+        pass
+
+    def walk(dataset, depth=0):
+        if depth > 18:
+            return
+        try:
+            for elem in dataset:
+                if elem.VR == 'SQ' and elem.value:
+                    for sub in elem.value:
+                        walk(sub, depth + 1)
+                    continue
+                if elem.VR not in ('DS', 'IS', 'FL', 'FD', 'US', 'SL'):
+                    continue
+                val = _to_float_or_none(elem.value)
+                if val is None:
+                    continue
+                name = (getattr(elem, 'keyword', None) or str(elem.tag)).lower()
+                for field, needles in keyword_map.items():
+                    if field in out:
+                        continue
+                    if any(n in name for n in needles):
+                        out[field] = val
+                        break
+        except Exception:
+            pass
+
+    walk(ds)
+    return out
+
+
+def _merge_measurement_dicts(*dicts):
+    merged = {}
+    for d in dicts:
+        if not d:
+            continue
+        for k, v in d.items():
+            if v not in (None, '', 0) and merged.get(k) in (None, '', 0):
+                merged[k] = v
+    return merged
+
+
+_DICOM_INTERNAL_TO_CANONICAL = {
+    'bpd': 'BPD (mm)',
+    'hc': 'HC (mm)',
+    'ac': 'AC (mm)',
+    'fl': 'FL (mm)',
+    'afi': 'AFI (cm)',
+    'estimated_weight': 'EFW (g)',
+    'crl': 'CRL (mm)',
+    'hl': 'HL (mm)',
+    'mvp': 'MVP (cm)',
+    'psv': 'PSV (cm/s)',
+    'cereb': 'Cereb (mm)',
+}
+
+
+def _pick_dicom_keyword_value(ds, keywords):
+    for key in keywords:
+        try:
+            if hasattr(ds, key):
+                v = _to_float_or_none(getattr(ds, key))
                 if v is not None:
                     return v
-        return None
+        except Exception:
+            continue
+    return None
 
-    result = {
-        'gestational_age': pick_by_keywords(['GestationalAge']) or pick_by_regex([r'\bGA\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
-        'bpd': pick_by_keywords(['BiparietalDiameter']) or pick_by_regex([r'\bBPD\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
-        'hc': pick_by_keywords(['HeadCircumference']) or pick_by_regex([r'\bHC\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
-        'ac': pick_by_keywords(['AbdominalCircumference']) or pick_by_regex([r'\bAC\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
-        'fl': pick_by_keywords(['FemurLength']) or pick_by_regex([r'\bFL\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
-        'afi': pick_by_keywords(['AmnioticFluidIndex']) or pick_by_regex([r'\bAFI\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
-        'estimated_weight': pick_by_keywords(['EstimatedFetalWeight']) or pick_by_regex([r'\bEFW\b\s*[:=]?\s*(\d+(?:\.\d+)?)'])
+
+def _pick_dicom_regex_value(text_blob, patterns):
+    for pattern in patterns:
+        m = re.search(pattern, text_blob, flags=re.IGNORECASE)
+        if m:
+            v = _to_float_or_none(m.group(1))
+            if v is not None:
+                return v
+    return None
+
+
+def _extract_dicom_keyword_tags(ds) -> dict:
+    """Chỉ tag DICOM chuẩn (keyword), không regex/SR/vendor."""
+    return {
+        'gestational_age': _pick_dicom_keyword_value(ds, ['GestationalAge']),
+        'bpd': _pick_dicom_keyword_value(ds, ['BiparietalDiameter']),
+        'hc': _pick_dicom_keyword_value(ds, ['HeadCircumference']),
+        'ac': _pick_dicom_keyword_value(ds, ['AbdominalCircumference']),
+        'fl': _pick_dicom_keyword_value(ds, ['FemurLength']),
+        'hl': _pick_dicom_keyword_value(ds, ['HumerusLength']),
+        'afi': _pick_dicom_keyword_value(ds, ['AmnioticFluidIndex']),
+        'estimated_weight': _pick_dicom_keyword_value(ds, ['EstimatedFetalWeight']),
     }
-    return result
+
+
+def _extract_dicom_regex_internal(ds) -> dict:
+    """Regex trên text dump DICOM — dùng cho merge legacy, không gán provenance tag."""
+    text_blob = str(ds)[:200000]
+    return {
+        'gestational_age': _pick_dicom_regex_value(text_blob, [r'\bGA\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+        'bpd': _pick_dicom_regex_value(text_blob, [r'\bBPD\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+        'hc': _pick_dicom_regex_value(text_blob, [r'\bHC\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+        'ac': _pick_dicom_regex_value(text_blob, [r'\bAC\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+        'fl': _pick_dicom_regex_value(text_blob, [r'\bFL\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+        'hl': _pick_dicom_regex_value(text_blob, [r'\b(?:HL|HUM|HUMERUS)\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+        'afi': _pick_dicom_regex_value(text_blob, [r'\bAFI\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+        'estimated_weight': _pick_dicom_regex_value(text_blob, [r'\bEFW\b\s*[:=]?\s*(\d+(?:\.\d+)?)']),
+    }
+
+
+def _map_dicom_internal_layer_to_canonical(internal_dict):
+    """Map dict nội bộ (bpd, hc…) → nhãn bảng chỉ số."""
+    internal_dict = internal_dict or {}
+    out = {}
+    for src, dst in _DICOM_INTERNAL_TO_CANONICAL.items():
+        val = internal_dict.get(src)
+        if val is not None:
+            out[dst] = val
+    return out
+
+
+def extract_fetal_dicom_measurement_layers(ds):
+    """
+  Tách lớp DICOM cho provenance PACS:
+  tag (keyword) | sr | vendor | text (parser canonical)
+    """
+    text_parsed = {}
+    try:
+        text_parsed = extract_fetal_report_measurements_from_text(str(ds)[:200000]) or {}
+    except Exception as exc:
+        print(f'DICOM text layer parse error: {exc}')
+    return {
+        'tag': _extract_dicom_keyword_tags(ds),
+        'sr': _extract_sr_measurements(ds) or {},
+        'vendor': _extract_vendor_tag_measurements(ds) or {},
+        'text': text_parsed,
+    }
+
+
+def extract_fetal_dicom_parser_layers(ds):
+    """
+    Trả về các lớp đã map canonical + gợi ý GA theo nguồn (cho Image Parser Engine).
+    """
+    layers = extract_fetal_dicom_measurement_layers(ds)
+    canonical_layers = {
+        'dicom_tag': _map_dicom_internal_layer_to_canonical(layers['tag']),
+        'dicom_sr': _map_dicom_internal_layer_to_canonical(layers['sr']),
+        'dicom_vendor': _map_dicom_internal_layer_to_canonical(layers['vendor']),
+        'dicom_text': {
+            k: v for k, v in (layers.get('text') or {}).items()
+            if v is not None and v != ''
+        },
+    }
+    ga_candidates = []
+    for source_key, internal in (
+        ('dicom_tag', layers['tag']),
+        ('dicom_sr', layers['sr']),
+        ('dicom_vendor', layers['vendor']),
+    ):
+        weeks, days = _parse_ga_weeks_days_from_value((internal or {}).get('gestational_age'))
+        if weeks is not None:
+            ga_candidates.append({
+                'source': source_key,
+                'weeks': int(weeks),
+                'days': int(days or 0),
+            })
+    try:
+        tw, td = _parse_gestational_age_from_report_text(str(ds)[:200000])
+        if tw is not None:
+            ga_candidates.append({
+                'source': 'dicom_text',
+                'weeks': int(tw),
+                'days': int(td or 0),
+            })
+    except Exception:
+        pass
+    return canonical_layers, ga_candidates
+
+
+def _extract_measurements_from_dicom_dataset(ds):
+    """
+    Trích số đo siêu âm (gộp cho autofill / legacy):
+    keyword + regex + SR + vendor.
+    """
+    layers = extract_fetal_dicom_measurement_layers(ds)
+    regex_internal = _extract_dicom_regex_internal(ds)
+    return _merge_measurement_dicts(
+        layers['tag'],
+        regex_internal,
+        layers['sr'],
+        layers['vendor'],
+    )
+
+def _resolve_internal_patient_id_from_ref(ref):
+    """Chuyển PatientID/payload (BN, PAT_{appt}, id nội bộ) sang patient.id."""
+    if ref in (None, ''):
+        return None
+    text = str(ref).strip()
+    if not text:
+        return None
+    try:
+        if text.isdigit():
+            cand = Patient.query.get(int(text))
+            if cand:
+                return cand.id
+    except Exception:
+        pass
+    try:
+        cand = Patient.query.filter_by(patient_id=text).first()
+        if cand:
+            return cand.id
+        m = re.match(r'^PAT_(\d+)$', text, flags=re.IGNORECASE)
+        if m:
+            appt = db.session.get(Appointment, int(m.group(1)))
+            if appt and appt.patient_id:
+                return appt.patient_id
+    except Exception as e:
+        print(f"resolve internal patient id failed: {e}")
+    return None
+
+
+def _resolve_patient_from_dicom(ds):
+    """Map bệnh nhân từ PatientID trong DICOM (mã BN hoặc PAT_{appointment_id})."""
+    return _resolve_internal_patient_id_from_ref(ds.get('PatientID', ''))
 
 def _resolve_appointment_from_accession(accession_number):
     if not accession_number:
@@ -12756,51 +20328,15 @@ def create_ctg_result():
         variability = int(data.get('variability', 0))
         accelerations = int(data.get('accelerations', 0))
         decelerations = int(data.get('decelerations', 0))
-        
-        # Calculate analysis score
-        score = 0
-        status = 'normal'
-        recommendations = []
-        
-        # Analyze baseline heart rate
-        if 110 <= baseline_hr <= 160:
-            score += 2
-        elif 100 <= baseline_hr <= 170:
-            score += 1
-        else:
-            recommendations.append('Nhịp tim thai cơ bản nằm ngoài giới hạn bình thường')
-        
-        # Analyze variability
-        if 5 <= variability <= 25:
-            score += 2
-        elif 2 <= variability <= 30:
-            score += 1
-        else:
-            recommendations.append('Biến thiên nhịp tim bất thường')
-        
-        # Analyze accelerations
-        if accelerations >= 2:
-            score += 2
-        elif accelerations >= 1:
-            score += 1
-        else:
-            recommendations.append('Thiếu tăng nhịp tim, cần theo dõi')
-        
-        # Analyze decelerations
-        if decelerations == 0:
-            score += 2
-        elif decelerations <= 2:
-            score += 1
-        else:
-            recommendations.append('Có giảm nhịp tim, cần đánh giá thêm')
-        
-        # Determine status
-        if score >= 8:
-            status = 'normal'
-        elif score >= 6:
-            status = 'warning'
-        else:
-            status = 'danger'
+        contractions = int(data.get('contractions', 0))
+        recording_time = int(data.get('recording_time', 20))
+
+        analysis = perform_ctg_computer_analysis(
+            baseline_hr, variability, accelerations, decelerations, contractions, recording_time
+        )
+        score = analysis['score']
+        status = analysis['status']
+        recommendations = analysis['recommendations']
         
         ctg_result = CTGResult(
             patient_id=data['patient_id'],
@@ -12809,8 +20345,8 @@ def create_ctg_result():
             variability=variability,
             accelerations=accelerations,
             decelerations=decelerations,
-            contractions=int(data.get('contractions', 0)),
-            recording_time=int(data.get('recording_time', 0)),
+            contractions=contractions,
+            recording_time=recording_time,
             analysis_score=score,
             analysis_status=status,
             recommendations='; '.join(recommendations) if recommendations else None
@@ -12824,8 +20360,9 @@ def create_ctg_result():
             'ctg_id': ctg_result.id,
             'analysis': {
                 'score': score,
-                'max_score': 8,
+                'max_score': analysis['max_score'],
                 'status': status,
+                'tier': analysis['tier'],
                 'recommendations': recommendations
             }
         }), 201
@@ -12886,64 +20423,3016 @@ def delete_ctg_result(ctg_id):
         db.session.rollback()
         return jsonify({'message': f'Lỗi khi xóa kết quả CTG: {str(e)}'}), 500
 # ============= CTG Image Analysis Functions =============
-# Optional imports for OCR/CV - fallback nếu không cài
+# OCR (pytesseract + Pillow) tách riêng cv2/numpy — cv2 chỉ dùng tiền xử lý, không bắt buộc
+OCR_AVAILABLE = False
+pytesseract = None
+PILImage = None
+cv2 = None
+np = None
+
 try:
-    import pytesseract
-    from PIL import Image as PILImage
-    import cv2
-    import numpy as np
+    import pytesseract as _pytesseract
+    from PIL import Image as _PILImage
+    import shutil
+
+    _tess_cmd = os.environ.get('TESSERACT_CMD', '').strip()
+    if _tess_cmd and os.path.isfile(_tess_cmd):
+        _pytesseract.pytesseract.tesseract_cmd = _tess_cmd
+    elif os.path.isfile(r'C:\Program Files\Tesseract-OCR\tesseract.exe'):
+        _pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    elif os.path.isfile(r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe'):
+        _pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe'
+    elif not shutil.which('tesseract'):
+        raise RuntimeError('Không tìm thấy tesseract.exe — cài Tesseract OCR hoặc đặt TESSERACT_CMD')
+
+    pytesseract = _pytesseract
+    PILImage = _PILImage
     OCR_AVAILABLE = True
-except ImportError:
-    OCR_AVAILABLE = False
-    pytesseract = None
-    PILImage = None
-    cv2 = None
-    np = None
+except Exception as _ocr_exc:
+    print(f'OCR init warning: {_ocr_exc}')
+
+try:
+    import cv2 as _cv2
+    import numpy as _np
+    cv2 = _cv2
+    np = _np
+except Exception as _cv_exc:
+    print(f'OpenCV optional init warning: {_cv_exc}')
 
 def extract_ctg_data_ocr(image_bytes):
     """Trích xuất dữ liệu CTG từ ảnh bằng OCR"""
     if not OCR_AVAILABLE:
         return None
-    
+
     try:
-        # Convert bytes to PIL Image
         img = PILImage.open(BytesIO(image_bytes))
-        
-        # Use OCR to extract text
-        text = pytesseract.image_to_string(img, lang='eng', config='--psm 11')
-        
-        # Parse text to find CTG values
+        text = pytesseract.image_to_string(img, lang='eng', config='--psm 6')
+        text = text.replace('\r', '\n')
         import re
+
+        def parse_number(patterns, parse_float=False):
+            for pattern in patterns:
+                m = re.search(pattern, text, flags=re.IGNORECASE)
+                if not m:
+                    continue
+                raw = (m.group(1) or '').replace(',', '.').strip()
+                try:
+                    return float(raw) if parse_float else int(float(raw))
+                except (TypeError, ValueError):
+                    continue
+            return None
+
         results = {}
-        
-        # Find baseline heart rate
-        baseline_match = re.search(r'baseline.*?(\d{2,3})', text, re.IGNORECASE)
-        if baseline_match:
-            results['baseline_hr'] = int(baseline_match.group(1))
-        
-        # Find variability
-        var_match = re.search(r'variability.*?(\d+)', text, re.IGNORECASE)
-        if var_match:
-            results['variability'] = int(var_match.group(1))
-        
-        # Find accelerations
-        acc_match = re.search(r'acceleration.*?(\d+)', text, re.IGNORECASE)
-        if acc_match:
-            results['accelerations'] = int(acc_match.group(1))
-        
-        # Find decelerations
-        dec_match = re.search(r'deceleration.*?(\d+)', text, re.IGNORECASE)
-        if dec_match:
-            results['decelerations'] = int(dec_match.group(1))
-        
-        return results if results else None
+        results['baseline_hr'] = parse_number([
+            r'\b(?:baseline|basal(?: heart rate)?|heart rate|fhr(?: rate)?|tim thai|nhịp tim thai)\b[^0-9\n\r]{0,20}(\d{2,3})',
+            r'\bFHR[:=]?\s*([0-9]{2,3})\b',
+            r'\b(1[0-7]\d)\s*bpm\b'
+        ])
+        results['variability'] = parse_number([
+            r'\b(?:variability|biến\s*thiên|độ\s*biến\s*thiên|short[- ]?term variation|stv)\b[^0-9\n\r]{0,20}(\d{1,2})',
+            r'\bvar(?:iability)?[:=]?\s*(\d{1,2})\b'
+        ])
+        results['stv_ms'] = parse_number([
+            r'\b(?:short[- ]?term variation|stv|biến\s*thiên\s*ngắn\s*hạn)\b[^0-9\n\r]{0,20}(\d{1,2}(?:\.\d+)?)',
+            r'\bSTV[:=]?\s*(\d{1,2}(?:\.\d+)?)\s*ms\b',
+            r'\b(?:short[- ]?term)\b[^0-9\n\r]{0,20}(\d{1,2}(?:\.\d+)?)\s*ms'
+        ], parse_float=True)
+        results['ltv_ms'] = parse_number([
+            r'\b(?:long[- ]?term variation|ltv|biến\s*thiên\s*dài\s*hạn)\b[^0-9\n\r]{0,20}(\d{1,3}(?:\.\d+)?)',
+            r'\bLTV[:=]?\s*(\d{1,3}(?:\.\d+)?)\s*ms\b',
+            r'\b(?:long[- ]?term)\b[^0-9\n\r]{0,20}(\d{1,3}(?:\.\d+)?)\s*ms'
+        ], parse_float=True)
+        results['accelerations'] = parse_number([
+            r'\b(?:accelerations?|accels?|acc|tăng\s*gia)\b[^0-9\n\r]{0,20}(\d{1,2})',
+            r'\bACC[:=]?\s*(\d{1,2})\b'
+        ])
+        results['decelerations'] = parse_number([
+            r'\b(?:significant decelerations|decelerations?|decels?|dec|giảm\s*gia)\b[^0-9\n\r]{0,20}(\d{1,2})',
+            r'\bDEC[:=]?\s*(\d{1,2})\b'
+        ])
+        results['signal_loss_pct'] = parse_number([
+            r'\b(?:signal loss|loss|mất\s*tín\s*hiệu|signal\s*missing)\b[^0-9\n\r]{0,20}(\d{1,3}(?:\.\d+)?)\s*%?'
+        ], parse_float=True)
+        results['fetal_movements'] = parse_number([
+            r'\b(?:fetal movements|movements per hour|cử động thai|số cử động|cđt)\b[^0-9\n\r]{0,20}(\d{1,3}(?:\.\d+)?)',
+            r'\bFM[:=]?\s*(\d{1,3}(?:\.\d+)?)\b'
+        ], parse_float=True)
+        results['recording_time'] = parse_number([
+            r'\b(?:recording time|time|duration|mins?|minutes?|thời gian ghi|ghi|phút)\b[^0-9\n\r]{0,20}(\d{1,3})',
+            r'\b(\d{1,3})\s*phút\b'
+        ])
+        results['sinusoidal'] = 1 if re.search(r'\b(?:sinusoidal|hình sin)\b', text, flags=re.IGNORECASE) else 0
+
+        results = {k: v for k, v in results.items() if v is not None}
+        return results or None
     except Exception as e:
         print(f"OCR extraction error: {str(e)}")
         return None
 
-def analyze_ctg_graph_cv(image_bytes):
+
+def _fetal_report_first_match(text, patterns):
+    """Return first numeric capture from regex patterns on OCR text."""
+    for pattern in patterns:
+        m = re.search(pattern, text, flags=re.IGNORECASE)
+        if not m:
+            continue
+        raw = (m.group(1) or '').replace(',', '.')
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _fetal_report_split_row(line):
+    """Tách cột trong 1 dòng báo cáo (tab hoặc ≥2 khoảng trắng)."""
+    parts = re.split(r'\t+|\s{2,}', (line or '').strip())
+    if len(parts) <= 1:
+        parts = re.split(r'\s{1,}', (line or '').strip())
+    return [p.strip() for p in parts if p.strip()]
+
+
+_FETAL_VALUE_COL_HEADER = re.compile(
+    r'^(value|measured|measure|measurement|result|results|'
+    r'gi[aá]\s*tr[iị]|k[e\u1ebf]t\s*qu[a\u1ea3]|s[o\u1ed1]\s*[đd]o)\b',
+    re.IGNORECASE,
+)
+
+_FETAL_INDEX_CODE_MAP = [
+    ('CRL', 'CRL (mm)'),
+    ('OFD/HC', 'HC (mm)'),
+    ('BDP', 'BPD (mm)'),
+    ('8PD', 'BPD (mm)'),
+    ('BPD', 'BPD (mm)'),
+    ('HC', 'HC (mm)'),
+    ('AC', 'AC (mm)'),
+    ('FL', 'FL (mm)'),
+    ('HL', 'HL (mm)'),
+    ('HUM', 'HL (mm)'),
+    ('HUMERUS', 'HL (mm)'),
+    ('CEREB', 'Cereb (mm)'),
+    ('Cereb', 'Cereb (mm)'),
+    ('TCD', 'Cereb (mm)'),
+    ('EFW', 'EFW (g)'),
+    ('AFI', 'AFI (cm)'),
+    ('MVP', 'MVP (cm)'),
+    ('DVP', 'MVP (cm)'),
+    ('PSV', 'PSV (cm/s)'),
+    ('CPR', 'CPR'),
+]
+
+FETAL_INDEX_ALIAS_SETTING_KEY = 'fetal_index_aliases_v1'
+FETAL_PROGNOSIS_SETTING_KEY = 'fetal_prognosis_table_v1'
+FETAL_VACCINATION_SETTING_KEY = 'fetal_vaccination_table_v1'
+FETAL_GDM_SETTING_KEY = 'fetal_gdm_table_v1'
+FETAL_NUTRITION_SETTING_KEY = 'fetal_nutrition_table_v1'
+FETAL_GUIDE_SETTING_KEY = 'fetal_guide_table_v1'
+GYNE_CERVICAL_LESION_ATLAS_SETTING_KEY = 'gyne_cervical_lesion_atlas_v1'
+
+_DEFAULT_GYNE_CERVICAL_LESION_ATLAS = {
+    "meta": {
+        "title": "ATLAS XỬ TRÍ TỔN THƯƠNG CỔ TỬ CUNG THEO ASCCP 2019–2024",
+        "subtitle": "(Risk-based Management)"
+    },
+    "steps": [
+        {"id": "s1", "label": "1. HPV TEST"},
+        {"id": "s2", "label": "2. PAP SMEAR / CYTOLOGY"},
+        {"id": "s3", "label": "3. SOI CỔ TỬ CUNG (COLPOSCOPY)"},
+        {"id": "s4", "label": "4. SINH THIẾT"},
+        {"id": "s5", "label": "5. ĐIỀU TRỊ"},
+        {"id": "s6", "label": "6. THEO DÕI (FOLLOW-UP)"},
+    ],
+    "blocks": [
+        # Cột 1: HPV test
+        {"id": "hpv_neg", "col": 1, "kind": "box", "title": "HPV âm tính", "text": "(Không phát hiện HPV nguy cơ cao)"},
+        {"id": "screening", "col": 1, "kind": "box", "title": "Sàng lọc định kỳ theo tuổi", "text": "(21–29: Pap 3 năm\n30–65: HPV 5 năm hoặc co-test 5 năm hoặc Pap 3 năm)"},
+        {"id": "hpv_pos_high", "col": 1, "kind": "box", "title": "HPV dương tính\n(nguy cơ cao)", "text": "- HPV 16 dương\n- HPV 18 dương"},
+        {"id": "hpv_pos_other", "col": 1, "kind": "box", "title": "HPV dương tính\nkhác (không 16/18)", "text": "Xem kết quả Pap\nbên cạnh"},
+        {"id": "colpo_now", "col": 1, "kind": "box", "title": "Soi cổ tử cung ngay", "text": "(đủ Pap bình thường)"},
+
+        # Cột 2: Cytology
+        {"id": "cyt_nil", "col": 2, "kind": "box", "title": "NILM", "text": "(Bình thường)"},
+        {"id": "cyt_ascus", "col": 2, "kind": "box", "title": "ASC-US", "text": "(Tế bào vảy không điển hình)"},
+        {"id": "cyt_lsil", "col": 2, "kind": "box", "title": "LSIL", "text": "(Tổn thương trong biểu mô mức thấp)"},
+        {"id": "cyt_asch", "col": 2, "kind": "box", "title": "ASC-H", "text": "(Không loại trừ HSIL)"},
+        {"id": "cyt_hsil", "col": 2, "kind": "box", "title": "HSIL", "text": "(Tổn thương mức cao)"},
+        {"id": "cyt_agc", "col": 2, "kind": "box", "title": "AGC", "text": "(Bất thường tế bào tuyến)"},
+
+        # Cột 3: Colposcopy
+        {"id": "no_colpo", "col": 3, "kind": "box", "title": "Không soi", "text": "(nguy cơ thấp)"},
+        {"id": "hpv_follow_3y", "col": 3, "kind": "box", "title": "HPV (−) → Theo dõi 3 năm", "text": ""},
+        {"id": "hpv_colpo", "col": 3, "kind": "box", "title": "HPV (+) → Soi cổ tử cung", "text": ""},
+        {"id": "hpv_follow_1y", "col": 3, "kind": "box", "title": "HPV (−) → Theo dõi 1 năm", "text": ""},
+        {"id": "colpo_now2", "col": 3, "kind": "box", "title": "Soi cổ tử cung", "text": "(ngay)"},
+        {"id": "colpo_or_leep", "col": 3, "kind": "box", "title": "Soi cổ tử cung\nhoặc LEEP ngay", "text": "(nếu ≥25 tuổi, HSIL, HPV16+,\n> 25 tuổi)"},
+        {"id": "colpo_ecc", "col": 3, "kind": "box", "title": "Soi cổ tử cung\n+ ECC", "text": "+ Sinh thiết nội mạc\n(nếu ≥35 tuổi hoặc chảy máu bất thường)"},
+
+        # Cột 4: Sinh thiết
+        {"id": "no_biopsy", "col": 4, "kind": "box", "title": "Không sinh thiết", "text": "(soi bình thường)"},
+        {"id": "target_biopsy", "col": 4, "kind": "box", "title": "Sinh thiết tại\nvùng tổn thương", "text": ""},
+        {"id": "ecc_needed", "col": 4, "kind": "box", "title": "ECC + nếu cần", "text": "(đặc biệt: HSIL, AGC,\nkhông thấy hết VCT)"},
+        {"id": "path_result", "col": 4, "kind": "box", "title": "Kết quả mô bệnh học", "text": ""},
+
+        # Cột 5: Điều trị
+        {"id": "cin1", "col": 5, "kind": "box", "title": "CIN1", "text": "(LSIL trên mô học)"},
+        {"id": "cin2", "col": 5, "kind": "box", "title": "CIN2", "text": "(HSIL/CIN2)"},
+        {"id": "cin3", "col": 5, "kind": "box", "title": "CIN3", "text": "(HSIL/CIN3)"},
+        {"id": "ais", "col": 5, "kind": "box", "title": "AIS", "text": "(Adenocarcinoma in situ)"},
+        {"id": "invasive", "col": 5, "kind": "box", "title": "Ung thư xâm lấn", "text": ""},
+
+        # Cột 6: Follow-up
+        {"id": "fu_1y", "col": 6, "kind": "box", "title": "HPV test hoặc co-test\nsau 1 năm", "text": "Nếu (−) → Lặp lại 3 năm"},
+        {"id": "fu_6m", "col": 6, "kind": "box", "title": "HPV test hoặc co-test\nsau 6 tháng", "text": "Sau đó theo hướng dẫn\nsau điều trị (xem bảng 5)"},
+        {"id": "fu_post", "col": 6, "kind": "box", "title": "Theo dõi sau điều trị\n(xem bảng 5)", "text": ""},
+
+        # Panels A-G (bên dưới)
+        {"id": "panel_a", "col": 0, "kind": "panel", "title": "A. XỬ TRÍ Ở PHỤ NỮ MANG THAI", "text": ""},
+        {"id": "panel_b", "col": 0, "kind": "panel", "title": "B. XỬ TRÍ Ở PHỤ NỮ <25 TUỔI", "text": ""},
+        {"id": "panel_c", "col": 0, "kind": "panel", "title": "C. XỬ TRÍ Ở BỆNH NHÂN SUY GIẢM MIỄN DỊCH", "text": ""},
+        {"id": "panel_d", "col": 0, "kind": "panel", "title": "D. THEO DÕI SAU ĐIỀU TRỊ (SAU LEEP/CONE) CIN2+", "text": ""},
+        {"id": "panel_e", "col": 0, "kind": "panel", "title": "E. PHƯƠNG PHÁP ĐIỀU TRỊ", "text": ""},
+        {"id": "panel_f", "col": 0, "kind": "panel", "title": "F. CHỐNG CHỈ ĐỊNH TƯƠNG ĐỐI", "text": ""},
+        {"id": "panel_g", "col": 0, "kind": "panel", "title": "G. NGUYÊN TẮC CHUNG", "text": ""},
+    ],
+}
+
+
+def _load_gyne_cervical_lesion_atlas():
+    try:
+        raw = AppSetting.get_value(GYNE_CERVICAL_LESION_ATLAS_SETTING_KEY)
+        if not raw:
+            return json.loads(json.dumps(_DEFAULT_GYNE_CERVICAL_LESION_ATLAS))
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return json.loads(json.dumps(_DEFAULT_GYNE_CERVICAL_LESION_ATLAS))
+        # Soft-validate core fields
+        if not isinstance(data.get("meta"), dict):
+            data["meta"] = dict(_DEFAULT_GYNE_CERVICAL_LESION_ATLAS["meta"])
+        if not isinstance(data.get("steps"), list):
+            data["steps"] = list(_DEFAULT_GYNE_CERVICAL_LESION_ATLAS["steps"])
+        if not isinstance(data.get("blocks"), list):
+            data["blocks"] = list(_DEFAULT_GYNE_CERVICAL_LESION_ATLAS["blocks"])
+        return data
+    except Exception:
+        return json.loads(json.dumps(_DEFAULT_GYNE_CERVICAL_LESION_ATLAS))
+
+
+def _save_gyne_cervical_lesion_atlas(data: dict):
+    if not isinstance(data, dict):
+        raise ValueError("Dữ liệu atlas không hợp lệ")
+    # keep structure but allow arbitrary text edits
+    meta = data.get("meta")
+    steps = data.get("steps")
+    blocks = data.get("blocks")
+    if not isinstance(meta, dict) or not isinstance(steps, list) or not isinstance(blocks, list):
+        raise ValueError("Dữ liệu atlas không đúng cấu trúc (meta/steps/blocks)")
+    AppSetting.set_value(GYNE_CERVICAL_LESION_ATLAS_SETTING_KEY, json.dumps(data, ensure_ascii=False))
+    return data
+
+_DEFAULT_FETAL_PROGNOSIS_TABLE = {
+    'sections': [
+        {
+            'id': 'nonviable',
+            'title': '1. Tiêu chuẩn chẩn đoán thai không phát triển',
+            'headers': ['Tiêu chuẩn', 'Kết luận', 'Mức độ'],
+            'rows': [
+                ['CRL ≥ 7 mm, không có tim thai', 'Thai ngừng phát triển', '●'],
+                ['MSD ≥ 25 mm, không có phôi', 'Chẩn đoán thai ngừng phát triển', '●'],
+                ['Sau 11 ngày từ khi có túi noãn hoàng, chưa thấy phôi có tim', 'Chẩn đoán', '●'],
+                ['Sau 14 ngày từ khi chỉ có túi thai, chưa thấy phôi', 'Chẩn đoán', '●'],
+            ],
+        },
+        {
+            'id': 'miscarriage-signs',
+            'title': '2. Dấu hiệu tiên lượng nguy cơ thai lưu',
+            'headers': ['Chỉ số', 'Bình thường', 'Bất thường / Tiên lượng'],
+            'rows': [
+                ['MSD', 'Tròn/bầu dục; tăng ~1 mm/ngày', 'Méo, tăng chậm; MSD–CRL < 5 mm (đặc biệt < 3 mm)'],
+                ['YS', '2–6 mm; tròn đều; thành mỏng', '< 2 mm; > 6 mm; méo; vôi hóa; YS đôi cần theo dõi'],
+                ['CRL', 'Tăng ~1 mm/ngày', 'Nhỏ hơn tuổi thai > 5–7 ngày; phát triển chậm liên tiếp'],
+            ],
+        },
+        {
+            'id': 'fhr-risk',
+            'title': '3. Tim thai theo tuổi thai',
+            'headers': ['Tuổi thai', 'Tim thai nguy cơ cao', 'Đánh giá'],
+            'rows': [
+                ['< 6,3 tuần', '< 100 bpm', 'Nguy cơ cao'],
+                ['6,3 – 7 tuần', '< 120 bpm', 'Nguy cơ cao'],
+                ['7 – 8 tuần', '< 110 bpm', 'Nguy cơ cao'],
+                ['> 8 tuần', '< 120 bpm', 'Nguy cơ cao'],
+                ['Bất kỳ', '< 80 bpm', 'Nguy cơ rất cao'],
+            ],
+        },
+        {
+            'id': 'msd-crl-gap',
+            'title': '4. Khoảng cách MSD – CRL',
+            'headers': ['Khoảng cách', 'Ý nghĩa', 'Mức nguy cơ'],
+            'rows': [
+                ['> 8 mm', 'Tiên lượng tốt', 'Thấp'],
+                ['5 – 8 mm', 'Theo dõi', 'Trung bình'],
+                ['< 5 mm', 'Tăng nguy cơ thai lưu', 'Cao'],
+                ['< 3 mm', 'Nguy cơ rất cao', 'Rất cao'],
+            ],
+        },
+    ],
+}
+
+_DEFAULT_FETAL_VACCINATION_TABLE = {
+    'sections': [
+        {
+            'id': 'recommended',
+            'title': '1. Vắc xin khuyến nghị trong thai kỳ',
+            'headers': ['Vắc xin', 'Thời điểm', 'Liều / lịch', 'Lợi ích chính', 'Ghi chú tư vấn'],
+            'rows': [
+                ['Cúm (influenza — miễn dịch)', 'Mọi tam cá nguyệt khi có vaccine', '1 liều mỗi mùa', 'Giảm viêm phổi, nhập viện, sinh non', 'Ưu tiên mùa cúm'],
+                ['Uốn ván–ho gà–bạch hầu (Tdap / Adacel)', '27–36 tuần (lý tưởng 27–32)', '1 liều mỗi thai kỳ', 'Bảo vệ sơ sinh khỏi ho gà sơ sinh', 'Mỗi lần mang thai 1 liều'],
+                ['COVID-19 (mRNA hoặc theo hướng dẫn Bộ Y tế)', 'Bất kỳ tam cá nguyệt khi chưa đủ liều', 'Theo lịch vaccine hiện hành', 'Giảm bệnh nặng, sinh non', 'An toàn trong thai kỳ'],
+                ['Viêm gan B (recombinant)', 'Nếu HBsAg (-) và nguy cơ cao', '0–1–6 tháng hoặc 0–1–2–12', 'Phòng lây cho con', 'Đối tác HBsAg (+), tiêm chích…'],
+                ['RSV (Abrysvo / Arexvy — nếu có)', '32–36 tuần (mùa RSV)', '1 liều', 'Giảm RSV nặng ở sơ sinh', 'Theo hướng dẫn địa phương'],
+            ],
+        },
+        {
+            'id': 'contraindicated',
+            'title': '2. Trì hoãn / chống chỉ định trong thai kỳ',
+            'headers': ['Vắc xin', 'Loại', 'Xử trí', 'Thời điểm tiêm lại', 'Tư vấn'],
+            'rows': [
+                ['MMR (sởi–quai bị–rubella)', 'Sống giảm hoạt tính', 'Không tiêm khi mang thai', 'Sau sinh', 'Chờ ≥ 1 tháng trước mang thai nếu vừa tiêm'],
+                ['Varicella (thủy đậu)', 'Sống', 'Không tiêm khi mang thai', 'Sau sinh', 'Xét nghiệm IgG trước mang thai'],
+                ['HPV', 'Không sống', 'Trì hoãn', 'Sau sinh', 'Không cần trong thai kỳ'],
+            ],
+        },
+        {
+            'id': 'postpartum',
+            'title': '3. Sau sinh — bù liều & miễn dịch',
+            'headers': ['Tình huống', 'Vắc xin', 'Thời điểm', 'Ghi chú'],
+            'rows': [
+                ['Chưa tiêm Tdap trong thai kỳ', 'Tdap', 'Ngay sau sinh', 'Vẫn có lợi'],
+                ['Rubella IgG âm tính', 'MMR', 'Sau sinh', 'Tránh thai 1 tháng'],
+                ['HBsAg (+) ở mẹ', 'HBIG + VGB cho trẻ', 'Trong 24h sau sinh', 'Phối hợp nhiễm trùng'],
+            ],
+        },
+        {
+            'id': 'special',
+            'title': '4. Tình huống đặc biệt',
+            'headers': ['Tình huống', 'Vắc xin / xử trí', 'Thai kỳ', 'Ghi chú'],
+            'rows': [
+                ['Vết thương nguy cơ uốn ván', 'Tdap/Td ± HTU uốn ván', 'Được tiêm', 'Theo lịch sử tiêm'],
+                ['Phơi nhiễm dại', 'Vaccine dại + HTU dại', 'Không chống chỉ định', 'Phác đồ đầy đủ'],
+                ['Phơi nhiễm VGB', 'HBIG + vaccine VGB', 'Được tiêm', 'Sàng lọc HBsAg'],
+            ],
+        },
+        {
+            'id': 'screening',
+            'title': '5. Sàng lọc trước / đầu thai kỳ',
+            'headers': ['Xét nghiệm / vaccine', 'Mục đích', 'Khi nào', 'Hành động nếu âm tính'],
+            'rows': [
+                ['Rubella IgG', 'Miễn dịch rubella', 'Trước / đầu thai kỳ', 'MMR sau sinh'],
+                ['HBsAg, anti-HBs', 'Viêm gan B', 'Đầu thai kỳ', 'Tiêm VGB nếu susceptible'],
+                ['Lịch sử Tdap', 'Ho gà sơ sinh', 'Mỗi thai kỳ', 'Tdap 27–36 tuần'],
+            ],
+        },
+        {
+            'id': 'tetanus-td',
+            'title': '6. Vaccine uốn ván (Td) theo tiền sử tiêm — TT 10/2024/TT-BYT (từ 01/8/2024)',
+            'headers': ['Tiền sử', 'Lịch tiêm thai kỳ hiện tại', 'Lịch tiếp theo / ghi chú'],
+            'rows': [
+                [
+                    'Chưa tiêm / chưa đủ 3 mũi cơ bản / không rõ tiền sử',
+                    'Mũi 1: tiêm sớm khi có thai; mũi 2: ≥ 1 tháng sau mũi 1',
+                    'Mũi 3: kỳ thai sau, ≥ 6 tháng sau mũi 2; mũi 4: kỳ thai sau, ≥ 1 năm sau mũi 3; mũi 5: kỳ thai sau, ≥ 1 năm sau mũi 4',
+                ],
+                [
+                    'Đã tiêm đủ 3 mũi cơ bản',
+                    'Mũi 1: tiêm sớm khi có thai; mũi 2: ≥ 1 tháng sau mũi 1',
+                    'Mũi 3: kỳ thai sau, ≥ 1 năm sau mũi 2',
+                ],
+                [
+                    'Đã tiêm đủ 3 mũi cơ bản + 1 mũi nhắc',
+                    'Mũi 1: tiêm sớm khi có thai',
+                    'Mũi 2: kỳ thai sau, ≥ 1 năm sau mũi 1',
+                ],
+                [
+                    'Đã tiêm đủ 3 mũi cơ bản + 2 mũi nhắc',
+                    'Tiêm sớm 1 mũi khi có thai',
+                    '—',
+                ],
+                [
+                    'Lưu ý chung',
+                    'Từ mũi 2 trở đi: tiêm trước ngày dự kiến sinh tối thiểu 2 tuần',
+                    'Vắc xin có chứa thành phần uốn ván (Td/Tdap). Thay Thông tư 38/2017/TT-BYT.',
+                ],
+            ],
+        },
+    ],
+}
+
+_DEFAULT_FETAL_GDM_TABLE = {
+    'sections': [
+        {
+            'id': 'screening-diagnosis',
+            'title': '1. Sàng lọc và chẩn đoán GDM (IADPSG/ADA/ACOG)',
+            'headers': ['Nội dung', 'Khuyến cáo', 'Ngưỡng / tiêu chí', 'Ghi chú thực hành'],
+            'rows': [
+                ['Thời điểm tầm soát chuẩn', '24–28 tuần cho thai phụ chưa ĐTĐ trước mang thai', 'OGTT 75g 2 giờ (IADPSG/ADA) hoặc chiến lược 2 bước', 'Làm sớm ở người nguy cơ cao'],
+                ['Chẩn đoán theo IADPSG/ADA (OGTT 75g)', 'Chỉ cần 1 giá trị bất thường', 'Đói ≥ 92 mg/dL; 1h ≥ 180 mg/dL; 2h ≥ 153 mg/dL', 'Lấy máu đúng mốc thời gian'],
+                ['Chiến lược 2 bước (ACOG)', '50g GCT, nếu dương tính làm OGTT 100g 3 giờ', 'Ngưỡng GCT thường 130–140 mg/dL', 'Thống nhất ngưỡng theo quy trình cơ sở'],
+                ['Tầm soát sớm lần đầu thai kỳ', 'Áp dụng nhóm nguy cơ cao', 'BMI cao, tiền sử GDM, PCOS, người thân ĐTĐ, tiền sử con to...', 'Nếu âm tính, vẫn tầm soát lại 24–28 tuần'],
+            ],
+        },
+        {
+            'id': 'glycemic-targets',
+            'title': '2. Mục tiêu đường huyết thai kỳ',
+            'headers': ['Thời điểm đo', 'Mục tiêu', 'Mức độ ưu tiên', 'Ghi chú'],
+            'rows': [
+                ['Đường huyết đói / trước ăn', '< 95 mg/dL (5.3 mmol/L)', 'Cao', 'Theo dõi hằng ngày'],
+                ['1 giờ sau ăn', '< 140 mg/dL (7.8 mmol/L)', 'Cao', 'Ưu tiên khi theo dõi sau ăn 1h'],
+                ['2 giờ sau ăn', '< 120 mg/dL (6.7 mmol/L)', 'Cao', 'Dùng khi cơ sở theo dõi mốc 2h'],
+                ['HbA1c', 'Cá thể hóa, thường < 6.0–6.5% nếu an toàn', 'Trung bình', 'Không thay thế SMBG'],
+            ],
+        },
+        {
+            'id': 'nutrition',
+            'title': '3. Dinh dưỡng trong GDM',
+            'headers': ['Nguyên tắc', 'Khuyến nghị', 'Mục tiêu', 'Ghi chú'],
+            'rows': [
+                ['Phân bố bữa ăn', '3 bữa chính + 2–3 bữa phụ', 'Giảm dao động đường huyết', 'Tránh bỏ bữa sáng'],
+                ['Carbohydrate', 'Ưu tiên carb hấp thu chậm, giàu chất xơ', 'Hạn chế tăng đường sau ăn', 'Tránh nước ngọt, bánh kẹo ngọt'],
+                ['Năng lượng theo BMI', 'Cá thể hóa theo tam cá nguyệt và BMI', 'Tăng cân đúng khuyến nghị thai kỳ', 'Theo dõi cân nặng mỗi lần khám'],
+                ['Protein và chất béo', 'Đủ đạm, ưu tiên béo không bão hòa', 'Đảm bảo phát triển thai', 'Giảm đồ chiên rán'],
+            ],
+        },
+        {
+            'id': 'exercise',
+            'title': '4. Vận động và theo dõi tại nhà',
+            'headers': ['Nội dung', 'Khuyến cáo', 'Tần suất', 'Lưu ý'],
+            'rows': [
+                ['Vận động mức vừa', 'Đi bộ nhanh / đạp xe nhẹ / bơi', '≥ 150 phút/tuần', 'Chia ít nhất 3 ngày/tuần'],
+                ['Đi bộ sau ăn', '10–20 phút sau mỗi bữa', 'Hằng ngày', 'Giảm tăng đường sau ăn'],
+                ['Tự theo dõi đường huyết (SMBG)', 'Đói + sau ăn (1h hoặc 2h)', '4 điểm/ngày hoặc theo chỉ định', 'Ghi sổ theo dõi để chỉnh điều trị'],
+            ],
+        },
+        {
+            'id': 'insulin',
+            'title': '5. Chỉ định insulin và theo dõi',
+            'headers': ['Tình huống', 'Xử trí', 'Theo dõi', 'Ghi chú'],
+            'rows': [
+                ['Không đạt mục tiêu sau 1–2 tuần ăn uống + vận động', 'Khởi trị insulin', 'Điều chỉnh theo SMBG', 'Insulin là lựa chọn chuẩn trong thai kỳ'],
+                ['Tăng đường đói ưu thế', 'Ưu tiên nền (basal) buổi tối', 'Đường đói sáng hôm sau', 'Tăng liều từng bước nhỏ'],
+                ['Tăng đường sau ăn ưu thế', 'Thêm insulin nhanh trước bữa', 'Đường sau ăn 1h/2h', 'Điều chỉnh theo bữa gây tăng đường'],
+                ['Hạ đường huyết', 'Xử trí quy tắc 15g carbohydrate nhanh', 'Đo lại sau 15 phút', 'Luôn mang theo đường nhanh'],
+            ],
+        },
+        {
+            'id': 'delivery-postpartum',
+            'title': '6. Kế hoạch sinh và theo dõi sau sinh',
+            'headers': ['Nội dung', 'Khuyến nghị', 'Thời điểm', 'Ghi chú'],
+            'rows': [
+                ['Theo dõi thai cuối thai kỳ', 'NST/BPP theo chỉ định khi kiểm soát kém hoặc dùng thuốc', 'Tam cá nguyệt 3', 'Cá thể hóa theo nguy cơ mẹ-thai'],
+                ['Đánh giá thời điểm sinh', 'Cân nhắc theo kiểm soát đường, tăng trưởng thai, biến chứng', 'Cuối thai kỳ', 'Theo phác đồ sản khoa cơ sở'],
+                ['Tầm soát ĐTĐ sau sinh', 'OGTT 75g sau sinh', '4–12 tuần hậu sản', 'Phát hiện sớm tiền ĐTĐ/ĐTĐ thật sự'],
+                ['Phòng ngừa lâu dài', 'Tư vấn lối sống + tầm soát định kỳ', 'Mỗi 1–3 năm', 'Nguy cơ tái phát GDM ở thai kỳ sau'],
+            ],
+        },
+    ],
+}
+
+_DEFAULT_FETAL_NUTRITION_TABLE = {
+    'sections': [
+        {
+            'id': 'stage-macros',
+            'title': '1. Đa lượng theo giai đoạn (chuẩn bị mang thai / thai kỳ theo quý)',
+            'headers': ['Giai đoạn', 'Năng lượng (kcal/ngày)', 'Protein (g/ngày)', 'Carb', 'Chất béo', 'Ghi chú thực hành'],
+            'rows': [
+                ['Chuẩn bị mang thai', 'Tùy cá nhân (ước tính theo nhu cầu)', 'Khoảng 1.0–1.1 g/kg/ngày', 'Ưu tiên carb hấp thu chậm, giàu chất xơ', 'Ưu tiên chất béo không bão hòa', 'Tránh ăn quá ít; tối ưu cân nặng'],
+                ['Quý I (0–13+6 tuần)', '+ ~0–70 kcal so với nền (tùy thai phụ)', 'Khoảng 1.1 g/kg/ngày', 'Giữ ổn định bữa ăn, tránh dao động', 'Không giảm quá thấp chất béo', 'Ưu tiên xử trí ốm nghén để đảm bảo ăn đủ'],
+                ['Quý II (14–27+6 tuần)', '+ ~340 kcal/ngày (tham chiếu)', 'Khoảng 71–90 g/ngày', 'Tăng chất xơ, kiểm soát đồ ngọt', 'Bổ sung omega-3 từ cá/nguồn phù hợp', 'Tăng cân mục tiêu theo BMI'],
+                ['Quý III (28–40 tuần)', '+ ~450 kcal/ngày (tham chiếu)', 'Khoảng 80–100 g/ngày', 'Chia nhỏ bữa', 'Duy trì chất béo tốt', 'Theo dõi tăng cân và tiêu hóa'],
+            ],
+        },
+        {
+            'id': 'micros',
+            'title': '2. Vi lượng & vitamin khoáng (mốc thực hành phổ biến)',
+            'headers': ['Chất', 'Liều khuyến nghị', 'Khi nào', 'Ghi chú'],
+            'rows': [
+                ['Folate / acid folic', '400–800 mcg/ngày (tiền sử nguy cơ cao có thể cao hơn)', 'Tối thiểu từ trước thụ thai đến hết Quý I', 'Giảm nguy cơ NTD; theo chỉ định bác sĩ nếu nguy cơ cao'],
+                ['Sắt', '27 mg/ngày (tham chiếu)', 'Suốt thai kỳ (thường bắt đầu sớm)', 'Nếu thiếu máu/feritin thấp: cá thể hóa và theo dõi đáp ứng'],
+                ['Canxi', '1000 mg/ngày', 'Suốt thai kỳ', 'Nếu không dùng đủ từ ăn: cân nhắc bổ sung; chia liều tránh khó hấp thu'],
+                ['Vitamin D', '600 IU/ngày (tham chiếu)', 'Suốt thai kỳ', 'Theo dõi 25(OH)D nếu có điều kiện'],
+                ['Iod', '150 mcg/ngày', 'Suốt thai kỳ', 'Dùng muối iod; tránh dùng liều quá cao'],
+                ['Omega-3 (DHA', '200–300 mg DHA/ngày', 'Suốt thai kỳ', 'Ưu tiên cá béo 2 lần/tuần; nếu không, cân nhắc bổ sung DHA'],
+                ['Vitamin B12', 'Tùy chế độ ăn; thường 2.6 mcg/ngày', 'Đặc biệt nếu ăn chay thuần/ít động vật', 'Cân nhắc xét nghiệm nếu nguy cơ thiếu'],
+                ['Kẽm (Zinc)', '11–12 mg/ngày', 'Suốt thai kỳ', 'Tránh bổ sung quá liều lâu dài'],
+                ['Choline', '450 mg/ngày', 'Suốt thai kỳ', 'Nguồn: trứng, thịt, cá; có thể bổ sung tùy chế độ ăn'],
+            ],
+        },
+        {
+            'id': 'meal-building',
+            'title': '3. Xây dựng chế độ ăn (mẫu thực hành)',
+            'headers': ['Mục tiêu', 'Khuyến nghị', 'Ghi chú'],
+            'rows': [
+                ['Cân bằng bữa ăn', '3 bữa chính + 2–3 bữa phụ; ưu tiên đạm nạc, rau xanh, tinh bột nguyên hạt', 'Chia nhỏ giúp giảm ợ nóng và ổn định đường huyết'],
+                ['Chất xơ', '≥ 25–30 g/ngày', 'Tăng dần để tránh đầy hơi'],
+                ['Đồ uống', 'Uống đủ nước; tránh nước ngọt/đồ uống có cồn', 'Caffeine giới hạn theo khuyến cáo cơ sở'],
+                ['Đảm bảo an toàn thực phẩm', 'Hạn chế thực phẩm sống; chế biến chín; vệ sinh', 'Giảm nguy cơ nhiễm khuẩn'],
+            ],
+        },
+        {
+            'id': 'supplement-playbook',
+            'title': '4. Gợi ý bổ sung (tổng quan theo nguyên tắc)',
+            'headers': ['Tình huống', 'Bổ sung thường được xem xét', 'Nguyên tắc dùng', 'Ghi chú'],
+            'rows': [
+                ['Không ăn đủ rau/khó đạt vi lượng', 'Prenatal vitamin theo chuẩn', 'Uống theo nhãn; theo dõi tác dụng phụ', 'Ưu tiên loại có sắt + folate phù hợp'],
+                ['Đang thiếu máu/feritin thấp', 'Sắt liều điều trị', 'Theo phác đồ; cân nhắc dạ dày', 'Không tự ý tăng liều khi chưa xét nghiệm'],
+                ['Không đạt canxi từ ăn', 'Canxi +/− Vitamin D', 'Chia 1–2 lần; tránh uống cùng một số khoáng khác', 'Cần tư vấn theo tình trạng tiêu hóa/kidney'],
+                ['Ăn chay thuần/ít B12', 'B12 bổ sung', 'Theo sản phẩm; có thể xét nghiệm', 'B12 không đủ có thể ảnh hưởng thai'],
+            ],
+        },
+    ],
+}
+
+
+_ISUOG_BIOMETRY_REF = {
+    'image_ref_doc': 'ISUOG Practice Guidelines — ultrasound assessment of fetal biometry and growth (2019)',
+    'image_ref_doc_url': 'https://www.isuog.org/static/d0d105b5-65b1-47f1-b4aa8b5e99afa1a6/ISUOG-Practice-Guidelines-ultrasound-fetal-biometry-growth.pdf',
+}
+_INTERGROWTH_REF = {
+    'image_ref_doc': 'INTERGROWTH-21st — Ultrasound methodology manual',
+    'image_ref_doc_url': 'https://intergrowth21.com/sites/default/files/2023-01/ultrasound_manual_24.07.14.pdf',
+}
+_NHS_FASP_REF = {
+    'image_ref_doc': 'NHS Fetal Anomaly Screening Programme — Ultrasound handbook',
+    'image_ref_doc_url': 'https://assets.publishing.service.gov.uk/media/611bc45ae90e07054a62c507/FASP_ultrasound_handbook_July_2015_090715.pdf',
+}
+_FMF_REF = {
+    'image_ref_doc': 'Fetal Medicine Foundation (FMF) — hướng dẫn đo tam kỳ đầu',
+    'image_ref_doc_url': 'https://fetalmedicine.org/',
+}
+_PEZARD_ECHO_REF = {
+    'image_source': 'Pezard (CC BY-SA 3.0)',
+    'image_source_url': 'https://commons.wikimedia.org/wiki/File:TGVecho1.gif',
+    'image_ref_doc': 'ISUOG — fetal echocardiography (4-chamber / outflow / great vessels)',
+    'image_ref_doc_url': 'https://www.isuog.org/',
+}
+_MORODER_REF = {
+    'image_source': 'W. Moroder (CC BY-SA 3.0)',
+    'image_source_url': 'https://commons.wikimedia.org/wiki/Category:Ultrasound_pictures_by_Wolfgang_Moroder',
+}
+_NT_MIDSAGITTAL_REF = {
+    'image_url': '/fetal-guide-media/refs/nt-fmf-moroder.jpg',
+    'image_source': 'W. Moroder — FMF (CC BY-SA 3.0)',
+    'image_source_url': 'https://commons.wikimedia.org/wiki/File:Nuchal_translucency_Dr._Wolfgang_Moroder.jpg',
+}
+_FETAL_GUIDE_IMAGE_REF_FIELDS = (
+    'image_url', 'image_source', 'image_source_url', 'image_ref_doc', 'image_ref_doc_url',
+)
+
+_FETAL_GUIDE_REFERENCE_IMAGES = {
+    'msd': {
+        'image_url': '/fetal-guide-media/refs/early-sac-ys-crl.gif',
+        'image_source': 'M. Häggström, WikiJournal of Medicine 2014 (CC0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Pregnancy_of_crown-rump_length_of_5.3mm_(6_weeks_1_day).gif',
+        'image_ref_doc': 'ISUOG — đánh giá siêu âm thai kỳ sớm',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'ys': {
+        'image_url': '/fetal-guide-media/refs/early-sac-ys-crl.gif',
+        'image_source': 'M. Häggström, WikiJournal of Medicine 2014 (CC0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Pregnancy_of_crown-rump_length_of_5.3mm_(6_weeks_1_day).gif',
+        **_ISUOG_BIOMETRY_REF,
+    },
+    'crl': {
+        'image_url': '/fetal-guide-media/refs/crl-moroder.jpg',
+        'image_source': 'W. Moroder (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:CRL_Crown_rump_length_12_weeks_ecografia_Dr._Wolfgang_Moroder.jpg',
+        **_NHS_FASP_REF,
+    },
+    'nt': {
+        'image_url': '/fetal-guide-media/refs/nt-fmf-moroder.jpg',
+        'image_source': 'W. Moroder — ảnh chứng nhận FMF (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Nuchal_translucency_Dr._Wolfgang_Moroder.jpg',
+        **_FMF_REF,
+    },
+    'bpd': {
+        'image_url': '/fetal-guide-media/refs/bpd-haaggstrom.jpg',
+        'image_source': 'M. Häggström, WikiJournal of Medicine 2014 (CC0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Biparietal_diameter.jpg',
+        **_ISUOG_BIOMETRY_REF,
+    },
+    'hc': {
+        'image_url': '/fetal-guide-media/refs/hc-head-nd420.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_420.jpg',
+        **_INTERGROWTH_REF,
+    },
+    'ac': {
+        'image_url': '/fetal-guide-media/refs/ac-transverse-abdomen.jpg',
+        'image_source': 'Feasibility of Fetal Portal Venous System Ultrasound Assessment (Diagnostics 2022, CC BY 4.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Transverse_plane_of_the_FT_fetal_abdomen_human.jpg',
+        **_INTERGROWTH_REF,
+    },
+    'fl': {
+        'image_url': '/fetal-guide-media/refs/fl-femur-nd435.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_435.jpg',
+        **_ISUOG_BIOMETRY_REF,
+    },
+    'hl': {
+        'image_url': '/fetal-guide-media/refs/limb-nd699.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_699.jpg',
+        **_ISUOG_BIOMETRY_REF,
+    },
+    'cereb': {
+        'image_url': '/fetal-guide-media/refs/cerebellum-moroder.jpg',
+        'image_source': 'W. Moroder (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Cervelletto_e_cisterna_magna_ecografia_ad_ultrasuoni_Dr._Wolfgang_Moroder.jpg',
+        **_ISUOG_BIOMETRY_REF,
+    },
+    'efw': {
+        'image_url': '/fetal-guide-media/refs/hc-head-nd420.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0) — minh họa mặt phẳng sinh trắc',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_420.jpg',
+        'image_ref_doc': 'INTERGROWTH-21st / FMF — biểu đồ EFW (Hadlock, Papageorghiou 2014)',
+        'image_ref_doc_url': 'https://intergrowth21.tghn.org/',
+    },
+    'efw_pct': {
+        'image_url': '/fetal-guide-media/refs/bpd-haaggstrom.jpg',
+        'image_source': 'M. Häggström (CC0) — minh họa chỉ số sinh trắc',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Biparietal_diameter.jpg',
+        'image_ref_doc': 'FMF / INTERGROWTH-21st — bách phân vị EFW',
+        'image_ref_doc_url': 'https://intergrowth21.tghn.org/',
+    },
+    'afi': {
+        'image_url': '/fetal-guide-media/refs/amniotic-fluid.jpg',
+        'image_source': 'W. Moroder (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Liquido_amniotico.jpg',
+        'image_ref_doc': 'ISUOG — đánh giá ối (AFI / DVP)',
+        'image_ref_doc_url': 'https://www.isuog.org/static/4e2ed89e-fa8a-42c2-9c0929cd89cb58ff/ISUOG-Practice-Guidelines-routine-mid-trimester-fetal-ultrasound.pdf',
+    },
+    'mvp': {
+        'image_url': '/fetal-guide-media/refs/amniotic-fluid.jpg',
+        'image_source': 'W. Moroder (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Liquido_amniotico.jpg',
+        'image_ref_doc': 'ISUOG — deepest vertical pocket (MVP/DVP)',
+        'image_ref_doc_url': 'https://www.isuog.org/static/4e2ed89e-fa8a-42c2-9c0929cd89cb58ff/ISUOG-Practice-Guidelines-routine-mid-trimester-fetal-ultrasound.pdf',
+    },
+    'psv': {
+        'image_url': '/fetal-guide-media/refs/doppler-mca-sample.png',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_0111145222_1457340.png',
+        'image_ref_doc': 'ISUOG — Doppler siêu âm thai',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'pi_ua': {
+        'image_url': '/fetal-guide-media/refs/doppler-ua-nd565.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_565.jpg',
+        **_ISUOG_BIOMETRY_REF,
+    },
+    'ri_ua': {
+        'image_url': '/fetal-guide-media/refs/doppler-ua-nd565.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_565.jpg',
+        **_ISUOG_BIOMETRY_REF,
+    },
+    'pi_mca': {
+        'image_url': '/fetal-guide-media/refs/doppler-mca-sample.png',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_0111145222_1457340.png',
+        **_ISUOG_BIOMETRY_REF,
+    },
+    'cpr': {
+        'image_url': '/fetal-guide-media/refs/doppler-mca-sample.png',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_0111145222_1457340.png',
+        'image_ref_doc': 'FMF — bách phân vị CPR (Nicolaides et al. 2018)',
+        'image_ref_doc_url': 'https://fetalmedicine.org/',
+    },
+    'nbl': {
+        'image_url': '/fetal-guide-media/refs/nasal-bone-absent.jpg',
+        'image_source': 'Mme Mim (CC BY-SA 4.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Absent_nasal_bone.jpg',
+        **_FMF_REF,
+    },
+    'it': {
+        **_NT_MIDSAGITTAL_REF,
+        'image_ref_doc': 'HCJM 2024 / Berlin IT — mặt phẳng giữa (cùng NT)',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'bs': {
+        **_NT_MIDSAGITTAL_REF,
+        'image_ref_doc': 'HCJM 2024 — IT/BS/BSOB (midsagittal)',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'bsob': {
+        **_NT_MIDSAGITTAL_REF,
+        'image_ref_doc': 'HCJM 2024 — IT/BS/BSOB (midsagittal)',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'bs_bsob': {
+        **_NT_MIDSAGITTAL_REF,
+        'image_ref_doc': 'HCJM 2024 — BS/BSOB ratio',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'dv_piv': {
+        'image_url': '/fetal-guide-media/refs/ductus-venosus-doppler.jpg',
+        'image_source': 'Nagy et al. — Diagnostics 2022 (CC BY 4.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Agenesis_of_ductus_venosus_human.jpg',
+        **_FMF_REF,
+    },
+    'dv_a_wave': {
+        'image_url': '/fetal-guide-media/refs/ductus-venosus-doppler.jpg',
+        'image_source': 'Nagy et al. — Diagnostics 2022 (CC BY 4.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Agenesis_of_ductus_venosus_human.jpg',
+        **_FMF_REF,
+    },
+    'uta_pi': {
+        'image_url': '/fetal-guide-media/refs/uta-doppler-nd566.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_566.jpg',
+        'image_ref_doc': 'Gómez et al. 2008 / FMF — sàng lọc tiền sản giật (UtA Doppler)',
+        'image_ref_doc_url': 'https://fetalmedicine.org/',
+    },
+    'jaw_index': {
+        'image_url': '/fetal-guide-media/refs/fetal-profile-moroder.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'Paladini / Rotten / FMF — profile / micrognathia',
+        'image_ref_doc_url': 'https://fetalmedicine.org/',
+    },
+    'ifa': {
+        'image_url': '/fetal-guide-media/refs/fetal-profile-moroder.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'Paladini / Rotten / FMF — inferior facial angle (profile)',
+        'image_ref_doc_url': 'https://fetalmedicine.org/',
+    },
+    'apd_td': {
+        'image_url': '/fetal-guide-media/refs/fetal-profile-moroder.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'FMF — mandible APD/TD (profile)',
+        'image_ref_doc_url': 'https://fetalmedicine.org/',
+    },
+    'cl': {
+        'image_url': '/fetal-guide-media/refs/cervix-length.jpg',
+        'image_source': 'M. Häggström (CC0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Cervix_length_measurement.jpg',
+        'image_ref_doc': 'Esplin 2021 / ISUOG — đo chiều dài cổ tử cung',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'ofd': {
+        'image_url': '/fetal-guide-media/refs/hc-head-nd420.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_420.jpg',
+        **_INTERGROWTH_REF,
+    },
+    'va': {
+        'image_url': '/fetal-guide-media/refs/hc-head-nd420.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_420.jpg',
+        'image_ref_doc': 'ISUOG — routine mid-trimester fetal ultrasound scan',
+        'image_ref_doc_url': 'https://www.isuog.org/static/4e2ed89e-fa8a-42c2-9c0929cd89cb58ff/ISUOG-Practice-Guidelines-routine-mid-trimester-fetal-ultrasound.pdf',
+    },
+    'cm': {
+        'image_url': '/fetal-guide-media/refs/cerebellum-moroder.jpg',
+        'image_source': 'W. Moroder (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Cervelletto_e_cisterna_magna_ecografia_ad_ultrasuoni_Dr._Wolfgang_Moroder.jpg',
+        'image_ref_doc': 'ISUOG — posterior fossa / cisterna magna',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'bpd_fl': {
+        'image_url': '/fetal-guide-media/refs/fl-femur-nd435.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_435.jpg',
+        'image_ref_doc': 'Campbell / Chitty — limb dysplasia ratios',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'hl_fl': {
+        'image_url': '/fetal-guide-media/refs/limb-nd699.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_699.jpg',
+        'image_ref_doc': 'Campbell / Chitty — limb dysplasia',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'fl_ac': {
+        'image_url': '/fetal-guide-media/refs/ac-transverse-abdomen.jpg',
+        'image_source': 'Diagnostics 2022 (CC BY 4.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Transverse_plane_of_the_FT_fetal_abdomen_human.jpg',
+        'image_ref_doc': 'Campbell / Chitty — short trunk / skeletal dysplasia',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'ri_mca': {
+        'image_url': '/fetal-guide-media/refs/doppler-mca-sample.png',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_0111145222_1457340.png',
+        **_ISUOG_BIOMETRY_REF,
+    },
+    'ua_notch': {
+        'image_url': '/fetal-guide-media/refs/doppler-ua-nd565.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_565.jpg',
+        **_ISUOG_BIOMETRY_REF,
+    },
+    'tr': {
+        'image_url': '/fetal-guide-media/refs/fetal-heart-doppler-nd.png',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_0121101156_1017514.png',
+        **_FMF_REF,
+    },
+    'fhr': {
+        'image_url': '/fetal-guide-media/refs/doppler-heartbeat-7w.gif',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Doppler_heartbeat_0218103423_1038270_7w_3d.gif',
+        'image_ref_doc': 'ISUOG — đánh giá tim thai sớm (FHR / M-mode)',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'cardiac_axis': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-4ch-tgv.gif',
+        **_PEZARD_ECHO_REF,
+    },
+    'ctr': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-4ch-tgv.gif',
+        **_PEZARD_ECHO_REF,
+        'image_ref_doc': 'ISUOG — cardiothoracic ratio (4-chamber view)',
+    },
+    'lv_major': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-4ch-tgv.gif',
+        **_PEZARD_ECHO_REF,
+    },
+    'lv_minor': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-4ch-tgv.gif',
+        **_PEZARD_ECHO_REF,
+    },
+    'rv_major': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-4ch-tgv.gif',
+        **_PEZARD_ECHO_REF,
+    },
+    'ivs': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-4ch-tgv.gif',
+        **_PEZARD_ECHO_REF,
+        'image_ref_doc': 'ISUOG fetal echo — IVS (4-chamber)',
+    },
+    'ao_root': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-lvot-tgv.gif',
+        **_PEZARD_ECHO_REF,
+        'image_ref_doc': 'ISUOG — LVOT / aortic root',
+    },
+    'pa_main': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-rvot-pa-tgv.gif',
+        **_PEZARD_ECHO_REF,
+        'image_ref_doc': 'ISUOG — RVOT / pulmonary artery',
+    },
+    'four_chamber': {
+        'image_url': '/fetal-guide-media/refs/fetal-heart-4ch-nd.png',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_0128160735_1615520.png',
+        'image_ref_doc': 'ISUOG — 4-chamber view (routine fetal heart)',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'lvot_view': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-lvot-tgv.gif',
+        **_PEZARD_ECHO_REF,
+    },
+    'rvot_view': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-rvot-pa-tgv.gif',
+        **_PEZARD_ECHO_REF,
+    },
+    'aortic_arch': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-great-vessels-tgv.gif',
+        **_PEZARD_ECHO_REF,
+        'image_ref_doc': 'ISUOG — aortic arch / great vessels',
+    },
+    'three_v_trachea': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-great-vessels-tgv.gif',
+        **_PEZARD_ECHO_REF,
+        'image_ref_doc': 'ISUOG — three vessel trachea view',
+    },
+    'mpi': {
+        'image_url': '/fetal-guide-media/refs/fetal-heart-mmode.gif',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_0121101156_1017510.gif',
+        'image_ref_doc': 'ISUOG — Doppler fetal echo (MPI/Tei)',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'ew': {
+        'image_url': '/fetal-guide-media/refs/fetal-profile-moroder.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'Jeanty — ear nomogram EL/EW (profile/coronal)',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'el_bpd': {
+        'image_url': '/fetal-guide-media/refs/bpd-haaggstrom.jpg',
+        'image_source': 'M. Häggström (CC0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Biparietal_diameter.jpg',
+        'image_ref_doc': 'Jeanty / Chitty — EL/BPD ratio',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'ear_position': {
+        'image_url': '/fetal-guide-media/refs/fetal-profile-moroder.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'Jeanty — low-set ears (profile)',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'lens': {
+        'image_url': '/fetal-guide-media/refs/fetal-orbit-axial-lens.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'ISUOG — fetal orbit / lens (axial)',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'ipd': {
+        'image_url': '/fetal-guide-media/refs/fetal-orbit-cataract.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'Jeanty / Goldstein — orbital distances',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'bod': {
+        'image_url': '/fetal-guide-media/refs/fetal-orbit-cataract.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'Jeanty / Goldstein — BOD/IOD/OD nomogram',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'iod': {
+        'image_url': '/fetal-guide-media/refs/fetal-orbit-cataract.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'Jeanty / Goldstein — orbital nomogram',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'od': {
+        'image_url': '/fetal-guide-media/refs/fetal-orbit-cataract.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'Jeanty / Goldstein — ocular diameter',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'el': {
+        'image_url': '/fetal-guide-media/refs/fetal-profile-moroder.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'Jeanty — ear length (profile)',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    # —— Mặt cắt chuẩn ISUOG ——
+    'plane_tv': {
+        'image_url': '/fetal-guide-media/refs/hc-head-nd420.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_420.jpg',
+        'image_ref_doc': 'ISUOG — transventricular plane',
+        'image_ref_doc_url': 'https://www.isuog.org/static/4e2ed89e-fa8a-42c2-9c0929cd89cb58ff/ISUOG-Practice-Guidelines-routine-mid-trimester-fetal-ultrasound.pdf',
+    },
+    'plane_tt': {
+        'image_url': '/fetal-guide-media/refs/bpd-haaggstrom.jpg',
+        'image_source': 'M. Häggström (CC0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Biparietal_diameter.jpg',
+        **_ISUOG_BIOMETRY_REF,
+    },
+    'plane_tc': {
+        'image_url': '/fetal-guide-media/refs/cerebellum-moroder.jpg',
+        'image_source': 'W. Moroder (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Cervelletto_e_cisterna_magna_ecografia_ad_ultrasuoni_Dr._Wolfgang_Moroder.jpg',
+        'image_ref_doc': 'ISUOG — transcerebellar plane',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'plane_midsag_brain': {
+        'image_url': '/fetal-guide-media/refs/holoprosencephaly-midline-moroder.jpg',
+        'image_source': 'W. Moroder (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Holoprosencephaly_fetus_14_weeks_US_by_Dr._W._Moroder.jpg',
+        'image_ref_doc': 'ISUOG — midsagittal brain / CSP',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'plane_profile': {
+        'image_url': '/fetal-guide-media/refs/fetal-profile-moroder.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'FMF / NHS FASP — profile plane',
+        'image_ref_doc_url': 'https://fetalmedicine.org/',
+    },
+    'plane_coronal_face': {
+        'image_url': '/fetal-guide-media/refs/fetal-orbit-cataract.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'ISUOG — coronal face / orbit',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'plane_palate': {
+        'image_url': '/fetal-guide-media/refs/fetal-profile-moroder.jpg',
+        **_MORODER_REF,
+        'image_ref_doc': 'NHS FASP — palate / lip assessment',
+        'image_ref_doc_url': 'https://assets.publishing.service.gov.uk/media/611bc45ae90e07054a62c507/FASP_ultrasound_handbook_July_2015_090715.pdf',
+    },
+    'plane_five_chamber': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-4ch-tgv.gif',
+        **_PEZARD_ECHO_REF,
+        'image_ref_doc': 'ISUOG — five-chamber view',
+    },
+    'plane_ductal_arch': {
+        'image_url': '/fetal-guide-media/refs/fetal-echo-great-vessels-tgv.gif',
+        **_PEZARD_ECHO_REF,
+        'image_ref_doc': 'ISUOG — ductal arch',
+    },
+    'plane_bicaval': {
+        'image_url': '/fetal-guide-media/refs/fetal-heart-4ch-nd.png',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_0128160735_1615520.png',
+        'image_ref_doc': 'ISUOG — bicaval view',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'plane_abdomen_std': {
+        'image_url': '/fetal-guide-media/refs/ac-transverse-abdomen.jpg',
+        'image_source': 'Diagnostics 2022 (CC BY 4.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Transverse_plane_of_the_FT_fetal_abdomen_human.jpg',
+        'image_ref_doc': 'ISUOG / INTERGROWTH — standard abdominal plane',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'plane_cord_insertion': {
+        'image_url': '/fetal-guide-media/refs/ac-transverse-abdomen.jpg',
+        'image_source': 'Diagnostics 2022 (CC BY 4.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Transverse_plane_of_the_FT_fetal_abdomen_human.jpg',
+        'image_ref_doc': 'ISUOG — umbilical cord insertion',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'plane_diaphragm': {
+        'image_url': '/fetal-guide-media/refs/ac-transverse-abdomen.jpg',
+        'image_source': 'Diagnostics 2022 (CC BY 4.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Transverse_plane_of_the_FT_fetal_abdomen_human.jpg',
+        'image_ref_doc': 'ISUOG — diaphragm / CDH screening',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'plane_kidney_cor': {
+        'image_url': '/fetal-guide-media/refs/ac-transverse-abdomen.jpg',
+        'image_source': 'Diagnostics 2022 (CC BY 4.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Transverse_plane_of_the_FT_fetal_abdomen_human.jpg',
+        'image_ref_doc': 'ISUOG — renal anatomy survey',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'plane_bladder': {
+        'image_url': '/fetal-guide-media/refs/amniotic-fluid.jpg',
+        'image_source': 'W. Moroder (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Liquido_amniotico.jpg',
+        'image_ref_doc': 'ISUOG — fetal bladder',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'plane_spine_sag': {
+        'image_url': '/fetal-guide-media/refs/spine-sagittal-moroder.jpg',
+        'image_source': 'W. Moroder (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Spina_bifida_lombare_sagittale.jpg',
+        'image_ref_doc': 'NHS FASP — spine sagittal survey',
+        'image_ref_doc_url': 'https://assets.publishing.service.gov.uk/media/611bc45ae90e07054a62c507/FASP_ultrasound_handbook_July_2015_090715.pdf',
+    },
+    'plane_spine_ax': {
+        'image_url': '/fetal-guide-media/refs/spine-3d-moroder.jpg',
+        'image_source': 'W. Moroder (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_of_fetal_spine_at_20_weeks_3D_Dr._Moroder.jpg',
+        'image_ref_doc': 'ISUOG — spine axial/arch',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'plane_hands': {
+        'image_url': '/fetal-guide-media/refs/limb-nd699.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_699.jpg',
+        'image_ref_doc': 'NHS FASP — hands survey',
+        'image_ref_doc_url': 'https://assets.publishing.service.gov.uk/media/611bc45ae90e07054a62c507/FASP_ultrasound_handbook_July_2015_090715.pdf',
+    },
+    'plane_feet': {
+        'image_url': '/fetal-guide-media/refs/fl-femur-nd435.jpg',
+        'image_source': 'Nevit Dilmen (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Ultrasound_Scan_ND_435.jpg',
+        'image_ref_doc': 'NHS FASP — feet / lower limb survey',
+        'image_ref_doc_url': 'https://assets.publishing.service.gov.uk/media/611bc45ae90e07054a62c507/FASP_ultrasound_handbook_July_2015_090715.pdf',
+    },
+    'plane_cord_3v': {
+        'image_url': '/fetal-guide-media/refs/placenta-cord-moroder.jpg',
+        'image_source': 'W. Moroder (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Human_placenta_umbilical_cord_Ultrasound_by_Dr._W._Moroder.jpg',
+        'image_ref_doc': 'ISUOG — umbilical cord (3 vessels)',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'plane_placenta': {
+        'image_url': '/fetal-guide-media/refs/placenta-cord-moroder.jpg',
+        'image_source': 'W. Moroder (CC BY-SA 3.0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Human_placenta_umbilical_cord_Ultrasound_by_Dr._W._Moroder.jpg',
+        'image_ref_doc': 'ISUOG — placental location',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+    'plane_cervix_tv': {
+        'image_url': '/fetal-guide-media/refs/cervix-length.jpg',
+        'image_source': 'M. Häggström (CC0)',
+        'image_source_url': 'https://commons.wikimedia.org/wiki/File:Cervix_length_measurement.jpg',
+        'image_ref_doc': 'Esplin 2021 / ISUOG — cervical length TV plane',
+        'image_ref_doc_url': 'https://www.isuog.org/',
+    },
+}
+
+
+def _apply_fetal_guide_reference_images(items):
+    """Gắn ảnh minh họa & nguồn tham chiếu vào từng chỉ số."""
+    out = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        it = dict(item)
+        ref = _FETAL_GUIDE_REFERENCE_IMAGES.get(str(it.get('id') or '').strip())
+        if ref:
+            for key in _FETAL_GUIDE_IMAGE_REF_FIELDS:
+                val = ref.get(key)
+                if not val:
+                    continue
+                cur = str(it.get(key) or '').strip()
+                if key == 'image_url' and cur and not cur.startswith('/fetal-guide-media/refs/'):
+                    continue
+                if not cur or cur.startswith('/fetal-guide-media/refs/'):
+                    it[key] = val
+        out.append(it)
+    return out
+
+
+def _migrate_fetal_guide_reference_images(data):
+    """Bổ sung ảnh tham chiếu cho dữ liệu đã lưu (chỉ điền trường còn trống)."""
+    if not isinstance(data, dict):
+        return data, False
+    items = data.get('items')
+    if not isinstance(items, list):
+        return data, False
+    merged = _apply_fetal_guide_reference_images(items)
+    changed = merged != items
+    if changed:
+        data = dict(data)
+        data['items'] = merged
+    return data, changed
+
+
+def _fetal_guide_all_raw_items():
+    """Gộp chỉ số cơ bản + chuyên sâu + chuyên khoa (tim, mắt, tai) + mặt cắt chuẩn."""
+    base = _default_fetal_guide_base_items()
+    try:
+        from fetal_guide_deep_items import FETAL_GUIDE_DEEP_ITEMS
+    except ImportError:
+        FETAL_GUIDE_DEEP_ITEMS = []
+    try:
+        from fetal_guide_specialty_items import FETAL_GUIDE_SPECIALTY_ITEMS
+    except ImportError:
+        FETAL_GUIDE_SPECIALTY_ITEMS = []
+    try:
+        from fetal_guide_planes_items import FETAL_GUIDE_PLANES_ITEMS
+    except ImportError:
+        FETAL_GUIDE_PLANES_ITEMS = []
+    return base + list(FETAL_GUIDE_DEEP_ITEMS) + list(FETAL_GUIDE_SPECIALTY_ITEMS) + list(FETAL_GUIDE_PLANES_ITEMS)
+
+
+_FETAL_GUIDE_RECATEGORIZE = {
+    'bod': 'Siêu âm mắt',
+    'iod': 'Siêu âm mắt',
+    'od': 'Siêu âm mắt',
+    'el': 'Siêu âm tai',
+}
+
+
+def _migrate_fetal_guide_msd_label(data):
+    """Sửa nhãn MSD: đường kính trung bình túi thai, không phải túi noãn hoàng."""
+    if not isinstance(data, dict):
+        return data, False
+    items = data.get('items')
+    if not isinstance(items, list):
+        return data, False
+    default_msd = next(
+        (item for item in _default_fetal_guide_base_items() if item.get('id') == 'msd'),
+        None,
+    )
+    if not default_msd:
+        return data, False
+    changed = False
+    out = []
+    for item in items:
+        if not isinstance(item, dict):
+            out.append(item)
+            continue
+        it = dict(item)
+        if str(it.get('id') or '').strip() == 'msd':
+            text_blob = ' '.join(
+                str(it.get(key) or '') for key in ('name', 'plane', 'method', 'tips')
+            ).lower()
+            if 'noãn hoàng' in text_blob:
+                for key in ('name', 'plane', 'method', 'tips'):
+                    if it.get(key) != default_msd.get(key):
+                        it[key] = default_msd[key]
+                        changed = True
+        out.append(it)
+    if changed:
+        data = dict(data)
+        data['items'] = out
+    return data, changed
+
+
+def _migrate_fetal_guide_recategorize(data):
+    """Chuyển BOD/IOD/OD/EL sang nhóm Siêu âm mắt / tai."""
+    if not isinstance(data, dict):
+        return data, False
+    items = data.get('items')
+    if not isinstance(items, list):
+        return data, False
+    changed = False
+    out = []
+    for item in items:
+        if not isinstance(item, dict):
+            out.append(item)
+            continue
+        it = dict(item)
+        item_id = str(it.get('id') or '').strip()
+        new_cat = _FETAL_GUIDE_RECATEGORIZE.get(item_id)
+        if new_cat and it.get('category') != new_cat:
+            it['category'] = new_cat
+            changed = True
+        out.append(it)
+    if changed:
+        data = dict(data)
+        data['items'] = out
+    return data, changed
+
+
+def _migrate_fetal_guide_append_items(data):
+    """Thêm chỉ số chuyên sâu mới vào dữ liệu đã lưu (theo id)."""
+    if not isinstance(data, dict):
+        return data, False
+    items = data.get('items')
+    if not isinstance(items, list):
+        return data, False
+    try:
+        from fetal_guide_deep_items import FETAL_GUIDE_DEEP_ITEMS
+    except ImportError:
+        FETAL_GUIDE_DEEP_ITEMS = []
+    try:
+        from fetal_guide_specialty_items import FETAL_GUIDE_SPECIALTY_ITEMS
+    except ImportError:
+        FETAL_GUIDE_SPECIALTY_ITEMS = []
+    try:
+        from fetal_guide_planes_items import FETAL_GUIDE_PLANES_ITEMS
+    except ImportError:
+        FETAL_GUIDE_PLANES_ITEMS = []
+    default_by_id = {i['id']: i for i in _apply_fetal_guide_reference_images(
+        [dict(x) for x in (_default_fetal_guide_base_items() + list(FETAL_GUIDE_DEEP_ITEMS) + list(FETAL_GUIDE_SPECIALTY_ITEMS) + list(FETAL_GUIDE_PLANES_ITEMS))]
+    )}
+    existing_ids = {str(i.get('id') or '').strip() for i in items if isinstance(i, dict)}
+    added = False
+    out = list(items)
+    for item_id, default_item in default_by_id.items():
+        if item_id not in existing_ids:
+            out.append(json.loads(json.dumps(default_item)))
+            added = True
+    if added:
+        data = dict(data)
+        data['items'] = out
+    return data, added
+
+
+def _default_fetal_guide_base_items():
+    """19 chỉ số siêu âm thai cơ bản."""
+    return [
+        {'id': 'msd', 'code': 'MSD', 'name': 'Đường kính trung bình túi thai (MSD)', 'unit': 'mm', 'category': 'Tam cá nguyệt I',
+         'ga_range': '5–6+ tuần', 'plane': 'Mặt cắt ngang túi thai tròn/bầu dục',
+         'method': 'Đo 3 đường kính trong (inner-to-inner) vuông góc nhau của túi thai, lấy trung bình (mean sac diameter).',
+         'tips': 'Túi thai tròn; tránh đo khi méo hoặc có máu quanh túi. MSD tăng ~1 mm/ngày giai đoạn sớm.', 'image_url': '', 'aliases': ['MSD', 'Mean sac diameter']},
+        {'id': 'ys', 'code': 'YS', 'name': 'Túi noãn hoàng (YS)', 'unit': 'mm', 'category': 'Tam cá nguyệt I',
+         'ga_range': '5–10 tuần', 'plane': 'Cùng mặt cắt với MSD, thấy túi noãn hoàng',
+         'method': 'Đo đường kính trong túi noãn hoàng (inner-to-inner), vuông góc với thành túi.',
+         'tips': 'YS bình thường 2–6 mm; >6 mm hoặc <2 mm cần đánh giá thêm. YS đôi: theo dõi sát.', 'image_url': '', 'aliases': ['YS', 'Yolk sac']},
+        {'id': 'crl', 'code': 'CRL', 'name': 'Chiều dài đầu–mông (CRL)', 'unit': 'mm', 'category': 'Tam cá nguyệt I',
+         'ga_range': '6–13+6 tuần', 'plane': 'Mặt phẳng giữa (midsagittal) — thai nhi thẳng, trung tính',
+         'method': 'Đo từ đỉnh đầu (vertex) đến cuối mông (rump), không tính chân. Caliper vuông góc với trục dọc thai.',
+         'tips': 'Thai cong gập — chỉnh mặt phẳng trước khi đo. CRL là chỉ số chính xác nhất để xác định tuổi thai giai đoạn sớm.', 'image_url': '', 'aliases': ['CRL', 'Crown-Rump Length']},
+        {'id': 'nt', 'code': 'NT', 'name': 'Độ mờ gáy (NT)', 'unit': 'mm', 'category': 'Sàng lọc 11–13+6',
+         'ga_range': '11–13+6 tuần', 'plane': 'Mặt phẳng giữa — thai thẳng, đầu hơi ngửa',
+         'method': 'Đo độ dày tối đa của bản mờ phía sau cổ thai nhi, từ da đến màng ức (inner-to-inner). Đo vuông góc với da lưng.',
+         'tips': 'Thu phóng đủ lớn; thai chiếm ≥75% khung hình. Lấy trung vị ≥3 lần đo. Kèm đánh giá xương mũi, tim thai, doppler ống động mạch.', 'image_url': '', 'aliases': ['NT', 'Nuchal translucency']},
+        {'id': 'bpd', 'code': 'BPD', 'name': 'Đường kính lưỡng đỉnh (BPD)', 'unit': 'mm', 'category': 'Sinh trắc học',
+         'ga_range': '≥13 tuần', 'plane': 'Mặt cắt ngang đầu — thalami, bên não thứ ba, không thấy xương sọ',
+         'method': 'Đo đường kính ngang lớn nhất từ xương sọ bên này sang xương sọ bên kia (outer-to-outer hoặc theo protocol máy).',
+         'tips': 'Mặt phẳng chuẩn: thalami đối xứng, falx giữa. Tránh mặt cắt quá cao (hình oval) hoặc quá thấp.', 'image_url': '', 'aliases': ['BPD', 'Biparietal diameter']},
+        {'id': 'hc', 'code': 'HC', 'name': 'Chu vi đầu (HC)', 'unit': 'mm', 'category': 'Sinh trắc học',
+         'ga_range': '≥13 tuần', 'plane': 'Cùng mặt cắt BPD',
+         'method': 'Đo chu vi đầu theo đường ellipse bao quanh ngoài xương sọ (outer skull).',
+         'tips': 'HC thường chính xác hơn BPD khi đầu méo. Kiểm tra mặt phẳng trước khi đo.', 'image_url': '', 'aliases': ['HC', 'Head circumference']},
+        {'id': 'ac', 'code': 'AC', 'name': 'Chu vi bụng (AC)', 'unit': 'mm', 'category': 'Sinh trắc học',
+         'ga_range': '≥13 tuần', 'plane': 'Mặt cắt ngang bụng — thấy dạ dày, tĩnh mạch cửa, xương sống',
+         'method': 'Đo chu vi bụng tại vị trí tròn nhất, bao gồm gan và dạ dày.',
+         'tips': 'Dạ dày bên trái, cửa tĩnh mạch bên phải. Tránh co thắt hoặc mặt cắt xiên.', 'image_url': '', 'aliases': ['AC', 'Abdominal circumference']},
+        {'id': 'fl', 'code': 'FL', 'name': 'Chiều dài xương đùi (FL)', 'unit': 'mm', 'category': 'Sinh trắc học',
+         'ga_range': '≥13 tuần', 'plane': 'Mặt cắt dọc xương đùi — thấy toàn bộ chiều dài xương',
+         'method': 'Đo từ đầu gần (proximal) đến đầu xa (distal) của xương đùi, không tính epiphysis nếu chưa vôi hóa.',
+         'tips': 'Xương song song với probe. Lấy trung bình nếu đo 2 lần. FL quan trọng cho EFW và sàng lọc chậm phát triển.', 'image_url': '', 'aliases': ['FL', 'Femur length']},
+        {'id': 'hl', 'code': 'HL', 'name': 'Chiều dài xương cánh tay (HL)', 'unit': 'mm', 'category': 'Sinh trắc học',
+         'ga_range': '≥13 tuần', 'plane': 'Mặt cắt dọc xương cánh tay',
+         'method': 'Đo chiều dài xương cánh tay (humerus) tương tự FL.',
+         'tips': 'Bổ sung khi nghi ngờ khiếm khuyết chi hoặc hội chứng. Không thay thế FL trong EFW thông thường.', 'image_url': '', 'aliases': ['HL', 'HUM', 'Humerus length']},
+        {'id': 'cereb', 'code': 'Cereb', 'name': 'Đường kính tiểu não (TCD/Cereb)', 'unit': 'mm', 'category': 'Sinh trắc học',
+         'ga_range': '≥18 tuần', 'plane': 'Mặt cắt ngang đầu qua thalami — thấy tiểu não',
+         'method': 'Đo đường kính ngang lớn nhất của tiểu não (transcerebellar diameter).',
+         'tips': 'Hữu ích khi BPD méo hoặc nghi ngờ bất thường sọ não. Mặt phẳng phải thấy thalami đối xứng.', 'image_url': '', 'aliases': ['Cereb', 'TCD', 'Cerebellum']},
+        {'id': 'efw', 'code': 'EFW', 'name': 'Cân nặng ước tính thai (EFW)', 'unit': 'g', 'category': 'Sinh trắc học',
+         'ga_range': '≥14 tuần', 'plane': 'Từ BPD/HC/AC/FL trên mặt phẳng chuẩn',
+         'method': 'Nhập các chỉ số sinh trắc vào công thức (Hadlock, Shepard, INTERGROWTH-21st…). Máy tự tính EFW.',
+         'tips': 'Dùng cùng bộ công thức trong suốt thai kỳ. EFW <10%: SGA/FGR; >90%: LGA — đối chiếu biểu đồ.', 'image_url': '', 'aliases': ['EFW', 'Estimated fetal weight']},
+        {'id': 'efw_pct', 'code': '% EFW', 'name': 'Phần trăm EFW (percentile)', 'unit': '%', 'category': 'Sinh trắc học',
+         'ga_range': 'Theo tuổi thai', 'plane': '—',
+         'method': 'Đối chiếu EFW với biểu đồ chuẩn theo tuổi thai (Hadlock, INTERGROWTH, WHO…).',
+         'tips': '<10%: theo dõi FGR/SGA; >90%: cân nhắc ĐTĐ thai kỳ/macrosomia. Ghi rõ biểu đồ đang dùng.', 'image_url': '', 'aliases': ['% EFW', 'EFW percentile']},
+        {'id': 'afi', 'code': 'AFI', 'name': 'Chỉ số ối (AFI)', 'unit': 'cm', 'category': 'Ối / thai nhi',
+         'ga_range': '≥20 tuần', 'plane': '4 túi ối — chia bụng mẹ thành 4 góc phần tư',
+         'method': 'Đo chiều cao túi ối lớn nhất ở mỗi góc phần tư (không có cuống rốn/thai). Cộng 4 giá trị = AFI.',
+         'tips': 'AFI <5 cm: oligohydramnios; >25 cm (hoặc theo ngưỡng cơ sở): polyhydramnios. Tránh đo qua thai/cuống rốn.', 'image_url': '', 'aliases': ['AFI', 'Amniotic fluid index']},
+        {'id': 'mvp', 'code': 'MVP', 'name': 'Bể ối sâu nhất (MVP/DVP)', 'unit': 'cm', 'category': 'Ối / thai nhi',
+         'ga_range': '≥20 tuần', 'plane': 'Mặt cắt ngang ổ bụng mẹ',
+         'method': 'Đo chiều cao túi ối sâu nhất, vuông góc với thành túi, không có thai/cuống rốn.',
+         'tips': 'MVP <2 cm: oligohydramnios; >8 cm: polyhydramnios (ngưỡng có thể khác theo guideline). Nhanh hơn AFI.', 'image_url': '', 'aliases': ['MVP', 'DVP', 'Deepest vertical pocket']},
+        {'id': 'psv', 'code': 'PSV', 'name': 'Vận tốc đỉnh sóng (PSV ĐMC)', 'unit': 'cm/s', 'category': 'Doppler',
+         'ga_range': 'Theo chỉ định', 'plane': 'Doppler động mạch não giữa (MCA) hoặc ống động mạch',
+         'method': 'Đặt sample gate trong lòng mạch, góc ≤30°. Lấy PSV cao nhất trong 3–5 chu kỳ.',
+         'tips': 'Dùng trong sàng lọc thiếu máu (Middle Cerebral Artery PSV). Ghi rõ mạch đo.', 'image_url': '', 'aliases': ['PSV', 'Peak systolic velocity']},
+        {'id': 'pi_ua', 'code': 'PI ĐM rốn', 'name': 'PI động mạch rốn (UA PI)', 'unit': '—', 'category': 'Doppler',
+         'ga_range': '≥24 tuần', 'plane': 'Mặt cắt ngang qua vùng rốn — đo UA giữa thai và điểm nhập gan',
+         'method': 'Doppler UA: sample gate trong lumen, góc ≤30°. Lấy PI từ 3–5 chu kỳ đồng nhất.',
+         'tips': 'PI tăng: nguy cơ FGR/suy thai. Notching cuối tâm thu: đánh giá thêm. Tránh co thắt mạch.', 'image_url': '', 'aliases': ['UA PI', 'PI UA', 'Umbilical artery PI']},
+        {'id': 'ri_ua', 'code': 'RI ĐM rốn', 'name': 'RI động mạch rốn (UA RI)', 'unit': '—', 'category': 'Doppler',
+         'ga_range': '≥24 tuần', 'plane': 'Cùng UA PI',
+         'method': 'RI = (PSV - EDV) / PSV. Đo tương tự UA PI.',
+         'tips': 'RI giảm dần theo tuổi thai. RI=1 hoặc notching: cần theo dõi sát.', 'image_url': '', 'aliases': ['UA RI', 'RI UA']},
+        {'id': 'pi_mca', 'code': 'PI ĐM não', 'name': 'PI động mạch não giữa (MCA PI)', 'unit': '—', 'category': 'Doppler',
+         'ga_range': '≥24 tuần', 'plane': 'MCA đo gần gốc, song song với probe',
+         'method': 'Doppler MCA: sample gate giữa lòng mạch. Lấy PI trung bình 3 chu kỳ.',
+         'tips': 'PI MCA giảm trong thiếu máu (brain sparing). Đối chiếu với UA PI để tính CPR.', 'image_url': '', 'aliases': ['MCA PI', 'PI MCA', 'Middle cerebral artery PI']},
+        {'id': 'cpr', 'code': 'CPR', 'name': 'Tỷ số CPR (MCA PI / UA PI)', 'unit': '—', 'category': 'Doppler',
+         'ga_range': '≥28 tuần', 'plane': 'Từ PI MCA và PI UA đo cùng buổi',
+         'method': 'CPR = PI MCA / PI UA (hoặc RI MCA / RI UA tùy protocol). Máy có thể tính tự động.',
+         'tips': 'CPR thấp: brain sparing, nguy cơ FGR/suy thai. Đối chiếu biểu đồ theo tuổi thai.', 'image_url': '', 'aliases': ['CPR', 'Cerebroplacental ratio']},
+    ]
+
+
+def _default_fetal_guide_items():
+    """Danh mục chỉ số đo SA thai (cơ bản + chuyên sâu + tim/mắt/tai) + ảnh minh họa."""
+    return _apply_fetal_guide_reference_images(_fetal_guide_all_raw_items())
+
+
+_DEFAULT_FETAL_GUIDE_TABLE = {
+    'items': _default_fetal_guide_items(),
+}
+
+
+def _normalize_fetal_guide_table(data):
+    if not isinstance(data, dict):
+        raise ValueError('Dữ liệu bảng hướng dẫn không hợp lệ')
+    items_in = data.get('items')
+    if not isinstance(items_in, list):
+        raise ValueError('Bảng hướng dẫn cần mảng items')
+    items_out = []
+    seen_ids = set()
+    for idx, item in enumerate(items_in):
+        if not isinstance(item, dict):
+            continue
+        item_id = str(item.get('id') or '').strip() or f'item-{idx + 1}'
+        if item_id in seen_ids:
+            item_id = f'{item_id}-{idx + 1}'
+        seen_ids.add(item_id)
+        aliases = item.get('aliases')
+        if isinstance(aliases, str):
+            aliases = [a.strip() for a in aliases.split(',') if a.strip()]
+        elif not isinstance(aliases, list):
+            aliases = []
+        items_out.append({
+            'id': item_id,
+            'code': str(item.get('code') or '').strip(),
+            'name': str(item.get('name') or '').strip(),
+            'unit': str(item.get('unit') or '').strip(),
+            'category': str(item.get('category') or '').strip(),
+            'ga_range': str(item.get('ga_range') or '').strip(),
+            'plane': str(item.get('plane') or '').strip(),
+            'method': str(item.get('method') or '').strip(),
+            'tips': str(item.get('tips') or '').strip(),
+            'image_url': str(item.get('image_url') or '').strip(),
+            'image_source': str(item.get('image_source') or '').strip(),
+            'image_source_url': str(item.get('image_source_url') or '').strip(),
+            'image_ref_doc': str(item.get('image_ref_doc') or '').strip(),
+            'image_ref_doc_url': str(item.get('image_ref_doc_url') or '').strip(),
+            'aliases': [str(a).strip() for a in aliases if str(a).strip()],
+        })
+    if not items_out:
+        raise ValueError('Bảng hướng dẫn không có mục hợp lệ')
+    return {'items': items_out}
+
+
+def _load_fetal_guide_table():
+    try:
+        raw = AppSetting.get_value(FETAL_GUIDE_SETTING_KEY, '') or ''
+        if not raw:
+            return json.loads(json.dumps(_DEFAULT_FETAL_GUIDE_TABLE))
+        data = json.loads(raw)
+        normalized = _normalize_fetal_guide_table(data)
+        msd_fixed, msd_changed = _migrate_fetal_guide_msd_label(normalized)
+        recategorized, cat_changed = _migrate_fetal_guide_recategorize(msd_fixed)
+        appended, append_changed = _migrate_fetal_guide_append_items(recategorized)
+        migrated, image_changed = _migrate_fetal_guide_reference_images(appended)
+        if msd_changed or cat_changed or append_changed or image_changed:
+            try:
+                _save_fetal_guide_table(migrated)
+            except Exception as save_exc:
+                print(f'migrate fetal guide images save failed: {save_exc}')
+        return migrated
+    except ValueError:
+        return json.loads(json.dumps(_DEFAULT_FETAL_GUIDE_TABLE))
+    except Exception as exc:
+        print(f'load fetal guide table failed: {exc}')
+        return json.loads(json.dumps(_DEFAULT_FETAL_GUIDE_TABLE))
+
+
+def _save_fetal_guide_table(data):
+    normalized = _normalize_fetal_guide_table(data)
+    AppSetting.set_value(
+        FETAL_GUIDE_SETTING_KEY,
+        json.dumps(normalized, ensure_ascii=False),
+    )
+    return normalized
+
+
+def _normalize_fetal_prognosis_table(data):
+    if not isinstance(data, dict):
+        raise ValueError('Dữ liệu bảng tiên lượng không hợp lệ')
+    sections_in = data.get('sections')
+    if not isinstance(sections_in, list) or not sections_in:
+        raise ValueError('Bảng tiên lượng cần ít nhất 1 mục')
+    sections_out = []
+    for idx, section in enumerate(sections_in):
+        if not isinstance(section, dict):
+            continue
+        title = str(section.get('title') or '').strip() or f'Mục {idx + 1}'
+        headers_in = section.get('headers')
+        if not isinstance(headers_in, list) or not headers_in:
+            raise ValueError(f'Mục «{title}» thiếu tiêu đề cột')
+        headers = [str(h or '').strip() or f'Cột {ci + 1}' for ci, h in enumerate(headers_in)]
+        col_count = len(headers)
+        rows_in = section.get('rows')
+        if not isinstance(rows_in, list):
+            rows_in = []
+        rows_out = []
+        for row in rows_in:
+            if not isinstance(row, list):
+                continue
+            cells = [str(c if c is not None else '').strip() for c in row]
+            while len(cells) < col_count:
+                cells.append('')
+            rows_out.append(cells[:col_count])
+        section_id = str(section.get('id') or '').strip() or f'section-{idx + 1}'
+        sections_out.append({
+            'id': section_id,
+            'title': title,
+            'headers': headers,
+            'rows': rows_out,
+        })
+    if not sections_out:
+        raise ValueError('Bảng tiên lượng không có mục hợp lệ')
+    return {'sections': sections_out}
+
+
+def _is_legacy_tetanus_td_section(section):
+    if not isinstance(section, dict):
+        return False
+    if section.get('id') != 'tetanus-td':
+        return False
+    rows = section.get('rows') or []
+    for row in rows:
+        if not isinstance(row, list) or not row:
+            continue
+        first = str(row[0] or '')
+        if 'lần trước < 5 năm' in first or first in ('Chưa từng tiêm / không nhớ', 'Đã tiêm 1 mũi'):
+            return True
+    title = str(section.get('title') or '')
+    return 'TT 10/2024' not in title
+
+
+def _migrate_fetal_vaccination_table(data):
+    normalized = _normalize_fetal_prognosis_table(data)
+    default_td = None
+    for section in _DEFAULT_FETAL_VACCINATION_TABLE.get('sections', []):
+        if section.get('id') == 'tetanus-td':
+            default_td = json.loads(json.dumps(section))
+            break
+    if not default_td:
+        return normalized
+    migrated = False
+    sections = []
+    for section in normalized.get('sections', []):
+        if section.get('id') == 'tetanus-td' and _is_legacy_tetanus_td_section(section):
+            sections.append(default_td)
+            migrated = True
+        else:
+            sections.append(section)
+    if not migrated:
+        return normalized
+    try:
+        patched = {'sections': sections}
+        _save_fetal_vaccination_table(patched)
+        print('migrated fetal vaccination table: tetanus-td -> TT 10/2024/TT-BYT')
+    except Exception as exc:
+        print(f'migrate fetal vaccination table failed: {exc}')
+    return {'sections': sections}
+
+
+def _load_fetal_prognosis_table():
+    try:
+        raw = AppSetting.get_value(FETAL_PROGNOSIS_SETTING_KEY, '') or ''
+        if not raw:
+            return json.loads(json.dumps(_DEFAULT_FETAL_PROGNOSIS_TABLE))
+        data = json.loads(raw)
+        return _normalize_fetal_prognosis_table(data)
+    except ValueError:
+        return json.loads(json.dumps(_DEFAULT_FETAL_PROGNOSIS_TABLE))
+    except Exception as exc:
+        print(f'load fetal prognosis table failed: {exc}')
+        return json.loads(json.dumps(_DEFAULT_FETAL_PROGNOSIS_TABLE))
+
+
+def _save_fetal_prognosis_table(data):
+    normalized = _normalize_fetal_prognosis_table(data)
+    AppSetting.set_value(
+        FETAL_PROGNOSIS_SETTING_KEY,
+        json.dumps(normalized, ensure_ascii=False),
+    )
+    return normalized
+
+
+def _load_fetal_vaccination_table():
+    try:
+        raw = AppSetting.get_value(FETAL_VACCINATION_SETTING_KEY, '') or ''
+        if not raw:
+            return json.loads(json.dumps(_DEFAULT_FETAL_VACCINATION_TABLE))
+        data = json.loads(raw)
+        return _migrate_fetal_vaccination_table(data)
+    except ValueError:
+        return json.loads(json.dumps(_DEFAULT_FETAL_VACCINATION_TABLE))
+    except Exception as exc:
+        print(f'load fetal vaccination table failed: {exc}')
+        return json.loads(json.dumps(_DEFAULT_FETAL_VACCINATION_TABLE))
+
+
+def _save_fetal_vaccination_table(data):
+    normalized = _normalize_fetal_prognosis_table(data)
+    AppSetting.set_value(
+        FETAL_VACCINATION_SETTING_KEY,
+        json.dumps(normalized, ensure_ascii=False),
+    )
+    return normalized
+
+
+def _load_fetal_gdm_table():
+    try:
+        raw = AppSetting.get_value(FETAL_GDM_SETTING_KEY, '') or ''
+        if not raw:
+            return json.loads(json.dumps(_DEFAULT_FETAL_GDM_TABLE))
+        data = json.loads(raw)
+        return _normalize_fetal_prognosis_table(data)
+    except ValueError:
+        return json.loads(json.dumps(_DEFAULT_FETAL_GDM_TABLE))
+    except Exception as exc:
+        print(f'load fetal gdm table failed: {exc}')
+        return json.loads(json.dumps(_DEFAULT_FETAL_GDM_TABLE))
+
+
+def _save_fetal_gdm_table(data):
+    normalized = _normalize_fetal_prognosis_table(data)
+    AppSetting.set_value(
+        FETAL_GDM_SETTING_KEY,
+        json.dumps(normalized, ensure_ascii=False),
+    )
+    return normalized
+
+
+def _load_fetal_nutrition_table():
+    try:
+        raw = AppSetting.get_value(FETAL_NUTRITION_SETTING_KEY, '') or ''
+        if not raw:
+            return json.loads(json.dumps(_DEFAULT_FETAL_NUTRITION_TABLE))
+        data = json.loads(raw)
+        return _normalize_fetal_prognosis_table(data)
+    except ValueError:
+        return json.loads(json.dumps(_DEFAULT_FETAL_NUTRITION_TABLE))
+    except Exception as exc:
+        print(f'load fetal nutrition table failed: {exc}')
+        return json.loads(json.dumps(_DEFAULT_FETAL_NUTRITION_TABLE))
+
+
+def _save_fetal_nutrition_table(data):
+    normalized = _normalize_fetal_prognosis_table(data)
+    AppSetting.set_value(
+        FETAL_NUTRITION_SETTING_KEY,
+        json.dumps(normalized, ensure_ascii=False),
+    )
+    return normalized
+
+
+_FETAL_DEFAULT_ALIAS_MAP = {
+    'CRL (mm)': ['CRL'],
+    'BPD (mm)': ['BPD', 'BDP', '8PD', 'BP0'],
+    'HC (mm)': ['HC', 'OFD/HC'],
+    'AC (mm)': ['AC'],
+    'FL (mm)': ['FL'],
+    'HL (mm)': ['HL', 'HUM', 'HUMERUS'],
+    'Cereb (mm)': ['CEREB', 'Cereb', 'TCD', 'Cerebellum'],
+    'EFW (g)': ['EFW', 'Estimated fetal', 'Fetal weight'],
+    '% EFW': ['% EFW', 'EFW %', 'Percentile'],
+    'AFI (cm)': ['AFI'],
+    'MVP (cm)': ['MVP', 'DVP'],
+    'PSV (cm/s)': ['PSV'],
+    'PI ĐM rốn': ['PI UA', 'UA PI'],
+    'RI ĐM rốn': ['RI UA', 'UA RI'],
+    'PI ĐM não': ['PI MCA', 'MCA PI'],
+    'CPR': ['CPR'],
+}
+
+FETAL_INDEX_SCHEMA = [
+    'CRL (mm)', 'BPD (mm)', 'HC (mm)', 'AC (mm)', 'FL (mm)',
+    'HL (mm)', 'Cereb (mm)', 'EFW (g)', '% EFW', 'AFI (cm)', 'MVP (cm)',
+    'PSV (cm/s)', 'PI ĐM rốn', 'RI ĐM rốn', 'PI ĐM não', 'CPR',
+]
+
+
+def _load_fetal_alias_store():
+    """Tải alias + ghi chú; tương thích dữ liệu cũ (chỉ có map alias)."""
+    merged_aliases = {k: list(v) for k, v in _FETAL_DEFAULT_ALIAS_MAP.items()}
+    merged_notes = {}
+    try:
+        raw = AppSetting.get_value(FETAL_INDEX_ALIAS_SETTING_KEY, '') or ''
+        if not raw:
+            return {'aliases': merged_aliases, 'notes': merged_notes}
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return {'aliases': merged_aliases, 'notes': merged_notes}
+        if 'aliases' in data:
+            aliases_part = data.get('aliases') or {}
+            notes_part = data.get('notes') or {}
+        else:
+            aliases_part = data
+            notes_part = {}
+        for canonical, aliases in aliases_part.items():
+            c = str(canonical or '').strip()
+            if not c or not isinstance(aliases, list):
+                continue
+            cleaned = []
+            seen = set()
+            for alias in aliases:
+                s = str(alias or '').strip()
+                if not s:
+                    continue
+                key = s.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                cleaned.append(s)
+            if cleaned:
+                merged_aliases[c] = cleaned
+        if isinstance(notes_part, dict):
+            for canonical, note in notes_part.items():
+                c = str(canonical or '').strip()
+                n = str(note or '').strip()
+                if c and n:
+                    merged_notes[c] = n
+    except Exception as exc:
+        print(f'load fetal alias store failed: {exc}')
+    return {'aliases': merged_aliases, 'notes': merged_notes}
+
+
+def _load_fetal_alias_map():
+    return (_load_fetal_alias_store().get('aliases') or {})
+
+
+def _save_fetal_alias_store(alias_map, notes_map=None):
+    compact_aliases = {}
+    for canonical, aliases in (alias_map or {}).items():
+        c = str(canonical or '').strip()
+        if not c or not isinstance(aliases, list):
+            continue
+        cleaned = []
+        seen = set()
+        for alias in aliases:
+            s = str(alias or '').strip()
+            if not s:
+                continue
+            key = s.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(s)
+        if cleaned:
+            compact_aliases[c] = cleaned
+    compact_notes = {}
+    for canonical, note in (notes_map or {}).items():
+        c = str(canonical or '').strip()
+        n = str(note or '').strip()
+        if c and n:
+            compact_notes[c] = n
+    payload = {'aliases': compact_aliases, 'notes': compact_notes}
+    AppSetting.set_value(FETAL_INDEX_ALIAS_SETTING_KEY, json.dumps(payload, ensure_ascii=False))
+
+
+def _save_fetal_alias_map(alias_map):
+    existing_notes = (_load_fetal_alias_store().get('notes') or {})
+    _save_fetal_alias_store(alias_map, existing_notes)
+
+
+def _fetal_alias_code_map():
+    out = list(_FETAL_INDEX_CODE_MAP)
+    alias_map = _load_fetal_alias_map()
+    for canonical, aliases in alias_map.items():
+        for alias in aliases:
+            a = str(alias or '').strip()
+            if not a:
+                continue
+            out.append((a.upper(), canonical))
+    try:
+        from fetal_image_parser.machine_profiles import profile_alias_codes
+        for code, key in profile_alias_codes():
+            out.append((code, key))
+    except Exception:
+        pass
+    uniq = []
+    seen = set()
+    for code, key in out:
+        sig = (str(code).upper(), key)
+        if sig in seen:
+            continue
+        seen.add(sig)
+        uniq.append((str(code).upper(), key))
+    return uniq
+
+_FETAL_DOPPLER_ROW_RULES = [
+    (re.compile(r'(?:UA|Umbilical|R[oố]n|DM\s*r[oố]n|t[ủu]\s*cung).*\bPI\b', re.I), 'PI ĐM rốn'),
+    (re.compile(r'(?:UA|Umbilical|R[oố]n|DM\s*r[oố]n|t[ủu]\s*cung).*\bRI\b', re.I), 'RI ĐM rốn'),
+    (re.compile(r'(?:MCA|DM\s*n[aã]o|Middle\s*cerebral|n[aã]o\s*gi[aữ]a).*\bPI\b', re.I), 'PI ĐM não'),
+    (re.compile(r'\bPI\s*\(?UA\)?\b', re.I), 'PI ĐM rốn'),
+    (re.compile(r'\bRI\s*\(?UA\)?\b', re.I), 'RI ĐM rốn'),
+    (re.compile(r'\bPI\s*\(?MCA\)?\b', re.I), 'PI ĐM não'),
+    (re.compile(r'\bUA\s*PI\b', re.I), 'PI ĐM rốn'),
+    (re.compile(r'\bUA\s*RI\b', re.I), 'RI ĐM rốn'),
+    (re.compile(r'\bMCA\s*PI\b', re.I), 'PI ĐM não'),
+]
+
+_FETAL_BIOMETRY_MM_KEYS = frozenset({
+    'CRL (mm)', 'BPD (mm)', 'HC (mm)', 'AC (mm)', 'FL (mm)', 'HL (mm)', 'Cereb (mm)',
+})
+
+_FETAL_UNIT_IN_LINE = {
+    'CRL (mm)': r'mm',
+    'BPD (mm)': r'mm',
+    'HC (mm)': r'mm',
+    'AC (mm)': r'mm',
+    'FL (mm)': r'mm',
+    'HL (mm)': r'mm',
+    'Cereb (mm)': r'mm',
+    'EFW (g)': r'g',
+    'AFI (cm)': r'cm',
+    'MVP (cm)': r'cm',
+    'PSV (cm/s)': r'(?:cm\s*/?\s*s|cm/s)',
+}
+
+
+def _fetal_recent_vessel_context(lines, current_index):
+    """Đoạn gần nhất: UA/rốn hay MCA/não (cho dòng PI/RI ngắn)."""
+    window = lines[max(0, current_index - 4):current_index]
+    blob = ' '.join(window).lower()
+    if re.search(r'\b(mca|middle cerebral|n[aã]o|brain|cerebral)\b', blob):
+        return 'mca'
+    if re.search(r'\b(ua|umbilical|r[oố]n|t[ủu]\s*cung)\b', blob):
+        return 'ua'
+    return None
+
+
+def _fetal_row_label_to_key(label, line='', context=None):
+    """Map nhãn dòng (cột 1) → tên biến trong bảng chỉ số."""
+    text = (label or '').strip()
+    if not text:
+        return None
+    upper = text.upper()
+    for code, key in sorted(_fetal_alias_code_map(), key=lambda item: -len(item[0])):
+        if re.search(rf'(?:^|\b){re.escape(code)}(?:\b|\s|\(|$)', upper):
+            if code == 'EFW' and re.search(r'%|percentile|tile', text, re.I):
+                return '% EFW'
+            return key
+    for pattern, key in _FETAL_DOPPLER_ROW_RULES:
+        if pattern.search(text) or (line and pattern.search(line)):
+            return key
+
+    short = upper.strip()
+    if short == 'CPR':
+        return 'CPR'
+    if short in ('PI', 'PI INDEX'):
+        if context == 'mca':
+            return 'PI ĐM não'
+        return 'PI ĐM rốn'
+    if short in ('RI', 'RI INDEX'):
+        return 'RI ĐM rốn'
+    return None
+
+
+_FETAL_BIOMETRY_RANGES = {
+    'CRL (mm)': (5, 120),
+    'BPD (mm)': (10, 120),
+    'HC (mm)': (50, 400),
+    'AC (mm)': (50, 400),
+    'FL (mm)': (5, 90),
+    'HL (mm)': (5, 90),
+    'Cereb (mm)': (5, 50),
+}
+
+_FETAL_LABEL_VALUE_INLINE = {
+    'CRL (mm)': r'(?:CRL)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+    'BPD (mm)': r'(?:BPD|BDP|8PD|BP0)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+    'HC (mm)': r'(?:HC|OFD/HC)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+    'AC (mm)': r'(?:AC)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+    'FL (mm)': r'(?:FL)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+    'HL (mm)': r'(?:HL)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+    'Cereb (mm)': r'(?:Cereb(?:ellum)?|CEREB|TCD)\s*[:：=]?\s*(\d+(?:[.,]\d+)?)',
+    'EFW (g)': r'(?:EFW)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+    'AFI (cm)': r'(?:AFI)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+    'MVP (cm)': r'(?:MVP|DVP)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+    'PSV (cm/s)': r'(?:PSV)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+}
+
+
+def _normalize_fetal_ocr_text(text):
+    """Sửa lỗi OCR phổ biến trên nhãn/chỉ số biometry."""
+    if not text:
+        return ''
+    out = text
+    out = re.sub(r'\bBDP\b', 'BPD', out, flags=re.IGNORECASE)
+    out = re.sub(r'\b8PD\b', 'BPD', out, flags=re.IGNORECASE)
+    out = re.sub(r'\bBP0\b', 'BPD', out, flags=re.IGNORECASE)
+    out = re.sub(r'\bCere\s+be\b', 'Cereb', out, flags=re.IGNORECASE)
+    out = re.sub(r'\bCerebellum\b', 'Cereb', out, flags=re.IGNORECASE)
+    # Chuẩn hóa alias do người dùng cấu hình về "mã chính" để regex cũ vẫn nhận
+    alias_map = _load_fetal_alias_map()
+    preferred_code = {
+        'CRL (mm)': 'CRL',
+        'BPD (mm)': 'BPD',
+        'HC (mm)': 'HC',
+        'AC (mm)': 'AC',
+        'FL (mm)': 'FL',
+        'HL (mm)': 'HL',
+        'Cereb (mm)': 'Cereb',
+        'EFW (g)': 'EFW',
+        '% EFW': 'EFW',
+        'AFI (cm)': 'AFI',
+        'MVP (cm)': 'MVP',
+        'PSV (cm/s)': 'PSV',
+        'PI ĐM rốn': 'UA PI',
+        'RI ĐM rốn': 'UA RI',
+        'PI ĐM não': 'MCA PI',
+        'CPR': 'CPR',
+    }
+    for canonical, aliases in alias_map.items():
+        repl = preferred_code.get(canonical)
+        if not repl:
+            continue
+        for alias in aliases:
+            a = str(alias or '').strip()
+            if not a or a.lower() == repl.lower():
+                continue
+            out = re.sub(rf'(?<!\w){re.escape(a)}(?!\w)', repl, out, flags=re.IGNORECASE)
+    out = re.sub(r'(\d)\s+[.,]\s*(\d)', r'\1.\2', out)
+    out = re.sub(r'(\d)\s+(?=\d{1,2}\s*mm\b)', r'\1.', out, flags=re.IGNORECASE)
+    out = re.sub(r'(\d)[oO](\d)', r'\1.\2', out)
+    out = re.sub(r'(\d)[lI|](\d)', r'\1.\2', out)
+    return out
+
+
+def _preprocess_fetal_report_image_pil(img):
+    """Tiền xử lý ảnh báo cáo (Pillow) — tăng độ nét/contrast cho OCR."""
+    from PIL import ImageEnhance, ImageOps
+
+    img = img.convert('RGB')
+    w, h = img.size
+    target = 1600
+    if max(w, h) < target:
+        scale = target / max(w, h)
+        img = img.resize((int(w * scale), int(h * scale)), _PILImage.Resampling.LANCZOS)
+
+    gray = ImageOps.grayscale(img)
+    gray = ImageOps.autocontrast(gray, cutoff=1)
+    gray = ImageEnhance.Contrast(gray).enhance(1.4)
+    gray = ImageEnhance.Sharpness(gray).enhance(1.5)
+    gray = gray.point(lambda p: 255 if p > 150 else 0)
+    return gray
+
+
+def _fetal_soft_grayscale_pil(img):
+    """Biến thể xám nhẹ — giữ chi tiết chữ mờ trên ảnh chụp màn hình."""
+    from PIL import ImageEnhance, ImageOps
+
+    img = img.convert('RGB')
+    w, h = img.size
+    target = 1600
+    if max(w, h) < target:
+        scale = target / max(w, h)
+        img = img.resize((int(w * scale), int(h * scale)), _PILImage.Resampling.LANCZOS)
+    gray = ImageOps.grayscale(img)
+    gray = ImageOps.autocontrast(gray, cutoff=2)
+    return ImageEnhance.Contrast(gray).enhance(1.2)
+
+
+def _fetal_parse_number(token):
+    if token is None:
+        return None
+    s = str(token).strip().replace(',', '.')
+    m = re.search(r'(\d+[.,]\d+)', s)
+    if m:
+        try:
+            return float(m.group(1).replace(',', '.'))
+        except (TypeError, ValueError):
+            pass
+    m = re.search(r'(\d+)', s)
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except (TypeError, ValueError):
+        return None
+
+
+def _fetal_group_ocr_words_into_rows(data):
+    """Nhóm từ OCR theo hàng (cùng to ≈ cùng dòng báo cáo)."""
+    words = []
+    texts = data.get('text') or []
+    for i, raw in enumerate(texts):
+        txt = (raw or '').strip()
+        if not txt:
+            continue
+        try:
+            conf = int(data['conf'][i])
+        except (TypeError, ValueError):
+            conf = 0
+        if conf >= 0 and conf < 25:
+            continue
+        words.append({
+            'text': txt,
+            'left': int(data['left'][i]),
+            'top': int(data['top'][i]),
+            'width': int(data['width'][i]),
+            'height': int(data['height'][i]),
+            'conf': conf,
+        })
+    if not words:
+        return []
+
+    words.sort(key=lambda w: (w['top'], w['left']))
+    rows = []
+    y_tol = max(10, int(sum(w['height'] for w in words) / max(len(words), 1) * 0.75))
+
+    for word in words:
+        placed = False
+        for row in rows:
+            if abs(word['top'] - row[0]['top']) <= y_tol:
+                row.append(word)
+                placed = True
+                break
+        if not placed:
+            rows.append([word])
+
+    for row in rows:
+        row.sort(key=lambda w: w['left'])
+    return rows
+
+
+def _fetal_label_token_to_key(token):
+    token = (token or '').strip()
+    if not token:
+        return None
+    return _fetal_row_label_to_key(token, line=token)
+
+
+def _fetal_value_word_score(key, val, word_text='', next_text=''):
+    """Chấm điểm ứng viên giá trị — ưu tiên số thập phân trên dòng biometry."""
+    if val is None:
+        return -999
+    score = word_text and 5 or 0
+    if key in _FETAL_BIOMETRY_MM_KEYS and val != int(val):
+        score += 30
+    lo, hi = _FETAL_BIOMETRY_RANGES.get(key, (0, 99999))
+    if lo <= val <= hi:
+        score += 10
+    if key in _FETAL_BIOMETRY_MM_KEYS and val == int(val) and 1 <= val <= 99:
+        score -= 25
+    if re.search(r'%', next_text or ''):
+        score -= 40
+    if re.search(r'\bmm\b', next_text or '', re.I):
+        score += 15
+    return score
+
+
+def _fetal_find_value_in_row_words(row_words, label_idx, key):
+    """Lấy số ở bên phải nhãn trên cùng hàng (cột Value)."""
+    if not row_words or label_idx >= len(row_words):
+        return None
+
+    best_val = None
+    best_score = -999
+    skip_tokens = re.compile(r'^(%|percentile|tile|ga|weeks|wks|unit|mm|cm|g)$', re.I)
+
+    idx = label_idx + 1
+    while idx < len(row_words):
+        w = row_words[idx]
+        txt = w['text']
+        if skip_tokens.match(txt):
+            idx += 1
+            continue
+        if _FETAL_VALUE_COL_HEADER.search(txt):
+            idx += 1
+            continue
+
+        next_text = row_words[idx + 1]['text'] if idx + 1 < len(row_words) else ''
+        if txt in (':', '：', '=', '-', '|'):
+            idx += 1
+            continue
+
+        val = _fetal_parse_number(txt)
+        if val is None and re.match(r'^[.,]?\d+$', txt) and idx > 0:
+            prev = row_words[idx - 1]['text']
+            if re.match(r'^\d+$', prev):
+                val = _fetal_parse_number(f'{prev}.{txt.lstrip(".,")}')
+
+        if val is not None:
+            score = _fetal_value_word_score(key, val, txt, next_text)
+            if score > best_score:
+                best_score = score
+                best_val = val
+            if key in _FETAL_BIOMETRY_MM_KEYS and val != int(val):
+                return val
+            if re.search(r'\bmm\b', next_text, re.I) and key in _FETAL_BIOMETRY_MM_KEYS:
+                return val
+        idx += 1
+
+    return best_val
+
+
+def _extract_fetal_from_ocr_layout(data):
+    """Trích chỉ số theo vị trí hàng/cột OCR — tránh lấy nhầm số dòng khác."""
+    results = {}
+    rows = _fetal_group_ocr_words_into_rows(data)
+    for row in rows:
+        for i, word in enumerate(row):
+            key = _fetal_label_token_to_key(word['text'])
+            if not key:
+                continue
+            if key in results:
+                if key == 'PI ĐM rốn':
+                    key = 'PI ĐM não'
+                else:
+                    continue
+            if key in results:
+                continue
+            val = _fetal_find_value_in_row_words(row, i, key)
+            if val is not None:
+                results[key] = val
+
+        line = ' '.join(w['text'] for w in row)
+        for key, pattern in _FETAL_LABEL_VALUE_INLINE.items():
+            if key in results:
+                continue
+            m = re.search(pattern, line, re.IGNORECASE)
+            if m:
+                val = _fetal_parse_number(m.group(1))
+                if val is not None:
+                    results[key] = val
+    return results
+
+
+def _score_fetal_extraction(measurements):
+    score = 0
+    for key, val in (measurements or {}).items():
+        if val is None:
+            continue
+        score += _fetal_measurement_pick_score(key, val)
+    return score
+
+
+def _fetal_ocr_data_to_text(data):
+    """Ghép text từ image_to_data — tránh gọi image_to_string riêng (nhanh hơn ~2×)."""
+    rows = _fetal_group_ocr_words_into_rows(data)
+    if not rows:
+        return ''
+    return '\n'.join(' '.join(w['text'] for w in row) for row in rows)
+
+
+def _fetal_measurement_pick_score(key, val):
+    if val is None:
+        return -999
+    score = 8
+    if key in _FETAL_BIOMETRY_MM_KEYS and val != int(val):
+        score += 18
+    lo, hi = _FETAL_BIOMETRY_RANGES.get(key, (0, 99999))
+    if lo <= val <= hi:
+        score += 6
+    return score
+
+
+def _fetal_count_filled(measurements):
+    return sum(1 for v in (measurements or {}).values() if v is not None)
+
+
+def _fetal_is_extraction_good_enough(measurements, score):
+    filled = _fetal_count_filled(measurements)
+    if filled >= 6 and score >= 50:
+        return True
+    if filled >= 4 and score >= 38:
+        return True
+    core = sum(
+        1 for k in ('BPD (mm)', 'HC (mm)', 'AC (mm)', 'FL (mm)', 'EFW (g)')
+        if (measurements or {}).get(k) is not None
+    )
+    return core >= 3 and score >= 32
+
+
+def _fetal_run_single_ocr_pass(im, lang='eng', cfg='--oem 1 --psm 6 -c preserve_interword_spaces=1'):
+    data = pytesseract.image_to_data(
+        im, lang=lang, config=cfg, output_type=pytesseract.Output.DICT
+    )
+    text = _normalize_fetal_ocr_text(_fetal_ocr_data_to_text(data))
+    layout = _extract_fetal_from_ocr_layout(data)
+    table = _extract_fetal_measurements_from_table(text)
+    combined = _merge_fetal_measurement_dicts(layout, table)
+    score = _score_fetal_extraction(combined) + min(len(text) // 200, 5)
+    return text, layout, combined, score
+
+
+def _fetal_merge_measurement_candidates(*candidates):
+    """Gộp theo từng chỉ số — lấy giá trị có điểm cao nhất."""
+    best = {}
+    best_scores = {}
+    for measurements, bonus in candidates:
+        for key, val in (measurements or {}).items():
+            if val is None:
+                continue
+            s = _fetal_measurement_pick_score(key, val) + (bonus or 0)
+            if s > best_scores.get(key, -999):
+                best[key] = val
+                best_scores[key] = s
+    return best
+
+
+def _merge_fetal_measurement_dicts(*sources):
+    merged = {}
+    for key in FETAL_INDEX_SCHEMA:
+        for src in sources:
+            if src and src.get(key) is not None:
+                merged[key] = src[key]
+                break
+    return merged
+
+
+def _fetal_profile_ocr_cfg():
+    try:
+        from fetal_image_parser.machine_profiles import profile_ocr_config
+        return profile_ocr_config()
+    except Exception:
+        return '--oem 1 --psm 6 -c preserve_interword_spaces=1'
+
+
+def _fetal_profile_ocr_lang():
+    try:
+        from fetal_image_parser.machine_profiles import profile_ocr_lang
+        return profile_ocr_lang()
+    except Exception:
+        return 'eng'
+
+
+def _run_fetal_report_ocr_on_pil(img):
+    """OCR theo tầng: 1 lần Tesseract/pass, dừng sớm khi đủ chỉ số."""
+    base_cfg = _fetal_profile_ocr_cfg()
+    base_lang = _fetal_profile_ocr_lang()
+    passes = [
+        (_preprocess_fetal_report_image_pil(img), base_lang, base_cfg),
+        (_preprocess_fetal_report_image_pil(img), base_lang, base_cfg.replace('--psm 6', '--psm 4')),
+        (_fetal_soft_grayscale_pil(img), base_lang, base_cfg),
+        (_fetal_soft_grayscale_pil(img), base_lang + ('+vie' if '+vie' not in base_lang else ''), base_cfg),
+    ]
+
+    best_text = ''
+    best_layout = {}
+    best_combined = {}
+    best_score = -1
+    merge_pool = []
+
+    for im, lang, cfg in passes:
+        try:
+            text, layout, combined, score = _fetal_run_single_ocr_pass(im, lang, cfg)
+            merge_pool.append((combined, 0))
+            if score > best_score:
+                best_score = score
+                best_text = text
+                best_layout = layout
+                best_combined = combined
+            if _fetal_is_extraction_good_enough(combined, score):
+                break
+        except Exception as exc:
+            print(f'Fetal OCR pass error: {exc}')
+
+    merged = _fetal_merge_measurement_candidates(*merge_pool)
+    if _fetal_count_filled(merged) >= _fetal_count_filled(best_combined):
+        best_combined = merged
+
+    if not best_text:
+        try:
+            best_text = _normalize_fetal_ocr_text(
+                pytesseract.image_to_string(img, lang='eng', config='--oem 1 --psm 6') or ''
+            )
+        except Exception as exc:
+            print(f'Fetal OCR fallback error: {exc}')
+
+    return best_text, best_layout, best_combined
+
+
+def _run_fetal_report_ocr_pipeline(image_bytes):
+    """OCR ảnh báo cáo — tối ưu tốc độ + gộp chỉ số theo từng trường."""
+    img = _PILImage.open(BytesIO(image_bytes))
+    return _run_fetal_report_ocr_on_pil(img)
+
+
+def _fetal_find_value_column_index(parts):
+    """Tìm chỉ số cột Value trong dòng header."""
+    for idx, part in enumerate(parts):
+        if _FETAL_VALUE_COL_HEADER.search(part.strip()):
+            return idx
+    return None
+
+
+def _fetal_pick_value_from_data_row(line, key):
+    """
+    Một dòng có nhiều số — ưu tiên giá trị đo (Value), bỏ qua %ile/GA/ref.
+    Ví dụ: BPD : 57.2 mm 45%  → 57.2
+    """
+    if not line or not key:
+        return None
+
+    inline = _FETAL_LABEL_VALUE_INLINE.get(key)
+    if inline:
+        m = re.search(inline, line, re.IGNORECASE)
+        if m:
+            return _fetal_parse_number(m.group(1))
+
+    if key == '% EFW':
+        m = re.search(r'(?:EFW|percentile|tile|%).*?(\d+(?:\.\d+)?)\s*%', line, re.I)
+        if m:
+            return _fetal_parse_number(m.group(1))
+        m = re.search(r'(\d+(?:\.\d+)?)\s*%\s*(?:EFW|tile|percentile)?', line, re.I)
+        return _fetal_parse_number(m.group(1)) if m else None
+
+    unit = _FETAL_UNIT_IN_LINE.get(key)
+    if unit:
+        m = re.search(rf'(\d+(?:\.\d+)?)\s*{unit}\b', line, re.I)
+        if m:
+            return _fetal_parse_number(m.group(1))
+
+    if key == 'EFW (g)':
+        m = re.search(r'EFW\s*[^\d]{0,12}(\d+(?:\.\d+)?)\s*g\b', line, re.I)
+        if m:
+            return _fetal_parse_number(m.group(1))
+        m = re.search(r'EFW\s*[^\d]{0,12}(\d{3,5})\b', line, re.I)
+        if m:
+            return _fetal_parse_number(m.group(1))
+
+    if key in ('PI ĐM rốn', 'RI ĐM rốn', 'PI ĐM não', 'CPR'):
+        label = {'PI ĐM rốn': 'PI', 'RI ĐM rốn': 'RI', 'PI ĐM não': 'PI', 'CPR': 'CPR'}[key]
+        m = re.search(rf'{label}\s*[:=]?\s*(\d+(?:\.\d+)?)', line, re.I)
+        if m:
+            return _fetal_parse_number(m.group(1))
+        decimals = [float(x) for x in re.findall(r'(\d+\.\d+)', line)]
+        if decimals:
+            return decimals[0]
+
+    candidates = []
+    for m in re.finditer(r'(\d+(?:\.\d+)?)', line):
+        tail = line[m.end():m.end() + 4]
+        if re.match(r'\s*[%‰]', tail):
+            continue
+        val = _fetal_parse_number(m.group(1))
+        if val is not None:
+            candidates.append(val)
+
+    if not candidates:
+        return None
+
+    if key in _FETAL_BIOMETRY_MM_KEYS:
+        for val in candidates:
+            if val != int(val) or val >= 100:
+                return val
+        if len(candidates) >= 2:
+            first, second = candidates[0], candidates[1]
+            if 20 <= first <= 400 and 1 <= second <= 99:
+                return first
+        return candidates[0]
+
+    if key == 'EFW (g)':
+        for val in candidates:
+            if val >= 100:
+                return val
+        return candidates[0]
+
+    return candidates[0]
+
+
+def _extract_fetal_measurements_from_table(text):
+    """
+    Đọc bảng báo cáo SA: nếu có cột Value/Giá trị thì lấy số ở cột đó.
+    Không có header bảng thì phân tích từng dòng, bỏ qua cột %ile.
+    """
+    if not text:
+        return {}
+
+    lines = [ln.strip() for ln in text.splitlines() if ln and ln.strip()]
+    results = {}
+    value_col_idx = None
+
+    for line_idx, line in enumerate(lines):
+        parts = _fetal_report_split_row(line)
+        if not parts:
+            continue
+
+        if value_col_idx is None:
+            col = _fetal_find_value_column_index(parts)
+            if col is not None:
+                value_col_idx = col
+                continue
+
+        if value_col_idx is not None and len(parts) > value_col_idx:
+            ctx = _fetal_recent_vessel_context(lines, line_idx)
+            key = _fetal_row_label_to_key(parts[0], line=line, context=ctx)
+            if not key:
+                continue
+            if key in results and key == 'PI ĐM rốn' and ctx == 'mca':
+                key = 'PI ĐM não'
+            if key in results:
+                continue
+            val = _fetal_parse_number(parts[value_col_idx])
+            if val is None and value_col_idx + 1 < len(parts):
+                combined = f'{parts[value_col_idx]} {parts[value_col_idx + 1]}'
+                val = _fetal_pick_value_from_data_row(combined, key)
+            if val is None:
+                val = _fetal_pick_value_from_data_row(line, key)
+            if val is not None:
+                results[key] = val
+
+    for line_idx, line in enumerate(lines):
+        if _FETAL_VALUE_COL_HEADER.search(line):
+            continue
+        ctx = _fetal_recent_vessel_context(lines, line_idx)
+        key = _fetal_row_label_to_key(line, line=line, context=ctx)
+        if not key:
+            for code, mapped in _FETAL_INDEX_CODE_MAP:
+                if re.search(rf'(?:^|\b){re.escape(code)}\b', line, re.I):
+                    key = mapped
+                    break
+        if not key:
+            for pattern, mapped in _FETAL_DOPPLER_ROW_RULES:
+                if pattern.search(line):
+                    key = mapped
+                    break
+        if not key or key in results:
+            continue
+        val = _fetal_pick_value_from_data_row(line, key)
+        if val is not None:
+            results[key] = val
+
+    return results
+
+
+def _parse_gestational_age_from_report_text(text):
+    """Parse GA weeks/days from ultrasound report OCR text."""
+    if not text:
+        return None, None
+    blob = text.replace('\n', ' ')
+    pairs = []
+    try:
+        from fetal_image_parser.machine_profiles import profile_ga_patterns
+        for pattern in profile_ga_patterns():
+            pairs.append(pattern)
+    except Exception:
+        pass
+    pairs.extend([
+        r'(?:GA|Gestational\s*Age|Tu(?:ổ|o)i\s*thai|Tuần\s*thai)[:\s]*(\d{1,2})\s*[wW\+]\s*(\d{1})',
+        r'(\d{1,2})\s*[wW]\s*\+?\s*(\d{1})\s*[dD]?',
+        r'(\d{1,2})\s*[wW](\d{1})\s*[dD]?',
+        r'(\d{1,2})\s*tuần\s*(\d{1})\s*ngày',
+        r'(\d{1,2})\s*\+\s*(\d{1})',
+    ])
+    for pattern in pairs:
+        m = re.search(pattern, blob, flags=re.IGNORECASE)
+        if m:
+            try:
+                return int(m.group(1)), int(m.group(2))
+            except (TypeError, ValueError):
+                continue
+    week_only = _fetal_report_first_match(blob, [
+        r'(?:GA|Gestational\s*Age|Tuần\s*thai)[:\s]*(\d{1,2})\s*[wW]?',
+        r'(\d{1,2})\s*tuần',
+    ])
+    if week_only is not None:
+        return int(week_only), 0
+    return None, None
+
+
+def extract_fetal_report_measurements_from_text(text, layout_vals=None):
+    """Parse fetal ultrasound indices — chỉ các biến trong bảng chỉ số đo."""
+    if not text:
+        text = ''
+    text = _normalize_fetal_ocr_text(text)
+
+    table_vals = _extract_fetal_measurements_from_table(text)
+    blob = re.sub(r'\s+', ' ', text.replace('\n', ' '))
+
+    def pick(patterns):
+        return _fetal_report_first_match(blob, patterns)
+
+    regex_vals = {
+        'CRL (mm)': pick([
+            r'(?:CRL)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+            r'CRL\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b',
+        ]),
+        'BPD (mm)': pick([
+            r'(?:BPD|BDP|8PD|BP0)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+            r'(?:BPD|BDP|8PD|BP0)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b',
+        ]),
+        'HC (mm)': pick([
+            r'(?:HC|OFD/HC)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+            r'(?:HC|OFD/HC)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b',
+        ]),
+        'AC (mm)': pick([
+            r'(?:AC)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+            r'AC\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b',
+        ]),
+        'FL (mm)': pick([
+            r'(?:FL)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+            r'FL\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b',
+        ]),
+        'HL (mm)': pick([
+            r'(?:HL|HUM|HUMERUS)\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+            r'(?:HL|HUM|HUMERUS)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b',
+        ]),
+        'Cereb (mm)': pick([
+            r'(?:Cereb(?:ellum)?|CEREB|TCD|Transcerebellar)\s*[:：=]?\s*(\d+(?:[.,]\d+)?)\s*mm\b',
+            r'Cereb(?:ellum)?\s+(\d+(?:[.,]\d+)?)\s*mm\b',
+            r'Cereb(?:ellum)?\s*[:：=]\s*(\d+(?:[.,]\d+)?)',
+        ]),
+        'EFW (g)': pick([
+            r'EFW\s*[:=]?\s*(\d+(?:\.\d+)?)\s*g\b',
+            r'(?:C[aâ]n n[aă]ng|Weight|Estimated)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*g\b',
+            r'EFW\s*[:=]?\s*(\d{3,5})\b',
+        ]),
+        '% EFW': pick([
+            r'(?:%|\%\s*tile|percentile|b[aá]ch ph[aâ]n v[iị])\s*[:=]?\s*(\d+(?:\.\d+)?)\s*%',
+            r'EFW\s*[^\d]{0,20}(\d+(?:\.\d+)?)\s*%',
+            r'(\d+(?:\.\d+)?)\s*%\s*(?:EFW|tile|percentile)',
+        ]),
+        'AFI (cm)': pick([
+            r'AFI\s*[:=]?\s*(\d+(?:\.\d+)?)\s*cm\b',
+            r'AFI\s*[:=]?\s*(\d+(?:\.\d+)?)\b',
+        ]),
+        'MVP (cm)': pick([
+            r'(?:MVP|DVP|max(?:imum)?\s*vertical)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*cm\b',
+            r'MVP\s*[:=]?\s*(\d+(?:\.\d+)?)\b',
+        ]),
+        'PSV (cm/s)': pick([
+            r'PSV\s*[:=]?\s*(\d+(?:\.\d+)?)\s*cm\s*/?\s*s\b',
+            r'PSV\s*[:=]?\s*(\d+(?:\.\d+)?)\b',
+        ]),
+        'PI ĐM rốn': pick([
+            r'(?:UA|Umbilical|DM\s*r[oố]n|R[oố]n|t[ủu] cung)\s*[^\d]{0,30}PI\s*[:=]?\s*(\d+(?:\.\d+)?)',
+            r'PI\s*\(?UA\)?\s*[:=]?\s*(\d+(?:\.\d+)?)',
+            r'UA\s*PI\s*[:=]?\s*(\d+(?:\.\d+)?)',
+        ]),
+        'RI ĐM rốn': pick([
+            r'(?:UA|Umbilical|DM\s*r[oố]n|R[oố]n|t[ủu] cung)\s*[^\d]{0,30}RI\s*[:=]?\s*(\d+(?:\.\d+)?)',
+            r'RI\s*\(?UA\)?\s*[:=]?\s*(\d+(?:\.\d+)?)',
+            r'UA\s*RI\s*[:=]?\s*(\d+(?:\.\d+)?)',
+        ]),
+        'PI ĐM não': pick([
+            r'(?:MCA|DM\s*n[aã]o|Middle\s*cerebral|n[aã]o gi[aữ]a)\s*[^\d]{0,30}PI\s*[:=]?\s*(\d+(?:\.\d+)?)',
+            r'PI\s*\(?MCA\)?\s*[:=]?\s*(\d+(?:\.\d+)?)',
+            r'MCA\s*PI\s*[:=]?\s*(\d+(?:\.\d+)?)',
+        ]),
+        'CPR': pick([
+            r'CPR\s*[:=]?\s*(\d+(?:\.\d+)?)',
+            r'CPR\s*\(?PI\)?\s*[:=]?\s*(\d+(?:\.\d+)?)',
+        ]),
+    }
+
+    try:
+        from fetal_image_parser.machine_profiles import profile_regex_patterns
+        for key, patterns in profile_regex_patterns().items():
+            if regex_vals.get(key) is not None:
+                continue
+            for pattern in patterns or []:
+                m = re.search(pattern, blob, flags=re.IGNORECASE)
+                if not m:
+                    continue
+                val = _fetal_parse_number(m.group(1))
+                if val is not None:
+                    regex_vals[key] = val
+                    break
+    except Exception:
+        pass
+
+    merged = _merge_fetal_measurement_dicts(layout_vals or {}, table_vals, regex_vals)
+    return {key: merged.get(key) for key in FETAL_INDEX_SCHEMA}
+
+
+def _is_dicom_upload(data, filename=''):
+    """Nhận diện file DICOM từ phần mở rộng hoặc preamble DICM."""
+    name = (filename or '').lower().strip()
+    if name.endswith('.dcm') or name.endswith('.dicom'):
+        return True
+    if data and len(data) > 132 and data[128:132] == b'DICM':
+        return True
+    return False
+
+
+def _parse_ga_weeks_days_from_value(ga_value):
+    """Chuyển GA từ DICOM (tuần thập phân) → weeks + days."""
+    if ga_value is None:
+        return None, None
+    try:
+        ga = float(ga_value)
+    except (TypeError, ValueError):
+        return None, None
+    weeks = int(ga)
+    days = int(round((ga - weeks) * 7))
+    return weeks, max(0, min(6, days))
+
+
+def _map_dicom_extract_to_fetal_measurements(extracted, ds=None):
+    """Map kết quả _extract_measurements_from_dicom_dataset → schema bảng chỉ số."""
+    out = _map_dicom_internal_layer_to_canonical(extracted)
+
+    if ds is not None:
+        try:
+            layers = extract_fetal_dicom_measurement_layers(ds)
+            text_vals = layers.get('text') or {}
+            for key in FETAL_INDEX_SCHEMA:
+                if out.get(key) is None and text_vals.get(key) is not None:
+                    out[key] = text_vals[key]
+        except Exception as exc:
+            print(f'DICOM text parse error: {exc}')
+
+    return out
+
+
+def _dicom_dataset_to_png_bytes(ds):
+    """Render frame DICOM US → PNG bytes (phục vụ OCR overlay báo cáo)."""
+    if _PILImage is None:
+        return None
+    try:
+        import pydicom
+        if not hasattr(ds, 'pixel_array'):
+            return None
+        arr = ds.pixel_array
+    except Exception as exc:
+        print(f'DICOM pixel_array error: {exc}')
+        return None
+
+    try:
+        from pydicom.pixel_data_handlers.util import apply_voi_lut
+        arr = apply_voi_lut(arr, ds)
+    except Exception:
+        pass
+
+    try:
+        if np is not None:
+            data = np.asarray(arr)
+            if data.ndim > 2:
+                data = data[..., 0] if data.shape[-1] <= 4 else data[0]
+            data = data.astype(np.float64)
+            dmin, dmax = float(data.min()), float(data.max())
+            if dmax > dmin:
+                data = (data - dmin) / (dmax - dmin) * 255.0
+            else:
+                data = np.zeros_like(data)
+            data = data.astype(np.uint8)
+            img = _PILImage.fromarray(data)
+        else:
+            img = _PILImage.fromarray(arr)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        w, h = img.size
+        if max(w, h) < 1200:
+            scale = 1200 / max(w, h)
+            img = img.resize((int(w * scale), int(h * scale)), _PILImage.Resampling.LANCZOS)
+        buf = BytesIO()
+        img.save(buf, format='PNG')
+        return buf.getvalue()
+    except Exception as exc:
+        print(f'DICOM to PNG error: {exc}')
+        return None
+
+
+def extract_fetal_report_from_dicom_bytes(dicom_bytes, debug=False):
+    """Trích chỉ số từ DICOM: tag SR/keyword + OCR trên frame ảnh."""
+    try:
+        import pydicom
+    except ImportError:
+        return {
+            'success': False,
+            'message': 'Chưa cài pydicom trên máy chủ — không đọc được DICOM',
+            'ocr_available': OCR_AVAILABLE,
+        }
+
+    try:
+        ds = pydicom.dcmread(BytesIO(dicom_bytes), force=True)
+    except Exception as exc:
+        return {
+            'success': False,
+            'message': f'Không đọc được file DICOM: {exc}',
+            'ocr_available': OCR_AVAILABLE,
+        }
+
+    dicom_extracted = _extract_measurements_from_dicom_dataset(ds)
+    tag_vals = _map_dicom_extract_to_fetal_measurements(dicom_extracted, ds)
+    weeks, days = _parse_ga_weeks_days_from_value(
+        (dicom_extracted or {}).get('gestational_age')
+    )
+
+    ocr_result = None
+    preview_b64 = None
+    png_bytes = _dicom_dataset_to_png_bytes(ds)
+    if png_bytes and OCR_AVAILABLE:
+        try:
+            ocr_result = extract_fetal_report_from_image_bytes(png_bytes, debug=debug)
+            preview_b64 = 'data:image/png;base64,' + base64.b64encode(png_bytes).decode('ascii')
+        except Exception as exc:
+            print(f'DICOM OCR error: {exc}')
+
+    ocr_measurements = (ocr_result or {}).get('measurements') or {}
+    merged = {}
+    for key in FETAL_INDEX_SCHEMA:
+        merged[key] = tag_vals.get(key) if tag_vals.get(key) is not None else ocr_measurements.get(key)
+
+    if weeks is None and ocr_result and ocr_result.get('gestational_age'):
+        ga = ocr_result['gestational_age']
+        weeks = ga.get('weeks')
+        days = ga.get('days', 0)
+
+    cleaned = {k: v for k, v in merged.items() if v is not None}
+    preview = (ocr_result or {}).get('raw_text_preview') or ''
+    if not preview:
+        preview = 'DICOM · ' + (str(ds.get('Modality', 'US')) or 'US')
+        if ds.get('StudyDescription'):
+            preview += ' · ' + str(ds.get('StudyDescription'))[:80]
+
+    ga_filled = 1 if weeks is not None else 0
+    result = {
+        'success': True,
+        'source': 'dicom',
+        'ocr_available': OCR_AVAILABLE,
+        'raw_text_preview': preview,
+        'preview_image_data': preview_b64,
+        'schema': FETAL_INDEX_SCHEMA,
+        'gestational_age': {
+            'weeks': weeks,
+            'days': days if days is not None else 0,
+        } if weeks is not None else None,
+        'measurements': cleaned,
+        'filled_count': len(cleaned) + ga_filled,
+        'message': f'Đã trích xuất {len(cleaned) + ga_filled} chỉ số từ DICOM',
+    }
+    if debug and ocr_result and ocr_result.get('debug_info'):
+        result['debug_info'] = ocr_result['debug_info']
+    return result
+
+
+def _opencv_prepare_fetal_report_variants(image_bytes):
+    """Tạo các biến thể ảnh bằng OpenCV để tăng chất lượng OCR (tối đa 2 biến thể)."""
+    if cv2 is None or np is None:
+        return []
+    try:
+        arr = np.frombuffer(image_bytes, dtype=np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if img is None:
+            return []
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        variants = []
+        variants.append(cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 35, 9
+        ))
+        _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        variants.append(otsu)
+        return variants
+    except Exception as exc:
+        print(f'OpenCV fetal preprocess error: {exc}')
+        return []
+
+
+def _opencv_detect_fetal_report_rois(gray_or_bin):
+    """Tách ROI nghi ngờ vùng bảng/khối text để OCR theo vùng."""
+    if cv2 is None or np is None or gray_or_bin is None:
+        return []
+    try:
+        h, w = gray_or_bin.shape[:2]
+        if len(gray_or_bin.shape) == 3:
+            gray = cv2.cvtColor(gray_or_bin, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = gray_or_bin
+        thr = gray
+        if gray.dtype != np.uint8:
+            thr = gray.astype(np.uint8)
+        if len(np.unique(thr)) > 4:
+            thr = cv2.adaptiveThreshold(
+                thr, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 31, 10
+            )
+        else:
+            thr = 255 - thr
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 5))
+        merged = cv2.morphologyEx(thr, cv2.MORPH_CLOSE, kernel, iterations=1)
+        contours, _ = cv2.findContours(merged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        boxes = []
+        for c in contours:
+            x, y, bw, bh = cv2.boundingRect(c)
+            area = bw * bh
+            ratio = area / float(max(1, w * h))
+            if ratio < 0.03 or ratio > 0.95:
+                continue
+            if bw < w * 0.25 or bh < 40:
+                continue
+            pad_x = max(8, int(bw * 0.02))
+            pad_y = max(8, int(bh * 0.03))
+            x1 = max(0, x - pad_x)
+            y1 = max(0, y - pad_y)
+            x2 = min(w, x + bw + pad_x)
+            y2 = min(h, y + bh + pad_y)
+            boxes.append((x1, y1, x2, y2))
+        boxes.sort(key=lambda b: (b[1], b[0]))
+        return boxes[:3]
+    except Exception as exc:
+        print(f'OpenCV fetal ROI detect error: {exc}')
+        return []
+
+
+def _run_fetal_report_hybrid_pipeline(image_bytes, collect_debug=False):
+    """
+    Hybrid: OCR toàn ảnh trước; chỉ chạy OpenCV ROI khi chưa đủ chỉ số.
+    Gộp kết quả theo từng chỉ số (tăng độ chính xác).
+  """
+    debug_info = {
+        'opencv_available': cv2 is not None and np is not None,
+        'variant_count': 0,
+        'roi_count': 0,
+        'candidates_evaluated': 0,
+        'winning_mode': 'baseline_fullpage',
+        'winning_score': -1,
+    }
+    candidate_records = []
+
+    def record_candidate(text, layout, measurements, mode, bonus=0):
+        debug_info['candidates_evaluated'] += 1
+        candidate_records.append({
+            'text': text or '',
+            'layout': layout or {},
+            'measurements': measurements or {},
+            'mode': mode,
+            'bonus': bonus,
+            'score': _score_fetal_extraction(measurements) + (bonus or 0),
+        })
+
+    raw_text, layout_vals, baseline = _run_fetal_report_ocr_pipeline(image_bytes)
+    record_candidate(raw_text, layout_vals, baseline, 'baseline_fullpage', 12)
+    baseline_score = _score_fetal_extraction(baseline)
+
+    if not _fetal_is_extraction_good_enough(baseline, baseline_score):
+        variants = _opencv_prepare_fetal_report_variants(image_bytes)
+        debug_info['variant_count'] = len(variants)
+        fast_cfg = _fetal_profile_ocr_cfg()
+
+        for vi, variant in enumerate(variants):
+            rois = _opencv_detect_fetal_report_rois(variant)
+            debug_info['roi_count'] += len(rois)
+            for ri, (x1, y1, x2, y2) in enumerate(rois):
+                try:
+                    roi = variant[y1:y2, x1:x2]
+                    if roi is None or roi.size == 0:
+                        continue
+                    ok, roi_png = cv2.imencode('.png', roi)
+                    if not ok:
+                        continue
+                    roi_img = _PILImage.open(BytesIO(roi_png.tobytes()))
+                    roi_prep = _preprocess_fetal_report_image_pil(roi_img)
+                    text, layout, combined, _score = _fetal_run_single_ocr_pass(
+                        roi_prep, 'eng', fast_cfg
+                    )
+                    record_candidate(text, layout, combined, f'opencv_roi_v{vi}_r{ri}', 8)
+                except Exception as exc:
+                    print(f'Hybrid ROI OCR error: {exc}')
+
+    merge_pool = [(rec['measurements'], rec['bonus']) for rec in candidate_records]
+    merged_measurements = _fetal_merge_measurement_candidates(*merge_pool)
+
+    winning = max(candidate_records, key=lambda r: r['score']) if candidate_records else None
+    if winning:
+        debug_info['winning_mode'] = winning['mode']
+        debug_info['winning_score'] = winning['score']
+        best_text = winning['text'] or raw_text
+        best_layout = winning['layout'] or layout_vals
+    else:
+        best_text = raw_text
+        best_layout = layout_vals
+
+    if collect_debug:
+        return best_text, best_layout, merged_measurements, debug_info
+    return best_text, best_layout, merged_measurements
+
+
+def extract_fetal_report_from_image_bytes(image_bytes, debug=False):
+    """Hybrid OCR ảnh báo cáo SA thai: OpenCV + OCR + layout parsing."""
+    raw_text = ''
+    layout_vals = {}
+    premerged = {}
+    hybrid_debug = None
+    if OCR_AVAILABLE:
+        try:
+            if debug:
+                raw_text, layout_vals, premerged, hybrid_debug = _run_fetal_report_hybrid_pipeline(
+                    image_bytes, collect_debug=True
+                )
+            else:
+                raw_text, layout_vals, premerged = _run_fetal_report_hybrid_pipeline(image_bytes)
+        except Exception as exc:
+            print(f'Fetal report hybrid pipeline error: {exc}')
+            try:
+                img = _PILImage.open(BytesIO(image_bytes))
+                raw_text = _normalize_fetal_ocr_text(
+                    pytesseract.image_to_string(img, lang='eng', config='--oem 1 --psm 6') or ''
+                )
+            except Exception as exc2:
+                print(f'Fetal report OCR fallback error: {exc2}')
+
+    weeks, days = _parse_gestational_age_from_report_text(raw_text)
+    measurements = extract_fetal_report_measurements_from_text(raw_text, layout_vals=layout_vals)
+    measurements = _fetal_merge_measurement_candidates(
+        (premerged, 10),
+        (measurements, 0),
+    )
+    cleaned = {k: v for k, v in measurements.items() if v is not None}
+    preview = ' '.join((raw_text or '').split())
+    if len(preview) > 600:
+        preview = preview[:600] + '…'
+
+    ga_filled = 1 if weeks is not None else 0
+    result = {
+        'success': True,
+        'ocr_available': OCR_AVAILABLE,
+        'raw_text_preview': preview,
+        'schema': FETAL_INDEX_SCHEMA,
+        'gestational_age': {
+            'weeks': weeks,
+            'days': days if days is not None else 0,
+        } if weeks is not None else None,
+        'measurements': cleaned,
+        'filled_count': len(cleaned) + ga_filled,
+    }
+    if debug and hybrid_debug:
+        result['debug_info'] = hybrid_debug
+    return result
+
+
+_fetal_image_parser_engine = None
+
+
+def get_fetal_image_parser_engine():
+    """Singleton PACS-style image parser engine (lazy init)."""
+    global _fetal_image_parser_engine
+    if _fetal_image_parser_engine is not None:
+        return _fetal_image_parser_engine
+    from fetal_image_parser import FetalImageParserEngine, ParserDependencies
+    import pydicom
+
+    _fetal_image_parser_engine = FetalImageParserEngine(ParserDependencies(
+        schema=list(FETAL_INDEX_SCHEMA),
+        ocr_available=lambda: OCR_AVAILABLE,
+        parse_image_bytes=extract_fetal_report_from_image_bytes,
+        extract_dicom_parser_layers=extract_fetal_dicom_parser_layers,
+        dicom_to_png_bytes=_dicom_dataset_to_png_bytes,
+        read_dicom_bytes=lambda raw: pydicom.dcmread(BytesIO(raw), force=True),
+    ))
+    return _fetal_image_parser_engine
+
+
+def calculate_dawes_redman_stv(bpm_series, duration_seconds, baseline_hr=None, decel_drop_bpm=15):
+    """
+    STV Dawes-Redman (ms): mỗi phút chia 16 epoch × 3,75 giây,
+    TB |Δ khoảng cách xung| giữa các epoch liên tiếp; loại trừ phút có giảm nhịp.
+    """
+    if not bpm_series or len(bpm_series) < 30 or duration_seconds <= 0:
+        return None
+
+    epoch_sec = 3.75
+    epochs_per_min = 16
+    baseline = float(baseline_hr) if baseline_hr else float(np.median(bpm_series))
+    n = len(bpm_series)
+    points = [
+        (i / max(1, n - 1) * duration_seconds, float(bpm))
+        for i, bpm in enumerate(bpm_series)
+        if bpm and bpm > 0
+    ]
+    if len(points) < 30:
+        return None
+
+    max_time = points[-1][0]
+    total_minutes = int(max_time // 60)
+    if total_minutes < 1:
+        return None
+
+    minute_stvs = []
+    excluded_minutes = 0
+
+    for m in range(total_minutes):
+        min_start = m * 60
+        min_end = (m + 1) * 60
+        min_points = [p for p in points if min_start <= p[0] < min_end]
+        if not min_points:
+            continue
+        if any(p[1] <= baseline - decel_drop_bpm for p in min_points):
+            excluded_minutes += 1
+            continue
+
+        pulse_intervals = []
+        for e in range(epochs_per_min):
+            e_start = min_start + e * epoch_sec
+            e_end = e_start + epoch_sec
+            epoch_points = [p for p in points if e_start <= p[0] < e_end]
+            if not epoch_points:
+                pulse_intervals.append(None)
+                continue
+            avg_bpm = sum(p[1] for p in epoch_points) / len(epoch_points)
+            pulse_intervals.append(60000.0 / avg_bpm)
+
+        valid_count = sum(1 for pi in pulse_intervals if pi is not None)
+        if valid_count < epochs_per_min * 0.75:
+            continue
+
+        diffs = []
+        for i in range(1, len(pulse_intervals)):
+            if pulse_intervals[i] is None or pulse_intervals[i - 1] is None:
+                continue
+            diffs.append(abs(pulse_intervals[i] - pulse_intervals[i - 1]))
+        if len(diffs) >= 10:
+            minute_stvs.append(sum(diffs) / len(diffs))
+
+    if not minute_stvs:
+        return {
+            'stv_ms': None,
+            'minute_count': 0,
+            'excluded_minutes': excluded_minutes,
+            'message': 'Không tính được STV từ đường FHR'
+        }
+
+    stv_ms = sum(minute_stvs) / len(minute_stvs)
+    return {
+        'stv_ms': round(stv_ms, 2),
+        'minute_count': len(minute_stvs),
+        'excluded_minutes': excluded_minutes,
+        'baseline_used': int(round(baseline)),
+        'method': 'dawes_redman_stv16'
+    }
+
+
+def calculate_dawes_redman_ltv(bpm_series, duration_seconds, baseline_hr=None, decel_drop_bpm=15):
+    """LTV (ms): trung bình biên độ khoảng cách xung theo phút (minute range)."""
+    if not bpm_series or len(bpm_series) < 30 or duration_seconds <= 0:
+        return None
+
+    baseline = float(baseline_hr) if baseline_hr else float(np.median(bpm_series))
+    n = len(bpm_series)
+    points = [
+        (i / max(1, n - 1) * duration_seconds, float(bpm))
+        for i, bpm in enumerate(bpm_series)
+        if bpm and bpm > 0
+    ]
+    if len(points) < 30:
+        return None
+
+    max_time = points[-1][0]
+    total_minutes = int(max_time // 60)
+    minute_ranges = []
+
+    for m in range(total_minutes):
+        min_start = m * 60
+        min_end = (m + 1) * 60
+        min_points = [p for p in points if min_start <= p[0] < min_end]
+        if not min_points:
+            continue
+        if any(p[1] <= baseline - decel_drop_bpm for p in min_points):
+            continue
+        pis = [60000.0 / p[1] for p in min_points]
+        minute_ranges.append(max(pis) - min(pis))
+
+    if not minute_ranges:
+        return {'ltv_ms': None, 'message': 'Không tính được LTV từ đường FHR'}
+
+    ltv_ms = sum(minute_ranges) / len(minute_ranges)
+    return {
+        'ltv_ms': round(ltv_ms, 2),
+        'minute_count': len(minute_ranges),
+        'method': 'dawes_redman_minute_range'
+    }
+
+
+def extract_ctg_data_cv(image_bytes):
     """Phân tích đồ thị CTG bằng Computer Vision với thuật toán nâng cao"""
-    if not OCR_AVAILABLE:
+    if cv2 is None or np is None:
         return None
     
     try:
@@ -13129,6 +23618,24 @@ def analyze_ctg_graph_cv(image_bytes):
             'contractions': int(contractions),
             'recording_time': int(recording_time)
         }
+
+        stv_result = calculate_dawes_redman_stv(
+            hr_bpm_values,
+            recording_time * 60,
+            baseline_hr=baseline_hr
+        )
+        if stv_result and stv_result.get('stv_ms') is not None:
+            results['stv_ms'] = stv_result['stv_ms']
+            results['stv_meta'] = stv_result
+
+        ltv_result = calculate_dawes_redman_ltv(
+            hr_bpm_values,
+            recording_time * 60,
+            baseline_hr=baseline_hr
+        )
+        if ltv_result and ltv_result.get('ltv_ms') is not None:
+            results['ltv_ms'] = ltv_result['ltv_ms']
+            results['ltv_meta'] = ltv_result
         
         return results
         
@@ -13138,52 +23645,421 @@ def analyze_ctg_graph_cv(image_bytes):
         traceback.print_exc()
         return None
 
+def analyze_ctg_graph_cv(image_bytes):
+    """Alias cho extract_ctg_data_cv (tương thích API cũ)."""
+    return extract_ctg_data_cv(image_bytes)
+
+
+def _compute_ctg_signal_quality(baseline_hr, stv_ms=None, ltv_ms=None, recording_time=20,
+                                signal_loss_pct=0):
+    """Đánh giá chất lượng tín hiệu CTG cho phân tích điện toán."""
+    score = 45
+    rec = int(recording_time or 20)
+    signal_loss = float(signal_loss_pct or 0)
+    baseline = int(baseline_hr or 0)
+    has_stv = stv_ms is not None
+    has_ltv = ltv_ms is not None
+    baseline_ok = 100 <= baseline <= 170
+    score += 25 if rec >= 20 else (15 if rec >= 15 else 5)
+    score += 15 if signal_loss < 15 else (8 if signal_loss <= 30 else 0)
+    score += 8 if has_stv else 0
+    score += 4 if has_ltv else 0
+    score += 8 if baseline_ok else 0
+    score = max(0, min(100, score))
+    if score >= 85:
+        label = 'cao'
+    elif score >= 65:
+        label = 'trung bình'
+    else:
+        label = 'thấp'
+    note = 'Tín hiệu đủ tốt cho phân tích điện toán Dawes-Redman.'
+    if rec < 20:
+        note = 'Độ dài ghi CTG ngắn hơn 20 phút làm giảm độ tin cậy điện toán.'
+    elif signal_loss > 20:
+        note = 'Mất tín hiệu cao làm giảm độ tin cậy của STV/LTV.'
+    return {'score': score, 'label': label, 'note': note}
+
+
+def perform_ctg_computer_analysis(baseline_hr, variability=None, accelerations=0, decelerations=0,
+                                  contractions=0, recording_time=20, stv_ms=None, ltv_ms=None,
+                                  gestational_week=32, high_variation=None, low_variation_min=0,
+                                  sinusoidal=0, signal_loss_pct=0, fetal_movements=None):
+    """Đánh giá CTG điện toán Dawes-Redman — đồng bộ với bảng phân tích CTG."""
+    score = 0
+    max_score = 20
+    recommendations = []
+    details = []
+    critical_fail = False
+
+    def _tier_from_score(s, mx, critical):
+        pct = (s / mx * 100) if mx else 0
+        if critical or pct < 55:
+            return {
+                'key': 'danger',
+                'label': 'FAIL — Nguy cơ cao',
+                'category': 'Không đạt Dawes-Redman',
+                'risk': 'Cao',
+                'action': 'Can thiệp ngay · đánh giá thai trong · hội chẩn sản khoa'
+            }
+        if pct >= 80:
+            return {
+                'key': 'pass',
+                'label': 'PASS — Criteria Met',
+                'category': 'Dawes-Redman đạt',
+                'risk': 'Thấp',
+                'action': 'Theo dõi thai kỳ · tái đánh giá theo chỉ định'
+            }
+        return {
+            'key': 'warning',
+            'label': 'FAIL một phần / Theo dõi',
+            'category': 'Chưa đủ tiêu chuẩn / ranh giới',
+            'risk': 'Trung bình',
+            'action': 'Theo dõi sát · tái ghi CTG · cân nhắc đánh giá thai trong'
+        }
+
+    def _match(value, normal_fn, border_fn, points_normal=2, points_border=1, label='', rec=''):
+        nonlocal score, critical_fail
+        if normal_fn(value):
+            score += points_normal
+            details.append({'code': label, 'level': 'normal', 'points': points_normal})
+            return
+        if border_fn(value):
+            score += points_border
+            details.append({'code': label, 'level': 'warning', 'points': points_border})
+            if rec:
+                recommendations.append(rec)
+            return
+        details.append({'code': label, 'level': 'danger', 'points': 0})
+        if rec:
+            recommendations.append(rec)
+
+    ga = int(gestational_week or 32)
+    stv_thresholds = [
+        (24, 2.0, 1.5), (26, 2.5, 2.0), (28, 3.0, 2.5), (30, 3.5, 3.0),
+        (32, 4.5, 3.0), (34, 5.0, 3.5), (36, 5.5, 4.0), (38, 6.0, 4.5),
+        (40, 6.5, 5.0)
+    ]
+    normal_min, border_min = 4.5, 3.0
+    for i, (w, nm, bm) in enumerate(stv_thresholds):
+        if ga <= w:
+            normal_min, border_min = nm, bm
+            break
+        if i < len(stv_thresholds) - 1 and stv_thresholds[i][0] <= ga <= stv_thresholds[i + 1][0]:
+            w1, nm1, bm1 = stv_thresholds[i]
+            w2, nm2, bm2 = stv_thresholds[i + 1]
+            f = (ga - w1) / max(1, w2 - w1)
+            normal_min = round(nm1 + (nm2 - nm1) * f, 2)
+            border_min = round(bm1 + (bm2 - bm1) * f, 2)
+            break
+    else:
+        normal_min, border_min = stv_thresholds[-1][1], stv_thresholds[-1][2]
+
+    bh = int(baseline_hr or 0)
+    _match(
+        bh,
+        lambda v: 110 <= v <= 160,
+        lambda v: 100 <= v <= 170,
+        label='baseline_hr',
+        rec='Basal FHR ngoài 110–160 bpm (Dawes-Redman)'
+    )
+
+    if stv_ms is not None:
+        try:
+            stv = float(stv_ms)
+            if stv >= normal_min:
+                score += 2
+                details.append({'code': 'stv_ms', 'level': 'normal', 'points': 2})
+            elif stv >= border_min:
+                score += 1
+                details.append({'code': 'stv_ms', 'level': 'warning', 'points': 1})
+                recommendations.append(f'STV ranh giới — tuần {ga}')
+            else:
+                critical_fail = True
+                details.append({'code': 'stv_ms', 'level': 'danger', 'points': 0})
+                recommendations.append(f'STV < {border_min} ms — nguy cơ rất cao (tuần {ga})')
+        except (TypeError, ValueError):
+            details.append({'code': 'stv_ms', 'level': 'warning', 'points': 0})
+
+    if ltv_ms is not None:
+        try:
+            ltv = float(ltv_ms)
+            _match(
+                ltv,
+                lambda v: v >= 30,
+                lambda v: 20 <= v < 30,
+                label='ltv_ms',
+                rec='LTV giảm kéo dài — biến thiên macro thấp'
+            )
+        except (TypeError, ValueError):
+            pass
+
+    acc = int(accelerations or 0)
+    if acc >= 1:
+        score += 2
+        details.append({'code': 'accelerations', 'level': 'normal', 'points': 2})
+    else:
+        details.append({'code': 'accelerations', 'level': 'danger', 'points': 0})
+        recommendations.append('Không có tăng nhịp nếu thai thức — theo dõi / kéo dài ghi')
+
+    dec = int(decelerations or 0)
+    if dec == 0:
+        score += 2
+        details.append({'code': 'decelerations', 'level': 'normal', 'points': 2})
+    elif dec <= 2:
+        score += 1
+        details.append({'code': 'decelerations', 'level': 'warning', 'points': 1})
+        recommendations.append('Có giảm nhịp tim — phân loại và theo dõi sát')
+    else:
+        details.append({'code': 'decelerations', 'level': 'danger', 'points': 0})
+        recommendations.append('Giảm nhịp tim lặp lại — đánh giá thai trong')
+
+    hv = high_variation if high_variation is not None else (1 if acc >= 1 else 0)
+    if hv >= 1:
+        score += 2
+        details.append({'code': 'high_variation', 'level': 'normal', 'points': 2})
+    elif hv >= 0.5:
+        score += 1
+        details.append({'code': 'high_variation', 'level': 'warning', 'points': 1})
+    else:
+        score += 0
+        details.append({'code': 'high_variation', 'level': 'danger', 'points': 0})
+        recommendations.append('Không có giai đoạn dao động cao kéo dài')
+
+    lvm = float(low_variation_min or 0)
+    if lvm < 50:
+        score += 2
+        details.append({'code': 'low_variation_min', 'level': 'normal', 'points': 2})
+    elif lvm <= 90:
+        score += 1
+        details.append({'code': 'low_variation_min', 'level': 'warning', 'points': 1})
+        recommendations.append('Dao động thấp kéo dài 50–90 phút')
+    else:
+        details.append({'code': 'low_variation_min', 'level': 'danger', 'points': 0})
+        recommendations.append('Dao động thấp kéo dài >90 phút')
+
+    sin = int(sinusoidal or 0)
+    if sin == 0:
+        score += 2
+        details.append({'code': 'sinusoidal', 'level': 'normal', 'points': 2})
+    else:
+        critical_fail = True
+        details.append({'code': 'sinusoidal', 'level': 'danger', 'points': 0})
+        recommendations.append('Nhịp hình sin — rất nguy hiểm, can thiệp ngay')
+
+    sl = float(signal_loss_pct or 0)
+    if sl < 15:
+        score += 2
+        details.append({'code': 'signal_loss_pct', 'level': 'normal', 'points': 2})
+    elif sl <= 20:
+        score += 1
+        details.append({'code': 'signal_loss_pct', 'level': 'warning', 'points': 1})
+    else:
+        details.append({'code': 'signal_loss_pct', 'level': 'danger', 'points': 0})
+        recommendations.append('Mất tín hiệu >20% — giảm độ tin cậy STV/LTV')
+
+    fm = fetal_movements if fetal_movements is not None else (1 if acc >= 1 else 0)
+    if fm >= 1:
+        score += 2
+        details.append({'code': 'fetal_movements', 'level': 'normal', 'points': 2})
+    elif fm >= 0.5:
+        score += 1
+        details.append({'code': 'fetal_movements', 'level': 'warning', 'points': 1})
+    else:
+        details.append({'code': 'fetal_movements', 'level': 'danger', 'points': 0})
+        recommendations.append('Giảm hoặc không có cử động thai trên CTG')
+
+    rt = int(recording_time or 0)
+    if rt < 15:
+        recommendations.append('Ghi CTG tối thiểu 20 phút (NST antepartum)')
+    elif rt < 20:
+        recommendations.append('Thời gian ghi CTG ranh giới — nên ≥20 phút')
+
+    signal_quality = _compute_ctg_signal_quality(bh, stv_ms, ltv_ms, rt, sl)
+    if signal_quality['score'] < 65:
+        recommendations.append('Tín hiệu CTG chưa đủ rõ — nên ghi lại hoặc kiểm tra thiết bị/điện cực')
+
+    cont = int(contractions or 0)
+    if cont >= 8:
+        recommendations.append('Cơn co tử cung tăng — đánh giá tachysystole kèm CTG')
+
+    tier = _tier_from_score(score, max_score, critical_fail)
+    dawes_pass = tier['key'] == 'pass' and not critical_fail
+    status = 'normal' if dawes_pass else ('warning' if tier['key'] == 'warning' else 'danger')
+
+    # FIGO / NICHD Category I–III (định hướng)
+    var_bpm = None
+    try:
+        var_bpm = float(variability) if variability is not None else None
+    except (TypeError, ValueError):
+        var_bpm = None
+    figo_reasons = []
+    if sin == 1:
+        figo = {
+            'category': 3, 'code': 'III', 'label': 'Category III — Bất thường', 'level': 'danger',
+            'summary': 'Pattern sinusoidal → Category III. Cần đánh giá thai trong / can thiệp khẩn.',
+            'reasons': ['Nhịp hình sin'],
+            'action_steps': ['Hội chẩn sản khoa ngay', 'Đánh giá thai trong', 'Chuẩn bị khả năng kết thúc thai kỳ nếu chỉ định']
+        }
+    elif (bh < 100) or (var_bpm is not None and var_bpm < 5 and dec >= 3) or (var_bpm is not None and var_bpm < 5 and bh < 110):
+        if bh < 100:
+            figo_reasons.append(f'Bradycardia nặng ({bh} bpm)')
+        if var_bpm is not None and var_bpm < 5:
+            figo_reasons.append(f'Biến thiên vắng/tối thiểu ({var_bpm} bpm)')
+        if dec >= 3:
+            figo_reasons.append(f'Giảm nhịp lặp lại (≥{dec})')
+        figo = {
+            'category': 3, 'code': 'III', 'label': 'Category III — Bất thường', 'level': 'danger',
+            'summary': 'Đủ tiêu chí gợi ý Category III.',
+            'reasons': figo_reasons or ['Chỉ số bất thường nặng'],
+            'action_steps': ['Đánh giá mẹ & tín hiệu CTG', 'Hội chẩn / chuyển tuyến', 'Cân nhắc kết thúc thai kỳ theo chỉ định']
+        }
+    elif (110 <= bh <= 160) and (var_bpm is None or 6 <= var_bpm <= 25) and dec == 0:
+        figo = {
+            'category': 1, 'code': 'I', 'label': 'Category I — Bình thường', 'level': 'normal',
+            'summary': 'Pattern gợi ý Category I (FIGO/NICHD).',
+            'reasons': ['Baseline 110–160', 'Không decelerations'] + ([f'Variability {var_bpm} bpm'] if var_bpm is not None else []),
+            'action_steps': ['Theo dõi theo chỉ định', 'Tái đánh giá khi lâm sàng thay đổi']
+        }
+    else:
+        if bh > 160:
+            figo_reasons.append(f'Tachycardia {bh} bpm')
+        if bh < 110:
+            figo_reasons.append(f'Bradycardia {bh} bpm')
+        if var_bpm is not None and var_bpm < 5:
+            figo_reasons.append(f'Variability thấp {var_bpm}')
+        if dec >= 1:
+            figo_reasons.append(f'Có decelerations ({dec})')
+        figo = {
+            'category': 2, 'code': 'II', 'label': 'Category II — Không xác định / Theo dõi', 'level': 'warning',
+            'summary': 'Pattern gợi ý Category II — theo dõi sát, tìm nguyên nhân đảo ngược.',
+            'reasons': figo_reasons or ['Chưa đủ tiêu chuẩn Category I'],
+            'action_steps': ['Kiểm tra tư thế/thuốc/tín hiệu', 'Kéo dài hoặc tái ghi CTG', 'Cân nhắc đánh giá thai trong nếu không cải thiện']
+        }
+
+    unique_recs = list(dict.fromkeys(recommendations))
+    expert_sections = [
+        {
+            'title': '1. Tóm tắt chuyên gia',
+            'body': f"Thai ~{ga} tuần. Dawes-Redman: {'PASS' if dawes_pass else 'FAIL'} · FIGO/NICHD: {figo['label']} · Điểm {score}/{max_score} · Nguy cơ {tier.get('risk', '—')}."
+        },
+        {
+            'title': '3. Phân loại FIGO / NICHD',
+            'body': figo['summary'],
+            'bullets': figo.get('action_steps') or []
+        },
+        {
+            'title': '5. Khuyến nghị hành động',
+            'body': tier.get('action') or '',
+            'bullets': unique_recs
+        },
+        {
+            'title': '6. Hạn chế & lưu ý',
+            'body': 'Kết quả hỗ trợ quyết định, không thay thế đọc CTG trực tiếp và thăm khám lâm sàng. Tham chiếu: Dawes-Redman, FIGO, NICHD.'
+        },
+    ]
+    return {
+        'score': score,
+        'max_score': max_score,
+        'status': status,
+        'tier': tier,
+        'dawes_redman_pass': dawes_pass,
+        'figo_nichd': figo,
+        'expert_report': {
+            'title': 'Báo cáo phân tích CTG chuyên gia',
+            'figo': figo,
+            'dawes_redman_pass': dawes_pass,
+            'sections': expert_sections,
+        },
+        'gestational_week': ga,
+        'stv_thresholds': {'normal_min': normal_min, 'border_min': border_min},
+        'recommendations': unique_recs,
+        'details': details,
+        'signal_quality': signal_quality['score'],
+        'signal_quality_label': signal_quality['label'],
+        'signal_quality_note': signal_quality['note'],
+        'confidence': max(55, min(95, signal_quality['score']))
+    }
+
+@app.route('/api/ctg/analyze', methods=['POST'])
+def analyze_ctg_computed():
+    """Phân tích CTG điện toán (không lưu DB)."""
+    try:
+        data = request.json or {}
+        analysis = perform_ctg_computer_analysis(
+            baseline_hr=data.get('baseline_hr'),
+            variability=data.get('variability'),
+            accelerations=data.get('accelerations'),
+            decelerations=data.get('decelerations'),
+            contractions=data.get('contractions', 0),
+            recording_time=data.get('recording_time', 20),
+            stv_ms=data.get('stv_ms'),
+            ltv_ms=data.get('ltv_ms'),
+            gestational_week=data.get('gestational_week', 32),
+            high_variation=data.get('high_variation'),
+            low_variation_min=data.get('low_variation_min', 0),
+            sinusoidal=data.get('sinusoidal', 0),
+            signal_loss_pct=data.get('signal_loss_pct', 0),
+            fetal_movements=data.get('fetal_movements')
+        )
+        return jsonify({'analysis': analysis})
+    except Exception as e:
+        return jsonify({'message': f'Lỗi phân tích CTG: {str(e)}'}), 500
+
 @app.route('/api/analyze-ctg-image', methods=['POST'])
 def analyze_ctg_image():
     """Phân tích ảnh CTG bằng điện toán"""
     try:
         data = request.json
         if not data or not data.get('image_data'):
+            print('analyze_ctg_image: missing image_data')
             return jsonify({'message': 'Thiếu dữ liệu ảnh'}), 400
         
-        import random
         import base64
         
         # Extract image data
         image_data = data['image_data']
+        print(f'analyze_ctg_image: received image_data length {len(image_data) if isinstance(image_data, str) else "?"}')
         patient_id = data.get('patient_id')
         
-        # Try AI/OCR analysis first, fallback to mock if not available
         baseline_hr = None
         variability = None
         accelerations = None
         decelerations = None
         contractions = None
         recording_time = None
-        analysis_method = 'mock'
-        confidence = 85
-        image_bytes = None  # Initialize image_bytes
+        analysis_method = None
+        confidence = 0
+        image_bytes = None
+        extraction_notes = []
+        cv_results = None
         
         if image_data.startswith('data:image'):
             # Extract base64 data
             header, encoded = image_data.split(',', 1)
             image_bytes = base64.b64decode(encoded)
             
-            # Try OCR extraction first
+            # Try OCR extraction first (printed values on strip)
             ocr_results = extract_ctg_data_ocr(image_bytes)
-            if ocr_results:
+            if ocr_results and ocr_results.get('baseline_hr'):
                 baseline_hr = ocr_results.get('baseline_hr')
                 variability = ocr_results.get('variability')
                 accelerations = ocr_results.get('accelerations')
                 decelerations = ocr_results.get('decelerations')
+                stv_ms = ocr_results.get('stv_ms')
+                ltv_ms = ocr_results.get('ltv_ms')
+                signal_loss_pct = ocr_results.get('signal_loss_pct')
+                fetal_movements = ocr_results.get('fetal_movements')
+                recording_time = ocr_results.get('recording_time')
+                sinusoidal = ocr_results.get('sinusoidal', 0)
                 analysis_method = 'ocr'
-                confidence = 90
+                confidence = 88
+                extraction_notes.append('OCR: đọc số in trên phiếu CTG hoặc báo cáo CTG')
                 print("Successfully extracted CTG data using OCR")
-            
-            # Try CV analysis if OCR didn't work
-            if not baseline_hr:
+
+            # Computer vision trace analysis
+            if baseline_hr is None:
                 cv_results = analyze_ctg_graph_cv(image_bytes)
-                if cv_results:
+                if cv_results and cv_results.get('baseline_hr'):
                     baseline_hr = cv_results.get('baseline_hr')
                     variability = cv_results.get('variability')
                     accelerations = cv_results.get('accelerations')
@@ -13191,75 +24067,43 @@ def analyze_ctg_image():
                     contractions = cv_results.get('contractions')
                     recording_time = cv_results.get('recording_time')
                     analysis_method = 'computer_vision'
-                    confidence = 92  # Increased confidence for advanced CV algorithm
-                    print("Successfully analyzed CTG using Advanced Computer Vision AI")
+                    confidence = 85
+                    extraction_notes.append('CV: phân tích đường FHR từ ảnh đồ thị')
+                    print("Successfully analyzed CTG using Computer Vision")
         
-        # Fallback to mock analysis if AI didn't work
-        if not baseline_hr:
-            baseline_hr = random.randint(110, 160)
-            variability = random.randint(5, 25)
-            accelerations = random.randint(1, 5)
-            decelerations = random.randint(0, 3)
-            analysis_method = 'mock'
-            confidence = 75
-            print("Using mock analysis as fallback")
+        if baseline_hr is None:
+            return jsonify({
+                'message': 'Không trích xuất được dữ liệu CTG từ ảnh. Vui lòng dùng ảnh rõ nét (đủ đường FHR) hoặc nhập thủ công / phân tích trên trình duyệt.',
+                'extraction_failed': True,
+                'analysis_method': None,
+                'confidence': 0
+            }), 422
         
-        # Set default values for missing data
+        if variability is None:
+            variability = 10
+        if accelerations is None:
+            accelerations = 0
+        if decelerations is None:
+            decelerations = 0
         if not contractions:
-            contractions = random.randint(0, 5)
+            contractions = 0
         if not recording_time:
-            recording_time = random.randint(20, 60)
-        
-        # Calculate analysis score
-        score = 0
-        status = 'normal'
-        recommendations = []
-        
-        # Analyze baseline heart rate
-        if 110 <= baseline_hr <= 160:
-            score += 2
-        elif 100 <= baseline_hr <= 170:
-            score += 1
-        else:
-            recommendations.append('Nhịp tim thai cơ bản nằm ngoài giới hạn bình thường')
-        
-        # Analyze variability
-        if 5 <= variability <= 25:
-            score += 2
-        elif 2 <= variability <= 30:
-            score += 1
-        else:
-            recommendations.append('Biến thiên nhịp tim bất thường')
-        
-        # Analyze accelerations
-        if accelerations >= 2:
-            score += 2
-        elif accelerations >= 1:
-            score += 1
-        else:
-            recommendations.append('Thiếu tăng nhịp tim, cần theo dõi')
-        
-        # Analyze decelerations
-        if decelerations == 0:
-            score += 2
-        elif decelerations <= 2:
-            score += 1
-        else:
-            recommendations.append('Có giảm nhịp tim, cần đánh giá thêm')
-        
-        # Determine status
-        if score >= 8:
-            status = 'normal'
-        elif score >= 6:
-            status = 'warning'
-        else:
-            status = 'danger'
-        
-        # Add some realistic recommendations based on analysis
-        if status == 'warning':
-            recommendations.append('Cần theo dõi thêm và có thể cần đánh giá lại')
-        elif status == 'danger':
-            recommendations.append('Cần đánh giá ngay lập tức bởi bác sĩ chuyên khoa')
+            recording_time = 20
+
+        computed = perform_ctg_computer_analysis(
+            baseline_hr, variability, accelerations, decelerations, contractions, recording_time,
+            stv_ms=stv_ms,
+            ltv_ms=ltv_ms,
+            gestational_week=data.get('gestational_week', 32),
+            high_variation=(1 if int(variability or 0) >= 15 else 0) if variability is not None else None,
+            low_variation_min=(min(int(recording_time or 20), 60) if int(variability or 10) < 5 else 0),
+            signal_loss_pct=(signal_loss_pct if signal_loss_pct is not None else 0),
+            fetal_movements=(1 if int(accelerations or 0) >= 1 else 0)
+        )
+        score = computed['score']
+        status = computed['status']
+        recommendations = computed['recommendations']
+        tier = computed['tier']
         
         # Save image file (optional) - reuse already decoded bytes if available
         image_saved = False
@@ -13279,25 +24123,45 @@ def analyze_ctg_image():
         
         # Determine analysis method description
         method_descriptions = {
-            'ocr': 'OCR (Nhận dạng ký tự quang học)',
-            'computer_vision': 'AI Computer Vision (Thị giác máy tính nâng cao)',
-            'mock': 'Phân tích mô phỏng'
+            'ocr': 'OCR source — đọc chỉ số in trên ảnh báo cáo/kết luận CTG',
+            'computer_vision': 'Computer Vision — phân tích đường FHR từ ảnh',
+            'client_cv': 'Trình duyệt — trích xuất đường FHR (client-side)'
         }
         
+        stv_ms = (ocr_results.get('stv_ms') if ocr_results and ocr_results.get('stv_ms') is not None else None)
+        ltv_ms = (ocr_results.get('ltv_ms') if ocr_results and ocr_results.get('ltv_ms') is not None else None)
+        stv_ms = stv_ms if stv_ms is not None else (cv_results.get('stv_ms') if cv_results else None)
+        ltv_ms = ltv_ms if ltv_ms is not None else (cv_results.get('ltv_ms') if cv_results else None)
+        stv_meta = cv_results.get('stv_meta') if cv_results else None
+        ltv_meta = cv_results.get('ltv_meta') if cv_results else None
+
         return jsonify({
-            'message': 'Phân tích ảnh CTG thành công bằng AI',
+            'message': 'Phân tích ảnh CTG thành công',
+            'patient_id': patient_id,
             'baseline_hr': baseline_hr,
             'variability': variability,
+            'stv_ms': stv_ms,
+            'stv_meta': stv_meta,
+            'ltv_ms': ltv_ms,
+            'ltv_meta': ltv_meta,
+            'high_variation': 1 if int(variability or 0) >= 15 else 0,
+            'low_variation_min': min(int(recording_time or 20), 60) if int(variability or 10) < 5 else 0,
+            'sinusoidal': 0,
+            'signal_loss_pct': 0,
+            'fetal_movements': 1 if int(accelerations or 0) >= 1 else 0,
+            'dawes_redman_pass': computed.get('dawes_redman_pass'),
             'accelerations': accelerations,
             'decelerations': decelerations,
             'contractions': contractions,
             'recording_time': recording_time,
             'analysis_score': score,
-            'max_score': 8,
+            'max_score': computed['max_score'],
             'analysis_status': status,
+            'tier': tier,
             'confidence': confidence,
             'analysis_method': analysis_method,
             'analysis_method_description': method_descriptions.get(analysis_method, 'Không xác định'),
+            'extraction_notes': extraction_notes,
             'recommendations': recommendations,
             'image_saved': image_saved
         })
@@ -13653,7 +24517,8 @@ def analyze_ultrasound_measurements():
 @app.route('/api/ultrasound-results', methods=['POST'])
 def save_ultrasound_results():
     """Lưu kết quả siêu âm thai"""
-    ensure_ultrasound_result_columns()  # Ensure column exists
+    ensure_ultrasound_result_columns()
+    ensure_pregnancy_episode_schema()
     try:
         data = request.json
         if not data or not data.get('patient_id'):
@@ -13668,11 +24533,18 @@ def save_ultrasound_results():
                 exam_date = datetime.now()
         else:
             exam_date = datetime.now()
+
+        pregnancy_episode_id = _resolve_ultrasound_pregnancy_episode_id(
+            data['patient_id'],
+            data.get('appointment_id'),
+            data.get('pregnancy_episode_id'),
+        )
         
         # Create new ultrasound result
         ultrasound_result = UltrasoundResult(
             patient_id=data['patient_id'],
             appointment_id=data.get('appointment_id'),
+            pregnancy_episode_id=pregnancy_episode_id,
             exam_date=exam_date,
             gestational_age=data.get('gestational_age'),
             bpd=data.get('bpd'),
@@ -13743,7 +24615,8 @@ def get_ultrasound_result(result_id):
 @app.route('/api/ultrasound-results/<int:result_id>', methods=['PUT'])
 def update_ultrasound_result(result_id):
     """Cập nhật kết quả siêu âm"""
-    ensure_ultrasound_result_columns()  # Ensure column exists
+    ensure_ultrasound_result_columns()
+    ensure_pregnancy_episode_schema()
     try:
         result = _get_or_404(UltrasoundResult, result_id)
         data = request.json
@@ -13782,6 +24655,14 @@ def update_ultrasound_result(result_id):
             result.findings = data.get('findings')
         if 'recommendations' in data:
             result.recommendations = data.get('recommendations')
+
+        episode_id = _resolve_ultrasound_pregnancy_episode_id(
+            result.patient_id,
+            data.get('appointment_id') or result.appointment_id,
+            data.get('pregnancy_episode_id') or getattr(result, 'pregnancy_episode_id', None),
+        )
+        if episode_id:
+            result.pregnancy_episode_id = episode_id
         
         db.session.commit()
         return jsonify({'message': 'Đã cập nhật kết quả siêu âm thành công', 'result': result.to_dict()})
@@ -13789,7 +24670,2082 @@ def update_ultrasound_result(result_id):
         db.session.rollback()
         return jsonify({'message': f'Lỗi khi cập nhật kết quả siêu âm: {str(e)}'}), 500
 
+
+_GYN_US_FLOAT_FIELDS = (
+    'uterus_length_mm', 'uterus_width_mm', 'uterus_height_mm', 'endometrium_mm', 'cervix_length_mm',
+    'left_ovary_length_mm', 'left_ovary_width_mm', 'left_ovary_height_mm',
+    'right_ovary_length_mm', 'right_ovary_width_mm', 'right_ovary_height_mm',
+)
+_GYN_US_INT_FIELDS = ('menstrual_day', 'afc_left', 'afc_right', 'afc_total')
+_GYN_US_STR_FIELDS = (
+    'exam_indication', 'uterus_position', 'myometrium', 'endometrium_pattern', 'endometrial_border',
+    'cavity_findings', 'figo_fibroid', 'left_ovary_findings', 'right_ovary_findings',
+    'adnexal_mass_side', 'adnexal_mass_description', 'orads_score', 'iota_conclusion',
+    'douglas_pouch', 'findings', 'recommendations', 'analysis_source',
+)
+
+
+def _parse_gyn_us_exam_date(value):
+    if not value:
+        return datetime.now()
+    try:
+        return datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except Exception:
+        return datetime.now()
+
+
+def _apply_gyn_ultrasound_payload(result, data, *, creating=False):
+    """Apply JSON payload onto GynecologicalUltrasoundResult."""
+    if creating or 'exam_date' in data:
+        result.exam_date = _parse_gyn_us_exam_date(data.get('exam_date'))
+    if creating or 'appointment_id' in data:
+        result.appointment_id = data.get('appointment_id')
+
+    for key in _GYN_US_FLOAT_FIELDS:
+        if creating or key in data:
+            result.__setattr__(key, _to_float_or_none(data.get(key)))
+
+    for key in _GYN_US_INT_FIELDS:
+        if creating or key in data:
+            raw = data.get(key)
+            if raw is None or raw == '':
+                result.__setattr__(key, None)
+            else:
+                try:
+                    result.__setattr__(key, int(raw))
+                except (TypeError, ValueError):
+                    result.__setattr__(key, None)
+
+    for key in _GYN_US_STR_FIELDS:
+        if creating or key in data:
+            val = data.get(key)
+            result.__setattr__(key, val if val not in (None, '') else None)
+
+    # Auto AFC total when sides provided and total omitted
+    if result.afc_total is None and (result.afc_left is not None or result.afc_right is not None):
+        left = result.afc_left or 0
+        right = result.afc_right or 0
+        if result.afc_left is not None or result.afc_right is not None:
+            result.afc_total = left + right
+
+    if creating and not result.analysis_source:
+        result.analysis_source = 'manual_input'
+
+
+@app.route('/api/gyn-ultrasound-results', methods=['POST'])
+def save_gyn_ultrasound_results():
+    """Lưu kết quả siêu âm phụ khoa."""
+    ensure_gyn_ultrasound_schema()
+    try:
+        data = request.json or {}
+        if not data.get('patient_id'):
+            return jsonify({'message': 'Thiếu dữ liệu bệnh nhân'}), 400
+
+        result = GynecologicalUltrasoundResult(patient_id=data['patient_id'])
+        _apply_gyn_ultrasound_payload(result, data, creating=True)
+        db.session.add(result)
+        db.session.commit()
+        return jsonify({'message': 'Đã lưu kết quả siêu âm phụ khoa', 'id': result.id, 'result': result.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi lưu siêu âm phụ khoa: {str(e)}'}), 500
+
+
+@app.route('/api/gyn-ultrasound-results', methods=['GET'])
+def get_gyn_ultrasound_results():
+    """Danh sách kết quả siêu âm phụ khoa."""
+    ensure_gyn_ultrasound_schema()
+    try:
+        patient_id = request.args.get('patient_id', type=int)
+        appointment_id = request.args.get('appointment_id', type=int)
+        query = GynecologicalUltrasoundResult.query
+        if patient_id:
+            query = query.filter_by(patient_id=patient_id)
+        if appointment_id:
+            query = query.filter_by(appointment_id=appointment_id)
+        rows = query.order_by(GynecologicalUltrasoundResult.exam_date.desc()).all()
+        return jsonify([r.to_dict() for r in rows])
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy siêu âm phụ khoa: {str(e)}'}), 500
+
+
+@app.route('/api/gyn-ultrasound-results/<int:result_id>', methods=['GET'])
+def get_gyn_ultrasound_result(result_id):
+    """Chi tiết một kết quả siêu âm phụ khoa."""
+    ensure_gyn_ultrasound_schema()
+    try:
+        result = _get_or_404(GynecologicalUltrasoundResult, result_id)
+        return jsonify(result.to_dict())
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy siêu âm phụ khoa: {str(e)}'}), 500
+
+
+@app.route('/api/gyn-ultrasound-results/<int:result_id>', methods=['PUT'])
+def update_gyn_ultrasound_result(result_id):
+    """Cập nhật kết quả siêu âm phụ khoa."""
+    ensure_gyn_ultrasound_schema()
+    try:
+        result = _get_or_404(GynecologicalUltrasoundResult, result_id)
+        data = request.json or {}
+        _apply_gyn_ultrasound_payload(result, data, creating=False)
+        db.session.commit()
+        return jsonify({'message': 'Đã cập nhật kết quả siêu âm phụ khoa', 'result': result.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi cập nhật siêu âm phụ khoa: {str(e)}'}), 500
+
+
+@app.route('/api/gyn-ultrasound-results/<int:result_id>', methods=['DELETE'])
+def delete_gyn_ultrasound_result(result_id):
+    """Xóa kết quả siêu âm phụ khoa."""
+    ensure_gyn_ultrasound_schema()
+    try:
+        result = _get_or_404(GynecologicalUltrasoundResult, result_id)
+        db.session.delete(result)
+        db.session.commit()
+        return jsonify({'message': 'Đã xóa kết quả siêu âm phụ khoa'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi xóa siêu âm phụ khoa: {str(e)}'}), 500
+
+
+def _pdf_vn_fonts():
+    """Register Arial for Vietnamese PDF text; fallback Helvetica."""
+    base_font = 'Helvetica'
+    bold_font = 'Helvetica-Bold'
+    try:
+        arial_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'arial.ttf')
+        arial_bold_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'arialbd.ttf')
+        if os.path.exists(arial_path):
+            pdfmetrics.registerFont(TTFont('ArialUnicode', arial_path))
+            base_font = 'ArialUnicode'
+        if os.path.exists(arial_bold_path):
+            pdfmetrics.registerFont(TTFont('ArialUnicodeBold', arial_bold_path))
+            bold_font = 'ArialUnicodeBold'
+        elif base_font == 'ArialUnicode':
+            bold_font = 'ArialUnicode'
+    except Exception as font_error:
+        print(f"PDF font fallback to Helvetica: {font_error}")
+    return base_font, bold_font
+
+
+def _gyn_us_label_maps():
+    return {
+        'uterus_position': {
+            'anteverted': 'Ngả trước', 'retroverted': 'Ngả sau',
+            'midposition': 'Trung gian', 'other': 'Khác',
+        },
+        'myometrium': {
+            'homogeneous': 'Đồng nhất', 'heterogeneous': 'Không đồng nhất',
+            'adenomyosis_suggestive': 'Gợi ý adenomyosis', 'fibroid': 'Có u xơ',
+        },
+        'endometrium_pattern': {
+            'proliferative': 'Tăng sinh', 'secretory': 'Tiết', 'trilaminar': '3 lớp',
+            'homogeneous': 'Đồng nhất', 'heterogeneous': 'Không đồng nhất', 'thin': 'Mỏng',
+        },
+        'endometrial_border': {'regular': 'Đều', 'irregular': 'Không đều'},
+        'adnexal_mass_side': {
+            'none': 'Không', 'left': 'Bên trái', 'right': 'Bên phải', 'bilateral': 'Hai bên',
+        },
+        'iota_conclusion': {
+            'benign': 'Lành tính (chỉ B)', 'malignant': 'Ác tính (chỉ M)',
+            'inconclusive': 'Không kết luận',
+        },
+        'douglas_pouch': {
+            'none': 'Không dịch', 'minimal': 'Dịch ít',
+            'moderate': 'Dịch vừa', 'large': 'Dịch nhiều',
+        },
+    }
+
+
+@app.route('/api/print_gyn_ultrasound/<int:result_id>', methods=['GET'])
+def print_gyn_ultrasound(result_id):
+    """In PDF kết quả siêu âm phụ khoa."""
+    ensure_gyn_ultrasound_schema()
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    import io
+
+    result = _get_or_404(GynecologicalUltrasoundResult, result_id)
+    patient = db.session.get(Patient, result.patient_id)
+    appointment = db.session.get(Appointment, result.appointment_id) if result.appointment_id else None
+    labels = _gyn_us_label_maps()
+
+    def map_label(field, value):
+        if value is None or value == '':
+            return ''
+        return labels.get(field, {}).get(str(value), str(value))
+
+    def fmt_mm(*vals):
+        parts = [str(v) for v in vals if v is not None]
+        return ' × '.join(parts) + (' mm' if parts else '')
+
+    base_font, bold_font = _pdf_vn_fonts()
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1.5*cm, bottomMargin=1.5*cm)
+    elements = []
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'GynUsTitle', parent=styles['Title'], fontName=bold_font,
+        fontSize=16, textColor=colors.HexColor('#0f766e'), spaceAfter=6,
+    )
+    heading_style = ParagraphStyle(
+        'GynUsH2', parent=styles['Heading2'], fontName=bold_font,
+        fontSize=12, textColor=colors.HexColor('#0d9488'), spaceBefore=8, spaceAfter=4,
+    )
+    normal_style = ParagraphStyle(
+        'GynUsNormal', parent=styles['Normal'], fontName=base_font, fontSize=10, leading=14,
+    )
+
+    elements.append(Paragraph("PHÒNG KHÁM CHUYÊN KHOA PHỤ SẢN ĐẠI ANH", title_style))
+    elements.append(Paragraph("KẾT QUẢ SIÊU ÂM PHỤ KHOA", heading_style))
+    elements.append(Spacer(1, 0.3*cm))
+
+    patient_data = [
+        ['Bệnh nhân:', (patient.name if patient else '') or ''],
+        ['Số điện thoại:', (patient.phone if patient else '') or ''],
+        ['Ngày sinh:', patient.date_of_birth.strftime('%d/%m/%Y') if patient and patient.date_of_birth else ''],
+        ['Ngày siêu âm:', result.exam_date.strftime('%d/%m/%Y %H:%M') if result.exam_date else ''],
+    ]
+    if result.exam_indication:
+        patient_data.append(['Chỉ định:', result.exam_indication])
+    if result.menstrual_day is not None:
+        patient_data.append(['Ngày vòng kinh:', str(result.menstrual_day)])
+    if appointment:
+        patient_data.append(['Mã lịch hẹn:', str(appointment.id)])
+
+    patient_table = Table(patient_data, colWidths=[4.5*cm, 11.5*cm])
+    patient_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (0, -1), bold_font),
+        ('FONTNAME', (1, 0), (1, -1), base_font),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(patient_table)
+    elements.append(Spacer(1, 0.4*cm))
+
+    uterus_rows = []
+    if result.uterus_position:
+        uterus_rows.append(['Tư thế tử cung:', map_label('uterus_position', result.uterus_position)])
+    size = fmt_mm(result.uterus_length_mm, result.uterus_width_mm, result.uterus_height_mm)
+    if size:
+        uterus_rows.append(['Kích thước TC:', size])
+    if result.myometrium:
+        uterus_rows.append(['Cơ tử cung:', map_label('myometrium', result.myometrium)])
+    if result.figo_fibroid:
+        uterus_rows.append(['FIGO u xơ:', str(result.figo_fibroid)])
+    if result.endometrium_mm is not None:
+        uterus_rows.append(['Độ dày NMTC:', f"{result.endometrium_mm} mm"])
+    if result.endometrium_pattern:
+        uterus_rows.append(['Kiểu echo NMTC:', map_label('endometrium_pattern', result.endometrium_pattern)])
+    if result.endometrial_border:
+        uterus_rows.append(['Bờ nội mạc:', map_label('endometrial_border', result.endometrial_border)])
+    if result.cavity_findings:
+        uterus_rows.append(['Buồng tử cung:', result.cavity_findings])
+    if result.cervix_length_mm is not None:
+        uterus_rows.append(['Chiều dài CTC:', f"{result.cervix_length_mm} mm"])
+
+    if uterus_rows:
+        elements.append(Paragraph("TỬ CUNG & NỘI MẠC", heading_style))
+        t = Table(uterus_rows, colWidths=[5*cm, 11*cm])
+        t.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), bold_font),
+            ('FONTNAME', (1, 0), (1, -1), base_font),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(t)
+
+    ovary_rows = []
+    left_size = fmt_mm(result.left_ovary_length_mm, result.left_ovary_width_mm, result.left_ovary_height_mm)
+    if left_size:
+        ovary_rows.append(['Buồng trứng trái:', left_size])
+    if result.left_ovary_findings:
+        ovary_rows.append(['BT trái — mô tả:', result.left_ovary_findings])
+    right_size = fmt_mm(result.right_ovary_length_mm, result.right_ovary_width_mm, result.right_ovary_height_mm)
+    if right_size:
+        ovary_rows.append(['Buồng trứng phải:', right_size])
+    if result.right_ovary_findings:
+        ovary_rows.append(['BT phải — mô tả:', result.right_ovary_findings])
+    if result.afc_left is not None or result.afc_right is not None or result.afc_total is not None:
+        ovary_rows.append([
+            'AFC (trái / phải / tổng):',
+            f"{result.afc_left if result.afc_left is not None else '—'} / "
+            f"{result.afc_right if result.afc_right is not None else '—'} / "
+            f"{result.afc_total if result.afc_total is not None else '—'}"
+        ])
+
+    if ovary_rows:
+        elements.append(Paragraph("BUỒNG TRỨNG & AFC", heading_style))
+        t = Table(ovary_rows, colWidths=[5*cm, 11*cm])
+        t.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), bold_font),
+            ('FONTNAME', (1, 0), (1, -1), base_font),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(t)
+
+    mass_rows = []
+    if result.adnexal_mass_side:
+        mass_rows.append(['Khối phần phụ:', map_label('adnexal_mass_side', result.adnexal_mass_side)])
+    if result.orads_score:
+        mass_rows.append(['O-RADS:', f"ORADS {result.orads_score}"])
+    if result.iota_conclusion:
+        mass_rows.append(['IOTA:', map_label('iota_conclusion', result.iota_conclusion)])
+    if result.douglas_pouch:
+        mass_rows.append(['Túi cùng Douglas:', map_label('douglas_pouch', result.douglas_pouch)])
+    if result.adnexal_mass_description:
+        mass_rows.append(['Mô tả khối:', result.adnexal_mass_description])
+
+    if mass_rows:
+        elements.append(Paragraph("KHỐI PHẦN PHỤ & PHÂN LOẠI", heading_style))
+        t = Table(mass_rows, colWidths=[5*cm, 11*cm])
+        t.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), bold_font),
+            ('FONTNAME', (1, 0), (1, -1), base_font),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(t)
+
+    if result.findings:
+        elements.append(Paragraph("NHẬN XÉT / KẾT QUẢ", heading_style))
+        elements.append(Paragraph(str(result.findings).replace('\n', '<br/>'), normal_style))
+    if result.recommendations:
+        elements.append(Paragraph("KHUYẾN NGHỊ", heading_style))
+        elements.append(Paragraph(str(result.recommendations).replace('\n', '<br/>'), normal_style))
+
+    elements.append(Spacer(1, 1*cm))
+    elements.append(Paragraph("Bác sĩ khám: ........................................", normal_style))
+    elements.append(Paragraph(f"In ngày: {datetime.now().strftime('%d/%m/%Y %H:%M')}", normal_style))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'ket_qua_sieu_am_phu_khoa_{result_id}.pdf',
+    )
+
+
+_GYN_EXAM_INT_FIELDS = ('menstrual_day', 'gravida', 'pain_vas')
+_GYN_EXAM_DATE_FIELDS = ('lmp_date', 'follow_up_date')
+_GYN_EXAM_STR_FIELDS = (
+    'doctor_name', 'chief_complaint', 'cycle_pattern', 'para', 'contraception', 'allergies',
+    'past_gyn_history', 'general_exam', 'vagina_findings', 'cervix_findings', 'uterus_bimanual',
+    'adnexa_findings', 'discharge_character', 'exam_findings', 'diagnosis', 'treatment_plan',
+    'recommendations', 'follow_up_notes', 'analysis_source',
+)
+
+
+def _parse_optional_date(value):
+    if not value:
+        return None
+    try:
+        raw = str(value).replace('Z', '+00:00')
+        if 'T' in raw:
+            return datetime.fromisoformat(raw).date()
+        return datetime.strptime(raw[:10], '%Y-%m-%d').date()
+    except Exception:
+        return None
+
+
+def _apply_gyn_exam_payload(result, data, *, creating=False):
+    if creating or 'exam_date' in data:
+        result.exam_date = _parse_gyn_us_exam_date(data.get('exam_date'))
+    if creating or 'appointment_id' in data:
+        result.appointment_id = data.get('appointment_id')
+
+    for key in _GYN_EXAM_INT_FIELDS:
+        if creating or key in data:
+            raw = data.get(key)
+            if raw is None or raw == '':
+                result.__setattr__(key, None)
+            else:
+                try:
+                    result.__setattr__(key, int(raw))
+                except (TypeError, ValueError):
+                    result.__setattr__(key, None)
+
+    for key in _GYN_EXAM_DATE_FIELDS:
+        if creating or key in data:
+            result.__setattr__(key, _parse_optional_date(data.get(key)))
+
+    for key in _GYN_EXAM_STR_FIELDS:
+        if creating or key in data:
+            val = data.get(key)
+            result.__setattr__(key, val if val not in (None, '') else None)
+
+    if creating and not result.analysis_source:
+        result.analysis_source = 'manual_input'
+
+
+@app.route('/api/gyn-exam-results', methods=['POST'])
+def save_gyn_exam_results():
+    """Lưu phiếu khám phụ khoa."""
+    ensure_gyn_exam_schema()
+    try:
+        data = request.json or {}
+        if not data.get('patient_id'):
+            return jsonify({'message': 'Thiếu dữ liệu bệnh nhân'}), 400
+        result = GynecologicalExamResult(patient_id=data['patient_id'])
+        _apply_gyn_exam_payload(result, data, creating=True)
+        db.session.add(result)
+        _sync_appointment_diagnosis(result.appointment_id, result.patient_id, result.diagnosis)
+        db.session.commit()
+        return jsonify({'message': 'Đã lưu phiếu khám phụ khoa', 'id': result.id, 'result': result.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi lưu phiếu khám phụ khoa: {str(e)}'}), 500
+
+
+@app.route('/api/gyn-exam-results', methods=['GET'])
+def get_gyn_exam_results():
+    """Danh sách phiếu khám phụ khoa."""
+    ensure_gyn_exam_schema()
+    try:
+        patient_id = request.args.get('patient_id', type=int)
+        appointment_id = request.args.get('appointment_id', type=int)
+        query = GynecologicalExamResult.query
+        if patient_id:
+            query = query.filter_by(patient_id=patient_id)
+        if appointment_id:
+            query = query.filter_by(appointment_id=appointment_id)
+        rows = query.order_by(GynecologicalExamResult.exam_date.desc()).all()
+        return jsonify([r.to_dict() for r in rows])
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy phiếu khám phụ khoa: {str(e)}'}), 500
+
+
+@app.route('/api/gyn-exam-results/<int:result_id>', methods=['GET'])
+def get_gyn_exam_result(result_id):
+    ensure_gyn_exam_schema()
+    try:
+        result = _get_or_404(GynecologicalExamResult, result_id)
+        return jsonify(result.to_dict())
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy phiếu khám phụ khoa: {str(e)}'}), 500
+
+
+@app.route('/api/gyn-exam-results/<int:result_id>', methods=['PUT'])
+def update_gyn_exam_result(result_id):
+    ensure_gyn_exam_schema()
+    try:
+        result = _get_or_404(GynecologicalExamResult, result_id)
+        data = request.json or {}
+        _apply_gyn_exam_payload(result, data, creating=False)
+        _sync_appointment_diagnosis(result.appointment_id, result.patient_id, result.diagnosis)
+        db.session.commit()
+        return jsonify({'message': 'Đã cập nhật phiếu khám phụ khoa', 'result': result.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi cập nhật phiếu khám phụ khoa: {str(e)}'}), 500
+
+
+@app.route('/api/gyn-exam-results/<int:result_id>', methods=['DELETE'])
+def delete_gyn_exam_result(result_id):
+    ensure_gyn_exam_schema()
+    try:
+        result = _get_or_404(GynecologicalExamResult, result_id)
+        db.session.delete(result)
+        db.session.commit()
+        return jsonify({'message': 'Đã xóa phiếu khám phụ khoa'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi xóa phiếu khám phụ khoa: {str(e)}'}), 500
+
+
+GENERAL_US_TYPE_LABELS = {
+    'abdomen': 'Ổ bụng (gan mật tụy lách)',
+    'kidney': 'Thận – tiết niệu',
+    'thyroid': 'Tuyến giáp',
+    'breast': 'Tuyến vú',
+    'heart': 'Tim (echo cơ bản)',
+    'soft_tissue': 'Mô mềm / khác',
+}
+
+
+def _apply_general_ultrasound_payload(result, data, creating=False):
+    if creating or 'exam_date' in data:
+        result.exam_date = _parse_gyn_us_exam_date(data.get('exam_date')) or result.exam_date or datetime.utcnow()
+    if creating or 'appointment_id' in data:
+        aid = data.get('appointment_id')
+        result.appointment_id = int(aid) if aid not in (None, '') else None
+    if creating or 'exam_type' in data:
+        et = (data.get('exam_type') or 'abdomen').strip().lower()
+        result.exam_type = et if et in GENERAL_US_TYPE_LABELS else 'abdomen'
+    if creating or 'exam_indication' in data:
+        result.exam_indication = (data.get('exam_indication') or None) or None
+    if creating or 'findings' in data:
+        result.findings = data.get('findings') or None
+    if creating or 'recommendations' in data:
+        result.recommendations = data.get('recommendations') or None
+    if creating or 'analysis_source' in data:
+        result.analysis_source = data.get('analysis_source') or result.analysis_source or 'manual_input'
+    if creating or 'findings_json' in data or 'fields' in data:
+        raw = data.get('findings_json')
+        if raw is None and isinstance(data.get('fields'), dict):
+            raw = data.get('fields')
+        if isinstance(raw, dict):
+            result.findings_json = json.dumps(raw, ensure_ascii=False)
+        elif isinstance(raw, str):
+            result.findings_json = raw
+        elif creating:
+            result.findings_json = '{}'
+    if creating and not result.findings_json:
+        result.findings_json = '{}'
+
+
+@app.route('/api/general-ultrasound-results', methods=['POST'])
+def save_general_ultrasound_results():
+    ensure_general_ultrasound_schema()
+    try:
+        data = request.json or {}
+        if not data.get('patient_id'):
+            return jsonify({'message': 'Thiếu dữ liệu bệnh nhân'}), 400
+        result = GeneralUltrasoundResult(patient_id=data['patient_id'])
+        _apply_general_ultrasound_payload(result, data, creating=True)
+        db.session.add(result)
+        db.session.commit()
+        return jsonify({'message': 'Đã lưu kết quả siêu âm tổng quát', 'id': result.id, 'result': result.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi lưu siêu âm tổng quát: {str(e)}'}), 500
+
+
+@app.route('/api/general-ultrasound-results', methods=['GET'])
+def get_general_ultrasound_results():
+    ensure_general_ultrasound_schema()
+    try:
+        patient_id = request.args.get('patient_id', type=int)
+        appointment_id = request.args.get('appointment_id', type=int)
+        exam_type = (request.args.get('exam_type') or '').strip().lower()
+        query = GeneralUltrasoundResult.query
+        if patient_id:
+            query = query.filter_by(patient_id=patient_id)
+        if appointment_id:
+            query = query.filter_by(appointment_id=appointment_id)
+        if exam_type and exam_type != 'all':
+            query = query.filter_by(exam_type=exam_type)
+        rows = query.order_by(GeneralUltrasoundResult.exam_date.desc()).all()
+        return jsonify([r.to_dict() for r in rows])
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy siêu âm tổng quát: {str(e)}'}), 500
+
+
+@app.route('/api/general-ultrasound-results/<int:result_id>', methods=['GET'])
+def get_general_ultrasound_result(result_id):
+    ensure_general_ultrasound_schema()
+    try:
+        result = _get_or_404(GeneralUltrasoundResult, result_id)
+        return jsonify(result.to_dict())
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy siêu âm tổng quát: {str(e)}'}), 500
+
+
+@app.route('/api/general-ultrasound-results/<int:result_id>', methods=['PUT'])
+def update_general_ultrasound_result(result_id):
+    ensure_general_ultrasound_schema()
+    try:
+        result = _get_or_404(GeneralUltrasoundResult, result_id)
+        data = request.json or {}
+        _apply_general_ultrasound_payload(result, data, creating=False)
+        db.session.commit()
+        return jsonify({'message': 'Đã cập nhật kết quả siêu âm tổng quát', 'result': result.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi cập nhật siêu âm tổng quát: {str(e)}'}), 500
+
+
+@app.route('/api/general-ultrasound-results/<int:result_id>', methods=['DELETE'])
+def delete_general_ultrasound_result(result_id):
+    ensure_general_ultrasound_schema()
+    try:
+        result = _get_or_404(GeneralUltrasoundResult, result_id)
+        db.session.delete(result)
+        db.session.commit()
+        return jsonify({'message': 'Đã xóa kết quả siêu âm tổng quát'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi xóa siêu âm tổng quát: {str(e)}'}), 500
+
+
+@app.route('/api/print_general_ultrasound/<int:result_id>', methods=['GET'])
+def print_general_ultrasound(result_id):
+    ensure_general_ultrasound_schema()
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    import io
+
+    result = _get_or_404(GeneralUltrasoundResult, result_id)
+    patient = db.session.get(Patient, result.patient_id)
+    fields = result.to_dict().get('findings_json') or {}
+    base_font, bold_font = _pdf_vn_fonts()
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1.5*cm, bottomMargin=1.5*cm)
+    elements = []
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'GenUsTitle', parent=styles['Title'], fontName=bold_font,
+        fontSize=16, textColor=colors.HexColor('#0369a1'), spaceAfter=6,
+    )
+    heading_style = ParagraphStyle(
+        'GenUsH2', parent=styles['Heading2'], fontName=bold_font,
+        fontSize=12, textColor=colors.HexColor('#0c4a6e'), spaceBefore=8, spaceAfter=4,
+    )
+    normal_style = ParagraphStyle(
+        'GenUsNormal', parent=styles['Normal'], fontName=base_font, fontSize=10, leading=14,
+    )
+
+    def add_kv_table(rows):
+        if not rows:
+            return
+        t = Table(rows, colWidths=[5.5*cm, 10.5*cm])
+        t.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), bold_font),
+            ('FONTNAME', (1, 0), (1, -1), base_font),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(t)
+
+    type_label = GENERAL_US_TYPE_LABELS.get(result.exam_type, result.exam_type or '')
+    elements.append(Paragraph("PHÒNG KHÁM CHUYÊN KHOA PHỤ SẢN ĐẠI ANH", title_style))
+    elements.append(Paragraph(f"PHIẾU SIÊU ÂM TỔNG QUÁT — {type_label}", heading_style))
+    elements.append(Spacer(1, 0.3*cm))
+    add_kv_table([
+        ['Bệnh nhân:', (patient.name if patient else '') or ''],
+        ['Số điện thoại:', (patient.phone if patient else '') or ''],
+        ['Ngày khám:', result.exam_date.strftime('%d/%m/%Y %H:%M') if result.exam_date else ''],
+        ['Loại siêu âm:', type_label],
+        ['Chỉ định:', result.exam_indication or ''],
+    ])
+    field_rows = []
+    for key, val in (fields.items() if isinstance(fields, dict) else []):
+        if val in (None, ''):
+            continue
+        field_rows.append([str(key).replace('_', ' ').title() + ':', str(val)])
+    if field_rows:
+        elements.append(Paragraph("CHI TIẾT", heading_style))
+        add_kv_table(field_rows)
+    if result.findings:
+        elements.append(Paragraph("MÔ TẢ / KẾT LUẬN", heading_style))
+        elements.append(Paragraph((result.findings or '').replace('\n', '<br/>'), normal_style))
+    if result.recommendations:
+        elements.append(Paragraph("KHUYẾN NGHỊ", heading_style))
+        elements.append(Paragraph((result.recommendations or '').replace('\n', '<br/>'), normal_style))
+    doc.build(elements)
+    buffer.seek(0)
+    return send_file(buffer, mimetype='application/pdf', as_attachment=False,
+                     download_name=f'general_ultrasound_{result_id}.pdf')
+
+
+_OBSTETRIC_EXAM_INT_FIELDS = (
+    'ga_weeks', 'ga_days', 'gravida', 'bp_systolic', 'bp_diastolic', 'pulse', 'fetal_heart_rate',
+)
+_OBSTETRIC_EXAM_FLOAT_FIELDS = (
+    'weight_kg', 'height_cm', 'bmi', 'temperature_c', 'fundal_height_cm',
+)
+_OBSTETRIC_EXAM_STR_FIELDS = (
+    'doctor_name', 'chief_complaint', 'para', 'presentation', 'leopold_findings',
+    'fetal_movement', 'edema', 'urine_protein', 'urine_glucose', 'exam_notes',
+    'diagnosis', 'treatment_plan', 'recommendations', 'follow_up_notes', 'analysis_source',
+)
+
+
+def _parse_optional_date(value):
+    if not value:
+        return None
+    try:
+        s = str(value).strip()[:10]
+        return datetime.strptime(s, '%Y-%m-%d').date()
+    except Exception:
+        return None
+
+
+def _apply_obstetric_exam_payload(result, data, creating=False):
+    if creating or 'exam_date' in data:
+        result.exam_date = _parse_gyn_us_exam_date(data.get('exam_date')) or result.exam_date or datetime.utcnow()
+    if creating or 'appointment_id' in data:
+        aid = data.get('appointment_id')
+        result.appointment_id = int(aid) if aid not in (None, '') else None
+    if creating or 'pregnancy_episode_id' in data:
+        peid = data.get('pregnancy_episode_id')
+        result.pregnancy_episode_id = int(peid) if peid not in (None, '') else None
+    for key in _OBSTETRIC_EXAM_INT_FIELDS:
+        if creating or key in data:
+            val = data.get(key)
+            if val in (None, ''):
+                result.__setattr__(key, None)
+            else:
+                try:
+                    result.__setattr__(key, int(val))
+                except Exception:
+                    result.__setattr__(key, None)
+    for key in _OBSTETRIC_EXAM_FLOAT_FIELDS:
+        if creating or key in data:
+            val = data.get(key)
+            if val in (None, ''):
+                result.__setattr__(key, None)
+            else:
+                try:
+                    result.__setattr__(key, float(val))
+                except Exception:
+                    result.__setattr__(key, None)
+    for key in _OBSTETRIC_EXAM_STR_FIELDS:
+        if creating or key in data:
+            val = data.get(key)
+            result.__setattr__(key, val if val not in (None, '') else None)
+    if creating or 'lmp_date' in data:
+        result.lmp_date = _parse_optional_date(data.get('lmp_date'))
+    if creating or 'edd_date' in data:
+        result.edd_date = _parse_optional_date(data.get('edd_date'))
+    if creating or 'follow_up_date' in data:
+        result.follow_up_date = _parse_optional_date(data.get('follow_up_date'))
+    if creating and not result.analysis_source:
+        result.analysis_source = 'manual_input'
+    # Auto BMI if missing
+    if result.weight_kg and result.height_cm and result.height_cm > 0:
+        h_m = result.height_cm / 100.0
+        if h_m > 0 and (creating or 'bmi' not in data or not data.get('bmi')):
+            result.bmi = round(result.weight_kg / (h_m * h_m), 1)
+
+
+@app.route('/api/obstetric-exam-results', methods=['POST'])
+def save_obstetric_exam_results():
+    ensure_obstetric_exam_schema()
+    try:
+        data = request.json or {}
+        if not data.get('patient_id'):
+            return jsonify({'message': 'Thiếu dữ liệu bệnh nhân'}), 400
+        result = ObstetricExamResult(patient_id=data['patient_id'])
+        _apply_obstetric_exam_payload(result, data, creating=True)
+        db.session.add(result)
+        _sync_appointment_diagnosis(result.appointment_id, result.patient_id, result.diagnosis)
+        db.session.commit()
+        return jsonify({'message': 'Đã lưu phiếu khám sản định kỳ', 'id': result.id, 'result': result.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi lưu phiếu khám sản: {str(e)}'}), 500
+
+
+@app.route('/api/obstetric-exam-results', methods=['GET'])
+def get_obstetric_exam_results():
+    ensure_obstetric_exam_schema()
+    try:
+        patient_id = request.args.get('patient_id', type=int)
+        appointment_id = request.args.get('appointment_id', type=int)
+        pregnancy_episode_id = request.args.get('pregnancy_episode_id', type=int)
+        query = ObstetricExamResult.query
+        if patient_id:
+            query = query.filter_by(patient_id=patient_id)
+        if appointment_id:
+            query = query.filter_by(appointment_id=appointment_id)
+        if pregnancy_episode_id:
+            query = query.filter_by(pregnancy_episode_id=pregnancy_episode_id)
+        rows = query.order_by(ObstetricExamResult.exam_date.desc()).all()
+        return jsonify([r.to_dict() for r in rows])
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy phiếu khám sản: {str(e)}'}), 500
+
+
+@app.route('/api/obstetric-exam-results/<int:result_id>', methods=['GET'])
+def get_obstetric_exam_result(result_id):
+    ensure_obstetric_exam_schema()
+    try:
+        result = _get_or_404(ObstetricExamResult, result_id)
+        return jsonify(result.to_dict())
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy phiếu khám sản: {str(e)}'}), 500
+
+
+@app.route('/api/obstetric-exam-results/<int:result_id>', methods=['PUT'])
+def update_obstetric_exam_result(result_id):
+    ensure_obstetric_exam_schema()
+    try:
+        result = _get_or_404(ObstetricExamResult, result_id)
+        data = request.json or {}
+        _apply_obstetric_exam_payload(result, data, creating=False)
+        _sync_appointment_diagnosis(result.appointment_id, result.patient_id, result.diagnosis)
+        db.session.commit()
+        return jsonify({'message': 'Đã cập nhật phiếu khám sản định kỳ', 'result': result.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi cập nhật phiếu khám sản: {str(e)}'}), 500
+
+
+@app.route('/api/obstetric-exam-results/<int:result_id>', methods=['DELETE'])
+def delete_obstetric_exam_result(result_id):
+    ensure_obstetric_exam_schema()
+    try:
+        result = _get_or_404(ObstetricExamResult, result_id)
+        db.session.delete(result)
+        db.session.commit()
+        return jsonify({'message': 'Đã xóa phiếu khám sản định kỳ'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi xóa phiếu khám sản: {str(e)}'}), 500
+
+
+@app.route('/api/print_obstetric_exam/<int:result_id>', methods=['GET'])
+def print_obstetric_exam(result_id):
+    ensure_obstetric_exam_schema()
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    import io
+
+    result = _get_or_404(ObstetricExamResult, result_id)
+    patient = db.session.get(Patient, result.patient_id)
+    base_font, bold_font = _pdf_vn_fonts()
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1.5*cm, bottomMargin=1.5*cm)
+    elements = []
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'AncTitle', parent=styles['Title'], fontName=bold_font,
+        fontSize=16, textColor=colors.HexColor('#be185d'), spaceAfter=6,
+    )
+    heading_style = ParagraphStyle(
+        'AncH2', parent=styles['Heading2'], fontName=bold_font,
+        fontSize=12, textColor=colors.HexColor('#9d174d'), spaceBefore=8, spaceAfter=4,
+    )
+    normal_style = ParagraphStyle(
+        'AncNormal', parent=styles['Normal'], fontName=base_font, fontSize=10, leading=14,
+    )
+
+    def add_kv_table(rows):
+        if not rows:
+            return
+        t = Table(rows, colWidths=[5.5*cm, 10.5*cm])
+        t.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), bold_font),
+            ('FONTNAME', (1, 0), (1, -1), base_font),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(t)
+
+    elements.append(Paragraph("PHÒNG KHÁM CHUYÊN KHOA PHỤ SẢN ĐẠI ANH", title_style))
+    elements.append(Paragraph("PHIẾU KHÁM SẢN ĐỊNH KỲ", heading_style))
+    elements.append(Spacer(1, 0.3*cm))
+    ga = ''
+    if result.ga_weeks is not None:
+        ga = f"{result.ga_weeks} tuần"
+        if result.ga_days is not None:
+            ga += f" {result.ga_days} ngày"
+    add_kv_table([
+        ['Bệnh nhân:', (patient.name if patient else '') or ''],
+        ['SĐT:', (patient.phone if patient else '') or ''],
+        ['Ngày khám:', result.exam_date.strftime('%d/%m/%Y %H:%M') if result.exam_date else ''],
+        ['Bác sĩ:', result.doctor_name or ''],
+        ['Tuổi thai:', ga],
+        ['G / P:', f"{result.gravida if result.gravida is not None else '—'} / {result.para or '—'}"],
+        ['Lý do khám:', result.chief_complaint or ''],
+    ])
+    elements.append(Paragraph("SINH HIỆU & CÂN ĐO", heading_style))
+    bp = ''
+    if result.bp_systolic is not None or result.bp_diastolic is not None:
+        bp = f"{result.bp_systolic or '—'} / {result.bp_diastolic or '—'} mmHg"
+    add_kv_table([
+        ['Cân nặng:', f"{result.weight_kg} kg" if result.weight_kg is not None else ''],
+        ['Chiều cao:', f"{result.height_cm} cm" if result.height_cm is not None else ''],
+        ['BMI:', str(result.bmi) if result.bmi is not None else ''],
+        ['Huyết áp:', bp],
+        ['Mạch:', f"{result.pulse} lần/phút" if result.pulse is not None else ''],
+        ['Nhiệt độ:', f"{result.temperature_c} °C" if result.temperature_c is not None else ''],
+    ])
+    elements.append(Paragraph("KHÁM BỤNG SẢN", heading_style))
+    add_kv_table([
+        ['Chiều cao tử cung:', f"{result.fundal_height_cm} cm" if result.fundal_height_cm is not None else ''],
+        ['Tim thai (lâm sàng):', f"{result.fetal_heart_rate} lần/phút" if result.fetal_heart_rate is not None else ''],
+        ['Ngôi thai:', result.presentation or ''],
+        ['Cử động thai:', result.fetal_movement or ''],
+        ['Leopold:', result.leopold_findings or ''],
+        ['Phù:', result.edema or ''],
+        ['Protein niệu:', result.urine_protein or ''],
+        ['Glucose niệu:', result.urine_glucose or ''],
+    ])
+    if result.exam_notes:
+        elements.append(Paragraph("GHI CHÚ KHÁM", heading_style))
+        elements.append(Paragraph((result.exam_notes or '').replace('\n', '<br/>'), normal_style))
+    if result.diagnosis:
+        elements.append(Paragraph("CHẨN ĐOÁN", heading_style))
+        elements.append(Paragraph((result.diagnosis or '').replace('\n', '<br/>'), normal_style))
+    if result.treatment_plan:
+        elements.append(Paragraph("KẾ HOẠCH XỬ TRÍ", heading_style))
+        elements.append(Paragraph((result.treatment_plan or '').replace('\n', '<br/>'), normal_style))
+    if result.recommendations:
+        elements.append(Paragraph("KHUYẾN NGHỊ", heading_style))
+        elements.append(Paragraph((result.recommendations or '').replace('\n', '<br/>'), normal_style))
+    fu = result.follow_up_date.strftime('%d/%m/%Y') if result.follow_up_date else ''
+    if fu or result.follow_up_notes:
+        elements.append(Paragraph("TÁI KHÁM", heading_style))
+        add_kv_table([
+            ['Ngày hẹn:', fu],
+            ['Ghi chú:', result.follow_up_notes or ''],
+        ])
+    doc.build(elements)
+    buffer.seek(0)
+    return send_file(buffer, mimetype='application/pdf', as_attachment=False,
+                     download_name=f'obstetric_exam_{result_id}.pdf')
+
+
+def _gyn_exam_label_maps():
+    return {
+        'cycle_pattern': {
+            'regular': 'Đều', 'irregular': 'Không đều', 'amenorrhea': 'Vô kinh',
+            'menopause': 'Mãn kinh', 'hormone': 'Đang dùng hormone',
+        },
+        'discharge_character': {
+            'normal': 'Bình thường', 'white': 'Trắng sữa', 'yellow': 'Vàng',
+            'green': 'Xanh',             'bloody': 'Máu / loãng máu', 'foul': 'Hôi',
+            'curd': 'Vón cục (nấm)',
+        },
+    }
+
+
+@app.route('/api/print_gyn_exam/<int:result_id>', methods=['GET'])
+def print_gyn_exam(result_id):
+    """In PDF phiếu khám phụ khoa."""
+    ensure_gyn_exam_schema()
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    import io
+
+    result = _get_or_404(GynecologicalExamResult, result_id)
+    patient = db.session.get(Patient, result.patient_id)
+    appointment = db.session.get(Appointment, result.appointment_id) if result.appointment_id else None
+    labels = _gyn_exam_label_maps()
+
+    def map_label(field, value):
+        if value is None or value == '':
+            return ''
+        return labels.get(field, {}).get(str(value), str(value))
+
+    base_font, bold_font = _pdf_vn_fonts()
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1.5*cm, bottomMargin=1.5*cm)
+    elements = []
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'GynExamTitle', parent=styles['Title'], fontName=bold_font,
+        fontSize=16, textColor=colors.HexColor('#7c3aed'), spaceAfter=6,
+    )
+    heading_style = ParagraphStyle(
+        'GynExamH2', parent=styles['Heading2'], fontName=bold_font,
+        fontSize=12, textColor=colors.HexColor('#6d28d9'), spaceBefore=8, spaceAfter=4,
+    )
+    normal_style = ParagraphStyle(
+        'GynExamNormal', parent=styles['Normal'], fontName=base_font, fontSize=10, leading=14,
+    )
+
+    def add_kv_table(rows):
+        if not rows:
+            return
+        t = Table(rows, colWidths=[5*cm, 11*cm])
+        t.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), bold_font),
+            ('FONTNAME', (1, 0), (1, -1), base_font),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(t)
+
+    elements.append(Paragraph("PHÒNG KHÁM CHUYÊN KHOA PHỤ SẢN ĐẠI ANH", title_style))
+    elements.append(Paragraph("PHIẾU KHÁM PHỤ KHOA", heading_style))
+    elements.append(Spacer(1, 0.3*cm))
+
+    patient_rows = [
+        ['Bệnh nhân:', (patient.name if patient else '') or ''],
+        ['Số điện thoại:', (patient.phone if patient else '') or ''],
+        ['Ngày sinh:', patient.date_of_birth.strftime('%d/%m/%Y') if patient and patient.date_of_birth else ''],
+        ['Ngày khám:', result.exam_date.strftime('%d/%m/%Y %H:%M') if result.exam_date else ''],
+    ]
+    if result.doctor_name:
+        patient_rows.append(['Bác sĩ:', result.doctor_name])
+    if result.chief_complaint:
+        patient_rows.append(['Lý do khám:', result.chief_complaint])
+    if appointment:
+        patient_rows.append(['Mã lịch hẹn:', str(appointment.id)])
+    add_kv_table(patient_rows)
+
+    hist_rows = []
+    if result.lmp_date:
+        hist_rows.append(['Ngày kinh cuối:', result.lmp_date.strftime('%d/%m/%Y')])
+    if result.menstrual_day is not None:
+        hist_rows.append(['Ngày vòng kinh:', str(result.menstrual_day)])
+    if result.cycle_pattern:
+        hist_rows.append(['Chu kỳ:', map_label('cycle_pattern', result.cycle_pattern)])
+    if result.gravida is not None or result.para:
+        hist_rows.append(['Gravida / Para:', f"{result.gravida if result.gravida is not None else '—'} / {result.para or '—'}"])
+    if result.contraception:
+        hist_rows.append(['Biện pháp tránh thai:', result.contraception])
+    if result.allergies:
+        hist_rows.append(['Dị ứng:', result.allergies])
+    if result.past_gyn_history:
+        hist_rows.append(['Tiền sử PK:', result.past_gyn_history])
+    if hist_rows:
+        elements.append(Paragraph("TIỀN SỬ / KINH NGUYỆT", heading_style))
+        add_kv_table(hist_rows)
+
+    exam_rows = []
+    if result.pain_vas is not None:
+        exam_rows.append(['Đau (VAS 0–10):', str(result.pain_vas)])
+    if result.general_exam:
+        exam_rows.append(['Khám toàn thân / bụng:', result.general_exam])
+    if result.vagina_findings:
+        exam_rows.append(['Âm đạo:', result.vagina_findings])
+    if result.cervix_findings:
+        exam_rows.append(['Cổ tử cung:', result.cervix_findings])
+    if result.discharge_character:
+        exam_rows.append(['Huyết trắng:', map_label('discharge_character', result.discharge_character)])
+    if result.uterus_bimanual:
+        exam_rows.append(['Tử cung (hai tay):', result.uterus_bimanual])
+    if result.adnexa_findings:
+        exam_rows.append(['Phần phụ:', result.adnexa_findings])
+    if result.exam_findings:
+        exam_rows.append(['Tóm tắt khám:', result.exam_findings])
+    if exam_rows:
+        elements.append(Paragraph("KHÁM LÂM SÀNG", heading_style))
+        add_kv_table(exam_rows)
+
+    if result.diagnosis:
+        elements.append(Paragraph("CHẨN ĐOÁN", heading_style))
+        elements.append(Paragraph(str(result.diagnosis).replace('\n', '<br/>'), normal_style))
+    if result.treatment_plan:
+        elements.append(Paragraph("HƯỚNG ĐIỀU TRỊ", heading_style))
+        elements.append(Paragraph(str(result.treatment_plan).replace('\n', '<br/>'), normal_style))
+    if result.recommendations:
+        elements.append(Paragraph("KHUYẾN NGHỊ", heading_style))
+        elements.append(Paragraph(str(result.recommendations).replace('\n', '<br/>'), normal_style))
+
+    fu_rows = []
+    if result.follow_up_date:
+        fu_rows.append(['Tái khám:', result.follow_up_date.strftime('%d/%m/%Y')])
+    if result.follow_up_notes:
+        fu_rows.append(['Ghi chú tái khám:', result.follow_up_notes])
+    if fu_rows:
+        elements.append(Paragraph("TÁI KHÁM", heading_style))
+        add_kv_table(fu_rows)
+
+    elements.append(Spacer(1, 1*cm))
+    elements.append(Paragraph("Bác sĩ khám: ........................................", normal_style))
+    elements.append(Paragraph(f"In ngày: {datetime.now().strftime('%d/%m/%Y %H:%M')}", normal_style))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'phieu_kham_phu_khoa_{result_id}.pdf',
+    )
+
+
+# ===== Follicle monitoring (vô sinh) =====
+
+def _parse_follicle_exam_date(value):
+    return _parse_gyn_us_exam_date(value)
+
+
+@app.route('/api/follicle-cycles', methods=['GET'])
+def get_follicle_cycles():
+    ensure_fertility_andrology_schema()
+    try:
+        patient_id = request.args.get('patient_id', type=int)
+        status = request.args.get('status')
+        include_entries = request.args.get('include_entries', '0') in ('1', 'true', 'yes')
+        query = FollicleMonitoringCycle.query
+        if patient_id:
+            query = query.filter_by(patient_id=patient_id)
+        if status:
+            query = query.filter_by(status=status)
+        rows = query.order_by(FollicleMonitoringCycle.created_at.desc()).all()
+        return jsonify([r.to_dict(include_entries=include_entries) for r in rows])
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy chu kỳ theo dõi nang: {str(e)}'}), 500
+
+
+@app.route('/api/follicle-cycles', methods=['POST'])
+def create_follicle_cycle():
+    ensure_fertility_andrology_schema()
+    try:
+        data = request.json or {}
+        if not data.get('patient_id'):
+            return jsonify({'message': 'Thiếu patient_id'}), 400
+        cycle = FollicleMonitoringCycle(
+            patient_id=data['patient_id'],
+            cycle_label=data.get('cycle_label') or None,
+            lmp_date=_parse_optional_date(data.get('lmp_date')),
+            protocol=data.get('protocol') or None,
+            status=data.get('status') or 'active',
+            notes=data.get('notes') or None,
+        )
+        db.session.add(cycle)
+        db.session.commit()
+        return jsonify({'message': 'Đã tạo chu kỳ theo dõi nang', 'id': cycle.id, 'cycle': cycle.to_dict(include_entries=True)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi tạo chu kỳ: {str(e)}'}), 500
+
+
+@app.route('/api/follicle-cycles/<int:cycle_id>', methods=['GET'])
+def get_follicle_cycle(cycle_id):
+    ensure_fertility_andrology_schema()
+    try:
+        cycle = _get_or_404(FollicleMonitoringCycle, cycle_id)
+        return jsonify(cycle.to_dict(include_entries=True))
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy chu kỳ: {str(e)}'}), 500
+
+
+@app.route('/api/follicle-cycles/<int:cycle_id>', methods=['PUT'])
+def update_follicle_cycle(cycle_id):
+    ensure_fertility_andrology_schema()
+    try:
+        cycle = _get_or_404(FollicleMonitoringCycle, cycle_id)
+        data = request.json or {}
+        if 'cycle_label' in data:
+            cycle.cycle_label = data.get('cycle_label') or None
+        if 'lmp_date' in data:
+            cycle.lmp_date = _parse_optional_date(data.get('lmp_date'))
+        if 'protocol' in data:
+            cycle.protocol = data.get('protocol') or None
+        if 'status' in data:
+            cycle.status = data.get('status') or cycle.status
+        if 'notes' in data:
+            cycle.notes = data.get('notes') or None
+        db.session.commit()
+        return jsonify({'message': 'Đã cập nhật chu kỳ', 'cycle': cycle.to_dict(include_entries=True)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi cập nhật chu kỳ: {str(e)}'}), 500
+
+
+@app.route('/api/follicle-cycles/<int:cycle_id>', methods=['DELETE'])
+def delete_follicle_cycle(cycle_id):
+    ensure_fertility_andrology_schema()
+    try:
+        cycle = _get_or_404(FollicleMonitoringCycle, cycle_id)
+        FollicleMonitoringEntry.query.filter_by(cycle_id=cycle_id).delete()
+        db.session.delete(cycle)
+        db.session.commit()
+        return jsonify({'message': 'Đã xóa chu kỳ theo dõi nang'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi xóa chu kỳ: {str(e)}'}), 500
+
+
+def _apply_follicle_entry_payload(entry, data, *, creating=False):
+    if creating or 'exam_date' in data:
+        entry.exam_date = _parse_follicle_exam_date(data.get('exam_date'))
+    if creating or 'appointment_id' in data:
+        entry.appointment_id = data.get('appointment_id')
+    for key in ('cycle_day',):
+        if creating or key in data:
+            raw = data.get(key)
+            try:
+                entry.__setattr__(key, int(raw) if raw not in (None, '') else None)
+            except (TypeError, ValueError):
+                entry.__setattr__(key, None)
+    for key in ('endometrium_mm', 'dominant_follicle_mm', 'estradiol', 'lh'):
+        if creating or key in data:
+            entry.__setattr__(key, _to_float_or_none(data.get(key)))
+    for key in ('left_follicles', 'right_follicles', 'recommendation', 'notes'):
+        if creating or key in data:
+            val = data.get(key)
+            entry.__setattr__(key, val if val not in (None, '') else None)
+
+
+@app.route('/api/follicle-entries', methods=['POST'])
+def create_follicle_entry():
+    ensure_fertility_andrology_schema()
+    try:
+        data = request.json or {}
+        if not data.get('cycle_id'):
+            return jsonify({'message': 'Thiếu cycle_id'}), 400
+        _get_or_404(FollicleMonitoringCycle, data['cycle_id'])
+        entry = FollicleMonitoringEntry(cycle_id=data['cycle_id'])
+        _apply_follicle_entry_payload(entry, data, creating=True)
+        db.session.add(entry)
+        db.session.commit()
+        return jsonify({'message': 'Đã thêm lần theo dõi nang', 'id': entry.id, 'entry': entry.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi thêm lần theo dõi: {str(e)}'}), 500
+
+
+@app.route('/api/follicle-entries/<int:entry_id>', methods=['PUT'])
+def update_follicle_entry(entry_id):
+    ensure_fertility_andrology_schema()
+    try:
+        entry = _get_or_404(FollicleMonitoringEntry, entry_id)
+        _apply_follicle_entry_payload(entry, request.json or {}, creating=False)
+        db.session.commit()
+        return jsonify({'message': 'Đã cập nhật lần theo dõi', 'entry': entry.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi cập nhật lần theo dõi: {str(e)}'}), 500
+
+
+@app.route('/api/follicle-entries/<int:entry_id>', methods=['DELETE'])
+def delete_follicle_entry(entry_id):
+    ensure_fertility_andrology_schema()
+    try:
+        entry = _get_or_404(FollicleMonitoringEntry, entry_id)
+        db.session.delete(entry)
+        db.session.commit()
+        return jsonify({'message': 'Đã xóa lần theo dõi'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi xóa lần theo dõi: {str(e)}'}), 500
+
+
+@app.route('/api/print_follicle_cycle/<int:cycle_id>', methods=['GET'])
+def print_follicle_cycle(cycle_id):
+    ensure_fertility_andrology_schema()
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    import io
+
+    cycle = _get_or_404(FollicleMonitoringCycle, cycle_id)
+    patient = db.session.get(Patient, cycle.patient_id)
+    entries = FollicleMonitoringEntry.query.filter_by(cycle_id=cycle_id).order_by(
+        FollicleMonitoringEntry.exam_date.asc(), FollicleMonitoringEntry.id.asc()
+    ).all()
+    base_font, bold_font = _pdf_vn_fonts()
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), topMargin=1.2*cm, bottomMargin=1.2*cm)
+    elements = []
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle('FollTitle', parent=styles['Title'], fontName=bold_font, fontSize=14,
+                           textColor=colors.HexColor('#be185d'))
+    normal = ParagraphStyle('FollNormal', parent=styles['Normal'], fontName=base_font, fontSize=9, leading=12)
+    elements.append(Paragraph("PHÒNG KHÁM CHUYÊN KHOA PHỤ SẢN ĐẠI ANH", title))
+    elements.append(Paragraph("BẢNG THEO DÕI NANG (VÔ SINH)", ParagraphStyle(
+        'FollH', parent=styles['Heading2'], fontName=bold_font, fontSize=12, textColor=colors.HexColor('#9d174d'))))
+    elements.append(Spacer(1, 0.2*cm))
+    header_rows = [
+        ['Bệnh nhân:', (patient.name if patient else '') or ''],
+        ['SĐT:', (patient.phone if patient else '') or ''],
+        ['Chu kỳ:', cycle.cycle_label or f'#{cycle.id}'],
+        ['LMP:', cycle.lmp_date.strftime('%d/%m/%Y') if cycle.lmp_date else ''],
+        ['Phác đồ:', cycle.protocol or ''],
+        ['Trạng thái:', cycle.status or ''],
+    ]
+    ht = Table(header_rows, colWidths=[3.5*cm, 10*cm])
+    ht.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (0, -1), bold_font),
+        ('FONTNAME', (1, 0), (1, -1), base_font),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    elements.append(ht)
+    elements.append(Spacer(1, 0.3*cm))
+
+    rec_map = {
+        'continue': 'Tiếp tục', 'trigger': 'Trigger', 'cancel': 'Hủy chu kỳ',
+        'iui': 'IUI', 'oocyte_pickup': 'Chọc hút trứng',
+    }
+    table_data = [['Ngày', 'Ngày CK', 'NMTC (mm)', 'Nang trái', 'Nang phải', 'Nang trội', 'E2', 'LH', 'Khuyến nghị', 'Ghi chú']]
+    for e in entries:
+        table_data.append([
+            e.exam_date.strftime('%d/%m %H:%M') if e.exam_date else '',
+            str(e.cycle_day) if e.cycle_day is not None else '',
+            str(e.endometrium_mm) if e.endometrium_mm is not None else '',
+            e.left_follicles or '',
+            e.right_follicles or '',
+            str(e.dominant_follicle_mm) if e.dominant_follicle_mm is not None else '',
+            str(e.estradiol) if e.estradiol is not None else '',
+            str(e.lh) if e.lh is not None else '',
+            rec_map.get(e.recommendation or '', e.recommendation or ''),
+            (e.notes or '')[:40],
+        ])
+    if len(table_data) == 1:
+        table_data.append(['—'] * 10)
+    ft = Table(table_data, colWidths=[2.4*cm, 1.6*cm, 2*cm, 3*cm, 3*cm, 1.8*cm, 1.6*cm, 1.4*cm, 2.4*cm, 4*cm])
+    ft.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, 0), bold_font),
+        ('FONTNAME', (0, 1), (-1, -1), base_font),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#fce7f3')),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#f9a8d4')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    elements.append(ft)
+    if cycle.notes:
+        elements.append(Spacer(1, 0.3*cm))
+        elements.append(Paragraph(f"<b>Ghi chú chu kỳ:</b> {cycle.notes}", normal))
+    elements.append(Spacer(1, 0.6*cm))
+    elements.append(Paragraph(f"In ngày: {datetime.now().strftime('%d/%m/%Y %H:%M')}", normal))
+    doc.build(elements)
+    buffer.seek(0)
+    return send_file(buffer, mimetype='application/pdf', as_attachment=True,
+                     download_name=f'theo_doi_nang_chu_ky_{cycle_id}.pdf')
+
+
+# ===== Andrology / semen analysis =====
+
+_ANDRO_INT_FIELDS = ('abstinence_days',)
+_ANDRO_FLOAT_FIELDS = (
+    'semen_volume_ml', 'semen_ph', 'sperm_concentration', 'total_sperm_count',
+    'progressive_motility', 'total_motility', 'vitality', 'normal_morphology', 'leukocytes',
+)
+_ANDRO_STR_FIELDS = (
+    'doctor_name', 'chief_complaint', 'testis_left', 'testis_right', 'varicocele_grade',
+    'epididymis_notes', 'exam_findings', 'semen_notes', 'diagnosis', 'recommendations', 'analysis_source',
+)
+
+
+def _apply_andrology_payload(result, data, *, creating=False):
+    if creating or 'exam_date' in data:
+        result.exam_date = _parse_gyn_us_exam_date(data.get('exam_date'))
+    if creating or 'appointment_id' in data:
+        result.appointment_id = data.get('appointment_id')
+    for key in _ANDRO_INT_FIELDS:
+        if creating or key in data:
+            raw = data.get(key)
+            try:
+                result.__setattr__(key, int(raw) if raw not in (None, '') else None)
+            except (TypeError, ValueError):
+                result.__setattr__(key, None)
+    for key in _ANDRO_FLOAT_FIELDS:
+        if creating or key in data:
+            result.__setattr__(key, _to_float_or_none(data.get(key)))
+    for key in _ANDRO_STR_FIELDS:
+        if creating or key in data:
+            val = data.get(key)
+            result.__setattr__(key, val if val not in (None, '') else None)
+    # Auto total sperm count if missing
+    if result.total_sperm_count is None and result.semen_volume_ml is not None and result.sperm_concentration is not None:
+        result.total_sperm_count = round(result.semen_volume_ml * result.sperm_concentration, 2)
+    if creating and not result.analysis_source:
+        result.analysis_source = 'manual_input'
+
+
+@app.route('/api/andrology-results', methods=['POST'])
+def save_andrology_result():
+    ensure_fertility_andrology_schema()
+    try:
+        data = request.json or {}
+        if not data.get('patient_id'):
+            return jsonify({'message': 'Thiếu patient_id'}), 400
+        result = AndrologyExamResult(patient_id=data['patient_id'])
+        _apply_andrology_payload(result, data, creating=True)
+        db.session.add(result)
+        _sync_appointment_diagnosis(result.appointment_id, result.patient_id, result.diagnosis)
+        db.session.commit()
+        return jsonify({'message': 'Đã lưu phiếu nam khoa / tinh dịch đồ', 'id': result.id, 'result': result.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi lưu phiếu nam khoa: {str(e)}'}), 500
+
+
+@app.route('/api/andrology-results', methods=['GET'])
+def get_andrology_results():
+    ensure_fertility_andrology_schema()
+    try:
+        patient_id = request.args.get('patient_id', type=int)
+        appointment_id = request.args.get('appointment_id', type=int)
+        query = AndrologyExamResult.query
+        if patient_id:
+            query = query.filter_by(patient_id=patient_id)
+        if appointment_id:
+            query = query.filter_by(appointment_id=appointment_id)
+        rows = query.order_by(AndrologyExamResult.exam_date.desc()).all()
+        return jsonify([r.to_dict() for r in rows])
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy phiếu nam khoa: {str(e)}'}), 500
+
+
+@app.route('/api/andrology-results/<int:result_id>', methods=['GET'])
+def get_andrology_result(result_id):
+    ensure_fertility_andrology_schema()
+    try:
+        return jsonify(_get_or_404(AndrologyExamResult, result_id).to_dict())
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy phiếu nam khoa: {str(e)}'}), 500
+
+
+@app.route('/api/andrology-results/<int:result_id>', methods=['PUT'])
+def update_andrology_result(result_id):
+    ensure_fertility_andrology_schema()
+    try:
+        result = _get_or_404(AndrologyExamResult, result_id)
+        _apply_andrology_payload(result, request.json or {}, creating=False)
+        _sync_appointment_diagnosis(result.appointment_id, result.patient_id, result.diagnosis)
+        db.session.commit()
+        return jsonify({'message': 'Đã cập nhật phiếu nam khoa', 'result': result.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi cập nhật phiếu nam khoa: {str(e)}'}), 500
+
+
+@app.route('/api/andrology-results/<int:result_id>', methods=['DELETE'])
+def delete_andrology_result(result_id):
+    ensure_fertility_andrology_schema()
+    try:
+        result = _get_or_404(AndrologyExamResult, result_id)
+        db.session.delete(result)
+        db.session.commit()
+        return jsonify({'message': 'Đã xóa phiếu nam khoa'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi xóa phiếu nam khoa: {str(e)}'}), 500
+
+
+@app.route('/api/print_andrology/<int:result_id>', methods=['GET'])
+def print_andrology(result_id):
+    ensure_fertility_andrology_schema()
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm
+    from reportlab.lib import colors
+    import io
+
+    result = _get_or_404(AndrologyExamResult, result_id)
+    patient = db.session.get(Patient, result.patient_id)
+    base_font, bold_font = _pdf_vn_fonts()
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1.5*cm, bottomMargin=1.5*cm)
+    elements = []
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle('AndroTitle', parent=styles['Title'], fontName=bold_font, fontSize=15,
+                           textColor=colors.HexColor('#1d4ed8'))
+    heading = ParagraphStyle('AndroH', parent=styles['Heading2'], fontName=bold_font, fontSize=11,
+                             textColor=colors.HexColor('#1e40af'), spaceBefore=8, spaceAfter=4)
+    normal = ParagraphStyle('AndroN', parent=styles['Normal'], fontName=base_font, fontSize=10, leading=13)
+
+    def add_kv(rows):
+        if not rows:
+            return
+        t = Table(rows, colWidths=[5.2*cm, 10.8*cm])
+        t.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (0, -1), bold_font),
+            ('FONTNAME', (1, 0), (1, -1), base_font),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(t)
+
+    varicocele_map = {
+        '0': 'Độ 0 (ẩn)', '1': 'Độ I', '2': 'Độ II', '3': 'Độ III', 'none': 'Không',
+    }
+
+    elements.append(Paragraph("PHÒNG KHÁM CHUYÊN KHOA PHỤ SẢN ĐẠI ANH", title))
+    elements.append(Paragraph("PHIẾU KHÁM NAM KHOA / TINH DỊCH ĐỒ", heading))
+    elements.append(Spacer(1, 0.25*cm))
+    add_kv([
+        ['Bệnh nhân:', (patient.name if patient else '') or ''],
+        ['SĐT:', (patient.phone if patient else '') or ''],
+        ['Ngày khám:', result.exam_date.strftime('%d/%m/%Y %H:%M') if result.exam_date else ''],
+        ['Bác sĩ:', result.doctor_name or ''],
+        ['Lý do khám:', result.chief_complaint or ''],
+        ['Kiêng xuất tinh (ngày):', str(result.abstinence_days) if result.abstinence_days is not None else ''],
+    ])
+
+    elements.append(Paragraph("KHÁM LÂM SÀNG", heading))
+    add_kv([
+        ['Tinh hoàn trái:', result.testis_left or ''],
+        ['Tinh hoàn phải:', result.testis_right or ''],
+        ['Giãn TM thừng tinh:', varicocele_map.get(str(result.varicocele_grade or ''), result.varicocele_grade or '')],
+        ['Mào tinh / khác:', result.epididymis_notes or ''],
+        ['Nhận xét khám:', result.exam_findings or ''],
+    ])
+
+    elements.append(Paragraph("TINH DỊCH ĐỒ (WHO 2021 — tham chiếu)", heading))
+    who_rows = [
+        ['Thể tích (≥1,4 mL):', f"{result.semen_volume_ml} mL" if result.semen_volume_ml is not None else ''],
+        ['pH (≥7,2):', str(result.semen_ph) if result.semen_ph is not None else ''],
+        ['Nồng độ (≥16 triệu/mL):', f"{result.sperm_concentration}" if result.sperm_concentration is not None else ''],
+        ['Tổng số (≥39 triệu):', f"{result.total_sperm_count}" if result.total_sperm_count is not None else ''],
+        ['Di động tiến tới PR (≥30%):', f"{result.progressive_motility} %" if result.progressive_motility is not None else ''],
+        ['Tổng di động (≥42%):', f"{result.total_motility} %" if result.total_motility is not None else ''],
+        ['Tỷ lệ sống (≥54%):', f"{result.vitality} %" if result.vitality is not None else ''],
+        ['Hình dạng bình thường (≥4%):', f"{result.normal_morphology} %" if result.normal_morphology is not None else ''],
+        ['Bạch cầu (<1 triệu/mL):', f"{result.leukocytes}" if result.leukocytes is not None else ''],
+        ['Ghi chú tinh dịch:', result.semen_notes or ''],
+    ]
+    add_kv(who_rows)
+
+    if result.diagnosis:
+        elements.append(Paragraph("CHẨN ĐOÁN", heading))
+        elements.append(Paragraph(str(result.diagnosis).replace('\n', '<br/>'), normal))
+    if result.recommendations:
+        elements.append(Paragraph("KHUYẾN NGHỊ", heading))
+        elements.append(Paragraph(str(result.recommendations).replace('\n', '<br/>'), normal))
+
+    elements.append(Spacer(1, 1*cm))
+    elements.append(Paragraph("Bác sĩ khám: ........................................", normal))
+    elements.append(Paragraph(f"In ngày: {datetime.now().strftime('%d/%m/%Y %H:%M')}", normal))
+    doc.build(elements)
+    buffer.seek(0)
+    return send_file(buffer, mimetype='application/pdf', as_attachment=True,
+                     download_name=f'phieu_nam_khoa_{result_id}.pdf')
+
+
+# ===== Infertility couple profiles =====
+
+@app.route('/api/infertility-couples', methods=['GET'])
+def get_infertility_couples():
+    ensure_infertility_couple_schema()
+    try:
+        q = (request.args.get('q') or '').strip().lower()
+        status = request.args.get('status')
+        patient_id = request.args.get('patient_id', type=int)
+        query = InfertilityCouple.query
+        if status:
+            query = query.filter_by(status=status)
+        if patient_id:
+            query = query.filter(or_(
+                InfertilityCouple.female_patient_id == patient_id,
+                InfertilityCouple.male_patient_id == patient_id,
+            ))
+        rows = query.order_by(InfertilityCouple.updated_at.desc()).all()
+        data = [r.to_dict() for r in rows]
+        if q:
+            data = [
+                d for d in data
+                if q in (d.get('couple_label') or '').lower()
+                or q in (d.get('female_name') or '').lower()
+                or q in (d.get('male_name') or '').lower()
+                or q in (d.get('female_phone') or '').lower()
+                or q in (d.get('male_phone') or '').lower()
+            ]
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy hồ sơ cặp VS: {str(e)}'}), 500
+
+
+@app.route('/api/infertility-couples', methods=['POST'])
+def create_infertility_couple():
+    ensure_infertility_couple_schema()
+    try:
+        data = request.json or {}
+        female_id = data.get('female_patient_id')
+        male_id = data.get('male_patient_id')
+        if not female_id or not male_id:
+            return jsonify({'message': 'Cần chọn bệnh nhân nữ và nam'}), 400
+        if int(female_id) == int(male_id):
+            return jsonify({'message': 'Hai bệnh nhân phải khác nhau'}), 400
+        if not db.session.get(Patient, int(female_id)) or not db.session.get(Patient, int(male_id)):
+            return jsonify({'message': 'Không tìm thấy bệnh nhân'}), 404
+        couple = InfertilityCouple(
+            female_patient_id=int(female_id),
+            male_patient_id=int(male_id),
+            couple_label=data.get('couple_label') or None,
+            status=data.get('status') or 'active',
+            notes=data.get('notes') or None,
+        )
+        db.session.add(couple)
+        db.session.commit()
+        return jsonify({'message': 'Đã tạo hồ sơ cặp vợ chồng', 'id': couple.id, 'couple': couple.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi tạo hồ sơ cặp: {str(e)}'}), 500
+
+
+@app.route('/api/infertility-couples/<int:couple_id>', methods=['GET'])
+def get_infertility_couple(couple_id):
+    ensure_infertility_couple_schema()
+    try:
+        couple = _get_or_404(InfertilityCouple, couple_id)
+        return jsonify(couple.to_dict())
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy hồ sơ cặp: {str(e)}'}), 500
+
+
+@app.route('/api/infertility-couples/<int:couple_id>', methods=['PUT'])
+def update_infertility_couple(couple_id):
+    ensure_infertility_couple_schema()
+    try:
+        couple = _get_or_404(InfertilityCouple, couple_id)
+        data = request.json or {}
+        if 'female_patient_id' in data and data.get('female_patient_id'):
+            couple.female_patient_id = int(data['female_patient_id'])
+        if 'male_patient_id' in data and data.get('male_patient_id'):
+            couple.male_patient_id = int(data['male_patient_id'])
+        if couple.female_patient_id == couple.male_patient_id:
+            return jsonify({'message': 'Hai bệnh nhân phải khác nhau'}), 400
+        if 'couple_label' in data:
+            couple.couple_label = data.get('couple_label') or None
+        if 'status' in data:
+            couple.status = data.get('status') or couple.status
+        if 'notes' in data:
+            couple.notes = data.get('notes') or None
+        db.session.commit()
+        return jsonify({'message': 'Đã cập nhật hồ sơ cặp', 'couple': couple.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi cập nhật hồ sơ cặp: {str(e)}'}), 500
+
+
+@app.route('/api/infertility-couples/<int:couple_id>', methods=['DELETE'])
+def delete_infertility_couple(couple_id):
+    ensure_infertility_couple_schema()
+    try:
+        couple = _get_or_404(InfertilityCouple, couple_id)
+        db.session.delete(couple)
+        db.session.commit()
+        return jsonify({'message': 'Đã xóa hồ sơ cặp'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Lỗi khi xóa hồ sơ cặp: {str(e)}'}), 500
+
+
+@app.route('/api/infertility-couples/<int:couple_id>/summary', methods=['GET'])
+def get_infertility_couple_summary(couple_id):
+    """Tóm tắt: chu kỳ nang (nữ) + tinh dịch đồ (nam) + phiếu khám gần đây."""
+    ensure_infertility_couple_schema()
+    ensure_fertility_andrology_schema()
+    ensure_gyn_exam_schema()
+    try:
+        couple = _get_or_404(InfertilityCouple, couple_id)
+        cycles = FollicleMonitoringCycle.query.filter_by(
+            patient_id=couple.female_patient_id
+        ).order_by(FollicleMonitoringCycle.created_at.desc()).limit(10).all()
+        andrology = AndrologyExamResult.query.filter_by(
+            patient_id=couple.male_patient_id
+        ).order_by(AndrologyExamResult.exam_date.desc()).limit(10).all()
+        female_exams = GynecologicalExamResult.query.filter_by(
+            patient_id=couple.female_patient_id
+        ).order_by(GynecologicalExamResult.exam_date.desc()).limit(5).all()
+        female_us = GynecologicalUltrasoundResult.query.filter_by(
+            patient_id=couple.female_patient_id
+        ).order_by(GynecologicalUltrasoundResult.exam_date.desc()).limit(5).all()
+        return jsonify({
+            'couple': couple.to_dict(),
+            'female': {
+                'follicle_cycles': [c.to_dict(include_entries=True) for c in cycles],
+                'gyn_exams': [e.to_dict() for e in female_exams],
+                'gyn_ultrasounds': [u.to_dict() for u in female_us],
+            },
+            'male': {
+                'andrology_results': [a.to_dict() for a in andrology],
+            },
+        })
+    except Exception as e:
+        return jsonify({'message': f'Lỗi khi lấy tóm tắt cặp VS: {str(e)}'}), 500
+
+
+def _pacs_canonical_to_ultrasound_fields(measurements, gestational_age=None):
+    """Map schema bảng chỉ số → cột ultrasound_results (legacy)."""
+    ga_float = None
+    if isinstance(gestational_age, dict) and gestational_age.get('weeks') is not None:
+        try:
+            ga_float = float(gestational_age['weeks']) + float(gestational_age.get('days') or 0) / 7.0
+        except (TypeError, ValueError):
+            ga_float = None
+    elif gestational_age is not None:
+        ga_float = _to_float_or_none(gestational_age)
+
+    m = measurements or {}
+
+    def pick(*keys):
+        for key in keys:
+            val = _to_float_or_none(m.get(key))
+            if val is not None:
+                return val
+        return None
+
+    return {
+        'gestational_age': ga_float,
+        'bpd': pick('BPD (mm)', 'BPD'),
+        'hc': pick('HC (mm)', 'HC'),
+        'ac': pick('AC (mm)', 'AC'),
+        'fl': pick('FL (mm)', 'FL'),
+        'afi': pick('AFI (cm)', 'AFI'),
+        'estimated_weight': pick('EFW (g)', 'EFW', 'FW'),
+        'ri_umbilical': pick('RI ĐM rốn', 'RI DM ron', 'UA RI', 'RI'),
+        'mca_pi': pick('PI ĐM não', 'PI DM nao', 'MCA PI', 'MCA-PI'),
+        'sd_ratio': pick('S/D', 'SD', 'UA S/D', 'S/D ratio'),
+        'cervical_length': pick('CL (mm)', 'Cervical Length', 'CL'),
+    }
+
+
+def _format_ga_display(weeks_float):
+    try:
+        weeks = float(weeks_float)
+    except (TypeError, ValueError):
+        return ''
+    if weeks < 0:
+        return ''
+    whole = int(weeks)
+    days = int(round((weeks - whole) * 7))
+    if days <= 0:
+        return f'{whole} tuần'
+    return f'{whole} tuần {days} ngày'
+
+
+def _analyze_ultrasound_extracted_fields(fields):
+    """Phân tích sơ bộ chỉ số đo (đối chiếu khoảng tham chiếu theo tuổi thai nếu có)."""
+    fields = fields or {}
+    ga = _to_float_or_none(fields.get('gestational_age'))
+    abnormalities = []
+    notes = []
+
+    def check(name, value, low, high, unit=''):
+        if value is None:
+            return
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            return
+        unit_txt = f' {unit}' if unit else ''
+        if v < low or v > high:
+            abnormalities.append(f'{name}: {v}{unit_txt} (ngoài khoảng tham chiếu {low}–{high}{unit_txt})')
+        else:
+            notes.append(f'{name}: {v}{unit_txt} — trong khoảng tham chiếu')
+
+    # Khoảng tham chiếu thô theo GA (đơn giản hóa; bác sĩ vẫn cần xác nhận trên biểu đồ chuẩn)
+    if ga is not None and 14 <= ga <= 42:
+        # Ước lượng khoảng biometry theo tuần (mm) — khoảng rộng an toàn
+        bpd_mid = max(20.0, min(100.0, ga * 2.5))
+        hc_mid = max(60.0, min(350.0, ga * 8.5))
+        ac_mid = max(50.0, min(400.0, ga * 8.0))
+        fl_mid = max(10.0, min(80.0, ga * 1.9))
+        check('BPD', fields.get('bpd'), bpd_mid * 0.75, bpd_mid * 1.25, 'mm')
+        check('HC', fields.get('hc'), hc_mid * 0.75, hc_mid * 1.25, 'mm')
+        check('AC', fields.get('ac'), ac_mid * 0.75, ac_mid * 1.25, 'mm')
+        check('FL', fields.get('fl'), fl_mid * 0.75, fl_mid * 1.25, 'mm')
+        if ga >= 24:
+            check('AFI', fields.get('afi'), 5.0, 25.0, 'cm')
+            check('RI ĐM rốn', fields.get('ri_umbilical'), 0.40, 0.80)
+            check('MCA PI', fields.get('mca_pi'), 0.80, 2.50)
+    else:
+        check('BPD', fields.get('bpd'), 20, 100, 'mm')
+        check('HC', fields.get('hc'), 60, 350, 'mm')
+        check('AC', fields.get('ac'), 50, 400, 'mm')
+        check('FL', fields.get('fl'), 10, 80, 'mm')
+        check('AFI', fields.get('afi'), 5.0, 25.0, 'cm')
+
+    if abnormalities:
+        status = 'warning' if len(abnormalities) <= 2 else 'danger'
+    else:
+        status = 'normal'
+
+    findings_parts = []
+    if ga is not None:
+        findings_parts.append(f'Tuổi thai (từ máy/report): {_format_ga_display(ga)}')
+    metric_labels = [
+        ('bpd', 'BPD', 'mm'),
+        ('hc', 'HC', 'mm'),
+        ('ac', 'AC', 'mm'),
+        ('fl', 'FL', 'mm'),
+        ('estimated_weight', 'EFW', 'g'),
+        ('afi', 'AFI', 'cm'),
+        ('ri_umbilical', 'RI ĐM rốn', ''),
+        ('mca_pi', 'MCA PI', ''),
+        ('sd_ratio', 'S/D', ''),
+        ('cervical_length', 'CL', 'mm'),
+    ]
+    measured = []
+    for key, label, unit in metric_labels:
+        val = fields.get(key)
+        if val is None:
+            continue
+        measured.append(f'{label}={val}{(" " + unit) if unit else ""}')
+    if measured:
+        findings_parts.append('Chỉ số đo: ' + '; '.join(measured))
+    if abnormalities:
+        findings_parts.append('Cảnh báo: ' + '; '.join(abnormalities))
+    elif notes:
+        findings_parts.append('Các chỉ số chính trong khoảng tham chiếu sơ bộ.')
+
+    recommendations = []
+    if status == 'normal':
+        recommendations.append('Đối chiếu thêm với biểu đồ tăng trưởng thai (Hadlock/INTERGROWTH) trên module phân tích.')
+        recommendations.append('Bác sĩ xác nhận trước khi ký phiếu kết quả.')
+    elif status == 'warning':
+        recommendations.append('Một số chỉ số ngoài khoảng tham chiếu sơ bộ — cần đối chiếu biểu đồ theo tuổi thai.')
+        recommendations.append('Cân nhắc siêu âm lại / hội chẩn nếu bất thường kéo dài.')
+    else:
+        recommendations.append('Có nhiều chỉ số bất thường — cần đánh giá bởi bác sĩ chuyên khoa.')
+        recommendations.append('Đối chiếu Doppler/AFI/EFW trên module phân tích siêu âm thai.')
+
+    return {
+        'analysis_status': status,
+        'abnormalities': abnormalities,
+        'findings': '\n'.join(findings_parts).strip(),
+        'recommendations': '\n'.join(recommendations).strip(),
+    }
+
+
+def _ultrasound_result_to_clinical_fields(result):
+    """Map UltrasoundResult → fields dùng cho phiếu kết quả CLS."""
+    if not result:
+        return {}
+    data = result.to_dict() if hasattr(result, 'to_dict') else dict(result)
+    fields = {}
+    mapping = [
+        ('gestational_age', ['gestational_age', 'tuoi_thai', 'ga']),
+        ('bpd', ['bpd']),
+        ('hc', ['hc']),
+        ('ac', ['ac']),
+        ('fl', ['fl']),
+        ('estimated_weight', ['estimated_weight', 'efw', 'can_nang']),
+        ('afi', ['afi']),
+        ('ri_umbilical', ['ri_umbilical']),
+        ('sd_ratio', ['sd_ratio']),
+        ('mca_pi', ['mca_pi']),
+        ('cervical_length', ['cervical_length', 'cl']),
+        ('fetal_position', ['fetal_position', 'ngoi_thai']),
+        ('placenta_position', ['placenta_position', 'vi_tri_nhau']),
+        ('amniotic_fluid', ['amniotic_fluid', 'nuoc_oi']),
+        ('findings', ['findings', 'nhan_xet', 'ket_qua']),
+        ('recommendations', ['recommendations', 'khuyen_nghi']),
+    ]
+    for src, aliases in mapping:
+        val = data.get(src)
+        if val is None or val == '':
+            continue
+        if src == 'gestational_age':
+            display = _format_ga_display(val)
+            for alias in aliases:
+                fields[alias] = display or val
+        else:
+            for alias in aliases:
+                fields[alias] = val
+    return fields
+
+
+def _get_latest_ultrasound_result_for_appointment(appointment_id, patient_id=None):
+    ensure_ultrasound_result_columns()
+    q = UltrasoundResult.query
+    if appointment_id:
+        by_appt = q.filter_by(appointment_id=int(appointment_id)).order_by(UltrasoundResult.exam_date.desc()).first()
+        if by_appt:
+            return by_appt
+    if patient_id:
+        return UltrasoundResult.query.filter_by(patient_id=int(patient_id)).order_by(
+            UltrasoundResult.exam_date.desc()
+        ).first()
+    return None
+
+
+@app.route('/api/appointments/<int:appointment_id>/ultrasound-autofill', methods=['GET'])
+def get_appointment_ultrasound_autofill(appointment_id):
+    """
+    Lấy số đo siêu âm đã trích từ DICOM/PACS (UltrasoundResult) để tự điền phiếu kết quả CLS.
+    """
+    try:
+        ensure_ultrasound_result_columns()
+        ensure_pacs_workflow_tables()
+        appt = db.session.get(Appointment, appointment_id)
+        if not appt:
+            return jsonify({'success': False, 'message': 'Không tìm thấy lịch khám'}), 404
+
+        result = _get_latest_ultrasound_result_for_appointment(appointment_id, appt.patient_id)
+        pending_link = PacsStudyLink.query.filter_by(
+            appointment_id=appointment_id,
+            indices_import_status='pending'
+        ).order_by(PacsStudyLink.created_at.desc()).first()
+        if not pending_link and appt.patient_id:
+            pending_link = PacsStudyLink.query.filter_by(
+                patient_id=appt.patient_id,
+                indices_import_status='pending'
+            ).order_by(PacsStudyLink.created_at.desc()).first()
+
+        fields = _ultrasound_result_to_clinical_fields(result) if result else {}
+        analysis = None
+        if result:
+            analysis = {
+                'findings': result.findings,
+                'recommendations': result.recommendations,
+                'analysis_source': result.analysis_source,
+            }
+        # Nếu chưa có UltrasoundResult nhưng còn pending payload → map tạm từ measurements
+        if not fields and pending_link:
+            payload = _parse_pacs_indices_payload(pending_link) or {}
+            extracted = _pacs_canonical_to_ultrasound_fields(
+                payload.get('measurements') or {},
+                payload.get('gestational_age')
+            )
+            analysis_info = _analyze_ultrasound_extracted_fields(extracted)
+            extracted['findings'] = analysis_info.get('findings')
+            extracted['recommendations'] = analysis_info.get('recommendations')
+            fields = _ultrasound_result_to_clinical_fields(extracted)
+            analysis = analysis_info
+
+        filled = sum(1 for k, v in fields.items() if v not in (None, '') and k in (
+            'gestational_age', 'bpd', 'hc', 'ac', 'fl', 'estimated_weight', 'afi',
+            'ri_umbilical', 'mca_pi', 'sd_ratio', 'cervical_length'
+        ))
+        return jsonify({
+            'success': True,
+            'appointment_id': appointment_id,
+            'patient_id': appt.patient_id,
+            'ultrasound_result_id': result.id if result else None,
+            'pacs_link_id': pending_link.id if pending_link else None,
+            'fields': fields,
+            'analysis': analysis,
+            'filled_count': filled,
+            'source': (result.analysis_source if result else None) or ('pacs_pending' if pending_link else None),
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+def _parse_pacs_indices_payload(link):
+    if not link or not link.indices_payload_json:
+        return None
+    try:
+        data = json.loads(link.indices_payload_json)
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def _pacs_link_summary_dict(link, patient=None):
+    """Tóm tắt study link cho UI import PACS → bảng chỉ số."""
+    if patient is None and link.patient_id:
+        patient = Patient.query.get(link.patient_id)
+    meta = {}
+    try:
+        meta = json.loads(link.raw_metadata or '{}') if link.raw_metadata else {}
+    except Exception:
+        meta = {}
+    dicom_name = (meta.get('patient_name') or '').strip()
+    return {
+        'id': link.id,
+        'patient_id': link.patient_id,
+        'patient_name': (patient.name if patient else None) or dicom_name or '—',
+        'appointment_id': link.appointment_id,
+        'accession_number': link.accession_number,
+        'source_ae': link.source_ae,
+        'modality': link.modality,
+        'storage_path': link.storage_path,
+        'ultrasound_result_id': link.ultrasound_result_id,
+        'indices_import_status': link.indices_import_status,
+        'indices_filled_count': int(link.indices_filled_count or 0),
+        'sync_status': link.sync_status,
+        'created_at': link.created_at.isoformat() if link.created_at else None,
+        'updated_at': link.updated_at.isoformat() if link.updated_at else None,
+    }
+
+
+def _extract_pacs_indices_from_dicom(ds, dicom_bytes, filename=''):
+    """Trích 16 chỉ số + provenance bằng Image Parser Engine."""
+    from fetal_image_parser.machine_profiles import detect_profile_from_dicom, get_profile, parser_profile_scope
+
+    profile_id = detect_profile_from_dicom(ds)
+    engine = get_fetal_image_parser_engine()
+    with parser_profile_scope(profile_id):
+        result = engine.parse(dicom_bytes, filename=filename or 'pacs.dcm', debug=False)
+    api = result.to_api_dict()
+    prof = get_profile(profile_id) or {}
+    parser_meta = dict(api.get('parser') or {})
+    parser_meta['machine_profile'] = profile_id
+    parser_meta['machine_profile_name'] = prof.get('name') or profile_id
+    parser_meta['machine_profile_auto'] = True
+    api['parser'] = parser_meta
+    api['source'] = 'pacs_cstore'
+    return api, profile_id
+
+
+@app.route('/api/pacs/pending-indices', methods=['GET'])
+def get_pacs_pending_indices():
+    """Danh sách số đo PACS chờ import vào bảng chỉ số siêu âm thai."""
+    ensure_pacs_workflow_tables()
+    try:
+        limit = max(1, min(int(request.args.get('limit', 20)), 100))
+        q = PacsStudyLink.query.filter(PacsStudyLink.indices_import_status == 'pending')
+        q = q.filter(PacsStudyLink.indices_filled_count > 0)
+        rows = q.order_by(PacsStudyLink.created_at.desc()).limit(limit).all()
+        patient_ids = [r.patient_id for r in rows if r.patient_id]
+        patients = {}
+        if patient_ids:
+            for p in Patient.query.filter(Patient.id.in_(patient_ids)).all():
+                patients[p.id] = p
+        items = [_pacs_link_summary_dict(r, patients.get(r.patient_id)) for r in rows]
+        return jsonify({'success': True, 'count': len(items), 'items': items})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/pacs/pending-indices/<int:link_id>', methods=['GET'])
+def get_pacs_pending_indices_detail(link_id):
+    """Chi tiết payload import (định dạng giống extract-from-image)."""
+    ensure_pacs_workflow_tables()
+    try:
+        link = PacsStudyLink.query.get(link_id)
+        if not link:
+            return jsonify({'success': False, 'message': 'Không tìm thấy study link'}), 404
+        payload = _parse_pacs_indices_payload(link)
+        if not payload:
+            return jsonify({'success': False, 'message': 'Không có dữ liệu chỉ số để import'}), 404
+        return jsonify({
+            'success': True,
+            'link': _pacs_link_summary_dict(link),
+            'payload': payload,
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/pacs/pending-indices/<int:link_id>/import', methods=['POST'])
+def mark_pacs_pending_indices_imported(link_id):
+    """Đánh dấu đã import vào bảng (bác sĩ xác nhận + Lưu trên UI)."""
+    ensure_pacs_workflow_tables()
+    try:
+        link = PacsStudyLink.query.get(link_id)
+        if not link:
+            return jsonify({'success': False, 'message': 'Không tìm thấy study link'}), 404
+        link.indices_import_status = 'imported'
+        link.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'success': True, 'link': _pacs_link_summary_dict(link)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/pacs/pending-indices/<int:link_id>/dismiss', methods=['POST'])
+def dismiss_pacs_pending_indices(link_id):
+    """Bỏ qua import — không hiện lại trong hàng đợi."""
+    ensure_pacs_workflow_tables()
+    try:
+        link = PacsStudyLink.query.get(link_id)
+        if not link:
+            return jsonify({'success': False, 'message': 'Không tìm thấy study link'}), 404
+        link.indices_import_status = 'dismissed'
+        link.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'success': True, 'link': _pacs_link_summary_dict(link)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 @app.route('/api/pacs/study-links', methods=['GET'])
+@_require_staff_api_access
 def get_pacs_study_links():
     """Tra cứu mapping giữa y lệnh (appointment/accession) và study DICOM."""
     ensure_pacs_workflow_tables()
@@ -13807,6 +26763,7 @@ def get_pacs_study_links():
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/pacs/autofill-status', methods=['GET'])
+@_require_staff_api_access
 def get_pacs_autofill_status():
     """Tra trạng thái autofill theo patient_name + filename."""
     ensure_pacs_workflow_tables()
@@ -13850,7 +26807,10 @@ def get_pacs_autofill_status():
 def pacs_autofill_ultrasound():
     """
     MVP: nhận file DICOM đã lưu, trích chỉ số đo và tự tạo bản ghi ultrasound_results.
+    Chỉ chấp nhận từ dicom_receiver (X-PACS-Token) hoặc localhost khi chưa cấu hình token.
     """
+    if not _pacs_internal_token_ok(request):
+        return jsonify({'success': False, 'message': 'Forbidden'}), 403
     ensure_pacs_workflow_tables()
     ensure_ultrasound_result_columns()
     try:
@@ -13865,16 +26825,9 @@ def pacs_autofill_ultrasound():
         if not filename:
             return jsonify({'success': False, 'message': 'Thiếu filename DICOM'}), 400
 
-        base_dir = Path("received_dicoms")
-        dicom_path = base_dir / filename
-        if patient_name:
-            dicom_path = base_dir / patient_name / filename
-        if not dicom_path.exists():
-            fallback_path = base_dir / filename
-            if fallback_path.exists():
-                dicom_path = fallback_path
-            else:
-                return jsonify({'success': False, 'message': 'Không tìm thấy file DICOM'}), 404
+        dicom_path = _resolve_received_dicom_path(patient_name, filename)
+        if not dicom_path:
+            return jsonify({'success': False, 'message': 'Không tìm thấy file DICOM'}), 404
 
         import pydicom
         ds = pydicom.dcmread(str(dicom_path), force=True)
@@ -13886,15 +26839,36 @@ def pacs_autofill_ultrasound():
         ds_sop_uid = str(ds.get("SOPInstanceUID", "") or '').strip()
         ds_modality = str(ds.get("Modality", "US") or 'US').strip()
         ds_patient_name = str(ds.get("PatientName", "") or '').strip()
+        storage_path = str(dicom_path)
+
+        existing_link = None
+        if ds_sop_uid:
+            existing_link = PacsStudyLink.query.filter_by(sop_instance_uid=ds_sop_uid).first()
+        if not existing_link:
+            existing_link = PacsStudyLink.query.filter_by(storage_path=storage_path).first()
+        if existing_link:
+            pending = existing_link.indices_import_status == 'pending'
+            return jsonify({
+                'success': True,
+                'skipped': True,
+                'message': 'Đã autofill trước đó (bỏ qua trùng)',
+                'ultrasound_result_id': existing_link.ultrasound_result_id,
+                'study_link': existing_link.to_dict(),
+                'indices_pending': pending,
+                'indices_filled_count': int(existing_link.indices_filled_count or 0),
+            })
 
         resolved_appointment_id = appointment_id
-        resolved_patient_id = patient_id
+        resolved_patient_id = _resolve_internal_patient_id_from_ref(patient_id)
         resolved_clinical_service_id = None
         if (not resolved_appointment_id or not resolved_patient_id) and accession_number:
             a_id, p_id, cs_id = _resolve_appointment_from_accession(accession_number)
             resolved_appointment_id = resolved_appointment_id or a_id
             resolved_patient_id = resolved_patient_id or p_id
             resolved_clinical_service_id = cs_id
+
+        if not resolved_patient_id:
+            resolved_patient_id = _resolve_patient_from_dicom(ds)
 
         if not resolved_patient_id and resolved_appointment_id:
             appt = db.session.get(Appointment, int(resolved_appointment_id))
@@ -13904,10 +26878,47 @@ def pacs_autofill_ultrasound():
         if not resolved_patient_id:
             return jsonify({
                 'success': False,
-                'message': 'Không map được bệnh nhân. Hãy gửi patient_id hoặc accession_number hợp lệ.'
+                'message': 'Không map được bệnh nhân. Cần AccessionNumber, PatientID (BN) trong DICOM, hoặc patient_id hợp lệ.'
             }), 400
 
-        extracted = _extract_measurements_from_dicom_dataset(ds)
+        with open(dicom_path, 'rb') as dicom_f:
+            dicom_bytes = dicom_f.read()
+        parser_api, profile_id = _extract_pacs_indices_from_dicom(ds, dicom_bytes, filename=filename)
+        measurements = parser_api.get('measurements') or {}
+        gestational_age = parser_api.get('gestational_age')
+        filled_count = int(parser_api.get('filled_count') or 0)
+        extracted = _pacs_canonical_to_ultrasound_fields(measurements, gestational_age)
+        analysis_info = _analyze_ultrasound_extracted_fields(extracted)
+        findings_text = analysis_info.get('findings') or ''
+        if findings_text:
+            findings_text = f"{findings_text}\n\nNguồn: DICOM PACS ({filename}) · profile {profile_id}"
+        else:
+            findings_text = f"Tự động trích xuất từ DICOM (PACS): {filename} · profile {profile_id}"
+        recommendations_text = analysis_info.get('recommendations') or 'Bác sĩ kiểm tra và xác nhận lại trước khi ký.'
+
+        indices_payload = {
+            'success': True,
+            'source': 'pacs_cstore',
+            'gestational_age': gestational_age,
+            'measurements': measurements,
+            'filled_count': filled_count,
+            'message': parser_api.get('message') or '',
+            'parser': parser_api.get('parser') or {},
+            'raw_text_preview': parser_api.get('raw_text_preview') or '',
+            'analysis': analysis_info,
+        }
+
+        pregnancy_episode_id = None
+        try:
+            if resolved_appointment_id:
+                appt_for_ep = db.session.get(Appointment, int(resolved_appointment_id))
+                if appt_for_ep:
+                    pregnancy_episode_id = getattr(appt_for_ep, 'pregnancy_episode_id', None)
+                    if not pregnancy_episode_id and is_obstetric_appointment(appt_for_ep):
+                        ep = link_appointment_to_pregnancy(appt_for_ep)
+                        pregnancy_episode_id = ep.id if ep else None
+        except Exception:
+            pregnancy_episode_id = None
 
         result = UltrasoundResult(
             patient_id=int(resolved_patient_id),
@@ -13920,9 +26931,14 @@ def pacs_autofill_ultrasound():
             fl=extracted.get('fl'),
             afi=extracted.get('afi'),
             estimated_weight=extracted.get('estimated_weight'),
-            findings=f"Tự động trích xuất từ DICOM: {filename}",
-            recommendations='Bác sĩ kiểm tra và xác nhận lại trước khi ký.',
-            analysis_source='dicom_autofill_mvp'
+            ri_umbilical=extracted.get('ri_umbilical'),
+            mca_pi=extracted.get('mca_pi'),
+            sd_ratio=extracted.get('sd_ratio'),
+            cervical_length=extracted.get('cervical_length'),
+            findings=findings_text,
+            recommendations=recommendations_text,
+            analysis_source='dicom_autofill_parser',
+            pregnancy_episode_id=pregnancy_episode_id,
         )
         db.session.add(result)
         db.session.flush()
@@ -13937,13 +26953,17 @@ def pacs_autofill_ultrasound():
             sop_instance_uid=ds_sop_uid or None,
             modality=ds_modality or 'US',
             source_ae=source_ae or None,
-            storage_path=str(dicom_path),
+            storage_path=storage_path,
             ultrasound_result_id=result.id,
             match_confidence=90 if accession_number else 60,
             sync_status='autofilled',
+            indices_payload_json=json.dumps(indices_payload, ensure_ascii=False),
+            indices_import_status='pending' if filled_count > 0 else None,
+            indices_filled_count=filled_count,
             raw_metadata=json.dumps({
                 'patient_name': ds_patient_name,
-                'dicom_filename': filename
+                'dicom_filename': filename,
+                'parser_profile': profile_id,
             }, ensure_ascii=False)
         )
         db.session.add(link)
@@ -13951,10 +26971,13 @@ def pacs_autofill_ultrasound():
 
         return jsonify({
             'success': True,
-            'message': 'Đã tự điền kết quả siêu âm từ DICOM (MVP)',
+            'message': 'Đã tự điền kết quả siêu âm từ DICOM (Image Parser)',
             'ultrasound_result': result.to_dict(),
             'study_link': link.to_dict(),
-            'extracted_measurements': extracted
+            'extracted_measurements': extracted,
+            'indices_pending': filled_count > 0,
+            'indices_filled_count': filled_count,
+            'parser_profile': profile_id,
         })
     except Exception as e:
         db.session.rollback()
@@ -14918,7 +27941,7 @@ def initialize_default_role_permissions():
         if existing:
             return
         defaults = {
-            'admin': ['manage_users', 'manage_worklist', 'manage_Maysieuam_sync', 'manage_content', 'manage_lab', 'manage_work_schedule'],
+            'admin': ['manage_users', 'manage_worklist', 'manage_Maysieuam_sync', 'manage_content', 'manage_lab', 'manage_work_schedule', 'admin.dicom_cleanup'],
             'doctor': [],
             'nurse': [],
             'receptionist': []
@@ -14932,6 +27955,20 @@ def initialize_default_role_permissions():
         db.session.rollback()
         print('Error initializing default role permissions:', e)
 
+
+def ensure_dicom_admin_permissions():
+    """Đảm bảo admin có quyền dọn DICOM (DB đã khởi tạo trước đó)."""
+    try:
+        ensure_role_permission_table()
+        row = RolePermission.query.filter_by(role_name='admin', permission_key='admin.dicom_cleanup').first()
+        if not row:
+            db.session.add(RolePermission(role_name='admin', permission_key='admin.dicom_cleanup'))
+            db.session.commit()
+            print('Added admin.dicom_cleanup permission for admin role')
+    except Exception as e:
+        db.session.rollback()
+        print('ensure_dicom_admin_permissions failed:', e)
+
 def initialize_user_management():
     """Ensure user management prerequisites are set before handling any request."""
     try:
@@ -14944,6 +27981,7 @@ def initialize_user_management():
             initialize_default_admin()
             # Ensure default role -> permission mapping exists
             initialize_default_role_permissions()
+            ensure_dicom_admin_permissions()
     except Exception as e:
         # Log but do not crash app startup
         print("Initialization error for user management:", e)
@@ -15069,6 +28107,12 @@ if __name__ == '__main__':
         ensure_appointment_doctor_column()
         ensure_appointment_expected_delivery_date_column()
         ensure_appointment_sync_columns()
+        ensure_gyn_ultrasound_schema()
+        ensure_gyn_exam_schema()
+        ensure_general_ultrasound_schema()
+        ensure_obstetric_exam_schema()
+        ensure_fertility_andrology_schema()
+        ensure_infertility_couple_schema()
         initialize_default_doctors()
         initialize_default_medical_charts()
         initialize_default_templates()
@@ -15297,28 +28341,33 @@ def generate_clinical_form_pdf():
 
 # Pricing Files API
 @app.route('/api/upload-pricing', methods=['POST'])
+@app.route('/api/upload-pricing-file', methods=['POST'])
 def upload_pricing_file():
     """Upload pricing file (PDF) to server and database."""
     try:
-        if 'pricing_file' not in request.files:
+        file = request.files.get('pricing_file') or request.files.get('file')
+        if not file:
             return jsonify({'success': False, 'message': 'Không có file được chọn'}), 400
         
-        file = request.files['pricing_file']
         file_type = request.form.get('file_type', 'nipt_pricing')
         
-        if file.filename == '':
+        if not file.filename:
             return jsonify({'success': False, 'message': 'Không có file được chọn'}), 400
         
         if not file.filename.lower().endswith('.pdf'):
             return jsonify({'success': False, 'message': 'Chỉ được upload file PDF'}), 400
         
         # Create uploads directory if not exists
-        upload_dir = 'uploads/pricing'
+        upload_dir = os.path.join(app.root_path, 'uploads', 'pricing')
         os.makedirs(upload_dir, exist_ok=True)
         
-        # Generate unique filename
+        # Sanitize filename (giữ đuôi .pdf, bỏ ký tự path nguy hiểm)
+        original_name = os.path.basename(file.filename).replace('\x00', '')
+        safe_base = re.sub(r'[<>:"/\\|?*]+', '_', original_name).strip(' .') or 'document.pdf'
+        if not safe_base.lower().endswith('.pdf'):
+            safe_base += '.pdf'
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        unique_filename = f"{file_type}_{timestamp}_{file.filename}"
+        unique_filename = f"{file_type}_{timestamp}_{safe_base}"
         file_path = os.path.join(upload_dir, unique_filename)
         
         # Save file
@@ -15331,18 +28380,24 @@ def upload_pricing_file():
         old_file = PricingFile.query.filter_by(file_type=file_type).first()
         if old_file:
             try:
-                if os.path.exists(old_file.file_path):
-                    os.remove(old_file.file_path)
-            except:
+                old_path = old_file.file_path
+                if old_path and not os.path.isabs(old_path):
+                    old_path = os.path.join(app.root_path, old_path)
+                if old_path and os.path.exists(old_path):
+                    os.remove(old_path)
+            except Exception:
                 pass
             db.session.delete(old_file)
         
+        # Store relative path for portability
+        relative_path = os.path.join('uploads', 'pricing', unique_filename)
+
         # Save to database
         pricing_file = PricingFile(
             file_type=file_type,
             filename=unique_filename,
-            original_filename=file.filename,
-            file_path=file_path,
+            original_filename=original_name,
+            file_path=relative_path,
             file_size=file_size,
             mime_type=file.content_type or 'application/pdf'
         )
@@ -15357,6 +28412,7 @@ def upload_pricing_file():
         })
         
     except Exception as e:
+        db.session.rollback()
         print(f"Upload error: {e}")
         return jsonify({'success': False, 'message': f'Lỗi upload: {str(e)}'}), 500
 
@@ -15406,8 +28462,8 @@ def get_pricing_file():
             return send_file(
                 file_path,
                 as_attachment=True,
-                download_name=pricing_file.original_filename,
-                mimetype=pricing_file.mime_type
+                download_name=re.sub(r'[^\x20-\x7E]', '_', pricing_file.original_filename or 'document.pdf') or 'document.pdf',
+                mimetype=pricing_file.mime_type or 'application/pdf'
             )
         else:
             # Return file for viewing (inline)
@@ -15436,16 +28492,21 @@ def get_pricing_file():
                 else:
                     return jsonify({'success': False, 'message': f'File không tồn tại tại đường dẫn: {pricing_file.file_path}'}), 404
             
-            # Add headers to allow iframe embedding
+            # Add headers to allow iframe embedding (ASCII-only in filename=)
             from urllib.parse import quote
-            safe_filename = quote(pricing_file.original_filename.encode('utf-8'))
+            original = pricing_file.original_filename or 'document.pdf'
+            ascii_name = re.sub(r'[^\x20-\x7E]', '_', original).replace('"', '') or 'document.pdf'
+            utf8_name = quote(original, safe='')
             
             response = send_file(
                 file_path,
                 as_attachment=False,
+                download_name=ascii_name,
                 mimetype=pricing_file.mime_type or 'application/pdf'
             )
-            response.headers['Content-Disposition'] = f'inline; filename="{pricing_file.original_filename}"; filename*=UTF-8\'\'{safe_filename}'
+            response.headers['Content-Disposition'] = (
+                f'inline; filename="{ascii_name}"; filename*=UTF-8\'\'{utf8_name}'
+            )
             response.headers['X-Content-Type-Options'] = 'nosniff'
             response.headers['Cache-Control'] = 'public, max-age=3600'
             return response
@@ -15753,7 +28814,22 @@ def test_dicom_workflow_checklist():
 def vr_pacs_page():
     """Trang VR PACS để quản lý và xem ảnh siêu âm từ máy siêu âm"""
     return send_from_directory('.', 'vr-pacs.html')
+
+
+@app.route('/vr-pacs-enhanced.html')
+def vr_pacs_enhanced_page():
+    """Viewer DICOM nâng cao (Cornerstone tools đầy đủ hơn)."""
+    return send_from_directory('vr-pacs-viewer', 'vr_pacs_enhanced.html')
+
+
+@app.route('/vr-pacs-viewer/static/<path:filename>')
+def vr_pacs_viewer_static(filename):
+    """Static assets cho VR PACS viewer (Cornerstone vendor)."""
+    return send_from_directory('vr-pacs-viewer/static', filename)
+
+
 @app.route('/api/vr-pacs/patients', methods=['GET'])
+@_require_staff_api_access
 def vr_pacs_get_patients():
     """API để lấy danh sách bệnh nhân và ảnh DICOM của họ"""
     try:
@@ -15777,6 +28853,8 @@ def vr_pacs_get_patients():
             patient_name = patient_dir.name
             dicom_files = []
             latest_date = None
+            dicom_patient_id = ''
+            dicom_patient_name = ''
             
             # Get all DICOM files in patient folder
             for dicom_file in sorted(patient_dir.glob("*.dcm")):
@@ -15784,6 +28862,10 @@ def vr_pacs_get_patients():
                     # Try to read DICOM metadata
                     ds = pydicom.dcmread(dicom_file, stop_before_pixels=True)
                     study_date = ds.get("StudyDate", "")
+                    if not dicom_patient_id:
+                        dicom_patient_id = str(ds.get("PatientID", "") or '').strip()
+                    if not dicom_patient_name:
+                        dicom_patient_name = str(ds.get("PatientName", "") or '').strip()
                     if study_date and (not latest_date or study_date > latest_date):
                         latest_date = study_date
                     
@@ -15813,6 +28895,9 @@ def vr_pacs_get_patients():
             if dicom_files:
                 patients.append({
                     'name': patient_name,
+                    'patient_id': dicom_patient_id,
+                    'patient_name_dicom': dicom_patient_name,
+                    'display_name': dicom_patient_name or patient_name,
                     'images': dicom_files,
                     'latestDate': latest_date or '',
                     'image_count': len(dicom_files)
@@ -15839,6 +28924,7 @@ def vr_pacs_get_patients():
         }), 500
 
 @app.route('/api/vr-pacs/preview/<path:patient_name>/<path:filename>', methods=['GET'])
+@_require_staff_api_access
 def vr_pacs_get_preview(patient_name, filename):
     """API để lấy ảnh preview (thumbnail) của DICOM"""
     try:
@@ -15846,13 +28932,11 @@ def vr_pacs_get_preview(patient_name, filename):
         import pydicom
         from PIL import Image
         import io
-        
-        BASE_DIR = Path("received_dicoms")
-        
-        dicom_path = BASE_DIR / patient_name / filename
-        if not dicom_path.exists():
+
+        dicom_path = _resolve_received_dicom_path(patient_name, filename)
+        if not dicom_path:
             return jsonify({'error': 'File không tồn tại'}), 404
-        
+
         # Read DICOM and convert to image
         ds = pydicom.dcmread(dicom_path)
         
@@ -15897,6 +28981,7 @@ def vr_pacs_get_preview(patient_name, filename):
             return jsonify({'error': str(e)}), 500
 
 @app.route('/api/vr-pacs/dicom/<path:patient_name>/<path:filename>', methods=['GET', 'OPTIONS'])
+@_require_staff_api_access
 def vr_pacs_get_dicom(patient_name, filename):
     """API để lấy file DICOM gốc để Cornerstone viewer hiển thị"""
     # Handle CORS preflight
@@ -15904,18 +28989,14 @@ def vr_pacs_get_dicom(patient_name, filename):
         response = jsonify({'status': 'ok'})
         response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         return response
     try:
-        from pathlib import Path
-        
-        BASE_DIR = Path("received_dicoms")
-        
-        dicom_path = BASE_DIR / patient_name / filename
-        if not dicom_path.exists():
-            print(f"DICOM file not found: {dicom_path}")
+        dicom_path = _resolve_received_dicom_path(patient_name, filename)
+        if not dicom_path:
+            print(f"DICOM file not found or invalid path: {patient_name}/{filename}")
             return jsonify({'error': 'File DICOM không tồn tại'}), 404
-        
+
         print(f"Serving DICOM file: {dicom_path}")
         
         # Return DICOM file with correct MIME type and CORS headers
@@ -16008,6 +29089,40 @@ def _orthanc_upload_dicom_file(dicom_path: Path) -> bool:
         print(f"Orthanc upload failed for {dicom_path}: {e}")
         return False
 
+
+@app.route('/api/pacs/orthanc-sync-file', methods=['POST'])
+def pacs_orthanc_sync_file():
+    """Upload một file DICOM local lên Orthanc (gọi từ dicom_receiver sau C-STORE)."""
+    if not _pacs_internal_token_ok(request):
+        return jsonify({'success': False, 'message': 'Forbidden'}), 403
+    try:
+        payload = request.get_json(silent=True) or {}
+        patient_name = (payload.get('patient_name') or '').strip()
+        filename = (payload.get('filename') or '').strip()
+        if not filename:
+            return jsonify({'success': False, 'message': 'Thiếu filename'}), 400
+        dicom_path = _resolve_received_dicom_path(patient_name, filename)
+        if not dicom_path:
+            return jsonify({'success': False, 'message': 'Không tìm thấy file DICOM'}), 404
+        uploaded = _orthanc_upload_dicom_file(dicom_path)
+        study_uid = ''
+        try:
+            import pydicom
+            ds = pydicom.dcmread(str(dicom_path), stop_before_pixels=True, force=True)
+            study_uid = str(ds.get('StudyInstanceUID', '') or '').strip()
+        except Exception:
+            pass
+        orthanc_study_id = _orthanc_find_study_id_by_uid(study_uid) if study_uid else None
+        return jsonify({
+            'success': uploaded,
+            'uploaded': uploaded,
+            'study_instance_uid': study_uid,
+            'orthanc_study_id': orthanc_study_id,
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 def _orthanc_ui_base_url(base_url: str, username: str, password: str) -> str:
     """
     Prefer Orthanc Explorer 2 (/ui/app/) if available, otherwise fallback to
@@ -16033,14 +29148,12 @@ def _orthanc_ui_base_url(base_url: str, username: str, password: str) -> str:
         return f"{base_url}/app/explorer.html"
 
 @app.route('/api/vr-pacs/orthanc-link/<path:patient_name>/<path:filename>', methods=['GET'])
+@_require_staff_api_access
 def vr_pacs_get_orthanc_link(patient_name, filename):
     """Map local DICOM to Orthanc study and return direct viewer link."""
     try:
-        base_dir = Path("received_dicoms")
-        dicom_path = base_dir / patient_name / filename
-        if not dicom_path.exists():
-            dicom_path = base_dir / filename
-        if not dicom_path.exists():
+        dicom_path = _resolve_received_dicom_path(patient_name, filename)
+        if not dicom_path:
             return jsonify({'success': False, 'error': 'File không tồn tại'}), 404
 
         import pydicom
@@ -16176,6 +29289,7 @@ def learn_from_interaction(message, intent, confidence, keywords_dict):
             db.session.add(new_pattern)
         
         db.session.commit()
+        _ai_invalidate_learning_cache()
         
     except Exception as e:
         print(f"Error learning from interaction: {e}")
@@ -16267,7 +29381,17 @@ _AI_APP_PAGE_INDEX = [
     {'name': 'Dịch vụ lâm sàng', 'url': '/clinical-services-admin.html', 'terms': 'dịch vụ lâm sàng clinical services giá'},
     {'name': 'Phác đồ điều trị', 'url': '/treatment-plans.html', 'terms': 'phác đồ điều trị treatment plan'},
     {'name': 'Siêu âm / Phân tích', 'url': '/ultrasound-analysis.html', 'terms': 'siêu âm phân tích ultrasound analysis'},
+    {'name': 'Siêu âm phụ khoa', 'url': '/ultrasound-gynecology.html', 'terms': 'siêu âm phụ khoa tử cung buồng trứng O-RADS IOTA AFC endometrium'},
+    {'name': 'Phiếu khám phụ khoa', 'url': '/gynecology-examination.html', 'terms': 'phiếu khám phụ khoa khám lâm sàng lý do khám chẩn đoán tái khám'},
+    {'name': 'Phiếu khám sản định kỳ', 'url': '/obstetric-examination.html', 'terms': 'phiếu khám sản định kỳ anc thai kỳ huyết áp phù protein niệu'},
+    {'name': 'Siêu âm tổng quát', 'url': '/ultrasound-general.html', 'terms': 'siêu âm tổng quát gan thận giáp vú tim ổ bụng'},
+    {'name': 'X quang CT MRI', 'url': '/radiology-mri.html', 'terms': 'x quang ct scanner mri cộng hưởng từ thai kỳ bức xạ icrp iaea vùng chậu vú'},
+    {'name': 'Theo dõi nang vô sinh', 'url': '/follicle-monitoring.html', 'terms': 'theo dõi nang follicle monitoring vô sinh IUI IVF kích thích'},
+    {'name': 'Nam khoa / tinh dịch đồ', 'url': '/andrology-examination.html', 'terms': 'nam khoa tinh dịch đồ WHO varicocele andrology semen'},
+    {'name': 'Hồ sơ cặp vô sinh', 'url': '/infertility-couple.html', 'terms': 'cặp vợ chồng vô sinh infertility couple theo dõi nang tinh dịch'},
     {'name': 'CTG', 'url': '/ctg-analysis.html', 'terms': 'ctg tim thai'},
+    {'name': 'Siêu âm thai chuyên sâu', 'url': '/ultrasound-fetal-deep-analysis.html', 'terms': 'siêu âm thai chuyên sâu phân tích fetal ultrasound deep'},
+    {'name': 'Bảng biểu siêu âm thai', 'url': '/ultrasound-fetal-charts.html', 'terms': 'bảng biểu siêu âm thai bách phân vị percentile BPD HC AC FL'},
     {'name': 'Tiện ích thai kỳ', 'url': '/pregnancy-utilities.html', 'terms': 'tiện ích thai kỳ pregnancy utilities'},
     {'name': 'Mẫu phiếu CLS', 'url': '/clinical-form-templates.html', 'terms': 'mẫu phiếu chỉ định kết quả cận lâm sàng template'},
     {'name': 'Mẫu đặc biệt / XN', 'url': '/improved-lab-request-template.html', 'terms': 'mẫu xét nghiệm phiếu chỉ định special template'},
@@ -16278,6 +29402,7 @@ _AI_APP_PAGE_INDEX = [
     {'name': 'Nội dung trang chủ', 'url': '/home-content.html', 'terms': 'nội dung trang chủ hero banner'},
     {'name': 'Chấm công', 'url': '/staff-attendance.html', 'terms': 'chấm công attendance nhân viên'},
     {'name': 'Lịch công tác', 'url': '/staff-work-calendar.html', 'terms': 'lịch công tác work calendar'},
+    {'name': 'Tạo video quảng cáo', 'url': '/ad-video-create.html', 'terms': 'tạo video quảng cáo n8n marketing film ads'},
     {'name': 'Liên kết hữu ích', 'url': '/links.html', 'terms': 'links liên kết website'},
 ]
 
@@ -16302,12 +29427,102 @@ _AI_SETTING_KEY_LABELS = {
 
 _AI_UI_INDEX_CACHE = {'mtime': 0.0, 'entries': []}
 
+# Cache tối ưu tốc độ cho trợ lý AI
+_AI_CACHE_TTL = 45.0  # giây
+_AI_PDF_TEXT_CACHE = {}          # key: (path, mtime, size) -> text
+_AI_PDF_TEXT_CACHE_LOCK = threading.Lock()
+_AI_KB_CACHE = {'ts': 0.0, 'rows': None}          # danh sách dict knowledge base
+_AI_KB_CACHE_LOCK = threading.Lock()
+_AI_LEARNED_CACHE = {'ts': 0.0, 'patterns': None}  # dict intent -> list pattern
+_AI_LEARNED_CACHE_LOCK = threading.Lock()
+
+
+def _ai_invalidate_learning_cache():
+    """Xóa cache khi AI học thêm/được feedback để phản ánh ngay."""
+    _AI_LEARNED_CACHE['ts'] = 0.0
+    _AI_LEARNED_CACHE['patterns'] = None
+    _AI_KB_CACHE['ts'] = 0.0
+    _AI_KB_CACHE['rows'] = None
+
+
+def _ai_get_knowledge_rows():
+    """Trả về knowledge base dạng list dict, cache theo TTL (tránh query mỗi request)."""
+    now = time.time()
+    with _AI_KB_CACHE_LOCK:
+        if _AI_KB_CACHE['rows'] is not None and (now - _AI_KB_CACHE['ts']) < _AI_CACHE_TTL:
+            return _AI_KB_CACHE['rows']
+    rows = []
+    try:
+        for kb in AIKnowledgeBase.query.order_by(AIKnowledgeBase.accuracy.desc()).limit(500).all():
+            rows.append({
+                'id': kb.id,
+                'question_pattern': kb.question_pattern or '',
+                'response': kb.response or '',
+                'accuracy': kb.accuracy or 0.0,
+            })
+    except Exception as ex:
+        app.logger.debug('ai kb cache load: %s', ex)
+        return rows
+    with _AI_KB_CACHE_LOCK:
+        _AI_KB_CACHE['rows'] = rows
+        _AI_KB_CACHE['ts'] = now
+    return rows
+
+
+def _ai_get_learned_patterns():
+    """Trả về learned patterns nhóm theo intent, cache theo TTL."""
+    now = time.time()
+    with _AI_LEARNED_CACHE_LOCK:
+        if _AI_LEARNED_CACHE['patterns'] is not None and (now - _AI_LEARNED_CACHE['ts']) < _AI_CACHE_TTL:
+            return _AI_LEARNED_CACHE['patterns']
+    learned = {}
+    try:
+        patterns = AILearnedPattern.query.filter(
+            AILearnedPattern.confidence_score > 0.3
+        ).order_by(
+            AILearnedPattern.confidence_score.desc(),
+            AILearnedPattern.usage_count.desc()
+        ).limit(100).all()
+        for pattern in patterns:
+            learned.setdefault(pattern.intent, []).append({
+                'pattern': pattern.pattern,
+                'keywords': json.loads(pattern.keywords) if pattern.keywords else [],
+                'confidence': pattern.confidence_score,
+                'usage': pattern.usage_count,
+                'success': pattern.success_count,
+            })
+    except Exception as ex:
+        app.logger.debug('ai learned cache load: %s', ex)
+        return learned
+    with _AI_LEARNED_CACHE_LOCK:
+        _AI_LEARNED_CACHE['patterns'] = learned
+        _AI_LEARNED_CACHE['ts'] = now
+    return learned
+
 
 def _ai_normalize_vn_text(s):
     if not s:
         return ''
     s = unicodedata.normalize('NFC', str(s).strip().lower())
     return s
+
+
+def _ai_fold_diacritics(s):
+    """Bỏ dấu tiếng Việt (và đ→d) để so khớp không phụ thuộc dấu.
+    Ví dụ: 'Nguyễn Thị Lan' -> 'nguyen thi lan', 'lịch khám' -> 'lich kham'."""
+    if not s:
+        return ''
+    s = unicodedata.normalize('NFD', str(s))
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    s = s.replace('đ', 'd').replace('Đ', 'D')
+    return unicodedata.normalize('NFC', s).lower().strip()
+
+
+def _ai_normalize_phone(s):
+    """Chỉ giữ chữ số của chuỗi (để so khớp số điện thoại linh hoạt)."""
+    if not s:
+        return ''
+    return re.sub(r'\D+', '', str(s))
 
 
 def _ai_extract_global_search_query(message, message_lower, keywords_dict=None):
@@ -16385,10 +29600,16 @@ def _ai_score_hit(text, tokens):
     if not text:
         return 0
     t = _ai_normalize_vn_text(text)
+    t_fold = _ai_fold_diacritics(t)
     score = 0
     for tok in tokens:
-        if tok in t:
+        if tok and tok in t:
             score += 10 if t == tok else (5 if t.startswith(tok) else 2)
+            continue
+        # So khớp không dấu (khi người dùng gõ thiếu dấu tiếng Việt)
+        tok_fold = _ai_fold_diacritics(tok)
+        if tok_fold and t_fold and tok_fold in t_fold:
+            score += 8 if t_fold == tok_fold else (4 if t_fold.startswith(tok_fold) else 2)
     return score
 
 
@@ -16445,10 +29666,22 @@ def _ai_resolve_upload_path(file_path):
 
 
 def _ai_try_read_pdf_text(file_path, max_chars=8000):
-    """Đọc nội dung PDF (nếu có thư viện); không thì trích chuỗi chữ từ bytes."""
+    """Đọc nội dung PDF (nếu có thư viện); không thì trích chuỗi chữ từ bytes.
+    Có cache theo (đường dẫn, mtime, kích thước) để không đọc lại PDF mỗi lần tra cứu."""
     path = _ai_resolve_upload_path(file_path)
     if not path:
         return ''
+    cache_key = None
+    try:
+        st = os.stat(path)
+        cache_key = (path, int(st.st_mtime), st.st_size, max_chars)
+        with _AI_PDF_TEXT_CACHE_LOCK:
+            if cache_key in _AI_PDF_TEXT_CACHE:
+                return _AI_PDF_TEXT_CACHE[cache_key]
+    except Exception:
+        cache_key = None
+
+    text_result = ''
     try:
         try:
             from pypdf import PdfReader  # type: ignore
@@ -16460,16 +29693,24 @@ def _ai_try_read_pdf_text(file_path, max_chars=8000):
             chunks.append(page.extract_text() or '')
         text = '\n'.join(chunks)
         if text.strip():
-            return text[:max_chars]
+            text_result = text[:max_chars]
     except Exception:
         pass
-    try:
-        raw = Path(path).read_bytes()
-        found = re.findall(rb'[\x20-\x7E\u00C0-\u1EF9]{4,}', raw)
-        text = ' '.join(s.decode('utf-8', errors='ignore') for s in found[:400])
-        return text[:max_chars]
-    except Exception:
-        return ''
+    if not text_result:
+        try:
+            raw = Path(path).read_bytes()
+            found = re.findall(rb'[\x20-\x7E\u00C0-\u1EF9]{4,}', raw)
+            text = ' '.join(s.decode('utf-8', errors='ignore') for s in found[:400])
+            text_result = text[:max_chars]
+        except Exception:
+            text_result = ''
+
+    if cache_key is not None:
+        with _AI_PDF_TEXT_CACHE_LOCK:
+            if len(_AI_PDF_TEXT_CACHE) > 200:
+                _AI_PDF_TEXT_CACHE.clear()
+            _AI_PDF_TEXT_CACHE[cache_key] = text_result
+    return text_result
 
 
 def _ai_get_ui_field_index():
@@ -16952,12 +30193,17 @@ def _ai_assistant_global_search(query, limit_per_category=6, max_total=40):
     hits = []
     seen_keys = set()
     per_cat = max(1, int(limit_per_category or 6))
+    phone_digits = _ai_normalize_phone(query)
 
     try:
         cond = _ai_sql_ilike_any(
             [Patient.name, Patient.phone, Patient.patient_id, Patient.address],
             tokens,
         )
+        # Khớp số điện thoại linh hoạt: "0912 345 678" -> "0912345678"
+        if len(phone_digits) >= 6:
+            phone_cond = Patient.phone.ilike(f'%{phone_digits}%')
+            cond = or_(cond, phone_cond) if cond is not None else phone_cond
         if cond is not None:
             for p in Patient.query.filter(cond).order_by(Patient.id.desc()).limit(per_cat).all():
                 dob = p.date_of_birth.strftime('%d/%m/%Y') if p.date_of_birth else ''
@@ -16966,12 +30212,13 @@ def _ai_assistant_global_search(query, limit_per_category=6, max_total=40):
                     detail += f" | Mã: {p.patient_id}"
                 if dob:
                     detail += f" | NS: {dob}"
+                phone_bonus = 10 if (phone_digits and phone_digits in _ai_normalize_phone(p.phone)) else 0
                 hits.append({
                     'category': 'patient',
                     'title': p.name or 'Bệnh nhân',
                     'detail': detail,
                     'url': '/examination-list.html',
-                    'score': _ai_score_hit(f"{p.name} {p.phone} {p.patient_id}", tokens) + 20,
+                    'score': _ai_score_hit(f"{p.name} {p.phone} {p.patient_id}", tokens) + 20 + phone_bonus,
                     'action': {
                         'type': 'search',
                         'selector': '#searchInput, input[placeholder*="tìm"], input[placeholder*="search"], #search-patient',
@@ -17157,15 +30404,16 @@ def _ai_assistant_global_search(query, limit_per_category=6, max_total=40):
         app.logger.debug('ai search users: %s', ex)
 
     try:
-        for kb in AIKnowledgeBase.query.order_by(AIKnowledgeBase.accuracy.desc()).limit(200).all():
-            blob = f"{kb.question_pattern or ''} {kb.response or ''}"
-            if _ai_score_hit(blob, tokens) > 0:
+        for kb in _ai_get_knowledge_rows():
+            blob = f"{kb['question_pattern']} {kb['response']}"
+            sc = _ai_score_hit(blob, tokens)
+            if sc > 0:
                 hits.append({
                     'category': 'knowledge',
-                    'title': (kb.question_pattern or 'Câu hỏi')[:80],
-                    'detail': (kb.response or '')[:160],
+                    'title': (kb['question_pattern'] or 'Câu hỏi')[:80],
+                    'detail': (kb['response'] or '')[:160],
                     'url': '/ai-assistant-admin.html',
-                    'score': _ai_score_hit(blob, tokens) + int((kb.accuracy or 0) * 5),
+                    'score': sc + int((kb['accuracy'] or 0) * 5),
                 })
     except Exception as ex:
         app.logger.debug('ai search knowledge: %s', ex)
@@ -17267,25 +30515,32 @@ def _ai_format_global_search_response(query, results):
 
 
 def _ai_knowledge_base_search(message_lower, tokens=None):
-    """Tìm câu trả lời trong knowledge base theo từ / cụm từ."""
+    """Tìm câu trả lời trong knowledge base theo từ / cụm từ (dùng cache TTL)."""
     tokens = tokens or _ai_search_tokens(message_lower)
     if not tokens:
         return None
     best = None
     best_score = 0
     try:
-        for kb in AIKnowledgeBase.query.order_by(AIKnowledgeBase.accuracy.desc()).all():
-            blob = f"{kb.question_pattern or ''} {kb.response or ''}".lower()
+        for kb in _ai_get_knowledge_rows():
+            blob = f"{kb['question_pattern']} {kb['response']}".lower()
             score = _ai_score_hit(blob, tokens)
-            if kb.accuracy:
-                score += int(kb.accuracy * 3)
+            if kb['accuracy']:
+                score += int(kb['accuracy'] * 3)
             if score > best_score:
                 best_score = score
                 best = kb
         if best and best_score >= 4:
-            best.usage_count = (best.usage_count or 0) + 1
-            db.session.commit()
-            return best
+            # Tăng usage_count trực tiếp theo id (không load toàn bộ bảng)
+            try:
+                AIKnowledgeBase.query.filter_by(id=best['id']).update(
+                    {AIKnowledgeBase.usage_count: (AIKnowledgeBase.usage_count or 0) + 1},
+                    synchronize_session=False,
+                )
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+            return db.session.get(AIKnowledgeBase, best['id'])
     except Exception:
         db.session.rollback()
     return None
@@ -17353,42 +30608,34 @@ def ai_assistant_chat():
             ],
         }
         
-        # Hàm kiểm tra keyword với fuzzy matching
+        # Bản không dấu của message để so khớp linh hoạt (gõ thiếu dấu tiếng Việt)
+        message_folded = _ai_fold_diacritics(message_lower)
+
+        # Hàm kiểm tra keyword: khớp cả có dấu lẫn không dấu.
+        # Chỉ so khớp không dấu với từ khóa đủ dài (>=4) để tránh dương tính giả
+        # kiểu "chủ"->"chu" khớp nhầm "chuẩn".
         def has_keyword(msg, keyword_list):
-            return any(kw in msg for kw in keyword_list)
+            for kw in keyword_list:
+                if kw in msg:
+                    return True
+                kw_folded = _ai_fold_diacritics(kw)
+                if len(kw_folded) >= 4 and kw_folded != kw and kw_folded in message_folded:
+                    return True
+            return False
         
         # Import re cho regex matching (đã import ở đầu file, nhưng đảm bảo)
         import re
         
         # ========== HỆ THỐNG TỰ HỌC ==========
-        # Load learned patterns từ database
-        learned_patterns = {}
-        try:
-            patterns = AILearnedPattern.query.filter(
-                AILearnedPattern.confidence_score > 0.3  # Chỉ lấy patterns có độ tin cậy > 30%
-            ).order_by(
-                AILearnedPattern.confidence_score.desc(),
-                AILearnedPattern.usage_count.desc()
-            ).limit(100).all()
-            
-            for pattern in patterns:
-                intent = pattern.intent
-                if intent not in learned_patterns:
-                    learned_patterns[intent] = []
-                learned_patterns[intent].append({
-                    'pattern': pattern.pattern,
-                    'keywords': json.loads(pattern.keywords) if pattern.keywords else [],
-                    'confidence': pattern.confidence_score,
-                    'usage': pattern.usage_count,
-                    'success': pattern.success_count
-                })
-        except Exception as e:
-            print(f"Error loading learned patterns: {e}")
+        # Load learned patterns từ database (qua cache TTL để tối ưu tốc độ)
+        learned_patterns = _ai_get_learned_patterns()
         
-        # Hàm tìm intent từ learned patterns
+        # Hàm tìm intent từ learned patterns (khớp cả có dấu lẫn không dấu)
         def find_intent_from_learned(msg):
             best_match = None
             best_score = 0.0
+            msg_l = msg.lower()
+            msg_f = _ai_fold_diacritics(msg_l)
             
             for intent, patterns in learned_patterns.items():
                 for pattern_data in patterns:
@@ -17399,12 +30646,17 @@ def ai_assistant_chat():
                     # Tính điểm dựa trên pattern match
                     score = 0.0
                     
-                    # Kiểm tra pattern có trong message không
-                    if pattern_text in msg.lower():
+                    # Kiểm tra pattern có trong message không (ưu tiên có dấu, fallback không dấu)
+                    if pattern_text and pattern_text in msg_l:
                         score += 0.5 * confidence
+                    elif pattern_text and _ai_fold_diacritics(pattern_text) in msg_f:
+                        score += 0.4 * confidence
                     
                     # Kiểm tra keywords
-                    keyword_matches = sum(1 for kw in pattern_keywords if kw.lower() in msg.lower())
+                    keyword_matches = sum(
+                        1 for kw in pattern_keywords
+                        if kw.lower() in msg_l or _ai_fold_diacritics(kw) in msg_f
+                    )
                     if pattern_keywords:
                         score += (keyword_matches / len(pattern_keywords)) * 0.3 * confidence
                     
@@ -17760,6 +31012,7 @@ def ai_assistant_feedback():
                         pattern.success_count += 1
             
             db.session.commit()
+            _ai_invalidate_learning_cache()
             
             return jsonify({'success': True, 'message': 'Feedback đã được lưu. Cảm ơn bạn!'})
         else:
@@ -18191,9 +31444,46 @@ def bootstrap_schema_on_startup():
             ensure_appointment_doctor_column()
             ensure_appointment_expected_delivery_date_column()
             ensure_appointment_sync_columns()
+            ensure_appointment_discount_column()
+            ensure_performance_indexes()
+            ensure_gyn_ultrasound_schema()
+            ensure_gyn_exam_schema()
+            ensure_general_ultrasound_schema()
+            ensure_obstetric_exam_schema()
+            ensure_fertility_andrology_schema()
+            ensure_infertility_couple_schema()
+            ensure_clinical_flowchart_content_type_column()
+            ensure_clinic_assets_table()
+            ensure_clinic_techniques_table()
+            _sync_clinical_templates_once()
     except Exception as e:
         # Không chặn app start nếu migrate best-effort bị lỗi
         print(f"[SCHEMA] bootstrap warning: {e}")
+
+
+# Route for serving static files — đặt cuối file để không che các API route đăng ký sau này
+@app.route('/<path:filename>')
+def static_files(filename):
+    # Không phục vụ /api/* như file tĩnh (tránh 405 Method Not Allowed cho POST API)
+    if filename.startswith('api/'):
+        return jsonify({'success': False, 'message': 'API endpoint không tồn tại'}), 404
+    # Trang HTML không trong PUBLIC_PAGES → yêu cầu đăng nhập (dành cho nhân viên)
+    if filename.endswith('.html') and filename not in PUBLIC_PAGES:
+        token = request.cookies.get('auth_token') or request.headers.get('Authorization', '').replace('Bearer ', '')
+        user_id = get_user_from_token(token) if token else None
+        if not token or not user_id:
+            from flask import redirect
+            return redirect('/users.html?msg=Đăng nhập để truy cập trang này')
+        # Chặn truy cập trang không thuộc quyền theo vai trò (page/menu permissions)
+        try:
+            allowed = allowed_pages_for_user(user_id)
+            if '*' not in allowed and filename not in allowed:
+                return Response("Forbidden", status=403, mimetype='text/plain; charset=utf-8')
+        except Exception:
+            # Nếu có lỗi phụ trợ, vẫn ưu tiên không chặn để tránh ảnh hưởng vận hành
+            pass
+    return send_from_directory('.', filename)
+
 
 # Chạy ngay khi module được import (kể cả khi chạy qua waitress/gunicorn)
 bootstrap_schema_on_startup()

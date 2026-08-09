@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Theo dõi nang - Vô sinh | Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="admin-clinical-shell.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root { --c:#0369a1; --cd:#0c4a6e; --a:#e0f2fe; --b:#bae6fd; }
+        body { margin:0; min-height:100vh; background:radial-gradient(ellipse 70% 40% at 0% 0%,rgba(3,105,161,.10),transparent),#f8fafc; font-family:Roboto,"Segoe UI",sans-serif; }
+        .wrap { max-width:1100px; margin:0 auto; padding:20px 16px 40px; }
+        .card { background:#fff; border:1px solid var(--b); border-radius:14px; padding:1.25rem 1.5rem; margin-bottom:1rem; }
+        .card h2,.card h3 { margin:0 0 .8rem; color:var(--cd); }
+        .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:12px; }
+        label { font-weight:600; font-size:.9rem; color:#334155; display:block; margin-bottom:4px; }
+        input,select,textarea { width:100%; padding:9px 11px; border:1.5px solid #e2e8f0; border-radius:8px; box-sizing:border-box; }
+        textarea { min-height:70px; resize:vertical; }
+        .btn { border:none; border-radius:8px; padding:10px 16px; font-weight:600; color:#fff; cursor:pointer; background:linear-gradient(135deg,var(--c),var(--cd)); display:inline-flex; align-items:center; gap:6px; }
+        .btn-sec { background:#64748b; }
+        .btns { display:flex; gap:8px; flex-wrap:wrap; }
+        table { width:100%; border-collapse:collapse; font-size:.9rem; }
+        th,td { padding:8px; border-bottom:1px solid #f1f5f9; text-align:left; }
+        th { background:var(--a); color:var(--cd); }
+        .cycle-list { display:flex; flex-direction:column; gap:8px; }
+        .cycle-item { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:10px 12px; border:1px solid var(--b); border-radius:10px; cursor:pointer; }
+        .cycle-item.active { border-color:var(--c); background:var(--a); }
+        .toast { position:fixed; right:16px; bottom:16px; background:var(--cd); color:#fff; padding:12px 14px; border-radius:8px; display:none; z-index:20; }
+        .toast.err { background:#b91c1c; }
+        .muted { color:#64748b; font-size:.9rem; }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.PNG" alt="Phòng khám Phụ Sản Đại Anh" onerror="this.style.display='none'">
+            <div class="logo-text">
+                <h1>Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                <p class="admin-slogan">Uy Tín - Chất Lượng</p>
+                <p class="page-subtitle">Theo dõi nang (vô sinh)</p>
+            </div>
+        </div>
+        <nav>
+            <div class="nav-row">
+                <a href="admin.html" class="header-nav-btn"><i class="fas fa-cog"></i> Admin</a>
+                <a href="examination-list.html" class="header-nav-btn" title="Danh sách lịch hẹn trong ngày"><i class="fas fa-calendar-check"></i> Danh sách khám</a>
+                <a href="cervical-examination-analysis.html" class="header-nav-btn"><i class="fas fa-search-plus"></i> Soi cổ tử cung</a>
+                <a href="gynecology-records.html" class="header-nav-btn" title="Quản lý bệnh lý phụ khoa và theo dõi điều trị"><i class="fas fa-venus"></i> Phụ khoa</a>
+                <a href="gynecology-examination.html" class="header-nav-btn" title="Phiếu khám phụ khoa có cấu trúc"><i class="fas fa-notes-medical"></i> Phiếu khám PK</a>
+                <a href="obstetric-examination.html" class="header-nav-btn" title="Phiếu khám sản định kỳ (ANC)"><i class="fas fa-baby"></i> Phiếu khám sản</a>
+                <a href="follicle-monitoring.html" class="header-nav-btn active" title="Theo dõi nang vô sinh"><i class="fas fa-circle-notch"></i> Theo dõi nang</a>
+                <a href="andrology-examination.html" class="header-nav-btn" title="Nam khoa / tinh dịch đồ"><i class="fas fa-mars"></i> Nam khoa</a>
+                <a href="infertility-couple.html" class="header-nav-btn" title="Hồ sơ cặp vợ chồng vô sinh"><i class="fas fa-user-friends"></i> Cặp VS</a>
+            </div>
+        </nav>
+    </header>
+<main class="wrap">
+    <div class="card">
+        <h2>Bệnh nhân &amp; chu kỳ</h2>
+        <div class="row">
+            <div>
+                <label>Bệnh nhân *</label>
+                <select id="patient-select"><option value="">-- Chọn --</option></select>
+            </div>
+            <div>
+                <label>Nhãn chu kỳ</label>
+                <input id="cycle-label" placeholder="VD: IUI #1 / IVF 07/2026">
+            </div>
+            <div>
+                <label>LMP</label>
+                <input type="date" id="lmp-date">
+            </div>
+            <div>
+                <label>Phác đồ</label>
+                <select id="protocol">
+                    <option value="">-- Chọn --</option>
+                    <option value="natural">Tự nhiên</option>
+                    <option value="IUI">IUI</option>
+                    <option value="IVF antagonist">IVF đối kháng</option>
+                    <option value="IVF long">IVF dài</option>
+                    <option value="other">Khác</option>
+                </select>
+            </div>
+            <div>
+                <label>Trạng thái</label>
+                <select id="cycle-status">
+                    <option value="active">Đang theo dõi</option>
+                    <option value="triggered">Đã trigger</option>
+                    <option value="cancelled">Hủy</option>
+                    <option value="closed">Đóng</option>
+                </select>
+            </div>
+        </div>
+        <div class="row"><div style="grid-column:1/-1"><label>Ghi chú chu kỳ</label><textarea id="cycle-notes"></textarea></div></div>
+        <div class="btns">
+            <button class="btn" type="button" onclick="createCycle()"><i class="fas fa-plus"></i> Tạo chu kỳ</button>
+            <button class="btn btn-sec" type="button" onclick="updateCycle()" id="btn-update-cycle" style="display:none"><i class="fas fa-save"></i> Cập nhật chu kỳ</button>
+            <button class="btn btn-sec" type="button" onclick="printCycle()" id="btn-print-cycle" style="display:none"><i class="fas fa-print"></i> In bảng</button>
+        </div>
+        <p class="muted" style="margin-top:12px">Danh sách chu kỳ:</p>
+        <div id="cycle-list" class="cycle-list muted">Chọn bệnh nhân để xem chu kỳ.</div>
+    </div>
+
+    <div class="card" id="entry-card" style="display:none">
+        <h3>Thêm lần theo dõi</h3>
+        <input type="hidden" id="editing-entry-id">
+        <div class="row">
+            <div><label>Ngày SA *</label><input type="datetime-local" id="exam-date"></div>
+            <div><label>Ngày chu kỳ</label><input type="number" id="cycle-day" min="1"></div>
+            <div><label>NMTC (mm)</label><input type="number" step="0.1" id="endometrium-mm"></div>
+            <div><label>Nang trội (mm)</label><input type="number" step="0.1" id="dominant-follicle-mm"></div>
+            <div><label>Nang trái (vd: 14,12,8)</label><input id="left-follicles"></div>
+            <div><label>Nang phải</label><input id="right-follicles"></div>
+            <div><label>E2</label><input type="number" step="0.1" id="estradiol"></div>
+            <div><label>LH</label><input type="number" step="0.1" id="lh"></div>
+            <div>
+                <label>Khuyến nghị</label>
+                <select id="recommendation">
+                    <option value="">--</option>
+                    <option value="continue">Tiếp tục</option>
+                    <option value="trigger">Trigger</option>
+                    <option value="iui">IUI</option>
+                    <option value="oocyte_pickup">Chọc hút trứng</option>
+                    <option value="cancel">Hủy chu kỳ</option>
+                </select>
+            </div>
+        </div>
+        <div class="row"><div style="grid-column:1/-1"><label>Ghi chú</label><textarea id="entry-notes"></textarea></div></div>
+        <div class="btns">
+            <button class="btn" type="button" onclick="saveEntry()"><i class="fas fa-save"></i> Lưu lần theo dõi</button>
+            <button class="btn btn-sec" type="button" onclick="clearEntryForm()">Làm mới form</button>
+        </div>
+        <h3 style="margin-top:1.2rem">Các lần trong chu kỳ</h3>
+        <div id="entries-table" class="muted">Chưa có dữ liệu.</div>
+    </div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+let currentCycleId = null;
+const params = new URLSearchParams(location.search);
+
+function toast(msg, err) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = 'toast' + (err ? ' err' : '');
+    t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3000);
+}
+function num(v){ if(v===''||v==null) return null; const n=Number(v); return Number.isFinite(n)?n:null; }
+function setNow(){ const el=document.getElementById('exam-date'); const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); el.value=d.toISOString().slice(0,16); }
+
+async function loadPatients(){
+    const res = await fetch('/api/patients');
+    const patients = await res.json();
+    const list = Array.isArray(patients)?patients:(patients.data||patients.patients||[]);
+    const sel = document.getElementById('patient-select');
+    list.forEach(p=>{
+        const o=document.createElement('option'); o.value=p.id;
+        o.textContent=`${p.full_name||p.name||('BN #'+p.id)}${p.phone?' — '+p.phone:''}`;
+        sel.appendChild(o);
+    });
+}
+async function loadCycles(){
+    const pid = document.getElementById('patient-select').value;
+    const box = document.getElementById('cycle-list');
+    if(!pid){ box.className='cycle-list muted'; box.textContent='Chọn bệnh nhân để xem chu kỳ.'; return; }
+    const res = await fetch(`/api/follicle-cycles?patient_id=${pid}`);
+    const rows = await res.json();
+    if(!res.ok){ toast(rows.message||'Lỗi',true); return; }
+    if(!rows.length){ box.className='cycle-list muted'; box.textContent='Chưa có chu kỳ.'; return; }
+    box.className='cycle-list';
+    box.innerHTML = rows.map(c=>`
+        <div class="cycle-item ${c.id===currentCycleId?'active':''}" onclick="selectCycle(${c.id})">
+            <div><strong>${c.cycle_label||('Chu kỳ #'+c.id)}</strong><div class="muted">${c.protocol||'—'} · ${c.status||''} · ${c.entry_count||0} lần · LMP ${c.lmp_date||'—'}</div></div>
+            <button class="btn btn-sec" type="button" onclick="event.stopPropagation(); deleteCycle(${c.id})">Xóa</button>
+        </div>`).join('');
+}
+async function createCycle(){
+    const patient_id = num(document.getElementById('patient-select').value);
+    if(!patient_id) return toast('Chọn bệnh nhân',true);
+    const body = {
+        patient_id,
+        cycle_label: document.getElementById('cycle-label').value || null,
+        lmp_date: document.getElementById('lmp-date').value || null,
+        protocol: document.getElementById('protocol').value || null,
+        status: document.getElementById('cycle-status').value || 'active',
+        notes: document.getElementById('cycle-notes').value || null,
+    };
+    const res = await fetch('/api/follicle-cycles',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data = await res.json();
+    if(!res.ok) return toast(data.message||'Lỗi',true);
+    toast(data.message||'Đã tạo');
+    currentCycleId = data.id;
+    await loadCycles();
+    await selectCycle(currentCycleId);
+}
+async function updateCycle(){
+    if(!currentCycleId) return;
+    const body = {
+        cycle_label: document.getElementById('cycle-label').value || null,
+        lmp_date: document.getElementById('lmp-date').value || null,
+        protocol: document.getElementById('protocol').value || null,
+        status: document.getElementById('cycle-status').value || 'active',
+        notes: document.getElementById('cycle-notes').value || null,
+    };
+    const res = await fetch(`/api/follicle-cycles/${currentCycleId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data = await res.json();
+    if(!res.ok) return toast(data.message||'Lỗi',true);
+    toast(data.message||'Đã cập nhật'); await loadCycles();
+}
+async function deleteCycle(id){
+    if(!confirm('Xóa chu kỳ và toàn bộ lần theo dõi?')) return;
+    const res = await fetch(`/api/follicle-cycles/${id}`,{method:'DELETE'});
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) return toast(data.message||'Lỗi',true);
+    if(currentCycleId===id){ currentCycleId=null; document.getElementById('entry-card').style.display='none'; }
+    toast('Đã xóa'); await loadCycles();
+}
+async function selectCycle(id){
+    currentCycleId = id;
+    const res = await fetch(`/api/follicle-cycles/${id}`);
+    const c = await res.json();
+    if(!res.ok) return toast(c.message||'Lỗi',true);
+    document.getElementById('cycle-label').value = c.cycle_label||'';
+    document.getElementById('lmp-date').value = c.lmp_date||'';
+    document.getElementById('protocol').value = c.protocol||'';
+    document.getElementById('cycle-status').value = c.status||'active';
+    document.getElementById('cycle-notes').value = c.notes||'';
+    document.getElementById('btn-update-cycle').style.display='inline-flex';
+    document.getElementById('btn-print-cycle').style.display='inline-flex';
+    document.getElementById('entry-card').style.display='block';
+    renderEntries(c.entries||[]);
+    await loadCycles();
+}
+function renderEntries(entries){
+    const box = document.getElementById('entries-table');
+    if(!entries.length){ box.className='muted'; box.textContent='Chưa có lần theo dõi.'; return; }
+    const rec={continue:'Tiếp tục',trigger:'Trigger',cancel:'Hủy',iui:'IUI',oocyte_pickup:'OPU'};
+    box.className='';
+    box.innerHTML = `<table><thead><tr><th>Ngày</th><th>CK</th><th>NMTC</th><th>Trái</th><th>Phải</th><th>Trội</th><th>E2/LH</th><th>KN</th><th></th></tr></thead>
+    <tbody>${entries.map(e=>`<tr>
+        <td>${e.exam_date?new Date(e.exam_date).toLocaleString('vi-VN'):''}</td>
+        <td>${e.cycle_day??'—'}</td><td>${e.endometrium_mm??'—'}</td>
+        <td>${e.left_follicles||'—'}</td><td>${e.right_follicles||'—'}</td>
+        <td>${e.dominant_follicle_mm??'—'}</td>
+        <td>${e.estradiol??'—'}/${e.lh??'—'}</td>
+        <td>${rec[e.recommendation]||e.recommendation||'—'}</td>
+        <td><button class="btn btn-sec" type="button" onclick='editEntry(${JSON.stringify(e)})'>Sửa</button>
+            <button class="btn btn-sec" type="button" onclick="deleteEntry(${e.id})">Xóa</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+function clearEntryForm(){
+    document.getElementById('editing-entry-id').value='';
+    ['cycle-day','endometrium-mm','dominant-follicle-mm','left-follicles','right-follicles','estradiol','lh','recommendation','entry-notes'].forEach(id=>{
+        const el=document.getElementById(id); if(el) el.value='';
+    });
+    setNow();
+}
+function editEntry(e){
+    document.getElementById('editing-entry-id').value=e.id;
+    const d=new Date(e.exam_date); d.setMinutes(d.getMinutes()-d.getTimezoneOffset());
+    document.getElementById('exam-date').value=d.toISOString().slice(0,16);
+    document.getElementById('cycle-day').value=e.cycle_day??'';
+    document.getElementById('endometrium-mm').value=e.endometrium_mm??'';
+    document.getElementById('dominant-follicle-mm').value=e.dominant_follicle_mm??'';
+    document.getElementById('left-follicles').value=e.left_follicles||'';
+    document.getElementById('right-follicles').value=e.right_follicles||'';
+    document.getElementById('estradiol').value=e.estradiol??'';
+    document.getElementById('lh').value=e.lh??'';
+    document.getElementById('recommendation').value=e.recommendation||'';
+    document.getElementById('entry-notes').value=e.notes||'';
+    window.scrollTo({top:document.getElementById('entry-card').offsetTop-20,behavior:'smooth'});
+}
+async function saveEntry(){
+    if(!currentCycleId) return toast('Chọn chu kỳ trước',true);
+    const body={
+        cycle_id: currentCycleId,
+        exam_date: document.getElementById('exam-date').value,
+        cycle_day: num(document.getElementById('cycle-day').value),
+        endometrium_mm: num(document.getElementById('endometrium-mm').value),
+        dominant_follicle_mm: num(document.getElementById('dominant-follicle-mm').value),
+        left_follicles: document.getElementById('left-follicles').value||null,
+        right_follicles: document.getElementById('right-follicles').value||null,
+        estradiol: num(document.getElementById('estradiol').value),
+        lh: num(document.getElementById('lh').value),
+        recommendation: document.getElementById('recommendation').value||null,
+        notes: document.getElementById('entry-notes').value||null,
+        appointment_id: num(params.get('appointment_id')),
+    };
+    const eid = document.getElementById('editing-entry-id').value;
+    const url = eid ? `/api/follicle-entries/${eid}` : '/api/follicle-entries';
+    const method = eid ? 'PUT' : 'POST';
+    const res = await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data = await res.json();
+    if(!res.ok) return toast(data.message||'Lỗi',true);
+    toast(data.message||'Đã lưu'); clearEntryForm(); await selectCycle(currentCycleId);
+}
+async function deleteEntry(id){
+    if(!confirm('Xóa lần theo dõi này?')) return;
+    const res = await fetch(`/api/follicle-entries/${id}`,{method:'DELETE'});
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) return toast(data.message||'Lỗi',true);
+    toast('Đã xóa'); await selectCycle(currentCycleId);
+}
+function printCycle(){ if(currentCycleId) window.open(`/api/print_follicle_cycle/${currentCycleId}`,'_blank'); }
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+    setNow();
+    await loadPatients();
+    if(params.get('patient_id')) document.getElementById('patient-select').value=params.get('patient_id');
+    if(params.get('phone')){
+        const sel=document.getElementById('patient-select');
+        const m=[...sel.options].find(o=>(o.textContent||'').includes(params.get('phone')));
+        if(m) sel.value=m.value;
+    }
+    document.getElementById('patient-select').addEventListener('change', ()=>{ currentCycleId=null; document.getElementById('entry-card').style.display='none'; loadCycles(); });
+    await loadCycles();
+    if(params.get('cycle_id')) await selectCycle(Number(params.get('cycle_id')));
+});
+</script>
+<script src="ai-assistant.js"></script>
+<script src="footer-loader.js"></script>
+</body>
+</html>

@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phiếu khám Sản định kỳ - Phòng khám Phụ Sản Đại Anh</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="admin-clinical-shell.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --obs-primary: #0369a1;
+            --obs-primary-dark: #0c4a6e;
+            --obs-accent: #e0f2fe;
+            --obs-border: #bae6fd;
+        }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(ellipse 80% 50% at 10% 0%, rgba(3, 105, 161, 0.10), transparent),
+                radial-gradient(ellipse 60% 40% at 100% 10%, rgba(14, 165, 233, 0.08), transparent),
+                #f8fafc;
+            font-family: Roboto, "Segoe UI", sans-serif;
+        }
+        .admin-main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; }
+        .page-intro {
+            background: #fff; border-radius: 14px; padding: 1.25rem 1.5rem;
+            margin-bottom: 1.25rem; border: 1px solid var(--obs-border);
+        }
+        .page-intro h2 { margin: 0 0 0.35rem; color: var(--obs-primary-dark); font-size: 1.4rem; }
+        .page-intro p { margin: 0; color: #475569; }
+        .quick-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+        .quick-links a {
+            display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px;
+            border-radius: 8px; background: var(--obs-accent); color: var(--obs-primary-dark);
+            text-decoration: none; font-weight: 600; font-size: 0.9rem; border: 1px solid var(--obs-border);
+        }
+        .exam-form {
+            background: #fff; border-radius: 14px; padding: 1.5rem; margin-bottom: 1.25rem;
+            border: 1px solid var(--obs-border); box-shadow: 0 8px 24px rgba(3, 105, 161, 0.06);
+        }
+        .exam-form h3 {
+            margin: 0 0 1rem; color: var(--obs-primary-dark); font-size: 1.15rem;
+            display: flex; align-items: center; gap: 8px; padding-bottom: 0.6rem;
+            border-bottom: 2px solid var(--obs-accent);
+        }
+        .form-row {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px; margin-bottom: 14px;
+        }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group.full { grid-column: 1 / -1; }
+        .form-group label { font-weight: 600; color: #334155; font-size: 0.92rem; }
+        .form-group input, .form-group select, .form-group textarea {
+            padding: 10px 12px; border: 1.5px solid #e2e8f0; border-radius: 8px;
+            font-size: 0.98rem; background: #fff;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none; border-color: var(--obs-primary);
+            box-shadow: 0 0 0 3px rgba(3, 105, 161, 0.15);
+        }
+        .form-group textarea { min-height: 80px; resize: vertical; }
+        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+        .btn {
+            border: none; border-radius: 8px; padding: 11px 18px; font-weight: 600;
+            cursor: pointer; display: inline-flex; align-items: center; gap: 8px; color: #fff;
+            background: linear-gradient(135deg, var(--obs-primary), var(--obs-primary-dark));
+        }
+        .btn:hover { filter: brightness(1.05); }
+        .btn-secondary { background: #64748b; }
+        .history-panel {
+            background: #fff; border-radius: 14px; padding: 1.25rem 1.5rem; border: 1px solid var(--obs-border);
+        }
+        .history-panel h3 { margin: 0 0 1rem; color: var(--obs-primary-dark); }
+        .history-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+        .history-table th, .history-table td {
+            text-align: left; padding: 10px 8px; border-bottom: 1px solid #e2e8f0;
+        }
+        .history-table th { background: var(--obs-accent); color: #0c4a6e; }
+        .history-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .history-actions button {
+            border: none; border-radius: 6px; padding: 6px 10px; cursor: pointer;
+            font-size: 0.82rem; color: #fff;
+        }
+        .btn-load { background: var(--obs-primary); }
+        .btn-del { background: #ef4444; }
+        .empty-history { color: #94a3b8; text-align: center; padding: 1.5rem; }
+        .toast {
+            position: fixed; right: 20px; bottom: 20px; background: #0369a1; color: #fff;
+            padding: 12px 16px; border-radius: 8px; z-index: 2000;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2); display: none;
+        }
+        .toast.error { background: #b91c1c; }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="logo">
+            <img src="logo_phu_san_dai_anh.PNG" alt="Phòng khám Phụ Sản Đại Anh" onerror="this.style.display='none'">
+            <div class="logo-text">
+                <h1>Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                <p class="admin-slogan">Uy Tín - Chất Lượng</p>
+                <p class="page-subtitle">Phiếu khám sản (ANC)</p>
+            </div>
+        </div>
+        <nav>
+            <div class="nav-row">
+                <a href="admin.html" class="header-nav-btn"><i class="fas fa-cog"></i> Admin</a>
+                <a href="examination-list.html" class="header-nav-btn" title="Danh sách lịch hẹn trong ngày"><i class="fas fa-calendar-check"></i> Danh sách khám</a>
+                <a href="cervical-examination-analysis.html" class="header-nav-btn"><i class="fas fa-search-plus"></i> Soi cổ tử cung</a>
+                <a href="gynecology-records.html" class="header-nav-btn" title="Quản lý bệnh lý phụ khoa và theo dõi điều trị"><i class="fas fa-venus"></i> Phụ khoa</a>
+                <a href="gynecology-examination.html" class="header-nav-btn" title="Phiếu khám phụ khoa có cấu trúc"><i class="fas fa-notes-medical"></i> Phiếu khám PK</a>
+                <a href="obstetric-examination.html" class="header-nav-btn active" title="Phiếu khám sản định kỳ (ANC)"><i class="fas fa-baby"></i> Phiếu khám sản</a>
+                <a href="follicle-monitoring.html" class="header-nav-btn" title="Theo dõi nang vô sinh"><i class="fas fa-circle-notch"></i> Theo dõi nang</a>
+                <a href="andrology-examination.html" class="header-nav-btn" title="Nam khoa / tinh dịch đồ"><i class="fas fa-mars"></i> Nam khoa</a>
+                <a href="infertility-couple.html" class="header-nav-btn" title="Hồ sơ cặp vợ chồng vô sinh"><i class="fas fa-user-friends"></i> Cặp VS</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="admin-main">
+        <div class="page-intro">
+            <h2>Theo dõi thai kỳ (ANC follow-up)</h2>
+            <p>Sinh hiệu, phù, que thử nước tiểu, chiều cao tử cung, ngôi/tim thai lâm sàng, Leopold, chẩn đoán và hẹn tái khám. Không thay phiếu lần đầu đầy đủ.</p>
+            <div class="quick-links">
+                <a href="#" onclick="openLinkedPage('ultrasound-analysis.html'); return false;"><i class="fas fa-baby"></i> Mở SA thai</a>
+                <a href="#" onclick="openLinkedPage('ctg-analysis.html'); return false;"><i class="fas fa-heartbeat"></i> Mở CTG</a>
+            </div>
+        </div>
+
+        <form class="exam-form" id="obs-exam-form" onsubmit="return false;">
+            <input type="hidden" id="result-id" value="">
+            <input type="hidden" id="appointment-id" value="">
+
+            <h3><i class="fas fa-user"></i> Hành chính &amp; thai kỳ</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="patient-select">Bệnh nhân *</label>
+                    <select id="patient-select" required>
+                        <option value="">-- Chọn bệnh nhân --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="pregnancy-episode-id">Thai kỳ</label>
+                    <select id="pregnancy-episode-id">
+                        <option value="">-- Không gắn / chưa có --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="exam-date">Ngày khám *</label>
+                    <input type="datetime-local" id="exam-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="doctor-name">Bác sĩ</label>
+                    <input type="text" id="doctor-name" placeholder="PK Đại Anh">
+                </div>
+                <div class="form-group">
+                    <label for="chief-complaint">Triệu chứng / lý do</label>
+                    <input type="text" id="chief-complaint" placeholder="Khám thai định kỳ, phù chân...">
+                </div>
+                <div class="form-group">
+                    <label for="ga-weeks">Tuổi thai (tuần)</label>
+                    <input type="number" id="ga-weeks" min="0" max="45">
+                </div>
+                <div class="form-group">
+                    <label for="ga-days">Tuổi thai (ngày)</label>
+                    <input type="number" id="ga-days" min="0" max="6">
+                </div>
+                <div class="form-group">
+                    <label for="gravida">Gravida</label>
+                    <input type="number" id="gravida" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="para">Para</label>
+                    <input type="text" id="para" placeholder="VD: 1-0-0-1">
+                </div>
+                <div class="form-group">
+                    <label for="lmp-date">LMP</label>
+                    <input type="date" id="lmp-date">
+                </div>
+                <div class="form-group">
+                    <label for="edd-date">EDD</label>
+                    <input type="date" id="edd-date">
+                </div>
+            </div>
+
+            <h3><i class="fas fa-heartbeat"></i> Sinh hiệu &amp; cân</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="weight-kg">Cân nặng (kg)</label>
+                    <input type="number" step="0.1" id="weight-kg">
+                </div>
+                <div class="form-group">
+                    <label for="height-cm">Chiều cao (cm)</label>
+                    <input type="number" step="0.1" id="height-cm">
+                </div>
+                <div class="form-group">
+                    <label for="bmi">BMI</label>
+                    <input type="number" step="0.1" id="bmi" readonly placeholder="Tự tính">
+                </div>
+                <div class="form-group">
+                    <label for="bp-systolic">HA tâm thu</label>
+                    <input type="number" id="bp-systolic" placeholder="mmHg">
+                </div>
+                <div class="form-group">
+                    <label for="bp-diastolic">HA tâm trương</label>
+                    <input type="number" id="bp-diastolic" placeholder="mmHg">
+                </div>
+                <div class="form-group">
+                    <label for="pulse">Mạch</label>
+                    <input type="number" id="pulse">
+                </div>
+                <div class="form-group">
+                    <label for="temperature-c">Nhiệt độ (°C)</label>
+                    <input type="number" step="0.1" id="temperature-c">
+                </div>
+                <div class="form-group">
+                    <label for="edema">Phù</label>
+                    <select id="edema">
+                        <option value="">-- Chọn --</option>
+                        <option value="none">Không</option>
+                        <option value="mild">Nhẹ</option>
+                        <option value="moderate">Vừa</option>
+                        <option value="severe">Nặng</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="urine-protein">Protein niệu (que thử)</label>
+                    <select id="urine-protein">
+                        <option value="">-- Chọn --</option>
+                        <option value="negative">Âm tính</option>
+                        <option value="trace">Vết</option>
+                        <option value="1+">1+</option>
+                        <option value="2+">2+</option>
+                        <option value="3+">3+</option>
+                        <option value="4+">4+</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="urine-glucose">Glucose niệu</label>
+                    <select id="urine-glucose">
+                        <option value="">-- Chọn --</option>
+                        <option value="negative">Âm tính</option>
+                        <option value="trace">Vết</option>
+                        <option value="1+">1+</option>
+                        <option value="2+">2+</option>
+                        <option value="3+">3+</option>
+                        <option value="4+">4+</option>
+                    </select>
+                </div>
+            </div>
+
+            <h3><i class="fas fa-female"></i> Khám bụng sản</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="fundal-height-cm">Chiều cao tử cung (cm)</label>
+                    <input type="number" step="0.1" id="fundal-height-cm">
+                </div>
+                <div class="form-group">
+                    <label for="fetal-heart-rate">Tim thai lâm sàng (lần/phút)</label>
+                    <input type="number" id="fetal-heart-rate">
+                </div>
+                <div class="form-group">
+                    <label for="presentation">Ngôi thai</label>
+                    <select id="presentation">
+                        <option value="">-- Chọn --</option>
+                        <option value="cephalic">Ngôi đầu</option>
+                        <option value="breech">Ngôi mông</option>
+                        <option value="transverse">Ngôi ngang</option>
+                        <option value="oblique">Ngôi chéo</option>
+                        <option value="unstable">Chưa ổn định</option>
+                        <option value="other">Khác</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="fetal-movement">Cử động thai</label>
+                    <select id="fetal-movement">
+                        <option value="">-- Chọn --</option>
+                        <option value="normal">Bình thường</option>
+                        <option value="decreased">Giảm</option>
+                        <option value="increased">Tăng</option>
+                        <option value="absent">Không thấy</option>
+                    </select>
+                </div>
+                <div class="form-group full">
+                    <label for="leopold-findings">Leopold</label>
+                    <textarea id="leopold-findings" placeholder="Mô tả 4 thao tác Leopold..."></textarea>
+                </div>
+                <div class="form-group full">
+                    <label for="exam-notes">Ghi chú khám</label>
+                    <textarea id="exam-notes"></textarea>
+                </div>
+            </div>
+
+            <h3><i class="fas fa-file-medical"></i> Chẩn đoán &amp; kế hoạch</h3>
+            <div class="form-row">
+                <div class="form-group full">
+                    <label for="diagnosis">Chẩn đoán</label>
+                    <textarea id="diagnosis" placeholder="Thai ... tuần, theo dõi..."></textarea>
+                </div>
+                <div class="form-group full">
+                    <label for="treatment-plan">Kế hoạch / xử trí</label>
+                    <textarea id="treatment-plan"></textarea>
+                </div>
+                <div class="form-group full">
+                    <label for="recommendations">Khuyến nghị</label>
+                    <textarea id="recommendations"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="follow-up-date">Hẹn tái khám</label>
+                    <input type="date" id="follow-up-date">
+                </div>
+                <div class="form-group">
+                    <label for="follow-up-notes">Ghi chú tái khám</label>
+                    <input type="text" id="follow-up-notes">
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button type="button" class="btn" onclick="saveResult()"><i class="fas fa-save"></i> Lưu phiếu</button>
+                <button type="button" class="btn btn-secondary" onclick="printResult()" id="print-btn" style="display:none;"><i class="fas fa-print"></i> In PDF</button>
+                <button type="button" class="btn btn-secondary" onclick="resetForm()"><i class="fas fa-eraser"></i> Làm mới</button>
+                <button type="button" class="btn btn-secondary" onclick="openLinkedPage('ultrasound-analysis.html')"><i class="fas fa-baby"></i> SA thai</button>
+                <button type="button" class="btn btn-secondary" onclick="openLinkedPage('ctg-analysis.html')"><i class="fas fa-heartbeat"></i> CTG</button>
+            </div>
+        </form>
+
+        <section class="history-panel">
+            <h3><i class="fas fa-history"></i> Lịch sử khám sản định kỳ</h3>
+            <div id="history-container" class="empty-history">Chọn bệnh nhân để xem lịch sử.</div>
+        </section>
+    </main>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        let currentEditingId = null;
+        const FIELD_MAP = {
+            'doctor-name': 'doctor_name',
+            'chief-complaint': 'chief_complaint',
+            'ga-weeks': 'ga_weeks',
+            'ga-days': 'ga_days',
+            'gravida': 'gravida',
+            'para': 'para',
+            'lmp-date': 'lmp_date',
+            'edd-date': 'edd_date',
+            'weight-kg': 'weight_kg',
+            'height-cm': 'height_cm',
+            'bmi': 'bmi',
+            'bp-systolic': 'bp_systolic',
+            'bp-diastolic': 'bp_diastolic',
+            'pulse': 'pulse',
+            'temperature-c': 'temperature_c',
+            'fundal-height-cm': 'fundal_height_cm',
+            'fetal-heart-rate': 'fetal_heart_rate',
+            'presentation': 'presentation',
+            'leopold-findings': 'leopold_findings',
+            'fetal-movement': 'fetal_movement',
+            'edema': 'edema',
+            'urine-protein': 'urine_protein',
+            'urine-glucose': 'urine_glucose',
+            'exam-notes': 'exam_notes',
+            'diagnosis': 'diagnosis',
+            'treatment-plan': 'treatment_plan',
+            'recommendations': 'recommendations',
+            'follow-up-date': 'follow_up_date',
+            'follow-up-notes': 'follow_up_notes',
+        };
+        const INT_FIELDS = ['ga_weeks', 'ga_days', 'gravida', 'bp_systolic', 'bp_diastolic', 'pulse', 'fetal_heart_rate'];
+        const FLOAT_FIELDS = ['weight_kg', 'height_cm', 'bmi', 'temperature_c', 'fundal_height_cm'];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            setDefaultExamDate();
+            await loadPatients();
+            const params = new URLSearchParams(location.search);
+            if (params.get('appointment_id')) {
+                document.getElementById('appointment-id').value = params.get('appointment_id');
+                await resolveFromAppointment(params.get('appointment_id'));
+            }
+            if (params.get('patient_id')) {
+                document.getElementById('patient-select').value = params.get('patient_id');
+            } else if (params.get('phone')) {
+                await selectPatientByPhone(params.get('phone'));
+            }
+            if (document.getElementById('patient-select').value) {
+                await loadPregnancyEpisodes();
+                await loadHistory();
+            }
+            if (params.get('pregnancy_episode_id')) {
+                document.getElementById('pregnancy-episode-id').value = params.get('pregnancy_episode_id');
+            }
+            if (params.get('result_id')) {
+                await loadResult(params.get('result_id'));
+            }
+            document.getElementById('patient-select').addEventListener('change', async () => {
+                await loadPregnancyEpisodes();
+                await loadHistory();
+            });
+            document.getElementById('weight-kg').addEventListener('input', syncBmi);
+            document.getElementById('height-cm').addEventListener('input', syncBmi);
+            updatePrintButton();
+        });
+
+        function setDefaultExamDate() {
+            const el = document.getElementById('exam-date');
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            el.value = now.toISOString().slice(0, 16);
+        }
+
+        function showToast(msg, isError) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.toggle('error', !!isError);
+            t.style.display = 'block';
+            setTimeout(() => { t.style.display = 'none'; }, 3200);
+        }
+
+        function numOrNull(v) {
+            if (v === '' || v == null) return null;
+            const n = Number(v);
+            return Number.isFinite(n) ? n : null;
+        }
+
+        function syncBmi() {
+            const w = numOrNull(document.getElementById('weight-kg').value);
+            const h = numOrNull(document.getElementById('height-cm').value);
+            if (w == null || h == null || h <= 0) {
+                document.getElementById('bmi').value = '';
+                return;
+            }
+            const bmi = w / Math.pow(h / 100, 2);
+            document.getElementById('bmi').value = (Math.round(bmi * 10) / 10).toString();
+        }
+
+        function updatePrintButton() {
+            const btn = document.getElementById('print-btn');
+            if (btn) btn.style.display = currentEditingId ? 'inline-flex' : 'none';
+        }
+
+        async function loadPatients() {
+            try {
+                const res = await fetch('/api/patients');
+                if (!res.ok) throw new Error('Không tải được danh sách bệnh nhân');
+                const patients = await res.json();
+                const select = document.getElementById('patient-select');
+                const list = Array.isArray(patients) ? patients : (patients.data || patients.patients || []);
+                list.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    const name = p.full_name || p.name || ('BN #' + p.id);
+                    const phone = p.phone ? ` — ${p.phone}` : '';
+                    opt.textContent = `${name}${phone}`;
+                    select.appendChild(opt);
+                });
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        async function loadPregnancyEpisodes() {
+            const patientId = document.getElementById('patient-select').value;
+            const select = document.getElementById('pregnancy-episode-id');
+            const prev = select.value;
+            select.innerHTML = '<option value="">-- Không gắn / chưa có --</option>';
+            if (!patientId) return;
+            try {
+                const res = await fetch(`/api/pregnancy-episodes?patient_id=${patientId}`);
+                const rows = await res.json();
+                if (!res.ok) return;
+                (rows || []).forEach(ep => {
+                    const opt = document.createElement('option');
+                    opt.value = ep.id;
+                    const status = ep.status || '';
+                    const lmp = ep.lmp_date || '';
+                    const edd = ep.expected_delivery_date || ep.edd_date || '';
+                    opt.textContent = `#${ep.id} ${status}${lmp ? ' · LMP ' + lmp : ''}${edd ? ' · EDD ' + edd : ''}`;
+                    select.appendChild(opt);
+                });
+                const active = (rows || []).find(ep => ep.status === 'active');
+                if (prev) select.value = prev;
+                else if (active) {
+                    select.value = active.id;
+                    applyEpisodeToForm(active);
+                }
+            } catch (e) {
+                console.warn(e);
+            }
+        }
+
+        function applyEpisodeToForm(ep) {
+            if (!ep) return;
+            if (ep.lmp_date && !document.getElementById('lmp-date').value) {
+                document.getElementById('lmp-date').value = ep.lmp_date.slice(0, 10);
+            }
+            const edd = ep.expected_delivery_date || ep.edd_date;
+            if (edd && !document.getElementById('edd-date').value) {
+                document.getElementById('edd-date').value = String(edd).slice(0, 10);
+            }
+            if (ep.gravida != null && document.getElementById('gravida').value === '') {
+                document.getElementById('gravida').value = ep.gravida;
+            }
+            if (ep.para && !document.getElementById('para').value) {
+                document.getElementById('para').value = ep.para;
+            }
+            if (ep.doctor_name && !document.getElementById('doctor-name').value) {
+                document.getElementById('doctor-name').value = ep.doctor_name;
+            }
+            if (ep.lmp_date && document.getElementById('ga-weeks').value === '') {
+                const ga = calcGaFromLmp(ep.lmp_date);
+                if (ga) {
+                    document.getElementById('ga-weeks').value = ga.weeks;
+                    document.getElementById('ga-days').value = ga.days;
+                }
+            }
+        }
+
+        function calcGaFromLmp(lmpStr) {
+            try {
+                const lmp = new Date(lmpStr);
+                if (Number.isNaN(lmp.getTime())) return null;
+                const now = new Date();
+                const diffDays = Math.floor((now - lmp) / (24 * 3600 * 1000));
+                if (diffDays < 0) return null;
+                return { weeks: Math.floor(diffDays / 7), days: diffDays % 7 };
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function resolveFromAppointment(appointmentId) {
+            try {
+                const res = await fetch(`/api/appointments/${appointmentId}`);
+                if (!res.ok) return;
+                const appt = await res.json();
+                if (appt.patient_id) document.getElementById('patient-select').value = appt.patient_id;
+                if (appt.doctor_name && !document.getElementById('doctor-name').value) {
+                    document.getElementById('doctor-name').value = appt.doctor_name;
+                }
+                if (appt.pregnancy_episode_id) {
+                    await loadPregnancyEpisodes();
+                    document.getElementById('pregnancy-episode-id').value = appt.pregnancy_episode_id;
+                }
+            } catch (e) {
+                console.warn(e);
+            }
+        }
+
+        async function selectPatientByPhone(phone) {
+            if (!phone) return;
+            const select = document.getElementById('patient-select');
+            const match = Array.from(select.options).find(opt => (opt.textContent || '').includes(phone));
+            if (match) select.value = match.value;
+        }
+
+        function getFormData() {
+            const data = {
+                patient_id: numOrNull(document.getElementById('patient-select').value),
+                appointment_id: numOrNull(document.getElementById('appointment-id').value),
+                pregnancy_episode_id: numOrNull(document.getElementById('pregnancy-episode-id').value),
+                exam_date: document.getElementById('exam-date').value,
+                analysis_source: 'manual_input',
+            };
+            Object.entries(FIELD_MAP).forEach(([domId, key]) => {
+                const el = document.getElementById(domId);
+                if (!el) return;
+                let val = el.value;
+                if (INT_FIELDS.includes(key) || FLOAT_FIELDS.includes(key)) val = numOrNull(val);
+                data[key] = val === '' ? null : val;
+            });
+            return data;
+        }
+
+        function fillForm(data) {
+            if (data.patient_id) document.getElementById('patient-select').value = data.patient_id;
+            if (data.appointment_id) document.getElementById('appointment-id').value = data.appointment_id;
+            if (data.exam_date) {
+                const d = new Date(data.exam_date);
+                d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+                document.getElementById('exam-date').value = d.toISOString().slice(0, 16);
+            }
+            Object.entries(FIELD_MAP).forEach(([domId, key]) => {
+                const el = document.getElementById(domId);
+                if (!el || data[key] == null) return;
+                el.value = data[key];
+            });
+            if (data.pregnancy_episode_id != null) {
+                document.getElementById('pregnancy-episode-id').value = data.pregnancy_episode_id;
+            }
+            currentEditingId = data.id || null;
+            document.getElementById('result-id').value = currentEditingId || '';
+            updatePrintButton();
+        }
+
+        function resetForm(keepPatient) {
+            const patientId = keepPatient ? document.getElementById('patient-select').value : '';
+            const appointmentId = keepPatient ? document.getElementById('appointment-id').value : '';
+            const episodeId = keepPatient ? document.getElementById('pregnancy-episode-id').value : '';
+            document.getElementById('obs-exam-form').reset();
+            document.getElementById('appointment-id').value = appointmentId;
+            if (patientId) document.getElementById('patient-select').value = patientId;
+            if (episodeId) document.getElementById('pregnancy-episode-id').value = episodeId;
+            currentEditingId = null;
+            document.getElementById('result-id').value = '';
+            setDefaultExamDate();
+            updatePrintButton();
+        }
+
+        function openLinkedPage(page) {
+            const params = new URLSearchParams();
+            const pid = document.getElementById('patient-select').value;
+            const aid = document.getElementById('appointment-id').value;
+            const eid = document.getElementById('pregnancy-episode-id').value;
+            if (pid) params.set('patient_id', pid);
+            if (aid) params.set('appointment_id', aid);
+            if (eid) params.set('pregnancy_episode_id', eid);
+            window.open(`/${page}?${params.toString()}`, '_blank');
+        }
+
+        function printResult() {
+            if (!currentEditingId) {
+                showToast('Hãy lưu phiếu trước khi in', true);
+                return;
+            }
+            window.open(`/api/print_obstetric_exam/${currentEditingId}`, '_blank');
+        }
+
+        async function saveResult() {
+            const data = getFormData();
+            if (!data.patient_id) {
+                showToast('Vui lòng chọn bệnh nhân', true);
+                return;
+            }
+            try {
+                const url = currentEditingId
+                    ? `/api/obstetric-exam-results/${currentEditingId}`
+                    : '/api/obstetric-exam-results';
+                const method = currentEditingId ? 'PUT' : 'POST';
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+                const body = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(body.message || 'Lưu thất bại');
+                if (body.id) currentEditingId = body.id;
+                if (body.result && body.result.id) currentEditingId = body.result.id;
+                document.getElementById('result-id').value = currentEditingId || '';
+                updatePrintButton();
+                showToast(body.message || 'Đã lưu');
+                await loadHistory();
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        async function loadHistory() {
+            const patientId = document.getElementById('patient-select').value;
+            const box = document.getElementById('history-container');
+            if (!patientId) {
+                box.className = 'empty-history';
+                box.textContent = 'Chọn bệnh nhân để xem lịch sử.';
+                return;
+            }
+            try {
+                const res = await fetch(`/api/obstetric-exam-results?patient_id=${patientId}`);
+                const rows = await res.json();
+                if (!res.ok) throw new Error(rows.message || 'Lỗi tải lịch sử');
+                if (!rows.length) {
+                    box.className = 'empty-history';
+                    box.textContent = 'Chưa có phiếu khám sản định kỳ.';
+                    return;
+                }
+                box.className = '';
+                box.innerHTML = `
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Ngày</th>
+                                <th>Tuổi thai</th>
+                                <th>HA</th>
+                                <th>Chẩn đoán</th>
+                                <th>Tái khám</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows.map(r => {
+                                const ga = (r.ga_weeks != null || r.ga_days != null)
+                                    ? `${r.ga_weeks ?? 0}w${r.ga_days ?? 0}d` : '—';
+                                const bp = (r.bp_systolic != null || r.bp_diastolic != null)
+                                    ? `${r.bp_systolic ?? '—'}/${r.bp_diastolic ?? '—'}` : '—';
+                                return `
+                                <tr>
+                                    <td>${r.exam_date ? new Date(r.exam_date).toLocaleString('vi-VN') : ''}</td>
+                                    <td>${ga}</td>
+                                    <td>${bp}</td>
+                                    <td>${(r.diagnosis || '—').toString().slice(0, 60)}</td>
+                                    <td>${r.follow_up_date || '—'}</td>
+                                    <td class="history-actions">
+                                        <button type="button" class="btn-load" onclick="loadResult(${r.id})">Mở</button>
+                                        <button type="button" class="btn-load" onclick="window.open('/api/print_obstetric_exam/${r.id}','_blank')">In</button>
+                                        <button type="button" class="btn-del" onclick="deleteResult(${r.id})">Xóa</button>
+                                    </td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (e) {
+                box.className = 'empty-history';
+                box.textContent = e.message;
+            }
+        }
+
+        async function loadResult(id) {
+            try {
+                const res = await fetch(`/api/obstetric-exam-results/${id}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.message || 'Không tải được phiếu');
+                if (data.patient_id) {
+                    document.getElementById('patient-select').value = data.patient_id;
+                    await loadPregnancyEpisodes();
+                }
+                fillForm(data);
+                showToast('Đã tải phiếu #' + id);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        async function deleteResult(id) {
+            if (!confirm('Xóa phiếu khám sản #' + id + '?')) return;
+            try {
+                const res = await fetch(`/api/obstetric-exam-results/${id}`, { method: 'DELETE' });
+                const body = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(body.message || 'Xóa thất bại');
+                if (String(currentEditingId) === String(id)) resetForm(true);
+                showToast(body.message || 'Đã xóa');
+                await loadHistory();
+            } catch (e) {
+                showToast(e.message, true);
+            }
+        }
+
+        document.getElementById('pregnancy-episode-id').addEventListener('change', async () => {
+            const id = document.getElementById('pregnancy-episode-id').value;
+            if (!id) return;
+            const patientId = document.getElementById('patient-select').value;
+            if (!patientId) return;
+            try {
+                const res = await fetch(`/api/pregnancy-episodes?patient_id=${patientId}`);
+                const rows = await res.json();
+                const ep = (rows || []).find(r => String(r.id) === String(id));
+                applyEpisodeToForm(ep);
+            } catch (e) {
+                console.warn(e);
+            }
+        });
+    </script>
+    <script src="ai-assistant.js"></script>
+    <script src="footer-loader.js"></script>
+</body>
+</html>

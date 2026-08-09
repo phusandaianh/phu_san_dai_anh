@@ -21,6 +21,7 @@ multidict==6.7.1
 numpy==2.4.4
 opencv-python==4.13.0.92
 pillow==12.2.0
+pytesseract==0.3.13
 propcache==0.5.2
 pydicom==3.0.2
 PyJWT==2.12.1

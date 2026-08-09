@@ -121,6 +121,112 @@
         .modal.hidden {
             display: none !important;
         }
+        /* Modal đăng ký khám — desktop */
+        #register-modal {
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            background: rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 12px;
+            box-sizing: border-box;
+        }
+        #register-modal .modal-content {
+            background: #fff;
+            padding: 2rem 1.5rem;
+            border-radius: 14px;
+            min-width: 320px;
+            max-width: min(520px, 95vw);
+            width: 100%;
+            max-height: min(92vh, 92dvh);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            position: relative;
+            box-sizing: border-box;
+        }
+        #register-modal #close-modal-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #d32f2f;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            font-weight: 700;
+            line-height: 1;
+            z-index: 2;
+        }
+        /* Mobile: modal full màn hình như trang booking */
+        @media (max-width: 768px) {
+            #register-modal {
+                padding: 0;
+                background: #f8fafc;
+                align-items: stretch;
+                justify-content: stretch;
+            }
+            #register-modal .modal-content {
+                min-width: 0;
+                max-width: none;
+                width: 100%;
+                height: 100%;
+                max-height: none;
+                border-radius: 0;
+                padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+                box-shadow: none;
+            }
+            #register-modal #close-modal-btn {
+                top: calc(10px + env(safe-area-inset-top, 0px));
+                right: 12px;
+                width: 40px;
+                height: 40px;
+                font-size: 1.25rem;
+            }
+            #register-modal h2 {
+                padding-right: 48px;
+                margin-top: 0.25rem;
+            }
+            #register-type-group {
+                flex-direction: column;
+                gap: 8px;
+            }
+            #register-type-first,
+            #register-type-repeat {
+                border-radius: 10px !important;
+                border-left: none !important;
+                font-size: 1.15rem !important;
+                padding: 14px 0 !important;
+            }
+            #success-ticket-modal {
+                padding: 0 !important;
+                background: #f8fafc !important;
+                align-items: stretch !important;
+                justify-content: stretch !important;
+            }
+            #success-ticket-modal .modal-content {
+                min-width: 0 !important;
+                max-width: none !important;
+                width: 100% !important;
+                height: 100% !important;
+                max-height: none !important;
+                border-radius: 0 !important;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+                box-sizing: border-box;
+            }
+        }
         /* Wheel picker ngày sinh */
         .dob-picker-wrap { margin-bottom: 8px; }
         .dob-picker {
@@ -227,9 +333,9 @@
         <div class="schedule-list" id="schedule-list"></div>
     </section>
     <!-- Popup đăng ký khám -->
-    <div id="register-modal" class="modal hidden" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;z-index:1000;">
-      <div class="modal-content" style="background:#fff;padding:2rem 1.5rem;border-radius:14px;min-width:320px;max-width:95vw;position:relative;">
-        <button id="close-modal-btn" aria-label="Đóng" style="position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:50%;background:#d32f2f;color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;line-height:1;">&times;</button>
+    <div id="register-modal" class="modal hidden">
+      <div class="modal-content">
+        <button id="close-modal-btn" type="button" aria-label="Đóng">&times;</button>
         <h2 style="margin-top:0">Đăng ký khám</h2>
         <form id="register-form">
           <div id="register-type-group" style="display:flex;margin-bottom:16px;">
@@ -265,7 +371,7 @@
               </select>
             </div>
             <input type="text" id="patient-address" placeholder="Địa chỉ" required style="width:100%;margin-bottom:8px;padding:7px;border-radius:6px;border:1px solid #ccc;">
-            <input type="text" id="patient-reason" placeholder="Lý do khám/Dịch vụ" list="reasons-list" style="width:100%;margin-bottom:8px;padding:7px;border-radius:6px;border:1px solid #ccc;">
+            <input type="text" id="patient-reason" placeholder="Lý do khám/Dịch vụ" list="reasons-list" required style="width:100%;margin-bottom:8px;padding:7px;border-radius:6px;border:1px solid #ccc;">
             <datalist id="reasons-list"></datalist>
             <div style="margin-bottom:8px;">
               <label for="appointment-time" style="display:block;font-size:0.9rem;color:#555;margin-bottom:6px;">Chọn giờ đăng ký khám :</label>
@@ -284,6 +390,30 @@
     <script>
     // Lịch/đăng ký qua API host hiện tại (booking online). pk đồng bộ lịch + hẹn qua sync/mirror khi tunnel bật.
     let scheduleRefreshSeconds = 45;
+
+    /** Chuẩn hóa SĐT VN: bỏ ký tự lạ, +84/84 → 0… */
+    function normalizeVNPhone(raw) {
+      let digits = String(raw || '').replace(/\D/g, '');
+      if (digits.indexOf('84') === 0 && digits.length >= 10) {
+        digits = '0' + digits.slice(2);
+      }
+      return digits;
+    }
+    function isValidVNPhone(raw) {
+      return /^\d{10,11}$/.test(normalizeVNPhone(raw));
+    }
+    /** Bật/tắt nút Xác nhận khi chưa chọn slot hợp lệ */
+    function updateBookingSubmitState() {
+      const submitBtn = document.querySelector('#register-form .register-btn');
+      const timeEl = document.getElementById('appointment-time');
+      if (!submitBtn || !timeEl) return;
+      const selOpt = timeEl.options[timeEl.selectedIndex];
+      const hasSlot = !!(timeEl.value && selOpt && selOpt.value &&
+        selOpt.textContent.indexOf('Không còn khung giờ') === -1);
+      submitBtn.disabled = !hasSlot;
+      submitBtn.style.opacity = hasSlot ? '1' : '0.55';
+      submitBtn.style.cursor = hasSlot ? 'pointer' : 'not-allowed';
+    }
     // Hàm lấy thứ tiếng Việt
     function getVietnameseDay(dateStr) {
       const d = new Date(dateStr);
@@ -367,6 +497,7 @@
       document.querySelectorAll('.register-btn[data-trial-slot]').forEach(btn => {
         btn.onclick = function() {
           document.getElementById('register-modal').classList.remove('hidden');
+          document.body.style.overflow = 'hidden';
           const dateStr = this.dataset.date;
           const timeStr = this.dataset.time;
           const service = this.dataset.service;
@@ -476,6 +607,7 @@
   document.querySelectorAll('.register-btn[data-date]').forEach(btn => {
     btn.onclick = async function() {
       document.getElementById('register-modal').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
       // Hiển thị ngày tháng năm đúng định dạng như ô lịch
       const dateStr = this.dataset.date;
       const weekday = getVietnameseDay(dateStr);
@@ -505,15 +637,21 @@
             opt.textContent = hhmm;
             select.appendChild(opt);
           });
+          if (slotData.slots.length === 1) {
+            select.value = slotData.slots[0];
+          }
         } else {
           const opt = document.createElement('option');
           opt.value = '';
           opt.textContent = 'Không còn khung giờ trống';
+          opt.disabled = true;
           select.appendChild(opt);
           select.value = '';
         }
+        updateBookingSubmitState();
       } catch (e) {
         console.error('Không tải được slot:', e);
+        updateBookingSubmitState();
       }
       if (typeof window.__bookingRefreshLookupIfRepeat === 'function') {
         window.__bookingRefreshLookupIfRepeat();
@@ -774,6 +912,7 @@
     // Đóng popup
     document.getElementById('close-modal-btn').onclick = function() {
       document.getElementById('register-modal').classList.add('hidden');
+      document.body.style.overflow = '';
     };
     // Gửi form đăng ký
     document.getElementById('register-form').onsubmit = async function(e) {
@@ -781,16 +920,30 @@
       const submitBtn = this.querySelector('.register-btn');
       const originalSubmitText = submitBtn ? submitBtn.innerHTML : '';
       const name = document.getElementById('patient-name').value;
-      const phone = document.getElementById('patient-phone').value;
+      const phoneRaw = document.getElementById('patient-phone').value;
+      const phone = normalizeVNPhone(phoneRaw);
       const dob = document.getElementById('patient-dob').value;
       const address = document.getElementById('patient-address').value;
-      const reason = document.getElementById('patient-reason').value;
+      const reason = (document.getElementById('patient-reason').value || '').trim();
       const time = document.getElementById('appointment-time').value;
       const date = this.dataset.date;
       const start = this.dataset.start;
       const end = this.dataset.end;
       const doctor = this.dataset.doctor;
       if (!dob) { alert('Vui lòng chọn ngày sinh!'); return; }
+      if (!isValidVNPhone(phoneRaw)) {
+        alert('Số điện thoại không hợp lệ. Vui lòng nhập đúng 10–11 số.');
+        return;
+      }
+      if (!reason) {
+        alert('Vui lòng nhập lý do khám / dịch vụ.');
+        return;
+      }
+      if (!time) {
+        alert('Vui lòng chọn giờ đăng ký khám. Nếu không còn khung giờ trống, vui lòng chọn ca khác.');
+        return;
+      }
+      document.getElementById('patient-phone').value = phone;
       const bookingPidRaw = (document.getElementById('booking-patient-id').value || '').trim();
       const bookingPatientIdNum = bookingPidRaw ? parseInt(bookingPidRaw, 10) : NaN;
       const payload = {
@@ -945,8 +1098,9 @@
         applyProfileById(v);
       }
       async function lookupByPhone(){
-        const phone = phoneEl.value.trim();
-        if (!/^\d{10,11}$/.test(phone)) return;
+        const phone = normalizeVNPhone(phoneEl.value);
+        if (phone && phone !== phoneEl.value.trim()) phoneEl.value = phone;
+        if (!isValidVNPhone(phone)) return;
         try {
           const res = await fetch(`/api/patients/by-phone?phone=${encodeURIComponent(phone)}`, { cache: 'no-store' });
           const data = await res.json();
@@ -1026,12 +1180,17 @@
       /** Mở lại modal đăng ký: nếu đang chế độ khám lại và đã có SĐT, tải lại hồ sơ từ server (sau khi sửa ở danh sách khám). */
       window.__bookingRefreshLookupIfRepeat = function () {
         if (registerMode !== 'repeat') return;
-        const phone = phoneEl.value.trim();
-        if (/^\d{10,11}$/.test(phone)) lookupByPhone();
+        const phone = normalizeVNPhone(phoneEl.value);
+        if (isValidVNPhone(phone)) lookupByPhone();
       };
       bindLookupEventsOnce();
       btnFirst.onclick = activateFirst;
       btnRepeat.onclick = activateRepeat;
+      const timeSelectEl = document.getElementById('appointment-time');
+      if (timeSelectEl) {
+        timeSelectEl.addEventListener('change', updateBookingSubmitState);
+      }
+      updateBookingSubmitState();
     })();
 
     // Biến để lưu trạng thái nút đang chọn
@@ -1309,6 +1468,7 @@
       window.showSuccessTicket = async ({name, phone, date, time, doctor, appointmentId}) => {
         console.log('Hàm showSuccessTicket được gọi với:', {name, phone, date, time, doctor, appointmentId});
         document.getElementById('register-modal').classList.add('hidden');
+        document.body.style.overflow = '';
         
         // Hiển thị tên bác sĩ ở đầu phiếu
         // XÓA dòng hiển thị tên bác sĩ phía trên dòng ĐĂNG KÝ THÀNH CÔNG (không cần set ticket-doctor-name)
@@ -1348,12 +1508,16 @@
         `;
         console.log('Hiển thị modal...');
         modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
         console.log('Modal đã được hiển thị');
 
         // Setup cancel action
         const btnCancel = document.getElementById('cancel-booking-btn');
         const closeBtn = document.getElementById('close-success-ticket');
-        closeBtn.onclick = () => { modal.classList.add('hidden'); };
+        closeBtn.onclick = () => {
+          modal.classList.add('hidden');
+          document.body.style.overflow = '';
+        };
 
         // Reset UI state mỗi lần mở phiếu
         if (btnCancel) {

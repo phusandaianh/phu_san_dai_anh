@@ -5,79 +5,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bệnh án phụ khoa - Quản lý khám phụ khoa</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="admin-clinical-shell.css">
     <link rel="stylesheet" href="utilities.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        body { background: #f8fafc; color: #0f172a; font-family: 'Inter', 'Segoe UI', Arial, sans-serif; }
-        .admin-header {
-            background-color: white;
-            color: #2196F3;
-            padding: 1rem 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid #2196F3;
-        }
-        .admin-header .logo img {
-            height: 50px;
-            margin-right: 10px;
-        }
-        .admin-header .logo {
-            display: flex;
-            align-items: center;
-        }
-        .admin-header nav {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            gap: 8px;
-        }
-        .admin-header .nav-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .admin-header .back-link {
-            color: #2196F3;
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-        }
-        .admin-header .back-link.btn.secondary-btn {
-            background-color: transparent;
-            border: 1px solid #2196F3;
-            color: #2196F3;
-        }
-        .admin-main {
-            padding: 20px;
-        }
+        body { background: #f8fafc; color: #0f172a; font-family: Roboto, 'Segoe UI', Arial, sans-serif; }
+        .admin-main { padding: 20px; }
         .page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 1.5rem; }
-        .page-header h1 { margin: 0; font-size: 1.6rem; }
+        .page-header h1 { margin: 0; font-size: 1.6rem; color: #0c4a6e; }
         .page-header p { margin: 4px 0 0; color: #475467; font-size: 0.95rem; max-width: 640px; }
         .toolbar { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
         .toolbar input { flex: 1; min-width: 240px; padding: 10px 14px; border: 1px solid #d0d5dd; border-radius: 8px; font-size: 14px; }
         .toolbar button { padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; }
-        .btn-primary { background: #9333ea; color: white; }
+        .btn-primary { background: #0369a1; color: white; }
         .btn-secondary { background: #e2e8f0; color: #1e293b; }
         .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 24px 0; }
-        .stat-card { background: white; padding: 18px; border-radius: 14px; box-shadow: 0 8px 30px rgba(76, 29, 149, 0.08); border: 1px solid #ede9fe; }
-        .stat-card label { font-size: 0.85rem; letter-spacing: .02em; text-transform: uppercase; color: #a78bfa; }
-        .stat-card strong { display: block; font-size: 1.9rem; margin-top: 8px; color: #581c87; }
+        .stat-card { background: white; padding: 18px; border-radius: 14px; box-shadow: 0 8px 30px rgba(3, 105, 161, 0.08); border: 1px solid #bae6fd; }
+        .stat-card label { font-size: 0.85rem; letter-spacing: .02em; text-transform: uppercase; color: #0284c7; }
+        .stat-card strong { display: block; font-size: 1.9rem; margin-top: 8px; color: #0c4a6e; }
         .patient-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
-        .patient-card { background: white; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 10px 28px rgba(79, 70, 229, 0.08); display: flex; flex-direction: column; }
+        .patient-card { background: white; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 10px 28px rgba(3, 105, 161, 0.08); display: flex; flex-direction: column; }
         .patient-card header { padding: 18px; border-bottom: 1px solid #f1f5f9; display: flex; flex-direction: column; gap: 6px; }
-        .patient-card header h3 { margin: 0; font-size: 1.1rem; color: #312e81; }
-        .patient-meta { font-size: 0.9rem; color: #4c1d95; display: flex; gap: 16px; flex-wrap: wrap; }
+        .patient-card header h3 { margin: 0; font-size: 1.1rem; color: #0c4a6e; }
+        .patient-meta { font-size: 0.9rem; color: #0369a1; display: flex; gap: 16px; flex-wrap: wrap; }
         .visit-table { width: 100%; border-collapse: collapse; }
         .visit-table th, .visit-table td { padding: 10px 14px; font-size: 0.9rem; border-bottom: 1px solid #f1f5f9; text-align: left; }
-        .visit-table th { background: #faf5ff; color: #6b21a8; font-weight: 600; }
-        .visit-table td { color: #312e81; }
+        .visit-table th { background: #e0f2fe; color: #0c4a6e; font-weight: 600; }
+        .visit-table td { color: #0f172a; }
         .visit-table tr:last-child td { border-bottom: none; }
         .tag { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
-        .tag.pending { background: #fdf4ff; color: #86198f; border: 1px solid #f5d0fe; }
+        .tag.pending { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
         .tag.completed { background: #ecfccb; color: #3f6212; }
         .tag.cancelled { background: #fee2e2; color: #b91c1c; }
-        .empty-state { margin: 40px auto; max-width: 480px; text-align: center; color: #7e22ce; background: #fdf4ff; border-radius: 16px; padding: 32px; border: 1px dashed #d946ef; }
-        .empty-state h3 { margin-bottom: 8px; font-size: 1.2rem; color: #6b21a8; }
+        .visit-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .visit-actions a, .visit-actions button {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 5px 10px; border-radius: 6px; border: none; cursor: pointer;
+            font-size: 0.8rem; font-weight: 600; text-decoration: none; color: #fff;
+            background: #0369a1;
+        }
+        .visit-actions .btn-muted { background: #64748b; }
+        .patient-card-actions { margin-top: 8px; }
+        .patient-card-actions a {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 12px; border-radius: 8px; background: #0284c7; color: #fff;
+            text-decoration: none; font-size: 0.85rem; font-weight: 600;
+        }
+        .empty-state { margin: 40px auto; max-width: 480px; text-align: center; color: #0369a1; background: #e0f2fe; border-radius: 16px; padding: 32px; border: 1px dashed #7dd3fc; }
+        .empty-state h3 { margin-bottom: 8px; font-size: 1.2rem; color: #0c4a6e; }
         @media (max-width: 640px) {
             .page-header { flex-direction: column; align-items: flex-start; }
             .toolbar input { min-width: 100%; }
@@ -87,20 +62,24 @@
 <body>
     <header class="admin-header">
         <div class="logo">
-            <img src="logo_phu_san_dai_anh.PNG" alt="Logo Phòng khám Đại Anh">
-            <div>
-                <h1>Bệnh án phụ khoa</h1>
-                <p style="margin: 0; font-size: 0.9rem; color: #666;">Theo dõi toàn bộ bệnh nhân khám phụ khoa, điều trị cổ tử cung, HPV</p>
+            <img src="logo_phu_san_dai_anh.PNG" alt="Phòng khám Phụ Sản Đại Anh" onerror="this.style.display='none'">
+            <div class="logo-text">
+                <h1>Phòng khám chuyên khoa Phụ Sản Đại Anh</h1>
+                <p class="admin-slogan">Uy Tín - Chất Lượng</p>
+                <p class="page-subtitle">Bệnh án phụ khoa</p>
             </div>
         </div>
         <nav>
             <div class="nav-row">
-                <a href="patient-records.html" class="back-link btn secondary-btn">
-                    <i class="fas fa-arrow-left"></i> Quay về hồ sơ tổng
-                </a>
-                <a href="index.html" class="back-link btn secondary-btn">
-                    <i class="fas fa-home"></i> Trang chủ
-                </a>
+                <a href="admin.html" class="header-nav-btn"><i class="fas fa-cog"></i> Admin</a>
+                <a href="examination-list.html" class="header-nav-btn" title="Danh sách lịch hẹn trong ngày"><i class="fas fa-calendar-check"></i> Danh sách khám</a>
+                <a href="cervical-examination-analysis.html" class="header-nav-btn"><i class="fas fa-search-plus"></i> Soi cổ tử cung</a>
+                <a href="gynecology-records.html" class="header-nav-btn active" title="Quản lý bệnh lý phụ khoa và theo dõi điều trị"><i class="fas fa-venus"></i> Phụ khoa</a>
+                <a href="gynecology-examination.html" class="header-nav-btn" title="Phiếu khám phụ khoa có cấu trúc"><i class="fas fa-notes-medical"></i> Phiếu khám PK</a>
+                <a href="obstetric-examination.html" class="header-nav-btn" title="Phiếu khám sản định kỳ (ANC)"><i class="fas fa-baby"></i> Phiếu khám sản</a>
+                <a href="follicle-monitoring.html" class="header-nav-btn" title="Theo dõi nang vô sinh"><i class="fas fa-circle-notch"></i> Theo dõi nang</a>
+                <a href="andrology-examination.html" class="header-nav-btn" title="Nam khoa / tinh dịch đồ"><i class="fas fa-mars"></i> Nam khoa</a>
+                <a href="infertility-couple.html" class="header-nav-btn" title="Hồ sơ cặp vợ chồng vô sinh"><i class="fas fa-user-friends"></i> Cặp VS</a>
             </div>
         </nav>
     </header>
@@ -186,15 +165,32 @@
                 return dateB - dateA; // Descending order (newest first)
             });
             listEl.innerHTML = patients.map(patient => {
-                const visitsRows = patient.visits.map(visit => `
+                const phone = patient.patient_phone || '';
+                const visitsRows = patient.visits.map(visit => {
+                    const apptId = visit.appointment_id || '';
+                    const actions = `
+                        <div class="visit-actions">
+                            <a href="gynecology-examination.html?${apptId ? `appointment_id=${encodeURIComponent(apptId)}&` : ''}phone=${encodeURIComponent(phone)}"
+                               title="Phiếu khám phụ khoa" style="background:#7c3aed;">
+                                <i class="fas fa-notes-medical"></i> Phiếu khám
+                            </a>
+                            <a href="ultrasound-gynecology.html?${apptId ? `appointment_id=${encodeURIComponent(apptId)}&` : ''}phone=${encodeURIComponent(phone)}"
+                               title="Nhập / xem siêu âm phụ khoa">
+                                <i class="fas fa-venus"></i> SA PK
+                            </a>
+                            ${apptId ? `<a class="btn-muted" href="examination-list.html?appointment_id=${encodeURIComponent(apptId)}" title="Mở danh sách khám"><i class="fas fa-stethoscope"></i></a>` : ''}
+                        </div>`;
+                    return `
                     <tr>
                         <td>${formatDate(visit.appointment_date)}</td>
                         <td>${visit.service_type || '—'}</td>
                         <td>${visit.doctor_name || 'PK Đại Anh'}</td>
                         <td><span class="${statusTag(visit.status)}">${visit.status || 'pending'}</span></td>
                         <td>${visit.notes ? visit.notes : '—'}</td>
+                        <td>${actions}</td>
                     </tr>
-                `).join('');
+                `;
+                }).join('');
                 return `
                     <article class="patient-card">
                         <header>
@@ -205,6 +201,14 @@
                                 <span>🔁 Tổng lượt: ${patient.total_visits}</span>
                             </div>
                             <small style="color:#7e22ce;">${patient.status_summary || 'Chưa cập nhật trạng thái'}</small>
+                            <div class="patient-card-actions">
+                                <a href="gynecology-examination.html?phone=${encodeURIComponent(phone)}" style="background:#7c3aed; margin-right:8px;">
+                                    <i class="fas fa-notes-medical"></i> Phiếu khám
+                                </a>
+                                <a href="ultrasound-gynecology.html?phone=${encodeURIComponent(phone)}">
+                                    <i class="fas fa-venus"></i> Siêu âm phụ khoa
+                                </a>
+                            </div>
                         </header>
                         <div style="overflow-x:auto;">
                             <table class="visit-table">
@@ -215,6 +219,7 @@
                                         <th>Bác sĩ</th>
                                         <th>Trạng thái</th>
                                         <th>Ghi chú</th>
+                                        <th>Thao tác</th>
                                     </tr>
                                 </thead>
                                 <tbody>
